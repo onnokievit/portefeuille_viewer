@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 from PySide6.QtGui import QAction
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.ui.orders_tab import OrdersTab
@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
         # Tabs
         self.tabs = QTabWidget()
         self.orders_tab = OrdersTab()
-        self.live_tab   = LiveViewTab(self.feed_service)
+        self.live_tab   = QWidget()
         self.settings_tab = SettingsTab()
 
         self.tabs.addTab(self.orders_tab, "Orders")
@@ -36,9 +36,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
-        self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_snapshots)
-
-        self.orders_tab.dbChanged.connect(self.live_tab.reload_from_db)
+        # self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_snapshots)
+        # self.orders_tab.dbChanged.connect(self.live_tab.reload_from_db)
 
         # Menu
         act_quit = QAction("Quit", self)
