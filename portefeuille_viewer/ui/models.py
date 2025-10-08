@@ -102,9 +102,7 @@ class WidePerAssetModel(QAbstractTableModel):
         if not index.isValid() or self._df is None:
             return None
         col = self.COLS[index.column()]
-        row = self._df.iloc[index.row()]
-        val = row.get(col, None)
-        # val = self._df.iloc[index.row()][col]
+        val = self._df.iloc[index.row()][col]
 
         if role == Qt.DisplayRole:
             # leeg tonen bij None/NaN/NaT

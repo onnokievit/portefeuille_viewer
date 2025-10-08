@@ -99,18 +99,19 @@ class LiveViewTab(QWidget):
         v.addWidget(self.lbl_total)
 
         # Data uit database
-        self.reload_from_snapshots()
+        self._build_base_dataframe()
+        self._refresh_total()
 
 
         # IB feed connectie
         self.feed_service.priceUpdated.connect(self.on_ul_price)
 
-        # # Eerste subscriptions
-        # if not self.base_df.empty:
-        #     subs = self.base_df[["_ib_symbol", "_ib_currency", "_prim_exch"]].dropna().drop_duplicates()
-        #     tuples = list(subs.itertuples(index=False, name=None))
-        #     if tuples:
-        #         self.feed_service.ensure_subscriptions(tuples)
+        # Eerste subscriptions
+        if not self.base_df.empty:
+            subs = self.base_df[["_ib_symbol", "_ib_currency", "_prim_exch"]].dropna().drop_duplicates()
+            tuples = list(subs.itertuples(index=False, name=None))
+            if tuples:
+                self.feed_service.ensure_subscriptions(tuples)
 
         # Timer voor totaal
         self._kpi_timer = QTimer(self)
@@ -513,61 +514,5 @@ class LiveViewTab(QWidget):
             f"Totale waarde (aandelen + sprinters): {total:,.2f}"
             .replace(",", "X").replace(".", ",").replace("X", ".")
     )
-        
-    def reload_from_snapshots(self):
-        """Herladen van model op basis van data in snapshot_store."""
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-
-        df_eq = SNAPSHOT_STORE.open_aandelen
-        df_spr = SNAPSHOT_STORE.open_sprinters
-        df_opt = SNAPSHOT_STORE.open_opties
-
-        if df_eq.empty:
-            print("[LiveTab] Waarschuwing: geen equity data geladen")
-            return
-
-        # Normaliseer keys
-        df_eq = df_eq.copy()
-        df_eq["_ar_key"] = df_eq["asset_rollup"].str.casefold()
-        df_spr["_ar_key"] = df_spr["asset_rollup"].str.casefold()
-        df_opt["_ar_key"] = df_opt["asset_rollup"].str.casefold()
-
-        # Merge dataframes op _ar_key
-        df = df_eq.merge(df_spr, on="_ar_key", how="left", suffixes=("_eq", "_spr"))
-        df = df.merge(df_opt, on="_ar_key", how="left")
-
-        df["Asset"] = df["asset_rollup_eq"]
-        df["Valuta"] = df["ib_currency"] if "ib_currency" in df.columns else ""
-        df["Koers"] = df.get("current_price", 0.0)
-
-        df["Aantal_eq"] = df.get("qty_eq", 0.0)
-        df["avg_buy_eq"] = df.get("avg_entry_eq", 0.0)
-        df["Hist_eq"] = df.get("hist_eq", 0.0)
-        df["Fees_eq"] = df.get("fee_eq", 0.0)
-
-        df["Aantal_spr"] = df.get("qty_spr", 0.0)
-        df["avg_buy_spr"] = df.get("avg_entry_spr", 0.0)
-        df["Hist_spr"] = df.get("hist_spr", 0.0)
-        df["Fees_spr"] = df.get("fee_spr", 0.0)
-
-        df["Premie_opties"] = df.get("premie_opties", 0.0)
-        df["Fees_opties"] = df.get("fees_opties", 0.0)
-
-        df = df.fillna(0.0)
-
-        df["Totaal_portefeuille"] = df["Hist_eq"] + df["Hist_spr"] + df["Premie_opties"]
-
-        df = df[[
-            "Asset", "Valuta", "Koers",
-            "Aantal_eq", "avg_buy_eq", "Hist_eq", "Fees_eq",
-            "Aantal_spr", "avg_buy_spr", "Hist_spr", "Fees_spr",
-            "Premie_opties", "Fees_opties", "Totaal_portefeuille"
-        ]]
-
-        self.model.set_df(df)
-        self._refresh_total()
-        print("✅ LiveViewTab succesvol herladen uit SNAPSHOT_STORE")
-
-
 
 

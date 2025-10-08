@@ -625,10 +625,6 @@ class OrdersTab(QWidget):
             if at2 == "optie":
                 if not self._validate_combo_in_list(self.order2["cp"], "Call/Put (regel 2)", allow_empty=False):
                     return
-                
-            from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-            SNAPSHOT_STORE.load_all()
-            self.parent().live_tab.reload_from_snapshots()  
 
         
         # Validatie minimaal gelijk aan single-file

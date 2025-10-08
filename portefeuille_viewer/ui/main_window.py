@@ -5,7 +5,6 @@ from portefeuille_viewer.ui.orders_tab import OrdersTab
 from portefeuille_viewer.ui.live_tab import LiveViewTab
 from portefeuille_viewer.ui.settings_tab import SettingsTab
 from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
-from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
 APP_TITLE = "🧭 Portefeuille Viewer"
 
@@ -20,9 +19,6 @@ class MainWindow(QMainWindow):
         self.feed_service._feed.log.connect(lambda s: self.statusBar().showMessage(s, 3000))
         self.feed_service._feed.ready.connect(lambda: self.statusBar().showMessage("IB-feed ready", 2000))
 
-        # eerste data_load in snapshot store
-        SNAPSHOT_STORE.load_all()
-
         # Tabs
         self.tabs = QTabWidget()
         self.orders_tab = OrdersTab()
@@ -36,8 +32,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
-        self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_snapshots)
-
+        self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_db)
         self.orders_tab.dbChanged.connect(self.live_tab.reload_from_db)
 
         # Menu
