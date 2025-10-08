@@ -52,8 +52,10 @@ class ColumnFilterPopup(QDialog):
         self.list.clear()
         # (Lege regels) eerst
         items = []
-        if any(v in (None,"") for v in self._all_values): items.append(None)
-        items.extend(sorted([v for v in self._all_values if v not in (None,"")], key=lambda x: str(x).lower()))
+        if any(v in (None, "") for v in self._all_values):
+            items.append(None)
+        items.extend(sorted([v for v in self._all_values if v not in (None, "")], key=lambda x: str(x).lower()))
+
         for v in items:
             it = QListWidgetItem(self._label_for(v))
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
@@ -62,10 +64,15 @@ class ColumnFilterPopup(QDialog):
             it.setData(Qt.UserRole, v)
             self.list.addItem(it)
 
+        # Update de status van de "Alles selecteren"-checkbox
+        self._update_all_checkbox()
+
     def _toggle_all(self, _state):
         check = Qt.Checked if self.chk_all.isChecked() else Qt.Unchecked
+        self.list.blockSignals(True)  # Blokkeer signalen om conflicten te voorkomen
         for i in range(self.list.count()):
             self.list.item(i).setCheckState(check)
+        self.list.blockSignals(False)  # Heractiveer signalen
 
     def _apply_filter_text(self, text: str):
         t = text.strip().lower()
@@ -79,17 +86,18 @@ class ColumnFilterPopup(QDialog):
             return
         item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
 
-        # (optioneel) update de status van '(Alles selecteren)'
-        if self.chk_all.isTristate() if hasattr(self.chk_all, "isTristate") else False:
-            total = sum(1 for _ in range(self.list.count()))
-            checked = sum(1 for i in range(self.list.count()) if self.list.item(i).checkState() == Qt.Checked)
-            if checked == 0:
-                self.chk_all.setCheckState(Qt.Unchecked)
-            elif checked == total:
-                self.chk_all.setCheckState(Qt.Checked)
-            else:
-                self.chk_all.setCheckState(Qt.PartiallyChecked)
+        # Update de status van '(Alles selecteren)'
+        total = self.list.count()
+        checked = sum(1 for i in range(total) if self.list.item(i).checkState() == Qt.Checked)
 
+        self.chk_all.blockSignals(True)  # Blokkeer signalen om conflicten te voorkomen
+        if checked == 0:
+            self.chk_all.setCheckState(Qt.Unchecked)
+        elif checked == total:
+            self.chk_all.setCheckState(Qt.Checked)
+        else:
+            self.chk_all.setCheckState(Qt.PartiallyChecked)
+        self.chk_all.blockSignals(False)  # Heractiveer signalen
 
     def _on_accept(self):
         selected = set()
@@ -104,3 +112,16 @@ class ColumnFilterPopup(QDialog):
     def _on_clear(self):
         self.cleared.emit()
         self.accept()
+
+    def _update_all_checkbox(self):
+        total = self.list.count()
+        checked = sum(1 for i in range(total) if self.list.item(i).checkState() == Qt.Checked)
+
+        self.chk_all.blockSignals(True)  # Blokkeer signalen om conflicten te voorkomen
+        if checked == 0:
+            self.chk_all.setCheckState(Qt.Unchecked)
+        elif checked == total:
+            self.chk_all.setCheckState(Qt.Checked)
+        else:
+            self.chk_all.setCheckState(Qt.PartiallyChecked)
+        self.chk_all.blockSignals(False)  # Heractiveer signalen
