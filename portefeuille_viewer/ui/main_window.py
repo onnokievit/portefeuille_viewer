@@ -6,6 +6,7 @@ from portefeuille_viewer.ui.live_tab import LiveViewTab
 from portefeuille_viewer.ui.settings_tab import SettingsTab
 from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 
 APP_TITLE = "🧭 Portefeuille Viewer"
 
@@ -32,6 +33,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.orders_tab, "Orders")
         self.tabs.addTab(self.live_tab, "Live view")
         self.tabs.addTab(self.settings_tab, "Settings")
+        self.open_opties_tab = OpenOptiesPolarsTab()
+        self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
 
         self.setCentralWidget(self.tabs)
 

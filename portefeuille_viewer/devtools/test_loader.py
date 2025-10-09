@@ -6,7 +6,7 @@ def test_load_open_opties():
     print(df.shape)
     print(df.columns)
     print(df.head())
-    df = repository.load_gesloten_opties()
+    df = repository.load_open_opties()
     print(df.shape)
     print(df.columns)
     print(df.head())

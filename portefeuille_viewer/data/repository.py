@@ -42,72 +42,175 @@ def switch_database(name: str):
 # ------------------------------------------------------------
 # Snapshot store loaders
 # ------------------------------------------------------------
-def load_open_aandelen() -> pl.DataFrame:
+def load_alle_transacties() -> pl.DataFrame:
     """
-    Laadt alle open aandelen uit de database als Polars DataFrame.
+    Laadt alle transacties uit de database.
     """
-    sql = "SELECT * FROM open_aandelen"  # vervang door jouw echte query of tabelnaam
+    sql = "SELECT * FROM transacties_bron_data_org"  # vervang door jouw Access-query
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     return compact_float64(df)
-
-
-def load_open_opties() -> pl.DataFrame:
-    """
-    Laadt alle open opties uit de database.
-    """
-    sql = "SELECT * FROM Opties_open_series_opgerold_op_uniek_id"
-    with get_connection() as conn:
-        df = pl.read_database(sql, conn)
-    return compact_float64(df)
-
-
-def load_open_sprinters() -> pl.DataFrame:
-    """
-    Laadt alle open sprinters uit de database.
-    """
-    sql = "SELECT * FROM open_sprinters"  # vervang door jouw Access-query
-    with get_connection() as conn:
-        df = pl.read_database(sql, conn)
-    return compact_float64(df)
-
-
-def load_gesloten_aandelen() -> pl.DataFrame:
-    """
-    Laadt alle open aandelen uit de database als Polars DataFrame.
-    """
-    sql = "SELECT * FROM open_aandelen"  # vervang door jouw echte query of tabelnaam
-    with get_connection() as conn:
-        df = pl.read_database(sql, conn)
-    return compact_float64(df)
-
-
-def load_gesloten_opties() -> pl.DataFrame:
-    """
-    Laadt alle open opties uit de database.
-    """
-    sql = "SELECT * FROM Opties_closed_series_opgerold_op_uniek_id_v2"  # vervang door jouw Access-query
-    with get_connection() as conn:
-        df = pl.read_database(sql, conn)
-    return compact_float64(df)
-
-
-def load_gesloten_sprinters() -> pl.DataFrame:
-    """
-    Laadt alle open sprinters uit de database.
-    """
-    sql = "SELECT * FROM open_sprinters"  # vervang door jouw Access-query
-    with get_connection() as conn:
-        df = pl.read_database(sql, conn)
-    return compact_float64(df)
-# ------------------------------------------------------------
-# ########## einde Snapshot store loaders
-# ------------------------------------------------------------
-
 
 # ------------------------------------------------------------
-# Orders tab helpers
+# Aandelen, zowel open als gesloten
 # ------------------------------------------------------------
+def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Snellere & compactere Polars-versie van de 'aandelen_open'-dataset.
+    Gebruikt één groupby + pivot in plaats van twee losse joins.
+    """
+    if df_tx is None:
+        df_tx = load_alle_transacties()
+
+    df = (
+        df_tx
+        .filter(pl.col("asset_type") == "aandeel")
+        .group_by(["broker", "asset_rollup", "asset_type", "transactie_type"])
+        .agg([
+            pl.sum("transactie_aantal").alias("transactie_aantal"),
+            pl.sum("transactie_euro_totaal").alias("transactie_euro_totaal"),
+            pl.sum("transactie_fee").alias("transactie_fee")
+        ])
+        .pivot(
+            values=["transactie_aantal", "transactie_euro_totaal", "transactie_fee"],
+            index=["broker", "asset_rollup", "asset_type"],
+            columns="transactie_type"
+        )
+        .with_columns([
+            pl.col("transactie_aantal_koop").fill_null(0),
+            pl.col("transactie_aantal_verkoop").fill_null(0),
+            pl.col("transactie_fee_koop").fill_null(0),
+            pl.col("transactie_fee_verkoop").fill_null(0),
+        ])
+        .with_columns([
+            (pl.col("transactie_aantal_koop") + pl.col("transactie_aantal_verkoop"))
+                .alias("aantal_bezit"),
+            (pl.col("transactie_fee_koop") + pl.col("transactie_fee_verkoop"))
+                .alias("totaal_fee")
+        ])
+        .sort(["broker", "asset_rollup"])
+    )
+
+    return df
+
+# ------------------------------------------------------------
+# Open opties
+# ------------------------------------------------------------
+def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Bouwt de dataset 'open opties' na volgens de Access-query:
+    SELECT ... FROM transacties_bron_data
+    GROUP BY ...
+    HAVING asset_type='optie' AND exp_date>=Date() AND SUM(aantal)<>0
+    """
+
+    if df_tx is None:
+        df_tx = load_alle_transacties()
+
+    vandaag = date.today()
+
+    # --- Eerste aggregatie (overeenkomend met Access GROUP BY) ---
+    per_uniek = (
+        df_tx
+        .group_by([
+            "uniek_id",
+            "broker",
+            "asset_rollup",
+            "asset_type",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put"
+        ])
+        .agg([
+            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_aantal").alias("SomVantransactie_aantal"),
+            (pl.col("optie_strike") * pl.col("transactie_aantal")).sum().alias("optie_waarde")
+        ])
+    )
+
+    # HAVING filter: alleen openstaande opties (exp_date >= vandaag, som(aantal) ≠ 0) ---
+    per_uniek_filtered = per_uniek.filter(
+        (pl.col("asset_type") == "optie")
+        & (pl.col("optie_exp_date") >= vandaag)
+        & (pl.col("SomVantransactie_aantal") != 0)
+    )
+
+    return per_uniek_filtered
+
+
+
+
+
+# ------------------------------------------------------------
+# Gesloten opties
+# ------------------------------------------------------------
+def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:
+    1. Groepeer transacties per uniek_id, broker, asset_rollup, exp_date, strike, call_put.
+    2. Bereken sommen van aantal, fee, euro_totaal.
+    3. Filter alleen 'optie' waarvan:
+       - exp_date < vandaag,  of
+       - som(transactie_aantal) == 0.
+    4. Groepeer opnieuw per broker + asset_rollup om series op te rollen.
+    """
+
+    if df_tx is None:
+        df_tx = load_alle_transacties()
+
+    vandaag = date.today()
+
+    # --- Eerste aggregatie (komt overeen met Opties_closed_series_opgerold_op_uniek_id) ---
+    per_uniek = (
+        df_tx
+        .group_by([
+            "uniek_id",
+            "broker",
+            "asset_rollup",
+            "asset_type",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put"
+        ])
+        .agg([
+            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_aantal").alias("SomVantransactie_aantal")
+        ])
+    )
+
+    # --- Filter volgens HAVING-voorwaarden ---
+    per_uniek_filtered = per_uniek.filter(
+        (pl.col("asset_type") == "optie")
+        & (
+            (pl.col("optie_exp_date") < vandaag)
+            | (pl.col("SomVantransactie_aantal") == 0)
+        )
+    )
+
+    # --- Tweede aggregatie (komt overeen met 2e Access-query) ---
+    df_final = (
+        per_uniek_filtered
+        .group_by(["broker", "asset_rollup"])
+        .agg([
+            pl.sum("SomVantransactie_fee").alias("SomVanSomVantransactie_fee"),
+            pl.sum("SomVantransactie_euro_totaal").alias("SomVanSomVantransactie_euro_totaal"),
+            pl.sum("SomVantransactie_aantal").alias("SomVanSomVantransactie_aantal")
+        ])
+        .sort(["broker", "asset_rollup"])
+    )
+
+    return df_final
+
+
+
+# ------------------------------------------------------------
+# ############## EINDE Snapshot store loaders
+# ------------------------------------------------------------
+
+
+
 asset_types = ["aandeel", "optie", "sprinter"]
 transactie_types = ["koop", "verkoop"]
 transactie_oorsprong = ["OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"]
@@ -453,14 +556,14 @@ def get_next_order_item_no(order_id: int) -> int:
 ####### tijdelijke test functie om het laden van data te testen 
 #------------------------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    # Test: laad open opties direct uit Access
+# if __name__ == "__main__":
+#     # Test: laad open opties direct uit Access
     
 
-    df = load_open_opties()
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
+#     df = load_open_opties()
+#     print(df.shape)
+#     print(df.columns)
+#     print(df.head())
 #------------------------------------------------------------------------------------------
 ####### tijdelijke test functie om het laden van data te testen 
 #------------------------------------------------------------------------------------------
