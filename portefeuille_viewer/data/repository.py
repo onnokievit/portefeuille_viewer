@@ -1,14 +1,12 @@
 import pandas as pd
 import pyodbc
 from datetime import date, datetime, timedelta
-import warnings
-import numpy as np
+from portefeuille_viewer.domain.engine import compact_float64
 
-warnings.filterwarnings(
-    "ignore",
-    message="pandas only supports SQLAlchemy connectable",
-    category=UserWarning,
-)
+import warnings
+import polars as pl
+
+
 
 # ------------------------------------------------------------
 # Database configuratie
@@ -40,8 +38,71 @@ def switch_database(name: str):
     db_path = new_path
     conn_str = test_conn_str
 
-def _connect():
-    return pyodbc.connect(conn_str, autocommit=True)
+
+# ------------------------------------------------------------
+# Snapshot store loaders
+# ------------------------------------------------------------
+def load_open_aandelen() -> pl.DataFrame:
+    """
+    Laadt alle open aandelen uit de database als Polars DataFrame.
+    """
+    sql = "SELECT * FROM open_aandelen"  # vervang door jouw echte query of tabelnaam
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+
+def load_open_opties() -> pl.DataFrame:
+    """
+    Laadt alle open opties uit de database.
+    """
+    sql = "SELECT * FROM Opties_open_series_opgerold_op_uniek_id"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+
+def load_open_sprinters() -> pl.DataFrame:
+    """
+    Laadt alle open sprinters uit de database.
+    """
+    sql = "SELECT * FROM open_sprinters"  # vervang door jouw Access-query
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+
+def load_gesloten_aandelen() -> pl.DataFrame:
+    """
+    Laadt alle open aandelen uit de database als Polars DataFrame.
+    """
+    sql = "SELECT * FROM open_aandelen"  # vervang door jouw echte query of tabelnaam
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+
+def load_gesloten_opties() -> pl.DataFrame:
+    """
+    Laadt alle open opties uit de database.
+    """
+    sql = "SELECT * FROM Opties_closed_series_opgerold_op_uniek_id_v2"  # vervang door jouw Access-query
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+
+def load_gesloten_sprinters() -> pl.DataFrame:
+    """
+    Laadt alle open sprinters uit de database.
+    """
+    sql = "SELECT * FROM open_sprinters"  # vervang door jouw Access-query
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+# ------------------------------------------------------------
+# ########## einde Snapshot store loaders
+# ------------------------------------------------------------
 
 
 # ------------------------------------------------------------
@@ -77,6 +138,7 @@ def insert_transaction(data: dict) -> int:
         conn.commit()
     return new_id
 
+##############################versie met build_where_and_params, niet meer nodig omdat client side filtering goed genoeg is
 def get_distinct_values(column: str, table: str = "transacties_bron_data_org", base_filters: dict | None = None) -> list:
     """
     Haal unieke waarden voor één kolom op.
@@ -98,11 +160,11 @@ def get_distinct_values(column: str, table: str = "transacties_bron_data_org", b
 
 
 
-# repository.py
-# --- Vervanging begint hier ---
-ALLOWED_SORT_COLS = {c: c for c in TABLE_COLS}
 
-def _build_where_and_params(filters: dict | None) -> tuple[str, list]:
+ALLOWED_SORT_COLS = {c: c for c in TABLE_COLS} # kan dit weg? aan chatgpt vragen
+
+############### deze functie wordt gebruikt voor serverside side filtering. niet nodig omdat client side goed genoeg werkt, laten staan omdat het in de toekomst misschien nodig is
+def _build_where_and_params(filters: dict | None) -> tuple[str, list]: 
     filters = filters or {}
     conds, params = [], []
     ar = (filters.get("asset_rollup") or "").strip()
@@ -182,12 +244,12 @@ def _build_where_and_params(filters: dict | None) -> tuple[str, list]:
     where_sql = (" WHERE " + " AND ".join(conds)) if conds else ""
     return where_sql, params
 
-def _order_by_for_seek(col: str, direction: str) -> str:
+def _order_by_for_seek(col: str, direction: str) -> str: ########################## niet genoemd door chatgpt om te blijven?
     col_db = ALLOWED_SORT_COLS.get(col, "Id")
     dirn = "DESC" if str(direction).upper() == "DESC" else "ASC"
     return f" ORDER BY {col_db} {dirn}, Id {dirn}"
 
-def _seek_predicate(col: str, direction: str) -> str:
+def _seek_predicate(col: str, direction: str) -> str: ########################## niet genoemd door chatgpt om te blijven?
     col_db = ALLOWED_SORT_COLS.get(col, "Id")
     dirn = str(direction).upper()
     if dirn == "ASC":
@@ -195,7 +257,13 @@ def _seek_predicate(col: str, direction: str) -> str:
     else:
         return f"(({col_db} < ?) OR ({col_db} = ? AND Id < ?))"
 
-def fetch_records_page(
+
+
+
+
+
+
+def fetch_records_page( ################## dit is de oude versie van fetch_records_page, met build_where_and_params. 
     table: str = "transacties_bron_data_org",
     sort_col: str = "Id",
     sort_dir: str = "DESC",
@@ -224,286 +292,6 @@ def fetch_records_page(
                 {_order_by_for_seek(sort_col, sort_dir)}
             """
             return pd.read_sql(sql, conn, params=[*params, seek_value, seek_value, int(seek_id)])
-# --- Einde vervanging ---
-
-
-
-
-
-
-# ------------------------------------------------------------
-# Live View tab helpers
-# ------------------------------------------------------------
-def coalesce_cols(df: pd.DataFrame, out_col: str, *cands: str):
-    vals = None
-    for c in cands:
-        if c in df.columns:
-            vals = df[c] if vals is None else vals.where(vals.notna(), df[c])
-    df[out_col] = vals if vals is not None else pd.NA
-
-
-def load_assetrollup_to_ib():
-    """
-    Leest asset_rollup_data en koppelt aan IB symbolen.
-    Gefilterd en opgeschoond zoals in de 1-bestand versie.
-    """
-    try:
-        with get_connection() as conn:
-            df = pd.read_sql(
-                """SELECT asset_rollup, ib_symbol, ib_currency, prim_exchange
-                   FROM asset_rollup_data
-                   WHERE ib_symbol IS NOT NULL AND ib_currency IS NOT NULL""",
-                conn,
-            )
-    except Exception as e:
-        print(f"[MAP] error: {e}")
-        return pd.DataFrame()
-
-    if df.empty:
-        return df
-
-    for c in ["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]:
-        df[c] = df[c].astype(str).str.strip()
-
-    df = df[
-        (df["asset_rollup"] != "")
-        & (df["ib_symbol"] != "")
-        & (df["ib_currency"] != "")
-    ]
-    df["_ar_key"] = df["asset_rollup"].str.casefold()
-    df = df.drop_duplicates(subset=["_ar_key"]).reset_index(drop=True)
-
-    return df[
-        ["_ar_key", "asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]
-    ]
-
-
-
-
-def load_equity_flows() -> pd.DataFrame:
-    """
-    Bouwt samenvatting van aandelen-transacties (aandeel-type).
-    Logica identiek aan 1-bestand-versie: correcte tekens, qty_eq, hist_eq, avg_entry_eq.
-    """
-    try:
-        with get_connection() as conn:
-            raw = pd.read_sql(
-                """SELECT asset_rollup, asset_type, transactie_type,
-                          aantal, transactie_euro_totaal, transactie_fee
-                   FROM transacties_bron_data_org
-                   WHERE asset_rollup IS NOT NULL""",
-                conn,
-            )
-    except Exception as e:
-        print(f"[EQ FLOWS] read error: {e}")
-        return pd.DataFrame()
-
-    if raw.empty:
-        return pd.DataFrame()
-
-    raw["asset_rollup"] = raw["asset_rollup"].astype(str).str.strip()
-    raw["asset_type"] = raw["asset_type"].astype(str).str.strip().str.casefold()
-    raw["transactie_type"] = raw["transactie_type"].astype(str).str.strip().str.casefold()
-    for c in ["aantal", "transactie_euro_totaal", "transactie_fee"]:
-        raw[c] = pd.to_numeric(raw[c], errors="coerce").fillna(0.0)
-
-    df = raw[raw["asset_type"] == "aandeel"].copy()
-    if df.empty:
-        return pd.DataFrame()
-
-    is_buy = df["transactie_type"].eq("koop")
-    is_sell = df["transactie_type"].eq("verkoop")
-
-    buy = df[is_buy].groupby("asset_rollup", as_index=False).agg(
-        buy_qty=("aantal", "sum"),
-        buy_eur=("transactie_euro_totaal", lambda s: -s.sum()),
-        fee_buy=("transactie_fee", "sum"),
-    )
-    sell = df[is_sell].groupby("asset_rollup", as_index=False).agg(
-        sell_qty=("aantal", "sum"),
-        sell_eur=("transactie_euro_totaal", "sum"),
-        fee_sell=("transactie_fee", "sum"),
-    )
-
-    flows = pd.merge(buy, sell, on="asset_rollup", how="outer").fillna(0.0)
-    flows["qty_eq"] = flows["buy_qty"] - flows["sell_qty"]
-    flows["fee_eq"] = flows["fee_buy"] + flows["fee_sell"]
-    flows = flows.drop(columns=["fee_buy", "fee_sell"])
-
-    def _avg_long(r):
-        return (r.buy_eur / r.buy_qty) if r.buy_qty > 0 else 0.0
-
-    def _avg_short(r):
-        return (r.sell_eur / r.sell_qty) if r.sell_qty > 0 else 0.0
-
-    def _hist_init(r):
-        if r.qty_eq >= 0:
-            av = _avg_long(r)
-            return r.sell_eur - r.sell_qty * av
-        else:
-            avs = _avg_short(r)
-            open_short_qty = -r.qty_eq
-            return r.sell_eur - open_short_qty * avs - r.buy_eur
-
-    flows["avg_entry_eq"] = flows.apply(
-        lambda r: _avg_long(r) if r.qty_eq >= 0 else _avg_short(r), axis=1
-    )
-    flows["hist_eq"] = flows.apply(_hist_init, axis=1)
-    flows["_ar_key"] = flows["asset_rollup"].str.casefold()
-    
-
-
-    return flows.reset_index(drop=True)
-
-
-
-def load_sprinter_reference() -> pd.DataFrame:
-    try:
-        with _connect() as conn:
-            ref = pd.read_sql("SELECT * FROM sprinters_referentie_data", conn)
-    except Exception as e:
-        print(f"[SPR REF] error: {e}")
-        return pd.DataFrame()
-    return ref
-
-############################### start sprinter flows ###############################
-
-def load_sprinter_flows() -> pd.DataFrame:
-    """
-    Retourneert alle sprinterposities op detailniveau (asset_detail).
-    - Berekeningen per sprinter (geen aggregatie)
-    - Funding (sprinter_funding) correct meegenomen
-    - Fees niet inbegrepen (apart query)
-    """
-
-    import numpy as np
-    import pandas as pd
-
-    try:
-        with get_connection() as conn:
-            tx = pd.read_sql("""
-                SELECT asset_rollup, asset_detail, asset_type, transactie_type,
-                       aantal, transactie_prijs, transactie_euro_totaal
-                FROM transacties_bron_data_org
-                WHERE asset_type='sprinter'
-            """, conn)
-
-            ref = pd.read_sql("""
-                SELECT asset_detail, sprinter_funding
-                FROM sprinters_referentie_data
-                WHERE sprinter_funding IS NOT NULL
-            """, conn)
-    except Exception as e:
-        print(f"[SPRINTER FLOWS] read error: {e}")
-        return pd.DataFrame()
-
-    if tx.empty:
-        return pd.DataFrame()
-
-    # Normalisatie
-    for c in ["asset_rollup", "asset_detail", "asset_type", "transactie_type"]:
-        tx[c] = tx[c].astype(str).str.strip().str.lower()
-    tx["aantal"] = pd.to_numeric(tx["aantal"], errors="coerce").fillna(0.0)
-    tx["transactie_prijs"] = pd.to_numeric(tx["transactie_prijs"], errors="coerce").fillna(0.0)
-    tx["transactie_euro_totaal"] = pd.to_numeric(tx["transactie_euro_totaal"], errors="coerce").fillna(0.0)
-
-    # Koop / verkoop samenvatten per sprinter
-    is_buy  = tx["transactie_type"].eq("koop")
-    is_sell = tx["transactie_type"].eq("verkoop")
-    grp = ["asset_detail", "asset_rollup"]
-
-    buy = tx[is_buy].groupby(grp, as_index=False).agg(
-        buy_qty=("aantal", "sum"),
-        buy_eur=("transactie_euro_totaal", lambda s: -s.sum())
-    )
-    sell = tx[is_sell].groupby(grp, as_index=False).agg(
-        sell_qty=("aantal", "sum"),
-        sell_eur=("transactie_euro_totaal", "sum")
-    )
-
-    df = pd.merge(buy, sell, on=grp, how="outer").fillna(0.0)
-    df["qty_spr"] = df["buy_qty"] - df["sell_qty"]
-
-    # Gemiddelde aankoopprijs & historisch resultaat
-    df["avg_entry_spr"] = np.where(df["buy_qty"] > 0, df["buy_eur"] / df["buy_qty"], 0.0)
-    df["hist_spr"] = np.where(
-        df["qty_spr"] >= 0,
-        df["sell_eur"] - df["sell_qty"] * df["avg_entry_spr"],
-        df["sell_eur"] - (-df["qty_spr"]) * (df["sell_eur"] / df["sell_qty"]) - df["buy_eur"]
-    )
-
-    # Funding koppelen per sprinter
-    ref["asset_detail"] = ref["asset_detail"].astype(str).str.strip().str.lower()
-    ref = ref.rename(columns={"sprinter_funding": "fund_w"})
-    df = df.merge(ref, on="asset_detail", how="left")
-    df["fund_w"] = pd.to_numeric(df["fund_w"], errors="coerce").fillna(0.0)
-
-    # Extra kolom voor key-merge
-    df["_ar_key"] = df["asset_rollup"].str.casefold()
-    df["_spr_key"] = df["asset_detail"].str.casefold()
-
-    return df.reset_index(drop=True)
-
-
-
-
-
-################################ einde sprinter flows ###############################
-
-
-
-def load_closed_options_summary(brokers: list[str] | None = None) -> pd.DataFrame:
-    """
-    Gesloten/verlopen opties per asset_rollup uit transacties_bron_data_org:
-      - aantal = 0  (gesloten/opgerold)
-      - OF (optie_exp_date IS NOT NULL AND optie_exp_date < Date())  (verlopen)
-    Geeft per asset_rollup: som(premie) en som(fees).
-    """
-    import pandas as pd
-    with get_connection() as conn:
-        base_sql = """
-        SELECT asset_rollup,
-               SUM(transactie_euro_totaal) AS premie_opties,
-               SUM(transactie_fee)         AS fees_opties
-        FROM (
-            SELECT asset_rollup, transactie_euro_totaal, transactie_fee
-            FROM transacties_bron_data_org
-            WHERE asset_type='optie' AND asset_rollup IS NOT NULL AND aantal=0
-            {broker1}
-
-            UNION ALL
-
-            SELECT asset_rollup, transactie_euro_totaal, transactie_fee
-            FROM transacties_bron_data_org
-            WHERE asset_type='optie' AND asset_rollup IS NOT NULL
-              AND (optie_exp_date IS NOT NULL AND optie_exp_date < Date())
-            {broker2}
-        ) q
-        GROUP BY asset_rollup
-        """
-        params: list = []
-        if brokers:
-            ph = ",".join(["?"] * len(brokers))
-            sql = base_sql.format(broker1=f"AND broker IN ({ph})",
-                                  broker2=f"AND broker IN ({ph})")
-            params = brokers + brokers  # voor beide SELECTs
-        else:
-            sql = base_sql.format(broker1="", broker2="")
-
-        df = pd.read_sql(sql, conn, params=params)
-
-    # normaliseren
-    df.columns = [str(c).strip().lower() for c in df.columns]
-    if df.empty:
-        return pd.DataFrame(columns=["_ar_key","asset_rollup","premie_opties","fees_opties"])
-
-    df["asset_rollup"]  = df["asset_rollup"].astype(str).str.strip()
-    df["_ar_key"]       = df["asset_rollup"].str.casefold()
-    df["premie_opties"] = pd.to_numeric(df["premie_opties"], errors="coerce").fillna(0.0)
-    df["fees_opties"]   = pd.to_numeric(df["fees_opties"],   errors="coerce").fillna(0.0)
-    return df[["_ar_key","asset_rollup","premie_opties","fees_opties"]]
-
-
 
 
 def load_reference_lists():
@@ -516,36 +304,6 @@ def load_reference_lists():
     except Exception:
         brokers, rollups, sprinters = [], [], []
     return brokers, rollups, sprinters
-
-def load_sprinter_fees() -> pd.DataFrame:
-    """
-    Haalt de som van alle sprintertransactie-fees op per asset_rollup.
-    Equivalent aan de Access-query:
-        SELECT asset_rollup, asset_type, SUM(transactie_fee)
-        FROM transacties_bron_data_org
-        WHERE asset_type='sprinter'
-        GROUP BY asset_rollup, asset_type;
-    """
-    import pandas as pd
-    try:
-        with get_connection() as conn:
-            df = pd.read_sql("""
-                SELECT asset_rollup, SUM(transactie_fee) AS fee_spr
-                FROM transacties_bron_data_org
-                WHERE asset_type='sprinter'
-                GROUP BY asset_rollup
-            """, conn)
-    except Exception as e:
-        print(f"[SPRINTER FEES] read error: {e}")
-        return pd.DataFrame(columns=["asset_rollup", "fee_spr"])
-
-    df["_ar_key"] = df["asset_rollup"].str.casefold()
-    # print("=== DEBUG SPRINTER FEES ===")
-    # print(df.head(50))
-    # print("Aantal regels:", len(df))
-    return df
-
-
 
 
 import pyodbc
@@ -592,7 +350,7 @@ def update_transactions_atomic(record_id1: int, data1: dict,
             conn.rollback()
             raise
 
-def _clean(x): 
+def _clean(x): ########################## niet genoemd door chatgpt om te blijven?????? 
     return "" if x is None else str(x).strip()
 
 def _parse_date(x):
@@ -629,11 +387,11 @@ def parse_int_field(s):
 
 
 
-def _date_for_id(x):
+def _date_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
     d = _parse_date(x)
     return "" if not d else f"{d.day}-{d.month}-{d.year}"
 
-def _norm_dec_for_id(x):
+def _norm_dec_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
     if x in (None, ""): return ""
     s = str(x).strip().replace(",", ".")
     try:
@@ -670,43 +428,6 @@ def is_pairable(order: dict) -> bool:
     return oorspr in {"DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"}
 
 
-def build_portfolio_snapshot():
-    """
-    Bouwt een volledige portefeuille-snapshot:
-    - Alle assets uit asset_rollup_data
-    - Met equity en sprinter berekeningen
-    """
-
-    conn = get_connection()
-    ar = pd.read_sql("SELECT * FROM asset_rollup_data", conn)
-    eq = load_equity_flows()
-    sp = load_sprinter_flows()
-
-    # --- merge alles op asset_rollup
-    df = ar.merge(eq, on="asset_rollup", how="left", suffixes=("", "_eq"))
-    df = df.merge(sp, on="asset_rollup", how="left", suffixes=("", "_spr"))
-
-    # --- bereken waarden
-    df["Waarde_eq"] = df["current_price"] * df["qty_eq"].fillna(0)
-    df["Waarde_spr"] = df["current_price"] * df["qty_spr"].fillna(0)
-
-    df["Total_eq"] = df["Waarde_eq"].fillna(0) + df["total_eq"].fillna(0)
-    df["Total_spr"] = df["Waarde_spr"].fillna(0) + df["total_spr"].fillna(0)
-    df["Total_portefeuille"] = df["Total_eq"].fillna(0) + df["Total_spr"].fillna(0)
-
-    # --- afronden en sorteren
-    df = df.fillna(0)
-    cols_order = [
-        "asset_rollup", "ib_currency", "current_price",
-        "qty_eq", "avg_entry_eq", "Waarde_eq", "total_eq",
-        "qty_spr", "avg_entry_spr", "Waarde_spr", "total_spr",
-        "Total_portefeuille"
-    ]
-    df = df[[c for c in cols_order if c in df.columns]].sort_values("asset_rollup")
-    return df
-
-
-
 def get_next_order_id() -> int:
     """
     Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
@@ -728,9 +449,18 @@ def get_next_order_item_no(order_id: int) -> int:
         )
         row = cur.fetchone()
         return (row[0] or 0) + 1
+#------------------------------------------------------------------------------------------    
+####### tijdelijke test functie om het laden van data te testen 
+#------------------------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # Test: laad open opties direct uit Access
     
 
-
-    
-
-
+    df = load_open_opties()
+    print(df.shape)
+    print(df.columns)
+    print(df.head())
+#------------------------------------------------------------------------------------------
+####### tijdelijke test functie om het laden van data te testen 
+#------------------------------------------------------------------------------------------

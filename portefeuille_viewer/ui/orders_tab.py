@@ -627,8 +627,8 @@ class OrdersTab(QWidget):
                     return
                 
             from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-            SNAPSHOT_STORE.load_all()
-            self.parent().live_tab.reload_from_snapshots()  
+            # SNAPSHOT_STORE.load_all()
+            # self.parent().live_tab.reload_from_snapshots()  
 
         
         # Validatie minimaal gelijk aan single-file

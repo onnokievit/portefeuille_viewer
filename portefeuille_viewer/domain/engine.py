@@ -1,33 +1,163 @@
-import pandas as pd
+import polars as pl
 
-def coalesce_cols(df: pd.DataFrame, out_col: str, *cands: str):
-    vals = None
-    for c in cands:
-        if c in df.columns:
-            vals = df[c] if vals is None else vals.where(vals.notna(), df[c])
-    df[out_col] = vals if vals is not None else pd.NA
+# ------------------------------------------------------------
+# engine.py:
+# bevat algemene rekenhulpen — kleine, herbruikbare functies
+# bijv. compute_equity_flows(), coalesce_cols(), compact_float64()
+# ------------------------------------------------------------
 
-def compute_equity_flows(raw: pd.DataFrame) -> pd.DataFrame:
-    if raw.empty:
-        return pd.DataFrame()
 
-    df = raw[raw["asset_type"].str.lower() == "aandeel"].copy()
-    if df.empty: return pd.DataFrame()
 
-    is_buy  = df["transactie_type"].str.lower().eq("koop")
-    is_sell = df["transactie_type"].str.lower().eq("verkoop")
 
-    buy = df[is_buy].groupby("asset_rollup", as_index=False).agg(
-        buy_qty=("aantal","sum"),
-        buy_eur=("transactie_euro_totaal", lambda s: -s.sum()),
-        fee_buy=("transactie_fee","sum")
+# ------------------------------------------------------------
+# float32 maken van polar dataframes om snelheid en geheugen te besparen
+# ------------------------------------------------------------
+
+def compact_float64(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Zet alle Float64 kolommen om naar Float32 om geheugen te besparen.
+    """
+    for c in df.columns:
+        if df.schema[c] == pl.Float64:
+            df = df.with_columns(pl.col(c).cast(pl.Float32))
+    return df
+
+# ------------------------------------------------------------
+# einde float32 maken van polar dataframes om snelheid en geheugen te besparen
+# ------------------------------------------------------------
+
+
+
+def coalesce_cols(df: pl.DataFrame, out_col: str, *cands: str) -> pl.DataFrame:
+    """
+    Combineer meerdere kolommen in volgorde van prioriteit.
+    De eerste niet-null waarde wordt gekozen.
+    """
+    if not cands:
+        df = df.with_columns(pl.lit(None).alias(out_col))
+        return df
+
+    expr = pl.col(cands[0])
+    for c in cands[1:]:
+        expr = expr.fill_null(pl.col(c))
+    return df.with_columns(expr.alias(out_col))
+
+
+def compute_equity_flows(raw: pl.DataFrame) -> pl.DataFrame:
+    """
+    Bereken cumulatieve equity flows (aandelen).
+    Output bevat buy/sell totals en netto positie.
+    """
+    if raw.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "qty_eq": pl.Float32})
+
+    # Alleen aandelen
+    df = raw.filter(pl.col("asset_type").str.to_lowercase() == "aandeel")
+    if df.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "qty_eq": pl.Float32})
+
+    # Koop/verkoop splitsen
+    is_buy = df.filter(pl.col("transactie_type").str.to_lowercase() == "koop")
+    is_sell = df.filter(pl.col("transactie_type").str.to_lowercase() == "verkoop")
+
+    # Aggregaties
+    buy = (
+        is_buy
+        .group_by("asset_rollup")
+        .agg([
+            pl.col("aantal").sum().alias("buy_qty"),
+            (-pl.col("transactie_euro_totaal")).sum().alias("buy_eur"),
+            pl.col("transactie_fee").sum().alias("fee_buy")
+        ])
     )
-    sell = df[is_sell].groupby("asset_rollup", as_index=False).agg(
-        sell_qty=("aantal","sum"),
-        sell_eur=("transactie_euro_totaal","sum"),
-        fee_sell=("transactie_fee","sum")
+
+    sell = (
+        is_sell
+        .group_by("asset_rollup")
+        .agg([
+            pl.col("aantal").sum().alias("sell_qty"),
+            pl.col("transactie_euro_totaal").sum().alias("sell_eur"),
+            pl.col("transactie_fee").sum().alias("fee_sell")
+        ])
     )
-    flows = pd.merge(buy, sell, on="asset_rollup", how="outer").fillna(0.0)
-    flows["qty_eq"] = flows["buy_qty"] - flows["sell_qty"]
-    flows["fee_eq"] = flows["fee_buy"] + flows["fee_sell"]
+
+    # Outer join met null-opvulling
+    flows = (
+        buy.join(sell, on="asset_rollup", how="outer")
+        .fill_null(0.0)
+        .with_columns([
+            (pl.col("buy_qty") - pl.col("sell_qty")).cast(pl.Float32).alias("qty_eq"),
+            (pl.col("fee_buy") + pl.col("fee_sell")).cast(pl.Float32).alias("fee_eq")
+        ])
+    )
+
+    return flows
+
+
+
+
+
+def coalesce_cols(df: pl.DataFrame, out_col: str, *cands: str) -> pl.DataFrame:
+    """
+    Combineer meerdere kolommen in volgorde van prioriteit.
+    De eerste niet-null waarde wordt gekozen.
+    """
+    if not cands:
+        df = df.with_columns(pl.lit(None).alias(out_col))
+        return df
+
+    expr = pl.col(cands[0])
+    for c in cands[1:]:
+        expr = expr.fill_null(pl.col(c))
+    return df.with_columns(expr.alias(out_col))
+
+
+def compute_equity_flows(raw: pl.DataFrame) -> pl.DataFrame:
+    """
+    Bereken cumulatieve equity flows (aandelen).
+    Output bevat buy/sell totals en netto positie.
+    """
+    if raw.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "qty_eq": pl.Float32})
+
+    # Alleen aandelen
+    df = raw.filter(pl.col("asset_type").str.to_lowercase() == "aandeel")
+    if df.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "qty_eq": pl.Float32})
+
+    # Koop/verkoop splitsen
+    is_buy = df.filter(pl.col("transactie_type").str.to_lowercase() == "koop")
+    is_sell = df.filter(pl.col("transactie_type").str.to_lowercase() == "verkoop")
+
+    # Aggregaties
+    buy = (
+        is_buy
+        .group_by("asset_rollup")
+        .agg([
+            pl.col("aantal").sum().alias("buy_qty"),
+            (-pl.col("transactie_euro_totaal")).sum().alias("buy_eur"),
+            pl.col("transactie_fee").sum().alias("fee_buy")
+        ])
+    )
+
+    sell = (
+        is_sell
+        .group_by("asset_rollup")
+        .agg([
+            pl.col("aantal").sum().alias("sell_qty"),
+            pl.col("transactie_euro_totaal").sum().alias("sell_eur"),
+            pl.col("transactie_fee").sum().alias("fee_sell")
+        ])
+    )
+
+    # Outer join met null-opvulling
+    flows = (
+        buy.join(sell, on="asset_rollup", how="outer")
+        .fill_null(0.0)
+        .with_columns([
+            (pl.col("buy_qty") - pl.col("sell_qty")).cast(pl.Float32).alias("qty_eq"),
+            (pl.col("fee_buy") + pl.col("fee_sell")).cast(pl.Float32).alias("fee_eq")
+        ])
+    )
+
     return flows

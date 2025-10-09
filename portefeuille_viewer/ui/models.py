@@ -1,6 +1,8 @@
 import pandas as pd
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PySide6.QtGui import QColor, QBrush
+import polars as pl
+
 
 
 # ------------------------------------------------------------
@@ -61,182 +63,75 @@ class PandasTableModel(QAbstractTableModel):
 
 
 # ------------------------------------------------------------
-# WidePerAssetModel — speciaal voor portefeuille-overzicht
+# Polars model voor portefeuille (
 # ------------------------------------------------------------
-class WidePerAssetModel(QAbstractTableModel):
+
+
+
+
+class PolarsTableModel(QAbstractTableModel):
     """
-    Toon gecombineerde posities (aandelen + sprinters) per asset.
-    Bevat kolommen met actuele prijzen, P/L, fees, etc.
+    Qt-model dat data rechtstreeks uit een Polars DataFrame toont.
+    Te gebruiken voor de Live-tab.
     """
 
-    COLS = [
-        "Asset","Valuta","Koers",
-        "Aantal_eq","avg_buy_eq","Waarde_eq","Hist_eq","Open_eq","Totaal_eq","Fees_eq",
-        "Aantal_spr","avg_buy_spr","Waarde_spr","Hist_spr","Open_spr","Totaal_spr","Fees_spr",
-        "Premie_opties","Fees_opties",              # ← toegevoegd
-        "Totaal_portefeuille"
-    ]
-
-
-    def __init__(self, df: pd.DataFrame, parent=None):
+    def __init__(self, df: pl.DataFrame | None = None, parent=None):
         super().__init__(parent)
-        self._df = df.copy() if df is not None else pd.DataFrame(columns=self.COLS)
+        self._df = df if df is not None else pl.DataFrame()
+        self._cols = list(self._df.columns)
 
-    # ---------------------------------------------
-    # Qt model API
-    # ---------------------------------------------
+    def set_df(self, df: pl.DataFrame):
+        self.beginResetModel()
+        self._df = df if df is not None else pl.DataFrame()
+        self._cols = list(self._df.columns)
+        self.endResetModel()
+
     def rowCount(self, parent=QModelIndex()):
-        return len(self._df)
+        return 0 if self._df.is_empty() else self._df.height
 
     def columnCount(self, parent=QModelIndex()):
-        return len(self.COLS)
+        return 0 if self._df.is_empty() else self._df.width
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
-            return self.COLS[section]
+            return self._cols[section]
         return str(section + 1)
 
     def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid() or self._df is None:
+        if not index.isValid() or self._df.is_empty():
             return None
-        col = self.COLS[index.column()]
-        row = self._df.iloc[index.row()]
-        val = row.get(col, None)
-        # val = self._df.iloc[index.row()][col]
 
+        val = self._df[index.row(), index.column()]
+        col_name = self._cols[index.column()]
+
+        # --- Tekstopmaak ---
         if role == Qt.DisplayRole:
-            # leeg tonen bij None/NaN/NaT
-            if pd.isna(val):
+            if val is None:
                 return ""
-            # eenvoudige EU-opmaak: getallen met 2 dec., aantallen als int
-            if col in ("Aantal_eq", "Aantal_spr"):
-                try:
-                    n = int(round(float(val)))
-                    return f"{n:,}".replace(",", ".")
-                except Exception:
-                    return str(val)
-            if isinstance(val, (int, float)):
-                try:
-                    s = f"{float(val):,.2f}"
-                    return s.replace(",", "X").replace(".", ",").replace("X", ".")
-                except Exception:
-                    return str(val)
+            if isinstance(val, float):
+                return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             return str(val)
 
         if role == Qt.TextAlignmentRole:
-            return (Qt.AlignRight | Qt.AlignVCenter) if isinstance(val, (float, int)) else (Qt.AlignLeft | Qt.AlignVCenter)
+            if isinstance(val, (int, float)):
+                return Qt.AlignRight | Qt.AlignVCenter
+            return Qt.AlignLeft | Qt.AlignVCenter
 
-        if role == Qt.ForegroundRole and col == "Totaal_portefeuille":
-            v = self._df.iloc[index.row()]["Totaal_portefeuille"]
-            if isinstance(v, (float, int)):
-                return QBrush(QColor("darkgreen") if v >= 0 else QColor("red"))
+        if role == Qt.ForegroundRole and col_name.lower().startswith("totaal"):
+            if isinstance(val, (int, float)):
+                return QBrush(QColor("darkgreen") if val >= 0 else QColor("red"))
 
         return None
 
-    def set_df(self, df: pd.DataFrame):
-        """Vervang de onderliggende dataframe en reset het model netjes."""
-        self.beginResetModel()
-        self._df = df.copy() if df is not None else pd.DataFrame(columns=self.COLS)
-        self.endResetModel()
+
+# ------------------------------------------------------------
+# filter model, gerbruikt in Orders-tab en live_tab
+# ------------------------------------------------------------
 
 
 
-
-    # ---------------------------------------------
-    # Business logic
-    # ---------------------------------------------
-    def update_price(self, ib_symbol: str, currency: str, px: float):
-        """Wordt aangeroepen bij prijsupdate vanuit IB feed."""
-        if self._df.empty:
-            return
-        mask = (self._df["_ib_symbol"] == ib_symbol) & (self._df["_ib_currency"] == currency)
-        idx = self._df.index[mask]
-        if len(idx) == 0:
-            return
-        i = idx[0]
-        self._df.at[i, "Koers"] = px
-        self._recalc_row(i)
-        top_left = self.index(i, 0)
-        bottom_right = self.index(i, len(self.COLS) - 1)
-        self.dataChanged.emit(top_left, bottom_right, [Qt.DisplayRole])
-
-    def _recalc_row(self, i: int):
-        """Herberekent alle velden voor één asset."""
-        r = self._df.iloc[i]
-        
-        # if not hasattr(self, "_sprinters_df"):
-        #     print("⚠️  _sprinters_df ontbreekt in model")
-        # elif self._sprinters_df.empty:
-        #     print("⚠️  _sprinters_df is leeg")
-        # else:
-        #     print("✅ _sprinters_df geladen met", len(self._sprinters_df), "regels")
-        #     print(self._sprinters_df.head(5))
-
-
-
-        px = float(r["Koers"] or 0.0)
-
-        # === Aandelen ===
-        qty_eq   = float(r["_qty_eq"] or 0.0)
-        avg_eq   = float(r["_avg_entry_eq"] or 0.0)
-        hist_eq  = float(r["_hist_init_eq"] or 0.0)
-        waarde_eq = qty_eq * px
-        open_eq   = (px - avg_eq) * qty_eq
-        total_eq  = hist_eq + open_eq
-
-        # === Sprinters ===
-        # Zoek alle sprinters (asset_detail) die bij deze asset_rollup horen
-        asset_name = str(r["Asset"]).strip().lower()
-        waarde_spr = open_spr = total_spr = hist_spr = 0.0
-
-        if hasattr(self, "_sprinters_df") and not self._sprinters_df.empty:
-            subset = self._sprinters_df[
-                self._sprinters_df["asset_rollup"].str.lower() == asset_name
-            ]
-            if not subset.empty:
-                # Bereken per sprinter met eigen funding
-                subset = subset.copy()
-                subset["waarde_i"] = subset["qty_spr"] * (px - subset["fund_w"])
-                subset["open_i"]   = ((px - subset["fund_w"]) - subset["avg_entry_spr"]) * subset["qty_spr"]
-                subset["total_i"]  = subset["hist_spr"] + subset["open_i"]
-
-                waarde_spr = subset["waarde_i"].sum()
-                open_spr   = subset["open_i"].sum()
-                total_spr  = subset["total_i"].sum()
-                hist_spr   = subset["hist_spr"].sum()
-
-        premie_opt = float(r.get("_premie_opties", 0.0))
-        fees_opt   = float(r.get("_fees_opties", 0.0))
-
-        # === Totaal portefeuille ===
-        totaal_port = total_eq + total_spr + premie_opt
-
-        # === Waarden terugschrijven ===
-        self._df.at[i, "Waarde_eq"] = waarde_eq
-        self._df.at[i, "Open_eq"]   = open_eq
-        self._df.at[i, "Totaal_eq"] = total_eq
-
-        self._df.at[i, "Waarde_spr"] = waarde_spr
-        self._df.at[i, "Open_spr"]   = open_spr
-        self._df.at[i, "Totaal_spr"] = total_spr
-        self._df.at[i, "Hist_spr"]   = hist_spr
-
-        self._df.at[i, "Premie_opties"] = premie_opt
-        self._df.at[i, "Fees_opties"]   = fees_opt
-        self._df.at[i, "Totaal_portefeuille"] = totaal_port
-
-        
-
-
-    def total_value(self) -> float:
-        """Som van Totaal_portefeuille."""
-        if self._df.empty or "Totaal_portefeuille" not in self._df.columns:
-            return 0.0
-        return float(self._df["Totaal_portefeuille"].sum())
-
-from PySide6.QtCore import QSortFilterProxyModel, Qt
 
 class MultiColFilterProxy(QSortFilterProxyModel):
     """

@@ -20,8 +20,8 @@ class MainWindow(QMainWindow):
         self.feed_service._feed.log.connect(lambda s: self.statusBar().showMessage(s, 3000))
         self.feed_service._feed.ready.connect(lambda: self.statusBar().showMessage("IB-feed ready", 2000))
 
-        # eerste data_load in snapshot store
-        SNAPSHOT_STORE.load_all()
+        # # eerste data_load in snapshot store
+        # SNAPSHOT_STORE.load_all()
 
         # Tabs
         self.tabs = QTabWidget()
