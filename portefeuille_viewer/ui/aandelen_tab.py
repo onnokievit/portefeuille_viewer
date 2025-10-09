@@ -6,16 +6,24 @@ from portefeuille_viewer.data import repository
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
 
-class OpenOptiesPolarsTab(QWidget):
+
+import polars as pl
+
+
+
+
+class AandelenPolarsTab(QWidget):
     """
     Tabblad dat de eerste 50 regels van load_open_opties_from_tx toont (Polars versie).
     """
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
+        
+
 
         # Data laden
-        df = repository.load_open_opties_from_tx()
+        df = repository.load_aandelen_from_tx()
         #df = df.head(50) if not df.is_empty() else pl.DataFrame()
 
         # Model aanmaken
@@ -34,3 +42,4 @@ class OpenOptiesPolarsTab(QWidget):
 
         layout.addWidget(QLabel(f"{len(df)} regels geladen (eerste 50 getoond)"))
         layout.addWidget(table)
+

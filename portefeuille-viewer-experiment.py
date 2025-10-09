@@ -30,69 +30,31 @@ def test_load_datasets():
     start_time = time.time()
     
     df = repository.load_alle_transacties()
-    print(" alle transacties:")
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
-    
+    alle_transaties_time = time.time()
+    # print(" alle transacties:")
+    # print(df.shape)
+    # print(df.columns)
+    # print(df.head())
+
     df = repository.load_aandelen_from_tx()
-    print(" open aandelen:")
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
     aandelen_time = time.time()
 
     df = repository.load_open_opties_from_tx()
-    print(" open opties:")
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
-    opties_time = time.time()
+    opties_open_time = time.time()
 
     df = repository.load_gesloten_opties_from_tx()
-    print(" gesloten opties:")
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
     optie_gesloten_time = time.time()
-      
-    
-    
-    # # print(df.shape)
-    # # print(df.columns)
-    # # print(df.head())
-
-    
-    # df = repository.load_open_sprinters()
-    # # print(df.shape)
-    # # print(df.columns)
-    # # print(df.head())
-    # sprinters_time = time.time()
-
-    # df = repository.load_gesloten_sprinters()
-    # # print(df.shape)
-    # # print(df.columns)
-    # # print(df.head())
-    # gesloten_sprinters_time = time.time()
-    
-    
-    
-    alle_transaties = time.time()
-    # print(df.shape)
-    # print(df.columns)
-    #print(df.head())
-
 
     end_time = time.time()
-    elapsed_time = end_time - start_time
 
-    # print(f"Time taken to load open aandelen: {aandelen_time - start_time}) seconds")
-    # print(f"Time taken to load open opties: {opties_time - aandelen_time}) seconds")
-    # print(f"Time taken to load gesloten opties: {optie_gesloten_time - opties_time}) seconds")
+    elapsed_time = end_time - start_time
+    print(f"Time taken to load open aandelen: {alle_transaties_time - start_time}) seconds")
+    print(f"Time taken to load open aandelen: {aandelen_time - alle_transaties_time}) seconds")
+    print(f"Time taken to load open opties: {opties_open_time - aandelen_time}) seconds")
+    print(f"Time taken to load gesloten opties: {optie_gesloten_time - opties_open_time}) seconds")
     # print(f"Time taken to load open sprinters: {sprinters_time - optie_gesloten_time}) seconds")
     # print(f"Time taken to load gesloten sprinters: {gesloten_sprinters_time - sprinters_time}) seconds")    
     # print(f"Time taken to load alle transacties: {alle_transaties - gesloten_sprinters_time}) seconds")     
-    print(f"Time taken to load alle transacties: {alle_transaties - start_time}) seconds")
     print(f"Time taken to load all data: {elapsed_time:.2f} seconds")
 
 
