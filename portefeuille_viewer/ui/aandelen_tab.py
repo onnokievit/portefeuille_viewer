@@ -45,14 +45,35 @@ class AandelenPolarsTab(QWidget):
             if df.is_empty():
                 df = pl.DataFrame()
 
-            # Voeg koers toe per asset_rollup (éénmalig bij laden)
-            def get_koers(asset_rollup: str) -> float:
-                prijs = self.feed_service.get(asset_rollup, "EUR")
-                # print(f"Koers voor {asset_rollup}: {prijs}")  # Debug: Print de opgehaalde koers
+            # Laad asset_rollup_data en voeg ib_symbol, ib_currency, prim_exchange toe
+            asset_map = repository.load_asset_rollup_data()
+            if not asset_map.is_empty():
+                df = df.join(
+                    asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
+                    on="asset_rollup",
+                    how="left"
+                )
+
+            # Subscripties instellen voor de feed_service
+            if not asset_map.is_empty():
+                subs = (
+                    asset_map.select(["ib_symbol", "ib_currency", "prim_exchange"])
+                            .unique()
+                            .to_numpy()
+                            .tolist()
+                )
+                self.feed_service.ensure_subscriptions(subs)
+
+            # Voeg koers toe per asset_rollup en ib_currency
+            def get_koers(asset_rollup: str, ib_currency: str) -> float:
+                prijs = self.feed_service.get(asset_rollup, cur=ib_currency)
                 return prijs if prijs is not None else 0.0
 
             df = df.with_columns([
-                pl.col("asset_rollup").map_elements(get_koers, return_dtype=pl.Float32).alias("Koers")
+                pl.struct(["asset_rollup", "ib_currency"]).map_elements(
+                    lambda row: get_koers(row["asset_rollup"], row["ib_currency"]),
+                    return_dtype=pl.Float32
+                ).alias("Koers")
             ])
 
             self.model = PolarsTableModel(df, self)
@@ -61,24 +82,49 @@ class AandelenPolarsTab(QWidget):
         except Exception as e:
             self.label.setText(f"Fout bij laden: {e}")
 
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
     @Slot(str, str, float)
+
     def _on_price_update(self, sym: str, cur: str, px: float):
         """Realtime update van koerskolom in de tabel."""
         if not hasattr(self, "model") or self.model._df.is_empty():
             return
-        if "asset_rollup" not in self.model._df.columns or "Koers" not in self.model._df.columns:
+        if "ib_symbol" not in self.model._df.columns or "ib_currency" not in self.model._df.columns or "Koers" not in self.model._df.columns:
             return
 
         df = self.model._df
-        if sym not in df["asset_rollup"].to_list():
+
+        # Controleer of sym en cur overeenkomen met een rij in de tabel
+        if not ((df["ib_symbol"] == sym) & (df["ib_currency"] == cur)).any():
             return  # geen match in deze tabel
 
+        # Update de kolom "Koers" voor de juiste rijen
         df = df.with_columns(
-            pl.when(pl.col("asset_rollup") == sym)
-              .then(pl.lit(px))
-              .otherwise(pl.col("Koers"))
-              .alias("Koers")
+            pl.when((pl.col("ib_symbol") == sym) & (pl.col("ib_currency") == cur))
+            .then(pl.lit(px))
+            .otherwise(pl.col("Koers"))
+            .alias("Koers")
         )
+
         self.model.set_df(df)
-        self.label.setText(f"Koersupdate ontvangen voor {sym}: {px:.2f}")
+        # Optioneel: Toon een melding in de UI
+        self.label.setText(f"Koersupdate ontvangen voor {sym} ({cur}): {px:.2f}")
+
+    # def _on_price_update(self, sym: str, cur: str, px: float):
+    #     if not hasattr(self, "model") or self.model._df.is_empty():
+    #         return
+    #     if "ib_symbol" not in self.model._df.columns or "Koers" not in self.model._df.columns:
+    #         return
+
+    #     df = self.model._df
+    #     if sym not in df["ib_symbol"].to_list():
+    #         return  # geen match in deze tabel
+
+    #     df = df.with_columns(
+    #         pl.when(pl.col("ib_symbol") == sym)
+    #         .then(pl.lit(px))
+    #         .otherwise(pl.col("Koers"))
+    #         .alias("Koers")
+    #     )
+    #     self.model.set_df(df)
+    #     # evt. self.label.setText(f"Koersupdate ontvangen voor {sym}: {px:.2f}")

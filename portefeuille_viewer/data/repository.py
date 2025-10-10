@@ -55,6 +55,7 @@ def load_asset_rollup_data() -> pl.DataFrame:
         df = pl.read_database(sql, conn)
     return compact_float64(df)
 
+
 # ------------------------------------------------------------
 # transacties laden
 # ------------------------------------------------------------
