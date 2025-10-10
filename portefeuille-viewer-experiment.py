@@ -13,20 +13,15 @@ from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
 import sys, os
 
-start_time = time.time()
-
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
 # sys.path.insert(0, os.path.dirname(__file__))
 
-# from portefeuille_viewer.data import repository
-
 # # Controleer welke repository daadwerkelijk geladen wordt:
 # print("✅ Repository geladen uit:", repository.__file__)
 
-
-
+start_time = time.time()
 
 def test_load_datasets():
     start_time = time.time()
@@ -52,6 +47,7 @@ def test_load_datasets():
     optie_gesloten_time = time.time()
 
     df = repository.load_asset_rollup_data()
+    SNAPSHOT_STORE.asset_rollup_data = df
     # print(" asset_rollup_data:")
     # print(df.shape)
     # print(df.columns)

@@ -56,7 +56,7 @@ class SnapshotStore:
         if self.gesloten_sprinters is not None:
             parts.append(f"Gesloten Sprinters: {len(self.gesloten_sprinters)} rijen")
         if self.asset_rollup_data is not None:
-            parts.append(f"Asset Rollup: {len(self.asset_rollup)} rijen")
+            parts.append(f"Asset Rollup data: {len(self.asset_rollup_data)} rijen")
 
         return " | ".join(parts) if parts else "(geen data geladen)"
 
