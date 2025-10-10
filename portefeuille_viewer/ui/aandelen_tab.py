@@ -48,7 +48,7 @@ class AandelenPolarsTab(QWidget):
             # Voeg koers toe per asset_rollup (éénmalig bij laden)
             def get_koers(asset_rollup: str) -> float:
                 prijs = self.feed_service.get(asset_rollup, "EUR")
-                print(f"Koers voor {asset_rollup}: {prijs}")  # Debug: Print de opgehaalde koers
+                # print(f"Koers voor {asset_rollup}: {prijs}")  # Debug: Print de opgehaalde koers
                 return prijs if prijs is not None else 0.0
 
             df = df.with_columns([

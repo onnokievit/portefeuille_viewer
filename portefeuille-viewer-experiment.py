@@ -10,9 +10,11 @@ import sys
 import pandas as pd
 from PySide6.QtWidgets import QApplication, QTableView
 from portefeuille_viewer.ui.models import PandasTableModel
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+import sys, os
+
 start_time = time.time()
 
-import sys, os
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
@@ -30,6 +32,7 @@ def test_load_datasets():
     start_time = time.time()
     
     df = repository.load_alle_transacties()
+    SNAPSHOT_STORE.alle_transacties = df 
     alle_transaties_time = time.time()
     # print(" alle transacties:")
     # print(df.shape)
@@ -37,21 +40,26 @@ def test_load_datasets():
     # print(df.head())
 
     df = repository.load_aandelen_from_tx()
+    SNAPSHOT_STORE.aandelen = df 
     aandelen_time = time.time()
 
     df = repository.load_open_opties_from_tx()
+    SNAPSHOT_STORE.load_open_opties_from_tx = df
     opties_open_time = time.time()
 
     df = repository.load_gesloten_opties_from_tx()
+    SNAPSHOT_STORE.gesloten_opties = df
     optie_gesloten_time = time.time()
 
     df = repository.load_asset_rollup_data()
-    print(" asset_rollup_data:")
-    print(df.shape)
-    print(df.columns)
-    print(df.head())
+    # print(" asset_rollup_data:")
+    # print(df.shape)
+    # print(df.columns)
+    # print(df.head())
 
     end_time = time.time()
+    # print("Samenvatting van geladen datasets:")
+    print(SNAPSHOT_STORE.summary())
 
     elapsed_time = end_time - start_time
     print(f"Time taken to load open transacties: {alle_transaties_time - start_time}) seconds")

@@ -5,8 +5,9 @@ from portefeuille_viewer.domain.engine import compact_float64
 
 import warnings
 import polars as pl
-
-
+import warnings # importeer warnings module om waarschuwingen te beheren
+warnings.filterwarnings("ignore", category=UserWarning, module="pandas") # onderdruk specifieke waarschuwingen van pandas
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # ------------------------------------------------------------
 # Database configuratie
