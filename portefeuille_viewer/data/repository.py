@@ -40,8 +40,24 @@ def switch_database(name: str):
 
 
 # ------------------------------------------------------------
-# Snapshot store loaders
+# ################ Snapshot store loaders ####################
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# asset_rollup_data referentie tabel ophalen
+# ------------------------------------------------------------
+def load_asset_rollup_data() -> pl.DataFrame:
+    """
+    Laadt de asset_rollup_data-tabel uit de database.
+    """
+    sql = "SELECT * FROM asset_rollup_data"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    return compact_float64(df)
+
+# ------------------------------------------------------------
+# transacties laden
+# ------------------------------------------------------------
+
 def load_alle_transacties() -> pl.DataFrame:
     """
     Laadt alle transacties uit de database.

@@ -45,6 +45,12 @@ def test_load_datasets():
     df = repository.load_gesloten_opties_from_tx()
     optie_gesloten_time = time.time()
 
+    df = repository.load_asset_rollup_data()
+    print(" asset_rollup_data:")
+    print(df.shape)
+    print(df.columns)
+    print(df.head())
+
     end_time = time.time()
 
     elapsed_time = end_time - start_time

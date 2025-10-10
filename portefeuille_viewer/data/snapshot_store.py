@@ -1,4 +1,5 @@
 import polars as pl
+from portefeuille_viewer.data.repository import load_asset_rollup_data
 
 class SnapshotStore:
     """
@@ -15,7 +16,7 @@ class SnapshotStore:
         self.gesloten_aandelen: pl.DataFrame | None = None
         self.gesloten_opties: pl.DataFrame | None = None
         self.gesloten_sprinters: pl.DataFrame | None = None
-
+        self.asset_rollup_data: pl.DataFrame | None = None
 
     def clear(self):
         """Reset alle snapshots naar leeg."""
@@ -25,7 +26,7 @@ class SnapshotStore:
         self.gesloten_aandelen = None
         self.gesloten_opties = None
         self.gesloten_sprinters = None
-
+        self.asset_rollup_data = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -36,7 +37,7 @@ class SnapshotStore:
             self.gesloten_aandelen is not None,
             self.gesloten_opties is not None,
             self.gesloten_sprinters is not None,
-
+            self.asset_rollup_data is not None
         ])
 
     def summary(self) -> str:
@@ -49,14 +50,19 @@ class SnapshotStore:
         if self.open_sprinters is not None:
             parts.append(f"Open Sprinters: {len(self.open_sprinters)} rijen")
         if self.gesloten_aandelen is not None:
-            parts.append(f"Gesloten Aandelen: {len(self.open_sprinters)} rijen")
+            parts.append(f"Gesloten Aandelen: {len(self.gesloten_aandelen)} rijen")
         if self.gesloten_opties is not None:
-            parts.append(f"Gesloten Opties: {len(self.open_sprinters)} rijen")
+            parts.append(f"Gesloten Opties: {len(self.gesloten_opties)} rijen")
         if self.gesloten_sprinters is not None:
-            parts.append(f"Gesloten Sprinters: {len(self.open_sprinters)} rijen")
+            parts.append(f"Gesloten Sprinters: {len(self.gesloten_sprinters)} rijen")
+        if self.asset_rollup_data is not None:
+            parts.append(f"Asset Rollup: {len(self.asset_rollup)} rijen")
 
         return " | ".join(parts) if parts else "(geen data geladen)"
 
+    def load_asset_rollup(self):
+        """Vul de asset_rollup snapshot."""
+        self.asset_rollup_data = load_asset_rollup_data()
 
 # Globale instantie — kan hergebruikt worden in UI of engines
 SNAPSHOT_STORE = SnapshotStore()
