@@ -55,43 +55,35 @@ def load_alle_transacties() -> pl.DataFrame:
 # Aandelen, zowel open als gesloten
 # ------------------------------------------------------------
 def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
-    """
-    Snellere & compactere Polars-versie van de 'aandelen_open'-dataset.
-    Gebruikt één groupby + pivot in plaats van twee losse joins.
-    """
     if df_tx is None:
         df_tx = load_alle_transacties()
 
-    df = (
-        df_tx
-        .filter(pl.col("asset_type") == "aandeel")
-        .group_by(["broker", "asset_rollup", "asset_type", "transactie_type"])
+    df_koop = (
+        df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "koop"))
+        .group_by(["broker", "asset_rollup", "asset_type"])
         .agg([
-            pl.sum("transactie_aantal").alias("transactie_aantal"),
-            pl.sum("transactie_euro_totaal").alias("transactie_euro_totaal"),
-            pl.sum("transactie_fee").alias("transactie_fee")
+            pl.sum("transactie_aantal").alias("aantal_koop"),
+            pl.sum("transactie_euro_totaal").alias("euro_koop"),
+            pl.sum("transactie_fee").alias("fee_koop"),
         ])
-        .pivot(
-            values=["transactie_aantal", "transactie_euro_totaal", "transactie_fee"],
-            index=["broker", "asset_rollup", "asset_type"],
-            columns="transactie_type"
-        )
-        .with_columns([
-            pl.col("transactie_aantal_koop").fill_null(0),
-            pl.col("transactie_aantal_verkoop").fill_null(0),
-            pl.col("transactie_fee_koop").fill_null(0),
-            pl.col("transactie_fee_verkoop").fill_null(0),
-        ])
-        .with_columns([
-            (pl.col("transactie_aantal_koop") + pl.col("transactie_aantal_verkoop"))
-                .alias("aantal_bezit"),
-            (pl.col("transactie_fee_koop") + pl.col("transactie_fee_verkoop"))
-                .alias("totaal_fee")
-        ])
-        .sort(["broker", "asset_rollup"])
     )
 
-    return df
+    df_verkoop = (
+        df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "verkoop"))
+        .group_by(["broker", "asset_rollup", "asset_type"])
+        .agg([
+            pl.sum("transactie_aantal").alias("aantal_verkoop"),
+            pl.sum("transactie_euro_totaal").alias("euro_verkoop"),
+            pl.sum("transactie_fee").alias("fee_verkoop"),
+        ])
+    )
+
+    df = df_koop.join(df_verkoop, on=["broker", "asset_rollup", "asset_type"], how="outer").fill_null(0)
+    return df.with_columns([
+        (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
+        (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("totaal_fee"),
+    ])
+
 
 # ------------------------------------------------------------
 # Open opties

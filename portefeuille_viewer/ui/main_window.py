@@ -31,7 +31,10 @@ class MainWindow(QMainWindow):
         self.orders_tab = OrdersTab()
         self.live_tab   = QWidget()
         self.open_opties_tab = OpenOptiesPolarsTab()
-        self.aandelen_tab = AandelenPolarsTab()
+        #self.aandelen_tab = AandelenPolarsTab()
+        
+        self.aandelen_tab = AandelenPolarsTab(self.feed_service)
+        self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
         self.settings_tab = SettingsTab()
 
         self.tabs.addTab(self.orders_tab, "Orders")

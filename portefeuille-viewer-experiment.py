@@ -48,7 +48,7 @@ def test_load_datasets():
     end_time = time.time()
 
     elapsed_time = end_time - start_time
-    print(f"Time taken to load open aandelen: {alle_transaties_time - start_time}) seconds")
+    print(f"Time taken to load open transacties: {alle_transaties_time - start_time}) seconds")
     print(f"Time taken to load open aandelen: {aandelen_time - alle_transaties_time}) seconds")
     print(f"Time taken to load open opties: {opties_open_time - aandelen_time}) seconds")
     print(f"Time taken to load gesloten opties: {optie_gesloten_time - opties_open_time}) seconds")
