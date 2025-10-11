@@ -53,8 +53,8 @@ def load_asset_rollup_data() -> pl.DataFrame:
     sql = "SELECT * FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    
-    return compact_float64(df)
+    SNAPSHOT_STORE.snapshot_asset_rollup_data = df
+    # return compact_float64(df)
 
 
 
@@ -71,8 +71,10 @@ def load_alle_transacties() -> pl.DataFrame:
     sql = "SELECT * FROM transacties_bron_data_org"  # vervang door jouw Access-query
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    # SNAPSHOT_STORE.snapshot_alle_transacties = df
-    return compact_float64(df)
+    compact_float64(df)
+    SNAPSHOT_STORE.snapshot_alle_transacties = df
+    
+    
 
 # ------------------------------------------------------------
 # Aandelen, zowel open als gesloten
@@ -104,12 +106,14 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     )
 
     df = df_koop.join(df_verkoop, on=["broker", "asset_rollup", "asset_type"], how="outer").fill_null(0)
-    return df.with_columns([
-        (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
-        (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("totaal_fee"),
-    ]
     
+    df = df.with_columns([
+        (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
+        (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("eq_total_fee"),
+    ]
     )
+    SNAPSHOT_STORE.snapshot_aandelen = df
+    
     
 
 
@@ -160,7 +164,8 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         & (pl.col("SomVantransactie_aantal") != 0)
     )
     # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
-    return per_uniek_filtered
+    SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
+    #return per_uniek_filtered
 
 
 
@@ -226,10 +231,8 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
         ])
         .sort(["broker", "asset_rollup"])
     )
-
-    return df_final
-
-
+    SNAPSHOT_STORE.snapshot_gesloten_opties = df_final
+    # return df_final
 
 # ------------------------------------------------------------
 # ############## EINDE Snapshot store loaders

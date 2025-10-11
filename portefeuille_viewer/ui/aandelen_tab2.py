@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QPushBut
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
 
+
 class AandelenTab2(QWidget):
     """
     Tab voor het tonen van de geaggregeerde aandelen-posities uit PortfolioEngine.

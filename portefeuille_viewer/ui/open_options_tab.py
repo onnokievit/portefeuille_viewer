@@ -33,5 +33,5 @@ class OpenOptiesPolarsTab(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setStretchLastSection(True)
 
-        layout.addWidget(QLabel(f"{len(df)} regels geladen (eerste 50 getoond)"))
+        layout.addWidget(QLabel(f"{len(df)} regels geladen "))
         layout.addWidget(table)

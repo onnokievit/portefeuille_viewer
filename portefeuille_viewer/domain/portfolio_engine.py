@@ -73,7 +73,8 @@ class PortfolioEngine:
                 "koers": [],
                 "aantal_bezit": [],
                 "result_realised": [],
-                "result_non_realised": []
+                "result_non_realised": [],
+                "eq_total_fee": []
             })
         return (
             self.df.group_by("asset_rollup")
@@ -82,6 +83,7 @@ class PortfolioEngine:
                 pl.col("aantal_bezit").sum(),
                 pl.col("result_realised").sum(),
                 pl.col("result_non_realised").sum(),
+                pl.col("eq_total_fee").sum()
             ])
         )
     
@@ -98,7 +100,8 @@ class PortfolioEngine:
                 "euro_verkoop": [],
                 "result_realised": [],
                 "result_non_realised": [],
-                "total_result": []
+                "total_result": [],
+                "total_fee": []
             })
         return (
             self.df.group_by("asset_rollup")
@@ -111,7 +114,8 @@ class PortfolioEngine:
                 pl.col("euro_verkoop").sum(),
                 pl.col("result_realised").sum(),
                 pl.col("result_non_realised").sum(),
-                pl.col("total_result").sum()
+                pl.col("total_result").sum(),
+                pl.col("total_fee").sum()
             ])
         )
 

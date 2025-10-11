@@ -25,11 +25,11 @@ import sys, os
 
 def load_datasets():
     start_time = time.time()            
-    SNAPSHOT_STORE.snapshot_alle_transacties = repository.load_alle_transacties()
-    SNAPSHOT_STORE.snapshot_aandelen = repository.load_aandelen_from_tx()
-    SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = repository.load_open_opties_from_tx()
-    SNAPSHOT_STORE.snapshot_gesloten_opties = repository.load_gesloten_opties_from_tx()
-    SNAPSHOT_STORE.snapshot_asset_rollup_data = repository.load_asset_rollup_data()
+    repository.load_alle_transacties()
+    repository.load_aandelen_from_tx()
+    repository.load_open_opties_from_tx()
+    repository.load_gesloten_opties_from_tx()
+    repository.load_asset_rollup_data()
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Datasets geladen in {elapsed_time:.2f} seconden.")

@@ -43,29 +43,29 @@ class AandelenPolarsTab(QWidget):
     def _reload_data(self):
         """Laad aandelen-data en voeg live koersen toe."""
         try:
-            df = SNAPSHOT_STORE.snapshot_aandelen
-            df = df.sort("asset_rollup")  # Sorteer hier!
-            if df.is_empty():
-                df = pl.DataFrame()
-
-            # Laad asset_rollup_data en voeg ib_symbol, ib_currency, prim_exchange toe
+            # Controleer of asset_rollup_data beschikbaar is
             asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
             if not asset_map.is_empty():
-                df = df.join(
-                    asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
-                    on="asset_rollup",
-                    how="left"
-                )
+                # Selecteer relevante kolommen uit asset_rollup_data
+                asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"])
 
-            # Subscripties instellen voor de feed_service
-            if not asset_map.is_empty():
-                subs = (
-                    asset_map.select(["ib_symbol", "ib_currency", "prim_exchange"])
-                            .unique()
-                            .to_numpy()
-                            .tolist()
-                )
+                # Controleer of aandelen-data beschikbaar is
+                df = SNAPSHOT_STORE.snapshot_aandelen
+                print(asset_map.select("asset_rollup").unique())
+                print(df.select("asset_rollup").unique())
+                asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
+                df = SNAPSHOT_STORE.snapshot_aandelen.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
+                if not df.is_empty():
+                    # Voeg asset_rollup_data toe aan aandelen-data
+                    df = asset_map.join(df, on="asset_rollup", how="left")
+                else:
+                    df = asset_map
+
+                # Stel subscripties in voor de feed_service
+                subs = asset_map.select(["ib_symbol", "ib_currency", "prim_exchange"]).unique().to_numpy().tolist()
                 self.feed_service.ensure_subscriptions(subs)
+            else:
+                df = pl.DataFrame()  # Gebruik een lege DataFrame als asset_map leeg is
 
             # Voeg koers toe per asset_rollup en ib_currency
             def get_koers(asset_rollup: str, ib_currency: str) -> float:
