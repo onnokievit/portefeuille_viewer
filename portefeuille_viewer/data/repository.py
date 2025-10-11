@@ -121,7 +121,11 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     """
 
     if df_tx is None:
-        df_tx = load_alle_transacties()
+        if SNAPSHOT_STORE.alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.alle_transacties
+
+    
 
     vandaag = date.today()
 
@@ -173,7 +177,9 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
     """
 
     if df_tx is None:
-        df_tx = load_alle_transacties()
+        if SNAPSHOT_STORE.alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.alle_transacties
 
     vandaag = date.today()
 

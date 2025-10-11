@@ -1,5 +1,5 @@
 import polars as pl
-from portefeuille_viewer.data.repository import load_asset_rollup_data
+
 
 class SnapshotStore:
     """
@@ -40,7 +40,7 @@ class SnapshotStore:
             self.asset_rollup_data is not None
         ])
 
-    def summary(self) -> str:
+    def snapshot_store_summary(self) -> str:
         """Korte tekstuele samenvatting voor debug/log."""
         parts = []
         if self.alle_transacties is not None:
@@ -62,6 +62,7 @@ class SnapshotStore:
 
     def load_asset_rollup(self):
         """Vul de asset_rollup snapshot."""
+        from portefeuille_viewer.data.repository import load_asset_rollup_data
         self.asset_rollup_data = load_asset_rollup_data()
 
 # Globale instantie — kan hergebruikt worden in UI of engines

@@ -21,34 +21,19 @@ import sys, os
 # # Controleer welke repository daadwerkelijk geladen wordt:
 # print("✅ Repository geladen uit:", repository.__file__)
 
-start_time = time.time()
 
-def test_load_datasets():
-    start_time = time.time()
-        
+
+def load_datasets():
+    start_time = time.time()            
     SNAPSHOT_STORE.alle_transacties = repository.load_alle_transacties()
-    alle_transaties_time = time.time()
     SNAPSHOT_STORE.aandelen = repository.load_aandelen_from_tx()
-    aandelen_time = time.time()
     SNAPSHOT_STORE.load_open_opties_from_tx = repository.load_open_opties_from_tx()
-    opties_open_time = time.time()
     SNAPSHOT_STORE.gesloten_opties = repository.load_gesloten_opties_from_tx()
-    optie_gesloten_time = time.time()
     SNAPSHOT_STORE.asset_rollup_data = repository.load_asset_rollup_data()
     end_time = time.time()
     elapsed_time = end_time - start_time
-    
-    print(f"Time taken to load open transacties: {alle_transaties_time - start_time}) seconds")
-    print(f"Time taken to load open aandelen: {aandelen_time - alle_transaties_time}) seconds")
-    print(f"Time taken to load open opties: {opties_open_time - aandelen_time}) seconds")
-    print(f"Time taken to load gesloten opties: {optie_gesloten_time - opties_open_time}) seconds")
-    print(f"Time taken to load all data: {elapsed_time:.2f} seconds")
-    # print(f"Time taken to load open sprinters: {sprinters_time - optie_gesloten_time}) seconds")
-    # print(f"Time taken to load gesloten sprinters: {gesloten_sprinters_time - sprinters_time}) seconds")    
-    # print(f"Time taken to load alle transacties: {alle_transaties - gesloten_sprinters_time}) seconds")     
-    
-    # print("Samenvatting van geladen datasets:")
-    print(SNAPSHOT_STORE.summary())
+    print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
+    print(SNAPSHOT_STORE.snapshot_store_summary())
 
 
 def main():
@@ -62,10 +47,10 @@ def main():
     except AttributeError:
         font.setWeight(QFont.DemiBold)
     app.setFont(font)
-
+    load_datasets()
     w = MainWindow()
     w.show()
-    test_load_datasets()
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import polars as pl
 from portefeuille_viewer.data import repository
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
 
 class PortfolioEngine:
     """
@@ -14,7 +15,10 @@ class PortfolioEngine:
 
     def _load_and_prepare(self):
         # Laad de basisdata uit transacties
-        df = repository.load_aandelen_from_tx()
+        if SNAPSHOT_STORE.aandelen is None:
+            raise ValueError("Aandelen-data is niet geladen in SnapshotStore.")
+        df = SNAPSHOT_STORE.aandelen
+
         asset_map = repository.load_asset_rollup_data()
         if not asset_map.is_empty():
             df = df.join(
