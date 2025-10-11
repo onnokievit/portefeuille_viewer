@@ -10,6 +10,7 @@ from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
 from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
 
+
 APP_TITLE = "🧭 Portefeuille Viewer"
 
 class MainWindow(QMainWindow):
@@ -31,21 +32,19 @@ class MainWindow(QMainWindow):
         #self.aandelen_tab = AandelenPolarsTab()
         
         self.aandelen_tab = AandelenPolarsTab(self.feed_service)
-        self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
+        
         self.settings_tab = SettingsTab()
         
-        from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
+        
 
-        self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen 2 (Agg)")
-
-        # self.aandelen_tab2 = AandelenTab2(self.feed_service)
-        # self.tabs.addTab(self.aandelen_tab2, "Open Aandelen (live feed)")
 
 
         self.tabs.addTab(self.orders_tab, "Orders")
+        self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
+        self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen 2 (Agg)")
         self.tabs.addTab(self.live_tab, "Live view")
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
-        self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
+        #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
         self.tabs.addTab(self.settings_tab, "Settings")
         
 

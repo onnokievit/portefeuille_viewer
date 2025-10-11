@@ -53,7 +53,11 @@ def load_asset_rollup_data() -> pl.DataFrame:
     sql = "SELECT * FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
+    
     return compact_float64(df)
+
+
+
 
 
 # ------------------------------------------------------------

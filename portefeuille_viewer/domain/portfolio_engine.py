@@ -19,7 +19,7 @@ class PortfolioEngine:
             raise ValueError("Aandelen-data is niet geladen in SnapshotStore.")
         df = SNAPSHOT_STORE.aandelen
 
-        asset_map = repository.load_asset_rollup_data()
+        asset_map = SNAPSHOT_STORE.asset_rollup_data
         if not asset_map.is_empty():
             df = df.join(
                 asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),

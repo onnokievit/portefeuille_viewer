@@ -60,10 +60,7 @@ class SnapshotStore:
 
         return " | ".join(parts) if parts else "(geen data geladen)"
 
-    def load_asset_rollup(self):
-        """Vul de asset_rollup snapshot."""
-        from portefeuille_viewer.data.repository import load_asset_rollup_data
-        self.asset_rollup_data = load_asset_rollup_data()
+
 
 # Globale instantie — kan hergebruikt worden in UI of engines
 SNAPSHOT_STORE = SnapshotStore()

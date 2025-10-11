@@ -3,6 +3,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QHeaderV
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+
 
 
 class AandelenPolarsTab(QWidget):
@@ -41,13 +43,13 @@ class AandelenPolarsTab(QWidget):
     def _reload_data(self):
         """Laad aandelen-data en voeg live koersen toe."""
         try:
-            df = repository.load_aandelen_from_tx()
+            df = SNAPSHOT_STORE.aandelen
             df = df.sort("asset_rollup")  # Sorteer hier!
             if df.is_empty():
                 df = pl.DataFrame()
 
             # Laad asset_rollup_data en voeg ib_symbol, ib_currency, prim_exchange toe
-            asset_map = repository.load_asset_rollup_data()
+            asset_map = SNAPSHOT_STORE.asset_rollup_data
             if not asset_map.is_empty():
                 df = df.join(
                     asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
