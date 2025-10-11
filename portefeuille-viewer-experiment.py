@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QTableView
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
 import sys, os
-
+from portefeuille_viewer.domain import engine
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
@@ -29,6 +29,8 @@ def load_datasets():
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()
     repository.load_gesloten_opties_from_tx()
+    engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties)
+    engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties)
     repository.load_asset_rollup_data()
     end_time = time.time()
     elapsed_time = end_time - start_time

@@ -51,8 +51,7 @@ class AandelenPolarsTab(QWidget):
 
                 # Controleer of aandelen-data beschikbaar is
                 df = SNAPSHOT_STORE.snapshot_aandelen
-                print(asset_map.select("asset_rollup").unique())
-                print(df.select("asset_rollup").unique())
+
                 asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
                 df = SNAPSHOT_STORE.snapshot_aandelen.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
                 if not df.is_empty():
