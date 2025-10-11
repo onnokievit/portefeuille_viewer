@@ -234,6 +234,30 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
     SNAPSHOT_STORE.snapshot_gesloten_opties = df_final
     # return df_final
 
+def load_gesloten_opties_no_broker() -> pl.DataFrame:
+    """
+    Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asset_rollup.
+    Sla het resultaat op in snapshot_gesloten_opties_no_broker.
+    """
+    if SNAPSHOT_STORE.snapshot_gesloten_opties is None:
+        raise ValueError("snapshot_gesloten_opties is niet geladen in SnapshotStore.")
+
+    # Voer aggregatie uit op asset_rollup
+    df_final = (
+        SNAPSHOT_STORE.snapshot_gesloten_opties
+        .group_by("asset_rollup")
+        .agg([
+            pl.sum("SomVanSomVantransactie_fee").alias("clos_opt_transactie_fee"),
+            pl.sum("SomVanSomVantransactie_euro_totaal").alias("clos_opt_transactie_euro_totaal"),
+        ])
+        .sort("asset_rollup")
+    )
+
+    # Sla het resultaat op in snapshot_gesloten_opties_no_broker
+    SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker = df_final
+    return df_final
+
+
 # ------------------------------------------------------------
 # ############## EINDE Snapshot store loaders
 # ------------------------------------------------------------

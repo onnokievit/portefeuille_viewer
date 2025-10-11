@@ -91,6 +91,9 @@ class PortfolioEngine:
 
 
     def get_aggregated(self):
+        """
+        Haal de geaggregeerde dataset op en voeg gesloten opties toe.
+        """
         if self.df.is_empty():
             return pl.DataFrame({
                 "asset_rollup": [],
@@ -98,18 +101,55 @@ class PortfolioEngine:
                 "aantal_bezit": [],
                 "result_realised": [],
                 "result_non_realised": [],
-                "eq_total_fee": []
+                "eq_total_fee": [],
+                "clos_opt_transactie_fee": [],
+                "clos_opt_transactie_euro_totaal": [],
+                "total_result": []
             })
-        return (
+
+        # Basisaggregatie
+        aggregated_df = (
             self.df.group_by("asset_rollup")
             .agg([
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
                 pl.col("result_realised").sum(),
                 pl.col("result_non_realised").sum(),
-                pl.col("eq_total_fee").sum()
+                pl.col("eq_total_fee").sum(),
+                pl.col("total_result").sum()
             ])
         )
+
+        # Voeg gesloten opties toe
+        closed_options = SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker
+        if closed_options is not None and not closed_options.is_empty():
+            aggregated_df = aggregated_df.join(
+                closed_options.select(["asset_rollup", "clos_opt_transactie_fee", "clos_opt_transactie_euro_totaal"]),
+                on="asset_rollup",
+                how="left"
+            )
+        else:
+            aggregated_df = aggregated_df.with_columns([
+                pl.lit(0).alias("clos_opt_transactie_fee"),
+                pl.lit(0).alias("clos_opt_transactie_euro_totaal"),
+            ])
+
+        # Pas de kolomvolgorde aan
+        aggregated_df = aggregated_df.select([
+            "asset_rollup",
+            "koers",
+            "aantal_bezit",
+            "result_realised",
+            "result_non_realised",
+            "total_result",
+            "clos_opt_transactie_euro_totaal",
+            "eq_total_fee",
+            "clos_opt_transactie_fee",
+            
+
+        ])
+
+        return aggregated_df
     
     
     def get_aggregated2(self):
