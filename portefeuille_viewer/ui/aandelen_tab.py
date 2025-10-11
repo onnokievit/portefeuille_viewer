@@ -42,6 +42,7 @@ class AandelenPolarsTab(QWidget):
         """Laad aandelen-data en voeg live koersen toe."""
         try:
             df = repository.load_aandelen_from_tx()
+            df = df.sort("asset_rollup")  # Sorteer hier!
             if df.is_empty():
                 df = pl.DataFrame()
 

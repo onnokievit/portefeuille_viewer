@@ -8,7 +8,7 @@ from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
-
+from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
 
 APP_TITLE = "🧭 Portefeuille Viewer"
 
@@ -36,6 +36,14 @@ class MainWindow(QMainWindow):
         self.aandelen_tab = AandelenPolarsTab(self.feed_service)
         self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
         self.settings_tab = SettingsTab()
+        
+        from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
+
+        self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen 2 (Agg)")
+
+        # self.aandelen_tab2 = AandelenTab2(self.feed_service)
+        # self.tabs.addTab(self.aandelen_tab2, "Open Aandelen (live feed)")
+
 
         self.tabs.addTab(self.orders_tab, "Orders")
         self.tabs.addTab(self.live_tab, "Live view")

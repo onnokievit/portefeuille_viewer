@@ -1,11 +1,3 @@
-# ------------------------------------------------------------
-# portfolio_engine.py:
-# is de centrale regisseur die de datasets uit je snapshots combineert
-# en de belangrijkste berekeningen uitvoert.
-# bijv. load_snapshots(), build_open_positions()
-# ------------------------------------------------------------
-
-
 import polars as pl
 from portefeuille_viewer.data import repository
 
@@ -22,8 +14,7 @@ class PortfolioEngine:
 
     def _load_and_prepare(self):
         # Laad de basisdata uit transacties
-        df = repository.load_aandelen_from_tx()  # verwacht kolommen: asset_rollup, broker, asset_type, aantal_koop, aantal_verkoop, aantal_bezit, euro_koop, euro_verkoop, fee_koop, fee_verkoop, etc.
-        # Voeg ib_symbol, ib_currency, prim_exchange toe via asset_rollup_data
+        df = repository.load_aandelen_from_tx()
         asset_map = repository.load_asset_rollup_data()
         if not asset_map.is_empty():
             df = df.join(
@@ -35,22 +26,28 @@ class PortfolioEngine:
         df = df.with_columns([
             pl.lit(0.0).alias("Koers")
         ])
-        # Voeg berekende kolommen toe
         df = self._add_calculated_columns(df)
         return df
 
     def _add_calculated_columns(self, df):
-        # Berekent extra kolommen voor elke rij
-        return df.with_columns([
+        # Eerste stap: kolommen die alleen van de originele kolommen afhangen
+        df = df.with_columns([
             (pl.col("aantal_bezit") * pl.col("Koers")).alias("eq_bezit"),
             (pl.col("euro_koop") / pl.col("aantal_koop")).alias("avg_price"),
             (pl.col("euro_verkoop") + pl.col("euro_koop")).alias("result_realised"),
-            (pl.col("aantal_bezit") * pl.col("avg_price")).alias("eq_purchase"),
-            (pl.col("eq_bezit") + pl.col("eq_purchase")).alias("result_non_realised"),
         ])
+        # Tweede stap: gebruik van avg_price
+        df = df.with_columns([
+            (pl.col("aantal_bezit") * pl.col("avg_price")).alias("eq_purchase"),
+        ])
+        # Derde stap: gebruik van eq_purchase
+        df = df.with_columns([
+            (pl.col("eq_bezit") ).alias("result_non_realised"),
+            (pl.col("eq_bezit") + pl.col("result_realised")).alias("total_result"),
+        ])
+        return df
 
     def _on_live_price(self, ib_symbol, currency, price):
-        # Update alleen de rijen met deze ib_symbol
         if "ib_symbol" not in self.df.columns or self.df.is_empty():
             return
         mask = self.df["ib_symbol"] == ib_symbol
@@ -59,24 +56,23 @@ class PortfolioEngine:
         self.df = self.df.with_columns([
             pl.when(mask).then(pl.lit(price)).otherwise(pl.col("Koers")).alias("Koers")
         ])
-        # Herbereken de afgeleide kolommen
         self.df = self._add_calculated_columns(self.df)
 
     def get_full_df(self):
-        """
-        Geeft het volledige (niet-geaggregeerde) DataFrame terug (voor analyse, export, etc).
-        """
         return self.df
 
+
     def get_aggregated(self):
-        """
-        Geeft een geaggregeerde DataFrame terug op asset_rollup-niveau.
-        Kolommen: asset_rollup, koers, aantal_bezit, result_realised, result_non_realised
-        """
         if self.df.is_empty():
-            return pl.DataFrame({"asset_rollup": [], "koers": [], "aantal_bezit": [], "result_realised": [], "result_non_realised": []})
+            return pl.DataFrame({
+                "asset_rollup": [],
+                "koers": [],
+                "aantal_bezit": [],
+                "result_realised": [],
+                "result_non_realised": []
+            })
         return (
-            self.df.groupby("asset_rollup")
+            self.df.group_by("asset_rollup")
             .agg([
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
@@ -84,3 +80,34 @@ class PortfolioEngine:
                 pl.col("result_non_realised").sum(),
             ])
         )
+    
+    
+    def get_aggregated2(self):
+        if self.df.is_empty():
+            return pl.DataFrame({
+                "asset_rollup": [],
+                "koers": [],
+                "aantal_bezit": [],
+                "aantal_koop": [],
+                "euro_koop": [],
+                "aantal_verkoop": [],
+                "euro_verkoop": [],
+                "result_realised": [],
+                "result_non_realised": [],
+                "total_result": []
+            })
+        return (
+            self.df.group_by("asset_rollup")
+            .agg([
+                pl.col("Koers").max().alias("koers"),
+                pl.col("aantal_bezit").sum(),
+                pl.col("aantal_koop").sum(),
+                pl.col("euro_koop").sum(),
+                pl.col("aantal_verkoop").sum(),
+                pl.col("euro_verkoop").sum(),
+                pl.col("result_realised").sum(),
+                pl.col("result_non_realised").sum(),
+                pl.col("total_result").sum()
+            ])
+        )
+
