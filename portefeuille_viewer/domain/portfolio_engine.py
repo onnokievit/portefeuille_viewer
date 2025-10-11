@@ -15,11 +15,11 @@ class PortfolioEngine:
 
     def _load_and_prepare(self):
         # Laad de basisdata uit transacties
-        if SNAPSHOT_STORE.aandelen is None:
+        if SNAPSHOT_STORE.snapshot_aandelen is None:
             raise ValueError("Aandelen-data is niet geladen in SnapshotStore.")
-        df = SNAPSHOT_STORE.aandelen
+        df = SNAPSHOT_STORE.snapshot_aandelen
 
-        asset_map = SNAPSHOT_STORE.asset_rollup_data
+        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
         if not asset_map.is_empty():
             df = df.join(
                 asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),

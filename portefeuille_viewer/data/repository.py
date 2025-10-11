@@ -71,7 +71,7 @@ def load_alle_transacties() -> pl.DataFrame:
     sql = "SELECT * FROM transacties_bron_data_org"  # vervang door jouw Access-query
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.alle_transacties = df
+    # SNAPSHOT_STORE.snapshot_alle_transacties = df
     return compact_float64(df)
 
 # ------------------------------------------------------------
@@ -79,9 +79,9 @@ def load_alle_transacties() -> pl.DataFrame:
 # ------------------------------------------------------------
 def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     if df_tx is None:
-        if SNAPSHOT_STORE.alle_transacties is None:
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
-        df_tx = SNAPSHOT_STORE.alle_transacties
+        df_tx = SNAPSHOT_STORE.snapshot_alle_transacties
 
     df_koop = (
         df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "koop"))
@@ -125,9 +125,9 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     """
 
     if df_tx is None:
-        if SNAPSHOT_STORE.alle_transacties is None:
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
-        df_tx = SNAPSHOT_STORE.alle_transacties
+        df_tx = SNAPSHOT_STORE.snapshot_alle_transacties
 
     
 
@@ -159,7 +159,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         & (pl.col("optie_exp_date") >= vandaag)
         & (pl.col("SomVantransactie_aantal") != 0)
     )
-
+    # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
     return per_uniek_filtered
 
 
@@ -181,9 +181,9 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
     """
 
     if df_tx is None:
-        if SNAPSHOT_STORE.alle_transacties is None:
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
-        df_tx = SNAPSHOT_STORE.alle_transacties
+        df_tx = SNAPSHOT_STORE.snapshot_alle_transacties
 
     vandaag = date.today()
 

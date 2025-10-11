@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QHeaderV
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
 
 class OpenOptiesPolarsTab(QWidget):
     """
@@ -15,7 +16,7 @@ class OpenOptiesPolarsTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Data laden
-        df = repository.load_open_opties_from_tx()
+        df = SNAPSHOT_STORE.snapshot_load_open_opties_from_tx
         #df = df.head(50) if not df.is_empty() else pl.DataFrame()
 
         # Model aanmaken

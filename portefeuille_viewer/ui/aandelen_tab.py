@@ -43,13 +43,13 @@ class AandelenPolarsTab(QWidget):
     def _reload_data(self):
         """Laad aandelen-data en voeg live koersen toe."""
         try:
-            df = SNAPSHOT_STORE.aandelen
+            df = SNAPSHOT_STORE.snapshot_aandelen
             df = df.sort("asset_rollup")  # Sorteer hier!
             if df.is_empty():
                 df = pl.DataFrame()
 
             # Laad asset_rollup_data en voeg ib_symbol, ib_currency, prim_exchange toe
-            asset_map = SNAPSHOT_STORE.asset_rollup_data
+            asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
             if not asset_map.is_empty():
                 df = df.join(
                     asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
