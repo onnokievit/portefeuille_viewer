@@ -15,17 +15,41 @@ class PortfolioEngine:
 
     def _load_and_prepare(self):
         # Laad de basisdata uit transacties
+
         if SNAPSHOT_STORE.snapshot_aandelen is None:
             raise ValueError("Aandelen-data is niet geladen in SnapshotStore.")
-        df = SNAPSHOT_STORE.snapshot_aandelen
 
+        # Laad asset_map en selecteer de relevante velden
         asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
         if not asset_map.is_empty():
-            df = df.join(
-                asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
+            asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"])
+
+            # Laad snapshot_aandelen
+            aandelen = SNAPSHOT_STORE.snapshot_aandelen
+
+            # Voer een left join uit waarbij asset_map leidend is
+            df = asset_map.join(
+                aandelen,
                 on="asset_rollup",
                 how="left"
             )
+        else:
+            # Als asset_map leeg is, gebruik een lege DataFrame
+            df = pl.DataFrame()
+
+
+
+        # if SNAPSHOT_STORE.snapshot_aandelen is None:
+        #     raise ValueError("Aandelen-data is niet geladen in SnapshotStore.")
+        # df = SNAPSHOT_STORE.snapshot_aandelen
+        # asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+
+        # if not asset_map.is_empty():
+        #     df = df.join(
+        #         asset_map.select(["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"]),
+        #         on="asset_rollup",
+        #         how="left"
+        #     )
         # Voeg koerskolom toe (default 0.0)
         df = df.with_columns([
             pl.lit(0.0).alias("Koers")
