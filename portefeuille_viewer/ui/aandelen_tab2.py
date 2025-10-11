@@ -38,7 +38,7 @@ class AandelenTab2(QWidget):
 
     def reload_data(self):
         """Laad en toon de geaggregeerde dataset."""
-        df = self.engine.get_aggregated2()
+        df = self.engine.get_aggregated()
         df = df.sort("asset_rollup")  # Sorteer hier!
         self.model = PolarsTableModel(df, self)
         self.table.setModel(self.model)

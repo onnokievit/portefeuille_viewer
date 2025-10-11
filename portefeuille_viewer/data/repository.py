@@ -2,9 +2,9 @@ import pandas as pd
 import pyodbc
 from datetime import date, datetime, timedelta
 from portefeuille_viewer.domain.engine import compact_float64
-
 import warnings
 import polars as pl
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
 import warnings # importeer warnings module om waarschuwingen te beheren
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas") # onderdruk specifieke waarschuwingen van pandas
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -67,6 +67,7 @@ def load_alle_transacties() -> pl.DataFrame:
     sql = "SELECT * FROM transacties_bron_data_org"  # vervang door jouw Access-query
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.alle_transacties = df
     return compact_float64(df)
 
 # ------------------------------------------------------------
@@ -74,7 +75,9 @@ def load_alle_transacties() -> pl.DataFrame:
 # ------------------------------------------------------------
 def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     if df_tx is None:
-        df_tx = load_alle_transacties()
+        if SNAPSHOT_STORE.alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.alle_transacties
 
     df_koop = (
         df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "koop"))
@@ -100,7 +103,10 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     return df.with_columns([
         (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
         (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("totaal_fee"),
-    ])
+    ]
+    
+    )
+    
 
 
 # ------------------------------------------------------------
