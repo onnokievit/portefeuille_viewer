@@ -109,21 +109,20 @@ def print_snapshot_head(snapshot_name: str, snapshot: pl.DataFrame, n: int = 50)
     print(snapshot.head(n))
     print("\n")
 
-def print_snapshot_columns(snapshot_name: str, snapshot: pl.DataFrame, log_file="snapshots.log"):
+def print_snapshot_columns(snapshot_name: str, snapshot: pl.DataFrame):
     """
-    Druk de kolommen van een snapshot af in tabelvorm en log naar een bestand.
+    Druk de kolommen van een snapshot af in tabelvorm.
     """
-    with open(log_file, "a") as f:
-        if snapshot is None:
-            f.write(f"Snapshot '{snapshot_name}' is None.\n")
-            return
+    if snapshot is None:
+        print(f"Snapshot '{snapshot_name}' is None.")
+        return
 
-        if snapshot.is_empty():
-            f.write(f"Snapshot '{snapshot_name}' is leeg.\n")
-            return
+    if snapshot.is_empty():
+        print(f"Snapshot '{snapshot_name}' is leeg.")
+        return
 
-        f.write(f"Snapshot: {snapshot_name}\n")
-        f.write("Kolommen:\n")
-        for col in snapshot.columns:
-            f.write(f"- {col}\n")
-        f.write("\n")
+    print(f"Snapshot: {snapshot_name}")
+    print("Kolommen:")
+    for col in snapshot.columns:
+        print(f"- {col}")
+    print("\n")

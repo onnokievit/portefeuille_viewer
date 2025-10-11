@@ -581,18 +581,4 @@ def get_next_order_item_no(order_id: int) -> int:
         )
         row = cur.fetchone()
         return (row[0] or 0) + 1
-#------------------------------------------------------------------------------------------    
-####### tijdelijke test functie om het laden van data te testen 
-#------------------------------------------------------------------------------------------
 
-# if __name__ == "__main__":
-#     # Test: laad open opties direct uit Access
-    
-
-#     df = load_open_opties()
-#     print(df.shape)
-#     print(df.columns)
-#     print(df.head())
-#------------------------------------------------------------------------------------------
-####### tijdelijke test functie om het laden van data te testen 
-#------------------------------------------------------------------------------------------

@@ -15,6 +15,7 @@ class SnapshotStore:
         self.snapshot_load_open_opties_from_tx: pl.DataFrame | None = None
         self.open_sprinters: pl.DataFrame | None = None
         self.snapshot_gesloten_opties: pl.DataFrame | None = None
+        self.snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
         self.gesloten_sprinters: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
 
@@ -25,6 +26,7 @@ class SnapshotStore:
         self.snapshot_load_open_opties_from_tx = None
         self.open_sprinters = None
         self.snapshot_gesloten_opties = None
+        self.snapshot_gesloten_opties_no_broker = None
         self.gesloten_sprinters = None
         self.snapshot_asset_rollup_data = None
 
@@ -36,6 +38,7 @@ class SnapshotStore:
             self.snapshot_load_open_opties_from_tx is not None,
             self.open_sprinters is not None,
             self.snapshot_gesloten_opties is not None,
+            self.snapshot_gesloten_opties_no_broker is not None,
             self.gesloten_sprinters is not None,
             self.snapshot_asset_rollup_data is not None
         ])
@@ -53,6 +56,8 @@ class SnapshotStore:
             parts.append(f"Open Sprinters: {len(self.open_sprinters)} rijen")
         if self.snapshot_gesloten_opties is not None:
             parts.append(f"Gesloten Opties: {len(self.snapshot_gesloten_opties)} rijen")
+        if self.snapshot_gesloten_opties_no_broker is not None:
+            parts.append(f"Gesloten Opties (zonder broker): {len(self.snapshot_gesloten_opties_no_broker)} rijen")
         if self.gesloten_sprinters is not None:
             parts.append(f"Gesloten Sprinters: {len(self.gesloten_sprinters)} rijen")
         if self.snapshot_asset_rollup_data is not None:
