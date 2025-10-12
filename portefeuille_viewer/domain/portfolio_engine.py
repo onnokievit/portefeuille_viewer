@@ -86,6 +86,7 @@ class PortfolioEngine:
         ])
         self.df = self._add_calculated_columns(self.df)
 
+
     def get_full_df(self):
         return self.df
 

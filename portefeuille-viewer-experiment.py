@@ -30,12 +30,12 @@ def load_datasets():
     repository.load_open_opties_from_tx()
     repository.load_gesloten_opties_from_tx()
     
-    engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: kolommen controleren
-    engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: eerste rijen controleren
+    # engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: kolommen controleren
+    # engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: eerste rijen controleren
     
     repository.load_gesloten_opties_no_broker()
-    engine.print_snapshot_columns("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: kolommen controleren
-    engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: eerste rijen controleren
+    # engine.print_snapshot_columns("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: kolommen controleren
+    # engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: eerste rijen controleren
 
 
     repository.load_asset_rollup_data()
