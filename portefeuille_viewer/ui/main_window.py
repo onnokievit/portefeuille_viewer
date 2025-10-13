@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         
         #self.aandelen_tab = AandelenPolarsTab()
         
-        self.aandelen_tab = AandelenPolarsTab(self.feed_service)
+        # self.aandelen_tab = AandelenPolarsTab(self.feed_service)
         
         self.settings_tab = SettingsTab()
         
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
 
 
         self.tabs.addTab(self.orders_tab, "Orders")
-        self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
+        # self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
         
         # Pass the centralized portfolio_engine if available, otherwise let tab create its own
         if self.portfolio_engine:
