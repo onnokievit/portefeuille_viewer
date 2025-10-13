@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 from PySide6.QtGui import QAction
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.ui.orders_tab import OrdersTab
-from portefeuille_viewer.ui.live_tab import LiveViewTab
+
 from portefeuille_viewer.ui.settings_tab import SettingsTab
 from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
         # Tabs
         self.tabs = QTabWidget()
         self.orders_tab = OrdersTab()
-        self.live_tab   = QWidget()
+
         
         # Pass portfolio_engine to OpenOptiesPolarsTab for live updates
         if self.portfolio_engine:
@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
         else:
             self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen 2 (Agg)")
             
-        self.tabs.addTab(self.live_tab, "Live view")
+
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
         #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
         self.tabs.addTab(self.settings_tab, "Settings")
