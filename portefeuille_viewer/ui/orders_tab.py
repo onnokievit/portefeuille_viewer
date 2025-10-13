@@ -1,18 +1,16 @@
 import re
 from datetime import date, datetime
 from typing import Optional
-
 import pandas as pd
 import pyodbc
 from PySide6.QtCore import Qt, QModelIndex, QEvent, Signal
-from PySide6.QtWidgets import QMenu, QInputDialog  # ← toevoegen
-from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, QLabel,
     QLineEdit, QComboBox, QPushButton, QTableView, QHeaderView,
-    QAbstractItemView, QCompleter, QMessageBox, QSpacerItem, QSizePolicy
+    QAbstractItemView, QCompleter, QMessageBox, QSpacerItem, QSizePolicy, QMenu, QInputDialog
 )
-
+from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
+from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.repository import (
     DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     conn_str, get_connection,
@@ -20,9 +18,6 @@ from portefeuille_viewer.data.repository import (
     fetch_records_page, build_uniek_id, is_pairable,
     get_next_order_id, get_next_order_item_no,
 )
-
-from portefeuille_viewer.ui.models import PandasTableModel
-# test
 # ------------------------------------------------------------
 # SmartCombo helper
 # ------------------------------------------------------------
@@ -275,9 +270,11 @@ class OrdersTab(QWidget):
         btn_save = QPushButton("Opslaan")
         btn_save.clicked.connect(self.opslaan_orders)
         h.addWidget(btn_save)
+        
         btn_reset = QPushButton("Reset")
         btn_reset.clicked.connect(self.reset_action)
         h.addWidget(btn_reset)
+        
         h.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         h.addWidget(QLabel("Database:"))
@@ -410,10 +407,10 @@ class OrdersTab(QWidget):
         at = self.order1["asset_type"].currentText()
 
         # Eerst alles verbergen
-        for w in [self.order1["lbl_detail"], self.order1["detail"],
-                self.order1["lbl_exp"], self.order1["exp"],
-                self.order1["lbl_strike"], self.order1["strike"],
-                self.order1["lbl_cp"], self.order1["cp"]]:
+        for w in [ self.order1["detail"],
+                 self.order1["exp"],
+                 self.order1["strike"],
+                self.order1["cp"]]:
             w.setVisible(False)
 
         # Sprinter: toon detailvelden
@@ -444,17 +441,15 @@ class OrdersTab(QWidget):
 
         # Sprinter: toon alleen sprintervelden
         if at == "sprinter":
-            for w in [self.order2["lbl_detail"], self.order2["detail"],
-                    self.order2["lbl_exp"], self.order2["exp"],
-                    self.order2["lbl_strike"], self.order2["strike"],
-                    self.order2["lbl_cp"], self.order2["cp"]]:
+            for w in [ self.order1["lbl_detail"],self.order2["detail"],
+                     self.order1["lbl_exp"],self.order2["exp"],
+                    self.order1["lbl_strike"],self.order2["strike"],
+                     self.order1["lbl_cp"],self.order2["cp"]]:
                 w.setVisible(True)
 
         # Optie: toon optievelden
         elif at == "optie":
-            for w in [self.order2["lbl_exp"], self.order2["exp"],
-                    self.order2["lbl_strike"], self.order2["strike"],
-                    self.order2["lbl_cp"], self.order2["cp"]]:
+            for w in [ self.order1["lbl_exp"],self.order2["exp"], self.order1["lbl_strike"],self.order2["strike"], self.order1["lbl_cp"], self.order2["cp"]]:
                 w.setVisible(True)
 
     def toggle_order2_visibility(self):
@@ -627,8 +622,8 @@ class OrdersTab(QWidget):
                     return
                 
             from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-            SNAPSHOT_STORE.load_all()
-            self.parent().live_tab.reload_from_snapshots()  
+            # SNAPSHOT_STORE.load_all()
+            # self.parent().live_tab.reload_from_snapshots()  
 
         
         # Validatie minimaal gelijk aan single-file
