@@ -86,6 +86,7 @@ class PortfolioEngine(QObject):
         mask = self.df["ib_symbol"] == ib_symbol
         if not mask.any():
             return
+            
         self.df = self.df.with_columns([
             pl.when(mask).then(pl.lit(price)).otherwise(pl.col("Koers")).alias("Koers")
         ])

@@ -68,4 +68,5 @@ class AandelenTab2(QWidget):
     
     def on_price_update(self, *args):
         """Bij koersupdate via pricefeed: refresh aggregatie (fallback)."""
+        print(f"📊 AandelenTab2: Received price update signal - refreshing... (args: {args})")
         self.reload_data()
