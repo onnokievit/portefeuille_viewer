@@ -69,6 +69,39 @@ class PortfolioEngine(QObject):
         
         print(f"PortfolioEngine: Triggered aggregators for {symbol}")
     
+    def start_subscriptions(self):
+        """
+        Start live price subscriptions voor alle symbolen.
+        Moet aangeroepen worden na initialisatie van PortfolioEngine.
+        
+        Verantwoordelijkheden:
+        - Haalt alle symbolen op uit asset_rollup_data
+        - Start subscriptions via pricefeed.ensure_subscriptions()
+        - Kan later uitgebreid worden met refresh/cleanup logica
+        """
+        if not self.pricefeed:
+            print("PortfolioEngine: No pricefeed available, skipping subscriptions")
+            return
+        
+        symbols_to_subscribe = self.get_symbols_to_subscribe()
+        
+        if not symbols_to_subscribe:
+            print("PortfolioEngine: No symbols to subscribe to")
+            return
+        
+        try:
+            # Converteer naar format (ib_symbol, ib_currency, prim_exchange)
+            from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+            asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+            subs = asset_map.select(["ib_symbol", "ib_currency", "prim_exchange"]).unique().to_numpy().tolist()
+            
+            print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbols...")
+            self.pricefeed.ensure_subscriptions(subs)
+            print("PortfolioEngine: Subscriptions started successfully")
+            
+        except Exception as e:
+            print(f"PortfolioEngine: Error starting subscriptions: {e}")
+    
     def get_symbols_to_subscribe(self):
         """
         Collect all symbols that need live price subscriptions.
