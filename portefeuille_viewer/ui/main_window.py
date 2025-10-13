@@ -9,6 +9,9 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
 from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
+import logging
+import os
+from datetime import datetime
 
 
 APP_TITLE = "🧭 Portefeuille Viewer"
@@ -18,6 +21,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
         self.resize(1800, 950)
+        
+        # Setup logging
+        self._setup_logging()
 
         # Use provided services or create new ones for backward compatibility
         if price_feed is not None:
@@ -30,9 +36,9 @@ class MainWindow(QMainWindow):
         # Store portfolio engine reference
         self.portfolio_engine = portfolio_engine
         
-        # Connect feed service signals
-        self.feed_service._feed.log.connect(lambda s: self.statusBar().showMessage(s, 3000))
-        self.feed_service._feed.ready.connect(lambda: self.statusBar().showMessage("IB-feed ready", 2000))
+        # Connect feed service signals with improved logging
+        self.feed_service._feed.log.connect(self._log_message)
+        self.feed_service._feed.ready.connect(lambda: self._log_message("IB-feed ready"))
 
         # Tabs
         self.tabs = QTabWidget()
@@ -89,3 +95,46 @@ class MainWindow(QMainWindow):
             pass
 
         super().closeEvent(event)
+    
+    def _setup_logging(self):
+        """Setup file logging voor IB feed meldingen."""
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        
+        # Setup logger
+        self.logger = logging.getLogger("PortfolioViewer")
+        self.logger.setLevel(logging.INFO)
+        
+        # Clear existing handlers
+        self.logger.handlers.clear()
+        
+        # File handler with timestamp
+        today = datetime.now().strftime("%Y%m%d")
+        log_file = os.path.join(log_dir, f"portfolio_viewer_{today}.log")
+        
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        
+        # Formatter
+        formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        
+        self.logger.addHandler(file_handler)
+        
+        # Log startup
+        self.logger.info("=== Portfolio Viewer Started ===")
+    
+    def _log_message(self, message):
+        """Log message to both file and statusbar with longer display time."""
+        # Log to file
+        self.logger.info(f"IB-Feed: {message}")
+        
+        # Show in statusbar for 10 seconds (was 2-3 seconds)
+        self.statusBar().showMessage(f"📡 {message}", 10000)
+        
+        # Also print to console for immediate visibility
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] IB-Feed: {message}")
