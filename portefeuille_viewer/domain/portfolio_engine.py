@@ -1,5 +1,6 @@
 from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
+from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 
 class PortfolioEngine(QObject):
     """
@@ -26,9 +27,9 @@ class PortfolioEngine(QObject):
         
         # Initialize specialized aggregators
         self.live_aggregator_aandelen = LiveAggregatorAandelen()
+        self.live_aggregator_opties = LiveAggregatorOpties()
         
         # TODO: Add when implemented
-        # self.live_aggregator_opties = LiveAggregatorOpties()
         # self.live_aggregator_sprinters = LiveAggregatorSprinters()
         
         # Connect pricefeed if provided
@@ -37,8 +38,9 @@ class PortfolioEngine(QObject):
         
         # Connect aggregator signals to main signal
         self.live_aggregator_aandelen.aandelenUpdated.connect(self.dataUpdated.emit)
+        self.live_aggregator_opties.optiesUpdated.connect(self.dataUpdated.emit)
         
-        print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen")
+        print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
     
     def _on_live_price(self, symbol, currency, price):
         """
@@ -52,9 +54,12 @@ class PortfolioEngine(QObject):
         """
         print(f"PortfolioEngine: Received price update {symbol} = {price}")
         
-        # Update live prijs in aggregator en trigger update
+        # Update live prijs in beide aggregators en trigger update
         self.live_aggregator_aandelen.update_live_price(symbol, price)
         self.live_aggregator_aandelen.process_live_update()
+        
+        self.live_aggregator_opties.update_live_price(symbol, price)
+        self.live_aggregator_opties.process_live_update()
         
         # TODO: Add conditional triggering based on symbol type
         # if symbol.endswith('OPT'):
