@@ -69,8 +69,25 @@ class AandelenTab2(QWidget):
 
     def reload_data(self):
         """Laad en toon de geaggregeerde dataset."""
-        df = self.engine.get_aggregated()
-        df = df.sort("asset_rollup")  # Sorteer hier!
+        # Load directly from SnapshotStore instead of via engine
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        
+        df = SNAPSHOT_STORE.snapshot_aandelen_live
+        if df is None or df.is_empty():
+            # Fallback: empty dataframe
+            import polars as pl
+            df = pl.DataFrame({
+                "asset_rollup": [],
+                "koers": [],
+                "aantal_bezit": [],
+                "result_realised": [],
+                "result_non_realised": [],
+                "eq_total_fee": [],
+                "total_result": []
+            })
+        else:
+            df = df.sort("asset_rollup")  # Sorteer hier!
+            
         self.model = PolarsTableModel(df, self)
         self.table.setModel(self.model)
         # Label wordt niet meer overschreven - ticker boodschap blijft staan

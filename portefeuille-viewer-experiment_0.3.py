@@ -30,16 +30,13 @@ def load_datasets():
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()
     repository.load_gesloten_opties_from_tx()
-    
     # engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: kolommen controleren
     # engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: eerste rijen controleren
-    
     repository.load_gesloten_opties_no_broker()
     # engine.print_snapshot_columns("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: kolommen controleren
     # engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: eerste rijen controleren
-
-
     repository.load_asset_rollup_data()
+
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
@@ -65,8 +62,7 @@ def main():
     price_feed = PriceFeedService(IB_HOST, IB_PORT, IB_CLIENT_ID)
     portfolio_engine = PortfolioEngine(price_feed)
     
-    # Perform initial calculation and populate SnapshotStore
-    portfolio_engine.update_snapshot_store()
+    # Note: LiveAggregator automatically initializes its data on instantiation
     
     # Create main window with centralized services
     w = MainWindow(portfolio_engine, price_feed)
