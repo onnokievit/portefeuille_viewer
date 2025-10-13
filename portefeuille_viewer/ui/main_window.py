@@ -44,7 +44,13 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.orders_tab = OrdersTab()
         self.live_tab   = QWidget()
-        self.open_opties_tab = OpenOptiesPolarsTab()
+        
+        # Pass portfolio_engine to OpenOptiesPolarsTab for live updates
+        if self.portfolio_engine:
+            self.open_opties_tab = OpenOptiesPolarsTab(portfolio_engine=self.portfolio_engine)
+        else:
+            self.open_opties_tab = OpenOptiesPolarsTab()
+        
         #self.aandelen_tab = AandelenPolarsTab()
         
         self.aandelen_tab = AandelenPolarsTab(self.feed_service)

@@ -14,6 +14,7 @@ class SnapshotStore:
         self.snapshot_aandelen: pl.DataFrame | None = None
         self.snapshot_aandelen_live: pl.DataFrame | None = None  # NIEUW: live geaggregeerde aandelen data
         self.snapshot_load_open_opties_from_tx: pl.DataFrame | None = None
+        self.snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
         self.open_sprinters: pl.DataFrame | None = None
         self.snapshot_gesloten_opties: pl.DataFrame | None = None
         self.snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
@@ -29,6 +30,7 @@ class SnapshotStore:
         self.snapshot_aandelen = None
         self.snapshot_aandelen_live = None
         self.snapshot_load_open_opties_from_tx = None
+        self.snapshot_load_open_opties_from_tx_live = None
         self.open_sprinters = None
         self.snapshot_gesloten_opties = None
         self.snapshot_gesloten_opties_no_broker = None
