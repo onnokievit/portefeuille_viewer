@@ -12,6 +12,7 @@ class SnapshotStore:
         # Polars DataFrames (standaard leeg)
         self.snapshot_alle_transacties: pl.DataFrame | None = None
         self.snapshot_aandelen: pl.DataFrame | None = None
+        self.snapshot_aandelen_live: pl.DataFrame | None = None  # NIEUW: live geaggregeerde aandelen data
         self.snapshot_load_open_opties_from_tx: pl.DataFrame | None = None
         self.open_sprinters: pl.DataFrame | None = None
         self.snapshot_gesloten_opties: pl.DataFrame | None = None
@@ -26,6 +27,7 @@ class SnapshotStore:
         """Reset alle snapshots naar leeg."""
         self.snapshot_alle_transacties = None
         self.snapshot_aandelen = None
+        self.snapshot_aandelen_live = None
         self.snapshot_load_open_opties_from_tx = None
         self.open_sprinters = None
         self.snapshot_gesloten_opties = None
@@ -39,6 +41,7 @@ class SnapshotStore:
         return any([
             self.snapshot_alle_transacties is not None,
             self.snapshot_aandelen is not None,
+            self.snapshot_aandelen_live is not None,
             self.snapshot_load_open_opties_from_tx is not None,
             self.open_sprinters is not None,
             self.snapshot_gesloten_opties is not None,
@@ -54,6 +57,8 @@ class SnapshotStore:
             parts.append(f"Alle Transacties: {len(self.snapshot_alle_transacties)} rijen")
         if self.snapshot_aandelen is not None:
             parts.append(f"Open Aandelen: {len(self.snapshot_aandelen)} rijen")
+        if self.snapshot_aandelen_live is not None:
+            parts.append(f"Live Aandelen: {len(self.snapshot_aandelen_live)} rijen")
         if self.snapshot_load_open_opties_from_tx is not None:
             parts.append(f"Open Opties: {len(self.snapshot_load_open_opties_from_tx)} rijen")
         if self.open_sprinters is not None:
