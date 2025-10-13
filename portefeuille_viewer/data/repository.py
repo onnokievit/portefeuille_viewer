@@ -50,7 +50,7 @@ def load_asset_rollup_data() -> pl.DataFrame:
     """
     Laadt de asset_rollup_data-tabel uit de database.
     """
-    sql = "SELECT * FROM asset_rollup_data"
+    sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.snapshot_asset_rollup_data = df
