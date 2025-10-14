@@ -2,6 +2,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 import pandas as pd
+import polars as pl
 import pyodbc
 from PySide6.QtCore import Qt, QModelIndex, QEvent, Signal
 from PySide6.QtWidgets import (
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.models import PandasTableModel
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import (
     DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     conn_str, get_connection,
@@ -129,6 +131,7 @@ class OrdersTab(QWidget):
         self.EDIT_ID2 = None
         self._loading_more = False
         self._no_more_records = False
+        self._current_offset = 0  # NEW: for snapshot paging
 
         self.sort_col = "Id"
         self.sort_dir = "DESC"
@@ -199,7 +202,7 @@ class OrdersTab(QWidget):
         box = QGroupBox("Orders")
         grid = QGridLayout(box)
 
-        headers = ["Oorsprong", "Broker", "Asset Rollup", "Type", "Koop/Verkoop", "Aantal", "Prijs", "Fee"]
+        headers = ["Oorsprong", "Broker", "Asset Rollup", "Type", "Asset Detail", "Koop/Verkoop", "Aantal", "Prijs", "Fee"]
         for c, txt in enumerate(headers):
             grid.addWidget(QLabel(txt), 0, c, alignment=Qt.AlignLeft)
 
@@ -222,21 +225,21 @@ class OrdersTab(QWidget):
         broker = SmartCombo(); broker.set_items(self.brokers)
         rollup = SmartCombo(); rollup.set_items(self.asset_rollups)
         at = SmartCombo(); at.set_items(["aandeel", "optie", "sprinter"])
+        
+        # Sprinter detail - komt nu direct na asset_type
+        det = SmartCombo()
+        det.set_items(self.sprinter_details)
+        det.setVisible(False)
+        
         ttype = SmartCombo(); ttype.set_items(["koop", "verkoop"])
         aantal = QLineEdit()
         prijs = QLineEdit()
         fee = QLineEdit()
 
-        widgets = [cb_oorspr or QLabel(""), broker, rollup, at, ttype, aantal, prijs, fee]
+        # Plaats widgets in grid: oorsprong, broker, rollup, type, detail, koop/verkoop, aantal, prijs, fee
+        widgets = [cb_oorspr or QLabel(""), broker, rollup, at, det, ttype, aantal, prijs, fee]
         for c, w in enumerate(widgets):
             grid.addWidget(w, row, c)
-
-        # --- Sprinter detail ---
-        lbl_det, det = QLabel("asset_detail"), SmartCombo()
-        det.set_items(self.sprinter_details)
-        grid.addWidget(lbl_det, row - 1, 11)
-        grid.addWidget(det, row, 11)
-        lbl_det.setVisible(False); det.setVisible(False)
 
         # --- Optie velden ---
         lbl_exp, exp = QLabel("optie_exp_date"), QLineEdit()
@@ -245,9 +248,10 @@ class OrdersTab(QWidget):
         exp.editingFinished.connect(lambda e=exp: self.auto_fill_year(e))
         cp.set_items(["call", "put"])
 
-        grid.addWidget(lbl_exp, row - 1, 8);   grid.addWidget(exp, row, 8)
-        grid.addWidget(lbl_strk, row - 1, 9);  grid.addWidget(strike, row, 9)
-        grid.addWidget(lbl_cp, row - 1, 10);   grid.addWidget(cp, row, 10)
+        # Optie velden op kolommen 9, 10, 11 (verschoven door asset_detail op kolom 4)
+        grid.addWidget(lbl_exp, row - 1, 9);   grid.addWidget(exp, row, 9)
+        grid.addWidget(lbl_strk, row - 1, 10);  grid.addWidget(strike, row, 10)
+        grid.addWidget(lbl_cp, row - 1, 11);   grid.addWidget(cp, row, 11)
 
         for w in (lbl_exp, exp, lbl_strk, strike, lbl_cp, cp):
             w.setVisible(False)
@@ -256,8 +260,8 @@ class OrdersTab(QWidget):
             cb_oorsprong=cb_oorspr, broker=broker, asset_rollup=rollup,
             asset_type=at, trans_type=ttype, aantal=aantal,
             prijs=prijs, fee=fee,
-            # sprinter
-            lbl_detail=lbl_det, detail=det,
+            # sprinter (geen lbl_detail meer, die staat in header)
+            lbl_detail=None, detail=det,
             # optie
             lbl_exp=lbl_exp, exp=exp,
             lbl_strike=lbl_strk, strike=strike,
@@ -378,6 +382,61 @@ class OrdersTab(QWidget):
         self.seek_value = None
         self.seek_id = None
         self._no_more_records = False
+        self._current_offset = 0  # NEW: track offset for snapshot paging
+
+    def _apply_snapshot_filters(self, df_pl: pl.DataFrame) -> pl.DataFrame:
+        """Apply filters to Polars DataFrame (convert from active_filters dict)."""
+        if not hasattr(self, 'active_filters') or not self.active_filters:
+            return df_pl
+        
+        # Text filter (filter_q)
+        if hasattr(self, 'filter_q') and self.filter_q.text().strip():
+            q = self.filter_q.text().strip().lower()
+            # Search in broker, asset_rollup, asset_detail, uniek_id
+            df_pl = df_pl.filter(
+                pl.col("broker").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
+                pl.col("asset_rollup").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
+                pl.col("asset_detail").cast(pl.Utf8).str.to_lowercase().str.contains(q, literal=True) |
+                pl.col("uniek_id").cast(pl.Utf8).str.to_lowercase().str.contains(q)
+            )
+        
+        # Column filters (col_filters dict)
+        if hasattr(self, 'col_filters') and self.col_filters:
+            for col, filt_dict in self.col_filters.items():
+                if col not in df_pl.columns:
+                    continue
+                
+                # 'in' filter (set of values)
+                if "in" in filt_dict and filt_dict["in"]:
+                    df_pl = df_pl.filter(pl.col(col).is_in(list(filt_dict["in"])))
+                
+                # 'eq' filter (exact match)
+                elif "eq" in filt_dict:
+                    df_pl = df_pl.filter(pl.col(col) == filt_dict["eq"])
+                
+                # 'contains' filter (substring)
+                elif "contains" in filt_dict:
+                    df_pl = df_pl.filter(
+                        pl.col(col).cast(pl.Utf8).str.to_lowercase()
+                        .str.contains(filt_dict["contains"].lower())
+                    )
+        
+        return df_pl
+    
+    def _apply_snapshot_sorting(self, df_pl: pl.DataFrame) -> pl.DataFrame:
+        """Apply sorting to Polars DataFrame."""
+        if not hasattr(self, 'sort_col') or not self.sort_col:
+            return df_pl
+        
+        # Check if sort column exists
+        if self.sort_col not in df_pl.columns:
+            return df_pl
+        
+        # Apply sort
+        descending = (self.sort_dir == "DESC")
+        df_pl = df_pl.sort(self.sort_col, descending=descending)
+        
+        return df_pl
 
 
     def _update_seek_from_df(self, df_raw):
@@ -413,15 +472,16 @@ class OrdersTab(QWidget):
                 self.order1["cp"]]:
             w.setVisible(False)
 
-        # Sprinter: toon detailvelden
+        # Sprinter: toon detail + exp/strike/cp velden
         if at == "sprinter":
-            for w in [self.order1["lbl_detail"], self.order1["detail"],
+            # lbl_detail zit nu in header, alleen detail widget toggen
+            for w in [self.order1["detail"],
                     self.order1["lbl_exp"], self.order1["exp"],
                     self.order1["lbl_strike"], self.order1["strike"],
                     self.order1["lbl_cp"], self.order1["cp"]]:
                 w.setVisible(True)
 
-        # Optie: toon optievelden
+        # Optie: toon alleen optievelden
         elif at == "optie":
             for w in [self.order1["lbl_exp"], self.order1["exp"],
                     self.order1["lbl_strike"], self.order1["strike"],
@@ -433,23 +493,23 @@ class OrdersTab(QWidget):
         at = self.order2["asset_type"].currentText()
 
         # Eerst alles verbergen
-        for w in [self.order2["lbl_detail"], self.order2["detail"],
+        for w in [self.order2["detail"],
                 self.order2["lbl_exp"], self.order2["exp"],
                 self.order2["lbl_strike"], self.order2["strike"],
                 self.order2["lbl_cp"], self.order2["cp"]]:
             w.setVisible(False)
 
-        # Sprinter: toon alleen sprintervelden
+        # Sprinter: toon detail + exp/strike/cp velden
         if at == "sprinter":
-            for w in [ self.order1["lbl_detail"],self.order2["detail"],
-                     self.order1["lbl_exp"],self.order2["exp"],
-                    self.order1["lbl_strike"],self.order2["strike"],
-                     self.order1["lbl_cp"],self.order2["cp"]]:
+            for w in [self.order2["detail"],
+                     self.order1["lbl_exp"], self.order2["exp"],
+                    self.order1["lbl_strike"], self.order2["strike"],
+                     self.order1["lbl_cp"], self.order2["cp"]]:
                 w.setVisible(True)
 
-        # Optie: toon optievelden
+        # Optie: toon alleen optievelden
         elif at == "optie":
-            for w in [ self.order1["lbl_exp"],self.order2["exp"], self.order1["lbl_strike"],self.order2["strike"], self.order1["lbl_cp"], self.order2["cp"]]:
+            for w in [self.order1["lbl_exp"], self.order2["exp"], self.order1["lbl_strike"], self.order2["strike"], self.order1["lbl_cp"], self.order2["cp"]]:
                 w.setVisible(True)
 
     def toggle_order2_visibility(self):
@@ -457,11 +517,12 @@ class OrdersTab(QWidget):
         visible = oorspr in ["DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"]
 
         widgets = [
-            "broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
-            "lbl_detail","detail","lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
+            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
         ]
         for key in widgets:
-            self.order2[key].setVisible(visible)
+            if self.order2[key] is not None:  # Skip None values (like lbl_detail)
+                self.order2[key].setVisible(visible)
 
         if visible:
             self.toggle_order2_fields()
@@ -559,11 +620,12 @@ class OrdersTab(QWidget):
 
     def _show_order2(self, visible: bool):
         widgets = [
-            "broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
-            "lbl_detail","detail","lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
+            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
         ]
         for key in widgets:
-            self.order2[key].setVisible(visible)
+            if self.order2[key] is not None:  # Skip None values
+                self.order2[key].setVisible(visible)
         if visible:
             self.toggle_order2_fields()
 
@@ -646,9 +708,9 @@ class OrdersTab(QWidget):
             aantal=parse_int_field(self.order1["aantal"].text()),
             transactie_prijs=float(self.order1["prijs"].text()) if self.order1["prijs"].text() else None,
             transactie_fee=-abs(float(self.order1["fee"].text())) if self.order1["fee"].text() else None,
-            optie_strike=float(self.order1["strike"].text()) if (at1 == "optie" and self.order1["strike"].text()) else None,
-            optie_exp_date=_parse_date(self.order1["exp"].text()) if (at1 == "optie" and self.order1["exp"].text()) else None,
-            optie_call_put=self.order1["cp"].currentText() if at1 == "optie" else None,
+            optie_strike=float(self.order1["strike"].text()) if (at1 in ["optie", "sprinter"] and self.order1["strike"].text()) else None,
+            optie_exp_date=_parse_date(self.order1["exp"].text()) if (at1 in ["optie", "sprinter"] and self.order1["exp"].text()) else None,
+            optie_call_put=self.order1["cp"].currentText() if at1 in ["optie", "sprinter"] else None,
         )
 
         tweede_order = None
@@ -666,9 +728,9 @@ class OrdersTab(QWidget):
                 aantal=parse_int_field(self.order2["aantal"].text()),
                 transactie_prijs=float(self.order2["prijs"].text()) if self.order2["prijs"].text() else None,
                 transactie_fee=-abs(float(self.order2["fee"].text())) if self.order2["fee"].text() else None,
-                optie_strike=float(self.order2["strike"].text()) if (at2 == "optie" and self.order2["strike"].text()) else None,
-                optie_exp_date=_parse_date(self.order2["exp"].text()) if (at2 == "optie" and self.order2["exp"].text()) else None,
-                optie_call_put=self.order2["cp"].currentText() if at2 == "optie" else None,
+                optie_strike=float(self.order2["strike"].text()) if (at2 in ["optie", "sprinter"] and self.order2["strike"].text()) else None,
+                optie_exp_date=_parse_date(self.order2["exp"].text()) if (at2 in ["optie", "sprinter"] and self.order2["exp"].text()) else None,
+                optie_call_put=self.order2["cp"].currentText() if at2 in ["optie", "sprinter"] else None,
             )
 
         # 2) Linking (oorsprong detail), idem als single-file
@@ -695,6 +757,14 @@ class OrdersTab(QWidget):
                     record_id1=int(self.EDIT_ID), data1=data_update_1,
                     record_id2=(int(self.EDIT_ID2) if self.EDIT_ID2 is not None else None), data2=data_update_2
                 )
+                
+                # Sync met snapshot: update eerste record
+                self._update_transaction_in_snapshot(int(self.EDIT_ID), data_update_1)
+                
+                # Sync met snapshot: update tweede record (indien gekoppeld)
+                if self.EDIT_ID2 is not None and data_update_2 is not None:
+                    self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
+                    
             except pyodbc.Error as e:
                 QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}"); return
 
@@ -710,7 +780,7 @@ class OrdersTab(QWidget):
             self.ordersCommitted.emit()    # Live-tab verversen
             return
 
-        # 4) INSERT-pad (ongewijzigd)
+        # 4) INSERT-pad
         try:
             from portefeuille_viewer.data.repository import get_next_order_id, get_next_order_item_no, insert_transaction
             new_order_id = get_next_order_id()
@@ -718,11 +788,17 @@ class OrdersTab(QWidget):
             eerste_order["order_id_number"] = get_next_order_item_no(new_order_id)
             eerste_id = insert_transaction(eerste_order)
 
+            # Sync met snapshot: voeg eerste record toe
+            self._add_transaction_to_snapshot(eerste_order, eerste_id)
+
             tweede_id = None
             if tweede_order:
                 tweede_order["order_id"] = new_order_id
                 tweede_order["order_id_number"] = get_next_order_item_no(new_order_id)
                 tweede_id = insert_transaction(tweede_order)
+                
+                # Sync met snapshot: voeg tweede record toe
+                self._add_transaction_to_snapshot(tweede_order, tweede_id)
 
         except pyodbc.Error as e:
             QMessageBox.critical(self, "Databasefout", f"Kon niet opslaan:\n{e}"); return
@@ -735,6 +811,79 @@ class OrdersTab(QWidget):
         self.load_initial_records()
         self.reset_form()
         self.ordersCommitted.emit()
+
+    def _add_transaction_to_snapshot(self, order_dict: dict, record_id: int):
+        """
+        Voegt een nieuw record toe aan snapshot_alle_transacties.
+        Zorgt ervoor dat de snapshot gesynchroniseerd blijft met de database na een INSERT.
+        
+        We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
+        """
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            print("⚠️ Snapshot niet geladen - kan record niet toevoegen")
+            return  # Geen snapshot geladen, niets te doen
+        
+        try:
+            # Haal het zojuist toegevoegde record op uit de database
+            # Dit garandeert dat we exact dezelfde schema krijgen als de snapshot
+            from portefeuille_viewer.data.repository import get_connection
+            import polars as pl
+            
+            with get_connection() as conn:
+                sql = f"SELECT * FROM transacties_bron_data_org WHERE Id = ?"
+                new_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
+            
+            if new_df.is_empty():
+                print(f"⚠️ Record {record_id} niet gevonden in database na INSERT")
+                return
+            
+            # Voeg toe aan de snapshot
+            SNAPSHOT_STORE.snapshot_alle_transacties = pl.concat([
+                SNAPSHOT_STORE.snapshot_alle_transacties,
+                new_df
+            ])
+            print(f"✅ Record {record_id} toegevoegd aan snapshot (totaal: {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen)")
+        except Exception as e:
+            print(f"❌ Fout bij toevoegen record {record_id} aan snapshot: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _update_transaction_in_snapshot(self, record_id: int, data_dict: dict):
+        """
+        Update een bestaand record in snapshot_alle_transacties.
+        Zorgt ervoor dat de snapshot gesynchroniseerd blijft met de database na een UPDATE.
+        
+        We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
+        """
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            print("⚠️ Snapshot niet geladen - kan record niet updaten")
+            return  # Geen snapshot geladen, niets te doen
+        
+        try:
+            # Haal het bijgewerkte record op uit de database
+            from portefeuille_viewer.data.repository import get_connection
+            import polars as pl
+            
+            with get_connection() as conn:
+                sql = f"SELECT * FROM transacties_bron_data_org WHERE Id = ?"
+                updated_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
+            
+            if updated_df.is_empty():
+                print(f"⚠️ Record {record_id} niet gevonden in database na UPDATE")
+                return
+            
+            # Verwijder het oude record en voeg het nieuwe toe
+            # Dit is eenvoudiger dan veld-voor-veld updaten en garandeert consistentie
+            mask = SNAPSHOT_STORE.snapshot_alle_transacties["Id"] != record_id
+            SNAPSHOT_STORE.snapshot_alle_transacties = pl.concat([
+                SNAPSHOT_STORE.snapshot_alle_transacties.filter(mask),
+                updated_df
+            ])
+            print(f"✅ Record {record_id} geüpdatet in snapshot")
+        except Exception as e:
+            print(f"❌ Fout bij updaten record {record_id} in snapshot: {e}")
+            import traceback
+            traceback.print_exc()
 
 
     def apply_database_by_name(self, name):
@@ -1009,47 +1158,87 @@ class OrdersTab(QWidget):
         self.reset_form()
 
     # --------------------------------------------------------
-    # Data loading
+    # Data loading - FROM SNAPSHOT (not database!)
     # --------------------------------------------------------
     def load_initial_records(self):
-        import portefeuille_viewer.data.repository as repo
+        """Laad data uit snapshot_alle_transacties met filters en sorting."""
+        print("🔄 load_initial_records() aangeroepen")
+        
+        # Check if snapshot is loaded
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            print("❌ Snapshot is None - kan data niet laden!")
+            QMessageBox.warning(self, "Error", "Transactiedata is niet geladen. Start de applicatie opnieuw.")
+            self.model.set_df(pd.DataFrame())
+            return
+        
+        print(f"📊 Snapshot bevat {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen")
+        
+        # Reset paging state
         self._reset_seek()
-        df_raw = repo.fetch_records_page(
-            limit=200,  # of jouw PAGE_SIZE
-            sort_col=self.sort_col,
-            sort_dir=self.sort_dir,
-            filters=getattr(self, "active_filters", None)
-        )
-
-        # Let op: jij had al een formatter; laat die intact
+        self._current_offset = 0  # Track offset for paging
+        
+        # Get data from snapshot (Polars)
+        df_pl = SNAPSHOT_STORE.snapshot_alle_transacties
+        
+        # Apply filters (convert to Polars expressions)
+        df_pl = self._apply_snapshot_filters(df_pl)
+        print(f"🔍 Na filters: {len(df_pl)} rijen")
+        
+        # Apply sorting
+        df_pl = self._apply_snapshot_sorting(df_pl)
+        
+        # Get first page (200 rows)
+        page_size = 200
+        df_pl_page = df_pl.head(page_size)
+        
+        # Convert to Pandas for display
+        df_raw = df_pl_page.to_pandas() if not df_pl_page.is_empty() else pd.DataFrame()
+        
+        # Format and display
         df_view = self._format_df_for_table(df_raw)
         self.model.set_df(df_view)
-
-        self._update_seek_from_df(df_raw)
+        print(f"✅ Model bijgewerkt met {len(df_view)} rijen")
+        
+        # Update paging state
+        self._current_offset = len(df_raw)
+        self._no_more_records = (len(df_raw) < page_size)
         
     def load_more_records(self):
+        """Lazy loading: load next page from snapshot."""
         if self._loading_more or self._no_more_records:
             return
+        
         self._loading_more = True
         try:
-            import portefeuille_viewer.data.repository as repo
-            df_raw = repo.fetch_records_page(
-                limit=200,  # zelfde PAGE_SIZE
-                sort_col=self.sort_col,
-                sort_dir=self.sort_dir,
-                filters=getattr(self, "active_filters", None),
-                seek_value=self.seek_value,
-                seek_id=self.seek_id
-            )
-            if df_raw is None or df_raw.empty:
+            # Check snapshot
+            if SNAPSHOT_STORE.snapshot_alle_transacties is None:
                 self._no_more_records = True
                 return
-
+            
+            # Get filtered/sorted data
+            df_pl = SNAPSHOT_STORE.snapshot_alle_transacties
+            df_pl = self._apply_snapshot_filters(df_pl)
+            df_pl = self._apply_snapshot_sorting(df_pl)
+            
+            # Get next page using offset
+            page_size = 200
+            df_pl_page = df_pl.slice(self._current_offset, page_size)
+            
+            if df_pl_page.is_empty():
+                self._no_more_records = True
+                return
+            
+            # Convert to Pandas
+            df_raw = df_pl_page.to_pandas()
+            
+            # Format and append
             df_view = self._format_df_for_table(df_raw)
-            # Vereist dat je in stap B `append_df` aan je model hebt toegevoegd
             self.model.append_df(df_view)
-
-            self._update_seek_from_df(df_raw)
+            
+            # Update offset
+            self._current_offset += len(df_raw)
+            self._no_more_records = (len(df_raw) < page_size)
+            
         finally:
             self._loading_more = False
 
