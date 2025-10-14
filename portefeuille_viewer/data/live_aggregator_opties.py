@@ -63,8 +63,13 @@ class LiveAggregatorOpties(QObject):
         # Laad basisdata met LAST kolom
         df = self._load_and_prepare_data()
         
-        # Voeg placeholder kolommen toe
-        df = self._add_placeholder_columns(df)
+        # Bereken ITM/OTM waarde
+        df = self._calculate_itm_otm(df)
+        
+        # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
+        df = df.with_columns([
+            (pl.col("SomVantransactie_euro_totaal") - pl.col("ITM_OTM")).alias("W/V")
+        ])
         
         # Selecteer en herorden kolommen volgens screenshot
         df = df.select([
@@ -83,12 +88,38 @@ class LiveAggregatorOpties(QObject):
         
         return df
     
-    def _add_placeholder_columns(self, df):
-        """Voeg placeholder kolommen toe voor toekomstige berekeningen."""
+    def _calculate_itm_otm(self, df):
+        """
+        Bereken ITM/OTM waarde voor opties.
+        
+        Logica:
+        - CALL optie: 
+          - Als koers > strike: ITM_OTM = koers - strike
+          - Anders: ITM_OTM = 0
+        - PUT optie:
+          - Als koers < strike: ITM_OTM = strike - koers
+          - Anders: ITM_OTM = 0
+        
+        Returns:
+            pl.DataFrame: DataFrame met toegevoegde ITM_OTM kolom
+        """
         df = df.with_columns([
-            pl.lit("").alias("ITM_OTM"),  # Placeholder voor In-The-Money / Out-The-Money
-            pl.lit("").alias("W/V"),       # Placeholder voor Winst/Verlies
+            pl.when(
+                (pl.col("optie_call_put") == "call") & (pl.col("LAST") > pl.col("optie_strike"))
+            ).then(
+                (pl.col("LAST") - pl.col("optie_strike"))*pl.col("SomVantransactie_aantal")
+            ).when(
+                (pl.col("optie_call_put") == "put") & (pl.col("LAST") < pl.col("optie_strike"))
+            ).then(
+                (pl.col("optie_strike") - pl.col("LAST"))*pl.col("SomVantransactie_aantal")
+            ).otherwise(
+                0.0
+            ).alias("ITM_OTM")
         ])
+        
+        
+
+
         return df
     
     def update_live_price(self, symbol, price):
