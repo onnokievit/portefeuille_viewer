@@ -279,6 +279,11 @@ class OrdersTab(QWidget):
         btn_reset.clicked.connect(self.reset_action)
         h.addWidget(btn_reset)
         
+        btn_delete = QPushButton("Verwijderen")
+        btn_delete.clicked.connect(self.delete_order)
+        btn_delete.setStyleSheet("QPushButton { background-color: #ff6b6b; color: white; }")
+        h.addWidget(btn_delete)
+        
         h.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         h.addWidget(QLabel("Database:"))
@@ -764,6 +769,9 @@ class OrdersTab(QWidget):
                 # Sync met snapshot: update tweede record (indien gekoppeld)
                 if self.EDIT_ID2 is not None and data_update_2 is not None:
                     self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
+                
+                # Refresh afgeleide snapshots na UPDATE
+                self._refresh_derived_snapshots()
                     
             except pyodbc.Error as e:
                 QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}"); return
@@ -799,6 +807,9 @@ class OrdersTab(QWidget):
                 
                 # Sync met snapshot: voeg tweede record toe
                 self._add_transaction_to_snapshot(tweede_order, tweede_id)
+            
+            # Refresh afgeleide snapshots na INSERT
+            self._refresh_derived_snapshots()
 
         except pyodbc.Error as e:
             QMessageBox.critical(self, "Databasefout", f"Kon niet opslaan:\n{e}"); return
@@ -1156,6 +1167,139 @@ class OrdersTab(QWidget):
         self.EDIT_ID = None
         self.EDIT_ID2 = None
         self.reset_form()
+
+    def delete_order(self):
+        """Verwijder geselecteerde order(s) op basis van Id(s)."""
+        if self.EDIT_ID is None:
+            QMessageBox.warning(self, "Geen selectie", "Selecteer eerst een order om te verwijderen.")
+            return
+        
+        try:
+            # Verzamel alle Ids om te verwijderen (EDIT_ID en eventueel EDIT_ID2)
+            ids_to_delete = [self.EDIT_ID]
+            if self.EDIT_ID2 is not None:
+                ids_to_delete.append(self.EDIT_ID2)
+            
+            print(f"🔍 Te verwijderen Id(s): {ids_to_delete}")
+            
+            # Confirmation dialog
+            if len(ids_to_delete) > 1:
+                msg = f"Deze order bestaat uit {len(ids_to_delete)} gekoppelde transacties.\n\nWeet je zeker dat je deze orders wilt verwijderen?"
+            else:
+                msg = f"Weet je zeker dat je deze order wilt verwijderen?"
+            
+            reply = QMessageBox.question(
+                self, "Bevestigen", msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply != QMessageBox.Yes:
+                print("❌ Verwijderen geannuleerd door gebruiker")
+                return
+            
+            # Delete from database
+            from portefeuille_viewer.data.repository import delete_transactions_by_ids
+            deleted_count = delete_transactions_by_ids(ids_to_delete)
+            print(f"🗑️ {deleted_count} record(s) verwijderd uit database")
+            
+            # Delete from snapshot
+            self._delete_transactions_from_snapshot_by_ids(ids_to_delete)
+            
+            # Refresh afgeleide snapshots
+            self._refresh_derived_snapshots()
+            
+            # Success message
+            id_list_str = ", ".join(map(str, ids_to_delete))
+            QMessageBox.information(
+                self, "Succes",
+                f"✅ Order verwijderd: {deleted_count} record(s) (Id: {id_list_str})"
+            )
+            
+            # Reset form en refresh
+            self.EDIT_ID = None
+            self.EDIT_ID2 = None
+            self.reset_form()
+            self.load_initial_records()
+            self.ordersCommitted.emit()  # Trigger refresh van andere tabs
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Fout", f"Kon order niet verwijderen:\n{e}")
+            import traceback
+            traceback.print_exc()
+
+    def _delete_transactions_from_snapshot_by_ids(self, ids_to_delete: list):
+        """Verwijder transacties met specifieke Id's uit snapshot."""
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            print("⚠️ Snapshot niet geladen - kan records niet verwijderen")
+            return
+        
+        try:
+            # Filter out records with these Id's
+            before_count = len(SNAPSHOT_STORE.snapshot_alle_transacties)
+            SNAPSHOT_STORE.snapshot_alle_transacties = SNAPSHOT_STORE.snapshot_alle_transacties.filter(
+                ~pl.col("Id").is_in(ids_to_delete)
+            )
+            after_count = len(SNAPSHOT_STORE.snapshot_alle_transacties)
+            deleted = before_count - after_count
+            id_list_str = ", ".join(map(str, ids_to_delete))
+            print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
+        except Exception as e:
+            print(f"❌ Fout bij verwijderen uit snapshot: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _refresh_derived_snapshots(self):
+        """
+        Herbereken alle afgeleide snapshots na wijzigingen in snapshot_alle_transacties.
+        Deze functie roept de bestaande load functies aan die snapshot_alle_transacties als bron gebruiken.
+        """
+        from portefeuille_viewer.data.repository import (
+            load_aandelen_from_tx,
+            load_open_opties_from_tx,
+            load_gesloten_opties_from_tx,
+            load_gesloten_opties_no_broker
+        )
+        
+        print("🔄 Refresh afgeleide snapshots...")
+        
+        try:
+            # Herbereken aandelen snapshot
+            load_aandelen_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            print("✅ snapshot_aandelen bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken snapshot_aandelen: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        try:
+            # Herbereken open opties snapshot
+            load_open_opties_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            print("✅ snapshot_load_open_opties_from_tx bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken snapshot_load_open_opties_from_tx: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        try:
+            # Herbereken gesloten opties snapshot
+            load_gesloten_opties_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            print("✅ snapshot_gesloten_opties bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken snapshot_gesloten_opties: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        try:
+            # Herbereken gesloten opties no broker snapshot (afgeleid van snapshot_gesloten_opties)
+            load_gesloten_opties_no_broker()
+            print("✅ snapshot_gesloten_opties_no_broker bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken snapshot_gesloten_opties_no_broker: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print("ℹ️ Sprinter snapshots (open/gesloten) nog niet geïmplementeerd - overgeslagen")
 
     # --------------------------------------------------------
     # Data loading - FROM SNAPSHOT (not database!)
