@@ -2,7 +2,7 @@
 # portefeuille_viewer/ui/open_opties_polars_tab.py
 # -----------------------------------------------------
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QHeaderView
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QSortFilterProxyModel
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
@@ -61,7 +61,9 @@ class OpenOptiesPolarsTab(QWidget):
         else:
             self.label.setText(f"{len(df)} open opties geladen")
         
-        # Update model
+        # Update model met sorteerbare proxy
         self.model = PolarsTableModel(df, self)
-        self.table.setModel(self.model)
+        self.proxy_model = QSortFilterProxyModel(self)
+        self.proxy_model.setSourceModel(self.model)
+        self.table.setModel(self.proxy_model)
 

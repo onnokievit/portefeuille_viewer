@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QPushButton, QHeaderView
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QSortFilterProxyModel
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
@@ -89,7 +89,9 @@ class AandelenTab2(QWidget):
             df = df.sort("asset_rollup")  # Sorteer hier!
             
         self.model = PolarsTableModel(df, self)
-        self.table.setModel(self.model)
+        self.proxy_model = QSortFilterProxyModel(self)
+        self.proxy_model.setSourceModel(self.model)
+        self.table.setModel(self.proxy_model)
         # Label wordt niet meer overschreven - ticker boodschap blijft staan
 
     def on_engine_data_update(self):
