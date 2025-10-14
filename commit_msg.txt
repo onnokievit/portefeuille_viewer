@@ -1,0 +1,27 @@
+Orders tab: Implement snapshot sync and UI improvements
+
+Features:
+- Implement bidirectional snapshot synchronization for INSERT/UPDATE operations
+- Add database-as-source-of-truth pattern for reliable data consistency
+- Reposition asset_detail field next to asset_type in form layout
+- Fix sprinter fields (exp_date, strike, call_put) not being saved
+
+Technical changes:
+- Add _add_transaction_to_snapshot() to sync new records after INSERT
+- Add _update_transaction_in_snapshot() to sync modified records after UPDATE
+- Fetch inserted/updated records from database to ensure schema compatibility
+- Update grid layout: asset_detail moved from column 11 to column 4
+- Shift optie fields to columns 9, 10, 11 to accommodate new layout
+- Fix sprinter save logic: include optie fields when asset_type is sprinter
+- Add debug logging for troubleshooting snapshot operations
+- Update toggle functions to work with new layout (remove lbl_detail references)
+
+Benefits:
+- Orders appear immediately in table after save (no database query needed)
+- Real-time consistency between database and in-memory snapshot
+- Better UX: asset_detail visible directly after asset_type selection
+- Complete sprinter data now saved correctly with all required fields
+
+Files modified:
+- portefeuille_viewer/ui/orders_tab.py
+- ORDERS_TAB_SNAPSHOT_SYNC.md (documentation)

@@ -294,6 +294,42 @@ def insert_transaction(data: dict) -> int:
         conn.commit()
     return new_id
 
+
+def delete_transactions_by_order_id(order_id: str) -> int:
+    """
+    Verwijder alle transacties met een specifieke order_id.
+    Retourneert het aantal verwijderde records.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM transacties_bron_data_org WHERE order_id = ?",
+            (order_id,)
+        )
+        deleted_count = cursor.rowcount
+        conn.commit()
+    return deleted_count
+
+
+def delete_transactions_by_ids(ids_to_delete: list) -> int:
+    """
+    Verwijder transacties met specifieke Id's.
+    Retourneert het aantal verwijderde records.
+    """
+    if not ids_to_delete:
+        return 0
+    
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Maak placeholders voor IN clause
+        placeholders = ",".join("?" * len(ids_to_delete))
+        sql = f"DELETE FROM transacties_bron_data_org WHERE Id IN ({placeholders})"
+        cursor.execute(sql, ids_to_delete)
+        deleted_count = cursor.rowcount
+        conn.commit()
+    return deleted_count
+
+
 ##############################versie met build_where_and_params, niet meer nodig omdat client side filtering goed genoeg is
 def get_distinct_values(column: str, table: str = "transacties_bron_data_org", base_filters: dict | None = None) -> list:
     """
