@@ -7,7 +7,7 @@ from portefeuille_viewer.ui.settings_tab import SettingsTab
 from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
-from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
+# from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
 from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
 import logging
 import os
