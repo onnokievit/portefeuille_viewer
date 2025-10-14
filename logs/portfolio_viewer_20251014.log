@@ -215,3 +215,68 @@
 14:48:27 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
 14:48:27 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
 14:48:27 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:17:30 - INFO - === Portfolio Viewer Started ===
+15:17:32 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:17:32 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:17:32 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:17:33 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:23:58 - INFO - === Portfolio Viewer Started ===
+15:24:00 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:00 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:00 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:00 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:18 - INFO - === Portfolio Viewer Started ===
+15:24:20 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:20 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:20 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+15:24:20 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+16:11:39 - INFO - IB-Feed: IB ERROR 1100: Connectivity between LYNX - Beleggen met een Voorsprong and LYNX - Handelsplatform has been lost.
+16:11:42 - INFO - IB-Feed: IB ERROR 2157: Sec-def data farm connection is broken:secdefnj
+16:11:42 - INFO - IB-Feed: IB ERROR 2105: HMDS data farm connection is broken:ushmds
+16:12:13 - INFO - IB-Feed: IB ERROR 1102: Connectivity between LYNX - Beleggen met een Voorsprong and LYNX - Handelsplatform has been restored - data maintained. The following farms are connected: cafarm; hfarm; eufarmnj; cashfarm; uscrypto; usfuture; jfarm; usfarm.nj; eufarm; usopt; usfarm; ushmds; secdefnj. The following farms are not connected: euhmds.
+16:21:39 - INFO - === Portfolio Viewer Started ===
+16:21:40 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+16:21:40 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+16:21:40 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+16:21:40 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:05 - INFO - === Portfolio Viewer Started ===
+17:26:06 - INFO - IB-Feed: IB-feed ready
+17:26:06 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:06 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:06 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:06 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:56 - INFO - === Portfolio Viewer Started ===
+17:26:57 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:57 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:57 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:26:57 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:29:05 - INFO - === Portfolio Viewer Started ===
+17:29:07 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:29:07 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:29:07 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:29:07 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:32:40 - INFO - === Portfolio Viewer Started ===
+17:32:42 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:32:42 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:32:42 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:32:42 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:33:32 - INFO - === Portfolio Viewer Started ===
+17:33:34 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:33:34 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:33:34 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:33:34 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:35:40 - INFO - === Portfolio Viewer Started ===
+17:35:41 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:35:41 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:35:41 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:35:41 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:36:16 - INFO - === Portfolio Viewer Started ===
+17:36:18 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:36:18 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:36:18 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:36:18 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+17:45:32 - INFO - === Portfolio Viewer Started ===
+17:45:33 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+17:45:33 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+17:45:33 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+17:45:33 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
