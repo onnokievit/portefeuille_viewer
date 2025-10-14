@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QPushButton, QHeaderView
-from PySide6.QtCore import Slot, QSortFilterProxyModel
+from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
@@ -13,6 +13,10 @@ class AandelenTab2(QWidget):
 
     def __init__(self, portfolio_engine=None, pricefeed=None, parent=None):
         super().__init__(parent)
+        
+        # Track sort state to preserve user's sorting after data updates
+        self.current_sort_column = -1  # -1 means no sorting
+        self.current_sort_order = 0     # 0 = ascending, 1 = descending
         
         # Use provided portfolio_engine or create our own for backward compatibility
         if portfolio_engine is not None:
@@ -67,6 +71,11 @@ class AandelenTab2(QWidget):
         elif pricefeed and hasattr(pricefeed, 'priceUpdated'):
             pricefeed.priceUpdated.connect(self.on_price_update)
 
+    def on_sort_changed(self, column, order):
+        """Track user's sort preferences."""
+        self.current_sort_column = column
+        self.current_sort_order = order
+    
     def reload_data(self):
         """Laad en toon de geaggregeerde dataset."""
         # Load directly from SnapshotStore instead of via engine
@@ -85,17 +94,26 @@ class AandelenTab2(QWidget):
                 "eq_total_fee": [],
                 "total_result": []
             })
-        else:
-            df = df.sort("asset_rollup")  # Sorteer hier!
             
         self.model = PolarsTableModel(df, self)
         self.proxy_model = QSortFilterProxyModel(self)
         self.proxy_model.setSourceModel(self.model)
+        # Use Qt.UserRole for sorting (raw numeric values instead of formatted strings)
+        self.proxy_model.setSortRole(Qt.UserRole)
         self.table.setModel(self.proxy_model)
+        
+        # Restore user's sort preferences after model refresh
+        if self.current_sort_column >= 0:
+            self.table.sortByColumn(self.current_sort_column, self.current_sort_order)
         # Label wordt niet meer overschreven - ticker boodschap blijft staan
 
     def on_engine_data_update(self):
         """Bij data update van PortfolioEngine: refresh aggregatie."""
+        # Before reload, save current sort state from the table
+        if hasattr(self, 'table') and self.table.model() is not None:
+            header = self.table.horizontalHeader()
+            self.current_sort_column = header.sortIndicatorSection()
+            self.current_sort_order = header.sortIndicatorOrder()
         self.reload_data()
     
     @Slot(str, str, float)

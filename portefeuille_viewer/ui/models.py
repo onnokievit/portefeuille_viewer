@@ -113,6 +113,16 @@ class PolarsTableModel(QAbstractTableModel):
             if isinstance(val, float):
                 return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             return str(val)
+        
+        # --- Sorteer data (echte waarden voor QSortFilterProxyModel) ---
+        if role == Qt.UserRole:
+            # Geef de echte waarde terug voor sorting
+            if val is None:
+                return None
+            # Converteer Polars types naar Python types
+            if isinstance(val, (int, float)):
+                return float(val)  # Altijd float voor consistente sorting
+            return str(val)
 
         if role == Qt.TextAlignmentRole:
             if isinstance(val, (int, float)):

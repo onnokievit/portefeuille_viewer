@@ -23,6 +23,8 @@ class LiveAggregatorOpties(QObject):
         try:
             self.df = self._load_and_calculate()
             print(f"LiveAggregatorOpties: Initialized with {len(self.df)} rows")
+            # Save initial data to snapshot store for immediate UI display
+            self._save_to_snapshot_store()
         except Exception as e:
             print(f"LiveAggregatorOpties initialization error: {e}")
             self.df = pl.DataFrame()
@@ -68,22 +70,23 @@ class LiveAggregatorOpties(QObject):
         
         # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
         df = df.with_columns([
-            (pl.col("SomVantransactie_euro_totaal") - pl.col("ITM_OTM")).alias("W/V")
+            (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("W/V")
         ])
         
         # Selecteer en herorden kolommen volgens screenshot
         df = df.select([
             "broker",
             "asset_rollup", 
+            "LAST",
             "optie_call_put",
             "optie_strike",
             "optie_exp_date",
             "SomVantransactie_aantal",
             "SomVantransactie_euro_totaal",
-            "SomVantransactie_fee",
-            "LAST",
+            
             "ITM_OTM",
-            "W/V"
+            "W/V",
+            "SomVantransactie_fee"
         ])
         
         return df

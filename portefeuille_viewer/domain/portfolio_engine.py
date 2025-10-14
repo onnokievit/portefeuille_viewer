@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 
@@ -32,6 +32,13 @@ class PortfolioEngine(QObject):
         # TODO: Add when implemented
         # self.live_aggregator_sprinters = LiveAggregatorSprinters()
         
+        # Throttling: batch updates instead of processing each price immediately
+        self._pending_updates = False
+        self._update_timer = QTimer()
+        self._update_timer.setInterval(1000)  # Process updates max every 1500ms
+        self._update_timer.setSingleShot(True)
+        self._update_timer.timeout.connect(self._process_batched_updates)
+        
         # Connect pricefeed if provided
         if self.pricefeed:
             self.pricefeed.priceUpdated.connect(self._on_live_price)
@@ -45,29 +52,35 @@ class PortfolioEngine(QObject):
     def _on_live_price(self, symbol, currency, price):
         """
         Handle incoming live price updates.
-        Triggers relevant aggregators based on symbol type.
+        Stores price in aggregators but batches the actual processing.
         
         Args:
             symbol: IB symbol (e.g. 'AAPL', 'TSLA')
             currency: Price currency 
             price: New price value
         """
-        print(f"PortfolioEngine: Received price update {symbol} = {price}")
-        
-        # Update live prijs in beide aggregators en trigger update
+        # Update live prijs in beide aggregators (just store, don't process yet)
         self.live_aggregator_aandelen.update_live_price(symbol, price)
-        self.live_aggregator_aandelen.process_live_update()
-        
         self.live_aggregator_opties.update_live_price(symbol, price)
+        
+        # Mark that we have pending updates and start/restart timer
+        self._pending_updates = True
+        if not self._update_timer.isActive():
+            self._update_timer.start()
+    
+    def _process_batched_updates(self):
+        """Process all accumulated price updates in one batch."""
+        if not self._pending_updates:
+            return
+        
+        print(f"PortfolioEngine: Processing batched updates...")
+        
+        # Process updates for both aggregators
+        self.live_aggregator_aandelen.process_live_update()
         self.live_aggregator_opties.process_live_update()
         
-        # TODO: Add conditional triggering based on symbol type
-        # if symbol.endswith('OPT'):
-        #     self.live_aggregator_opties.process_live_update()
-        # elif symbol.endswith('SPR'):  
-        #     self.live_aggregator_sprinters.process_live_update()
-        
-        print(f"PortfolioEngine: Triggered aggregators for {symbol}")
+        self._pending_updates = False
+        print(f"PortfolioEngine: Batch processing complete")
     
     def start_subscriptions(self):
         """
