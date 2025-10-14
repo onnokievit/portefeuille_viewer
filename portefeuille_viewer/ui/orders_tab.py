@@ -905,6 +905,23 @@ class OrdersTab(QWidget):
             QMessageBox.critical(self, "Database", f"Kan niet verbinden:\n{e}")
             return
 
+        print(f"🔄 Database gewisseld naar: {name}")
+        
+        # Herlaad snapshot_alle_transacties uit de nieuwe database
+        try:
+            print("📥 Laden van snapshot_alle_transacties uit nieuwe database...")
+            repo.load_alle_transacties()
+            print(f"✅ snapshot_alle_transacties geladen: {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen")
+        except Exception as e:
+            QMessageBox.critical(self, "Database", f"Kon transacties niet laden:\n{e}")
+            print(f"❌ Fout bij laden transacties: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+        
+        # Refresh alle afgeleide snapshots
+        self._refresh_derived_snapshots()
+
         # ververs alle referentielijsten
         self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
         # self.brokers, self.asset_rollups, self.sprinter_details = load_reference_lists()

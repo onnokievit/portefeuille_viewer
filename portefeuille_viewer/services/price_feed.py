@@ -68,7 +68,14 @@ class PriceFeedIB(QObject):
 
             def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
                 if errorCode not in (2103,2104,2106,2158):
-                    feed.log.emit(f"IB ERROR {errorCode}: {errorString}")
+                    # Try to find which symbol caused the error
+                    with feed._lock:
+                        key = feed._tid_by_key.get(reqId)
+                    if key:
+                        sym, cur = key
+                        feed.log.emit(f"IB ERROR {errorCode} for {sym} ({cur}): {errorString}")
+                    else:
+                        feed.log.emit(f"IB ERROR {errorCode}: {errorString}")
 
             def tickPrice(self, reqId, tickType, price, attrib):
                 with feed._lock:

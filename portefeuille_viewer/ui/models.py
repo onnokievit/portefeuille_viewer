@@ -2,6 +2,7 @@ import pandas as pd
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
+import datetime
 
 
 
@@ -112,6 +113,9 @@ class PolarsTableModel(QAbstractTableModel):
                 return ""
             if isinstance(val, float):
                 return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            # Format date columns without timestamp
+            if isinstance(val, datetime.date):
+                return val.strftime("%d/%m/%Y")
             return str(val)
         
         # --- Sorteer data (echte waarden voor QSortFilterProxyModel) ---
@@ -127,6 +131,9 @@ class PolarsTableModel(QAbstractTableModel):
         if role == Qt.TextAlignmentRole:
             if isinstance(val, (int, float)):
                 return Qt.AlignRight | Qt.AlignVCenter
+            # Center align date columns
+            if isinstance(val, datetime.date):
+                return Qt.AlignCenter | Qt.AlignVCenter
             return Qt.AlignLeft | Qt.AlignVCenter
 
         if role == Qt.ForegroundRole and col_name.lower().startswith("totaal"):

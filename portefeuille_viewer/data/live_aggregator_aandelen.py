@@ -65,7 +65,7 @@ class LiveAggregatorAandelen(QObject):
         """
         if price is not None and price > 0:
             self.live_prices[symbol] = float(price)
-            print(f"LiveAggregatorAandelen: Updated {symbol} = {price}")
+            # print(f"LiveAggregatorAandelen: Updated {symbol} = {price}")
     
     def process_live_update(self):
         """
@@ -88,7 +88,7 @@ class LiveAggregatorAandelen(QObject):
             # 4. Signal UI dat aandelen data is geüpdatet
             self.aandelenUpdated.emit()
             
-            print(f"LiveAggregatorAandelen: Processed live update with {len(self.df)} rows")
+            # print(f"LiveAggregatorAandelen: Processed live update with {len(self.df)} rows") # Debug log
             
         except Exception as e:
             print(f"LiveAggregatorAandelen process error: {e}")

@@ -135,7 +135,7 @@ class LiveAggregatorOpties(QObject):
         """
         if price is not None and price > 0:
             self.live_prices[symbol] = float(price)
-            print(f"LiveAggregatorOpties: Updated {symbol} = {price}")
+            # print(f"LiveAggregatorOpties: Updated {symbol} = {price}") # Debug log
     
     def process_live_update(self):
         """
@@ -158,8 +158,7 @@ class LiveAggregatorOpties(QObject):
             # 4. Signal UI dat opties data is geüpdatet
             self.optiesUpdated.emit()
             
-            print(f"LiveAggregatorOpties: Processed live update with {len(self.df)} rows")
-            
+            # print(f"LiveAggregatorOpties: Processed live update with {len(self.df)} rows") # Debug log
         except Exception as e:
             print(f"LiveAggregatorOpties process error: {e}")
     

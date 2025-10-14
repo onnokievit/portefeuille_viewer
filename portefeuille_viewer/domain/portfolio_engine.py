@@ -73,14 +73,14 @@ class PortfolioEngine(QObject):
         if not self._pending_updates:
             return
         
-        print(f"PortfolioEngine: Processing batched updates...")
+        # print(f"PortfolioEngine: Processing batched updates...") # Debug log
         
         # Process updates for both aggregators
         self.live_aggregator_aandelen.process_live_update()
         self.live_aggregator_opties.process_live_update()
         
         self._pending_updates = False
-        print(f"PortfolioEngine: Batch processing complete")
+        # print(f"PortfolioEngine: Batch processing complete") # Debug log
     
     def start_subscriptions(self):
         """
