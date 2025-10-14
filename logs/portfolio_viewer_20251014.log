@@ -280,3 +280,8 @@
 17:45:33 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
 17:45:33 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
 17:45:33 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+17:55:34 - INFO - === Portfolio Viewer Started ===
+17:55:36 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+17:55:36 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+17:55:36 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+17:55:36 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
