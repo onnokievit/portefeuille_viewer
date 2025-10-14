@@ -62,14 +62,15 @@ def main():
     price_feed = PriceFeedService(IB_HOST, IB_PORT, IB_CLIENT_ID)
     portfolio_engine = PortfolioEngine(price_feed)
     
-    # Start live price subscriptions via portfolio engine (orchestrator)
+    # Create main window with centralized services FIRST
+    w = MainWindow(portfolio_engine, price_feed)
+    w.show()
+    
+    # Start live price subscriptions AFTER GUI is shown
+    # This prevents blocking the UI during initial price updates
     portfolio_engine.start_subscriptions()
     
     # Note: LiveAggregator automatically initializes its data on instantiation
-    
-    # Create main window with centralized services
-    w = MainWindow(portfolio_engine, price_feed)
-    w.show()
 
     sys.exit(app.exec())
 

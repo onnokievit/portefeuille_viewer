@@ -20,6 +20,8 @@ class LiveAggregatorAandelen(QObject):
         try:
             self.df = self._load_and_calculate()
             print(f"LiveAggregatorAandelen: Initialized with {len(self.df)} rows")
+            # Save initial data to snapshot store for immediate UI display
+            self._save_to_snapshot_store()
         except Exception as e:
             print(f"LiveAggregatorAandelen initialization error: {e}")
             self.df = pl.DataFrame()
