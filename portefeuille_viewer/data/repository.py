@@ -5,27 +5,35 @@ from portefeuille_viewer.domain.engine import compact_float64
 import warnings
 import polars as pl
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+from portefeuille_viewer.config import get_databases, get_default_database
 import warnings # importeer warnings module om waarschuwingen te beheren
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas") # onderdruk specifieke waarschuwingen van pandas
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # ------------------------------------------------------------
-# Database configuratie
+# Database configuratie (dynamisch geladen uit settings.ini)
 # ------------------------------------------------------------
-DB_MAP = {
-    "ONNO-PRODUCTIE": r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb",
-    "ONNO-TEST":      r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO - test.accdb",
-    "MURIEL":         r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - MURIEL.accdb",
-    "MURIEL-TEST":    r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - MURIEL - test.accdb",
-}
-DB_STYLES = {
-    "ONNO-PRODUCTIE": {"fg": "white",  "bg": "#09890f"},
-    "ONNO-TEST":      {"fg": "black",  "bg": "orange"},
-    "MURIEL":         {"fg": "black",  "bg": "pink"},
-}
-DEFAULT_DB_NAME = next(iter(DB_MAP.keys()))
-db_path = DB_MAP[DEFAULT_DB_NAME]
-conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};"
+def _load_db_config():
+    """Laad database configuratie uit settings.ini."""
+    databases = get_databases()
+    db_map = {name: db["path"] for name, db in databases.items()}
+    db_styles = {name: {"fg": db["fg_color"], "bg": db["bg_color"]} 
+                 for name, db in databases.items()}
+    return db_map, db_styles
+
+DB_MAP, DB_STYLES = _load_db_config()
+DEFAULT_DB_NAME = get_default_database()
+db_path = DB_MAP.get(DEFAULT_DB_NAME, "") if DEFAULT_DB_NAME else ""
+conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};" if db_path else ""
+
+def reload_db_config():
+    """Herlaad database configuratie na wijzigingen in settings."""
+    global DB_MAP, DB_STYLES, DEFAULT_DB_NAME, db_path, conn_str
+    DB_MAP, DB_STYLES = _load_db_config()
+    DEFAULT_DB_NAME = get_default_database()
+    db_path = DB_MAP.get(DEFAULT_DB_NAME, "") if DEFAULT_DB_NAME else ""
+    conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};" if db_path else ""
+    print(f"🔄 Database config herladen: {len(DB_MAP)} databases, default: {DEFAULT_DB_NAME}")
 
 def switch_database(name: str):
     """Schakel naar een andere database."""

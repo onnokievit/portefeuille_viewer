@@ -4,7 +4,7 @@ from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.ui.orders_tab import OrdersTab
 
 from portefeuille_viewer.ui.settings_tab import SettingsTab
-from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
+from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 # from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
@@ -25,13 +25,21 @@ class MainWindow(QMainWindow):
         # Setup logging
         self._setup_logging()
 
+        # Get settings for IB configuration
+        settings = get_settings()
+
         # Use provided services or create new ones for backward compatibility
         if price_feed is not None:
             self.feed_service = price_feed
             self.feed_service.setParent(self)  # Set parent for Qt lifecycle
         else:
             # Fallback: create own feed service (backward compatibility)
-            self.feed_service = PriceFeedService(IB_HOST, IB_PORT, IB_CLIENT_ID, self)
+            self.feed_service = PriceFeedService(
+                settings.get_ib_host(), 
+                settings.get_ib_port(), 
+                settings.get_ib_client_id(), 
+                self
+            )
         
         # Store portfolio engine reference
         self.portfolio_engine = portfolio_engine
@@ -81,11 +89,34 @@ class MainWindow(QMainWindow):
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
         # self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_snapshots)
         # self.orders_tab.dbChanged.connect(self.live_tab.reload_from_db)
+        
+        # Connect settings changes (database config wijzigingen)
+        self.settings_tab.configChanged.connect(self._on_database_config_changed)
 
         # Menu
         act_quit = QAction("Quit", self)
         act_quit.triggered.connect(self.close)
         self.menuBar().addAction(act_quit)
+    
+    def _on_database_config_changed(self):
+        """Herlaad database configuratie na wijzigingen in settings."""
+        from portefeuille_viewer.data import repository
+        
+        # Herlaad DB config
+        repository.reload_db_config()
+        
+        # Update dropdown in orders tab
+        current = self.orders_tab.db_choice.currentText()
+        self.orders_tab.db_choice.clear()
+        self.orders_tab.db_choice.addItems(list(repository.DB_MAP.keys()))
+        
+        # Herstel selectie of kies default
+        if current in repository.DB_MAP:
+            self.orders_tab.db_choice.setCurrentText(current)
+        else:
+            self.orders_tab.db_choice.setCurrentText(repository.DEFAULT_DB_NAME)
+        
+        self.logger.info(f"✅ Database configuratie herladen: {len(repository.DB_MAP)} databases")
 
     def closeEvent(self, event):
         try:
