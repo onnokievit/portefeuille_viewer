@@ -107,16 +107,26 @@ class MainWindow(QMainWindow):
         
         # Update dropdown in orders tab
         current = self.orders_tab.db_choice.currentText()
+        self.orders_tab.db_choice.blockSignals(True)  # Voorkom dubbele triggers
         self.orders_tab.db_choice.clear()
         self.orders_tab.db_choice.addItems(list(repository.DB_MAP.keys()))
         
-        # Herstel selectie of kies default
+        # Kies welke database te selecteren
         if current in repository.DB_MAP:
-            self.orders_tab.db_choice.setCurrentText(current)
+            # Oude selectie bestaat nog
+            target_db = current
         else:
-            self.orders_tab.db_choice.setCurrentText(repository.DEFAULT_DB_NAME)
+            # Oude selectie bestaat niet meer, kies default
+            target_db = repository.DEFAULT_DB_NAME
         
-        self.logger.info(f"✅ Database configuratie herladen: {len(repository.DB_MAP)} databases")
+        # Selecteer in dropdown
+        self.orders_tab.db_choice.setCurrentText(target_db)
+        self.orders_tab.db_choice.blockSignals(False)  # Re-enable signals
+        
+        # Wissel daadwerkelijk naar de database (via apply_database_by_name)
+        self.orders_tab.apply_database_by_name(target_db)
+        
+        self.logger.info(f"✅ Database configuratie herladen: {len(repository.DB_MAP)} databases, actief: {target_db}")
 
     def closeEvent(self, event):
         try:
