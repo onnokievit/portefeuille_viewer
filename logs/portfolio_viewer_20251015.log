@@ -419,3 +419,11 @@
 20:57:25 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
 20:57:25 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
 20:57:26 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+21:16:25 - INFO - === Portfolio Viewer Started ===
+21:16:26 - INFO - IB-Feed: IB-feed ready
+21:16:26 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+21:16:26 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+21:16:26 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+21:16:26 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+21:17:01 - INFO - ✅ Database configuratie herladen: 4 databases, actief: onno-productie
+21:17:09 - INFO - ✅ Database configuratie herladen: 4 databases, actief: onno-productie
