@@ -1106,3 +1106,101 @@ Document-first approach enables:
 ---
 
 *This document serves as a comprehensive record of development decisions, implementation details, and architectural patterns for the Portfolio Viewer v0.5. It should be updated after significant changes or when new patterns emerge.*
+
+---
+
+## 2A. Orders Tab - Snapshot Synchronisatie Implementatie
+
+### Overzicht
+De Orders tab is succesvol gemigreerd van database-centric naar snapshot-centric architectuur. Dit document beschrijft de implementatie van Stap 1 en Stap 2.
+
+#### Stap 1: Data Loading uit Snapshot ✅ COMPLEET
+- `load_initial_records()` en `load_more_records()` lezen nu uit `SNAPSHOT_STORE.snapshot_alle_transacties` in plaats van database queries
+- Filtering en sorting gebeurt via Polars expressions in-memory
+- Conversie naar Pandas alleen voor display (Optie A benadering)
+- Belangrijke functies: `_apply_snapshot_filters()`, `_apply_snapshot_sorting()`, lazy loading met `_current_offset`
+- Voordelen: Snellere data loading, geen SQL injection risico, consistent met andere tabs
+
+#### Stap 2: Insert/Update Sync met Snapshot ✅ COMPLEET
+- Synchronisatie betekent dat wijzigingen in de database ook direct in de snapshot worden doorgevoerd
+- INSERT: na `insert_transaction()` wordt `_add_transaction_to_snapshot()` aangeroepen
+- UPDATE: na `update_transactions_atomic()` wordt `_update_transaction_in_snapshot()` aangeroepen
+- Beide paden ondersteunen gekoppelde orders
+
+**Voorbeeldcode INSERT:**
+```python
+eerste_id = insert_transaction(eerste_order)
+self._add_transaction_to_snapshot(eerste_order, eerste_id)
+if tweede_order:
+    tweede_id = insert_transaction(tweede_order)
+    self._add_transaction_to_snapshot(tweede_order, tweede_id)
+```
+
+**Voorbeeldcode UPDATE:**
+```python
+update_transactions_atomic(record_id1=int(self.EDIT_ID), data1=data_update_1, ...)
+self._update_transaction_in_snapshot(int(self.EDIT_ID), data_update_1)
+if self.EDIT_ID2 is not None:
+    self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
+```
+
+#### Helper Functies
+- `_add_transaction_to_snapshot(order_dict, record_id)`: voegt nieuw record toe aan snapshot na INSERT
+- `_update_transaction_in_snapshot(record_id, data_dict)`: update bestaand record in snapshot na UPDATE
+
+**Voorbeeldcode toevoegen:**
+```python
+new_row = {**order_dict, "Id": record_id}
+new_df = pl.DataFrame([new_row])
+SNAPSHOT_STORE.snapshot_alle_transacties = pl.concat([
+    SNAPSHOT_STORE.snapshot_alle_transacties,
+    new_df
+])
+```
+
+**Voorbeeldcode updaten:**
+```python
+mask = SNAPSHOT_STORE.snapshot_alle_transacties["Id"] == record_id
+updates = {}
+for col_name, new_value in data_dict.items():
+    if col_name in SNAPSHOT_STORE.snapshot_alle_transacties.columns:
+        updates[col_name] = pl.when(mask).then(pl.lit(new_value)).otherwise(pl.col(col_name))
+if updates:
+    SNAPSHOT_STORE.snapshot_alle_transacties = SNAPSHOT_STORE.snapshot_alle_transacties.with_columns(**updates)
+```
+
+#### Voordelen van Snapshot Sync
+- Real-time consistency: snapshot is altijd up-to-date zonder extra database query
+- Performance: geen extra SELECT query na INSERT/UPDATE, alles in-memory
+- Simpliciteit: snapshot is master voor UI, database is persistent storage
+- Future-proof: makkelijk uit te breiden, consistent met aggregator pattern
+
+#### Flow Diagrams
+**INSERT:**
+User klikt "Opslaan" → `opslaan_orders()` → `insert_transaction()` → `_add_transaction_to_snapshot()` → UI refresh → `ordersCommitted.emit()`
+
+**UPDATE:**
+User klikt "Opslaan" (edit mode) → `opslaan_orders()` → `update_transactions_atomic()` → `_update_transaction_in_snapshot()` → UI refresh → `ordersCommitted.emit()`
+
+#### Testing Checklist
+- [ ] Insert single/paired order → nieuwe rijen zichtbaar
+- [ ] Update bestaande/paired orders → wijzigingen zichtbaar
+- [ ] Geen database query na insert/update (alleen in-memory update)
+- [ ] Edge cases: snapshot niet geladen, missing columns, rapid inserts
+
+#### Bekende Beperkingen
+- Geen DELETE sync (workaround: reload snapshot)
+- Geen transaction rollback (snapshot reflecteert database state)
+- Memory overhead (Polars is efficient, ~1000-10000 transacties is acceptabel)
+
+#### Toekomstige Verbeteringen
+- DELETE sync toevoegen
+- Unit tests voor snapshot sync
+- Snapshot persistence (pickle/parquet), batch sync, versioning voor undo/redo
+
+#### Conclusie
+- Stap 1 (Data Loading): COMPLEET
+- Stap 2 (Insert/Update Sync): COMPLEET
+- Orders tab is nu volledig snapshot-centric, met snelle UI updates en betere maintainability.
+
+---
