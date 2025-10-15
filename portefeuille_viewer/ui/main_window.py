@@ -9,6 +9,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
 # from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
 from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
+from portefeuille_viewer.ui.option_explorer import OptionChainTab
 import logging
 import os
 from datetime import datetime
@@ -81,6 +82,11 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
         #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
+        
+        # Option Chain Explorer Tab (NEW - MVP)
+        self.option_chain_tab = OptionChainTab(feed_service=self.feed_service)
+        self.tabs.addTab(self.option_chain_tab, "Option Chain Explorer")
+        
         self.tabs.addTab(self.settings_tab, "Settings")
         
 
