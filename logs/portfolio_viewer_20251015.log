@@ -229,3 +229,32 @@
 10:55:29 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
 10:55:29 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
 10:55:29 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:35:27 - INFO - === Portfolio Viewer Started ===
+11:35:28 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:35:28 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+11:35:28 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+11:35:28 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+11:35:33 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+11:37:09 - INFO - === Portfolio Viewer Started ===
+11:37:11 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+11:37:11 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+11:37:11 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+11:37:11 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:39:06 - INFO - === Portfolio Viewer Started ===
+11:39:11 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+11:39:11 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+11:39:15 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+11:39:15 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:42:16 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+11:43:15 - INFO - IB-Feed: IB ERROR 200: No security definition has been found for the request
+11:43:44 - INFO - === Portfolio Viewer Started ===
+11:43:45 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+11:43:45 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+11:43:45 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:43:45 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
+11:49:51 - INFO - === Portfolio Viewer Started ===
+11:49:53 - INFO - IB-Feed: IB-feed ready
+11:49:53 - INFO - IB-Feed: IB ERROR 200 for PLAN (USD): No security definition has been found for the request
+11:49:53 - INFO - IB-Feed: IB ERROR 200 for ORDN (EUR): No security definition has been found for the request
+11:49:53 - INFO - IB-Feed: IB ERROR 200 for EOE (EUR): No security definition has been found for the request
+11:49:53 - INFO - IB-Feed: IB ERROR 200 for CORRECTIE-BENCHMARK (): No security definition has been found for the request
