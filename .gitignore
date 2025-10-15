@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code settings
+.vscode/
+
+# Access databases
+*.accdb
+
+# Log / tijdelijke bestanden
+*.log
+development.txt
