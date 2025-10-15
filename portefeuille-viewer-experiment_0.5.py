@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 
 from portefeuille_viewer.ui.main_window import MainWindow
-from portefeuille_viewer.config import IB_HOST, IB_PORT, IB_CLIENT_ID
+from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
@@ -58,8 +58,15 @@ def main():
     # Load datasets first
     load_datasets()
     
+    # Get settings for IB configuration
+    settings = get_settings()
+    
     # Initialize centralized services
-    price_feed = PriceFeedService(IB_HOST, IB_PORT, IB_CLIENT_ID)
+    price_feed = PriceFeedService(
+        settings.get_ib_host(), 
+        settings.get_ib_port(), 
+        settings.get_ib_client_id()
+    )
     portfolio_engine = PortfolioEngine(price_feed)
     
     # Create main window with centralized services FIRST
