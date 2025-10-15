@@ -50,6 +50,14 @@ class PriceFeedIB(QObject):
         self._app = None
         self._prices: Dict[Tuple[str,str], Dict[str, float]] = {}
         self.host, self.port, self.client_id = host, port, client_id
+        # Dispatcher dicts
+        self._cd_handlers = {}  # reqId -> on_detail
+        self._cd_end_handlers = {}  # reqId -> on_end
+        self._sd_handlers = {}  # reqId -> on_param
+        self._sd_end_handlers = {}  # reqId -> on_end
+        # Connection state + reconnect guard
+        self._is_ready = False
+        self._reconnect_attempted = False
         self._start()
 
     def _start(self):
@@ -64,9 +72,28 @@ class PriceFeedIB(QObject):
                 EClient.__init__(self, self)
 
             def nextValidId(self, orderId: int):
+                feed._is_ready = True
                 feed.ready.emit()
 
             def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
+                # Handle clientId conflict: auto-retry once with incremented clientId
+                if errorCode == 326:
+                    if not getattr(feed, "_reconnect_attempted", False):
+                        feed._reconnect_attempted = True
+                        new_id = feed.client_id + 1
+                        feed.log.emit(f"ERROR 326: Client ID {feed.client_id} in use; retrying with {new_id}...")
+                        def _do():
+                            try:
+                                if feed._app:
+                                    feed._app.disconnect()
+                                time.sleep(0.5)
+                                feed.client_id = new_id
+                                feed._is_ready = False
+                                feed._app.connect(feed.host, feed.port, clientId=feed.client_id)
+                            except Exception as e:
+                                feed.log.emit(f"Reconnect failed: {e}")
+                        threading.Thread(target=_do, daemon=True).start()
+                    return
                 if errorCode not in (2103,2104,2106,2158):
                     # Try to find which symbol caused the error
                     with feed._lock:
@@ -90,11 +117,60 @@ class PriceFeedIB(QObject):
                         entry["ts"] = time.time()
                     feed.priceUpdated.emit(sym, cur, float(price))
 
+            # Dispatcher for contractDetails
+            def contractDetails(self, reqId, contractDetails):
+                handler = feed._cd_handlers.get(reqId)
+                if handler:
+                    handler(contractDetails)
+
+            def contractDetailsEnd(self, reqId):
+                end = feed._cd_end_handlers.pop(reqId, None)
+                feed._cd_handlers.pop(reqId, None)
+                if end:
+                    end()
+
+            # Dispatcher for secdef opt params
+            def securityDefinitionOptionParameter(self, reqId, exchange, underlyingConId, tradingClass, multiplier, expirations, strikes):
+                handler = feed._sd_handlers.get(reqId)
+                if handler:
+                    handler(exchange, underlyingConId, tradingClass, multiplier, expirations, strikes)
+
+            def securityDefinitionOptionParameterEnd(self, reqId):
+                end = feed._sd_end_handlers.pop(reqId, None)
+                feed._sd_handlers.pop(reqId, None)
+                if end:
+                    end()
+
         self._Contract = Contract
         self._app = App()
         self._app.connect(self.host, self.port, clientId=self.client_id)
         t = threading.Thread(target=self._app.run, daemon=True)
         t.start()
+
+    def next_tid(self):
+        with self._lock:
+            tid = self._tid_next
+            self._tid_next += 1
+            return tid
+
+    # API: request contract details (async, per reqId handler)
+    def request_contract_details(self, contract, on_detail, on_end):
+        tid = self.next_tid()
+        self._cd_handlers[tid] = on_detail
+        self._cd_end_handlers[tid] = on_end
+        self._app.reqContractDetails(tid, contract)
+        return tid
+
+    # API: request secdef opt params (async, per reqId handler)
+    def request_secdef_opt_params(self, symbol, exchange, secType, conId, on_param, on_end):
+        tid = self.next_tid()
+        self._sd_handlers[tid] = on_param
+        self._sd_end_handlers[tid] = on_end
+        self._app.reqSecDefOptParams(tid, symbol, exchange, secType, conId)
+        return tid
+
+    def is_ready(self) -> bool:
+        return self._is_ready
 
     def _make_stock(self, symbol, currency, primaryExchange):
         c = self._Contract()
@@ -164,6 +240,9 @@ class PriceFeedService(QObject):
 
     def snapshot_df(self) -> pd.DataFrame:
         return self.store.snapshot_df()
+
+    def is_ready(self) -> bool:
+        return self._feed.is_ready()
 
     def ensure_subscriptions(self, rows: List[tuple[str, str, Optional[str]]]):
         self._feed.ensure_subscriptions(rows)

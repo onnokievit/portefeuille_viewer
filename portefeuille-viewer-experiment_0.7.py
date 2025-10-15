@@ -73,9 +73,12 @@ def main():
     w = MainWindow(portfolio_engine, price_feed)
     w.show()
     
-    # Start live price subscriptions AFTER GUI is shown
-    # This prevents blocking the UI during initial price updates
-    portfolio_engine.start_subscriptions()
+    # Start live price subscriptions only after IB is ready
+    if price_feed.is_ready():
+        portfolio_engine.start_subscriptions()
+    else:
+        # Wait for IB ready signal, then start subscriptions once
+        price_feed._feed.ready.connect(lambda: portfolio_engine.start_subscriptions())
     
     # Note: LiveAggregator automatically initializes its data on instantiation
 
