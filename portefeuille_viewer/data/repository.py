@@ -64,7 +64,18 @@ def load_asset_rollup_data() -> pl.DataFrame:
     SNAPSHOT_STORE.snapshot_asset_rollup_data = df
     # return compact_float64(df)
 
-
+# ------------------------------------------------------------
+# sprinter_refenctie_data referentie tabel ophalen
+# ------------------------------------------------------------
+def load_sprinter_referentie_data() -> pl.DataFrame:
+    """
+    Laadt de sprinter referentie tabel  uit de database.
+    """
+    sql = "SELECT * FROM sprinters_referentie_data"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data = df
+    # return compact_float64(df)
 
 
 

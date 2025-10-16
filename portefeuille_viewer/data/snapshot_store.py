@@ -16,10 +16,12 @@ class SnapshotStore:
         self.repository_snapshot_load_open_opties: pl.DataFrame | None = None
         self.aggregator_snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
         self.repository_snapshot_open_sprinters: pl.DataFrame | None = None
+        self.aggregator_snapshot_open_sprinters_live: pl.DataFrame | None = None  # NIEUW: live sprinters data met koersen met broker
         self.repository_snapshot_gesloten_opties: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_sprinters: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
+        self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         
         # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
@@ -32,11 +34,13 @@ class SnapshotStore:
         self.repository_snapshot_load_open_opties = None
         self.aggregator_snapshot_load_open_opties_from_tx_live = None
         self.repository_snapshot_open_sprinters = None
+        self.aggregator_snapshot_open_sprinters_live = None
         self.repository_snapshot_gesloten_opties = None
         self.repository_snapshot_gesloten_opties_no_broker = None
         self.repository_snapshot_gesloten_sprinters = None
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
+        self.repository_snapshot_sprinter_referentie_data = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -47,10 +51,13 @@ class SnapshotStore:
             self.repository_snapshot_load_open_opties is not None,
             self.aggregator_snapshot_load_open_opties_from_tx_live is not None,
             self.repository_snapshot_open_sprinters is not None,
+            self.aggregator_snapshot_open_sprinters_live is not None,
             self.repository_snapshot_gesloten_opties is not None,
             self.repository_snapshot_gesloten_opties_no_broker is not None,
             self.repository_snapshot_gesloten_sprinters is not None,
-            self.snapshot_asset_rollup_data is not None
+            self.snapshot_asset_rollup_data is not None,
+            
+            self.repository_snapshot_sprinter_referentie_data is not None,
         ])
 
     def snapshot_store_summary(self) -> str:
@@ -68,6 +75,8 @@ class SnapshotStore:
             parts.append(f"Live Opties: {len(self.aggregator_snapshot_load_open_opties_from_tx_live)} rijen")
         if self.repository_snapshot_open_sprinters is not None:
             parts.append(f"Open Sprinters: {len(self.repository_snapshot_open_sprinters)} rijen")
+        if self.aggregator_snapshot_open_sprinters_live is not None:
+            parts.append(f"Live Sprinters: {len(self.aggregator_snapshot_open_sprinters_live)} rijen")
         if self.repository_snapshot_gesloten_opties is not None:
             parts.append(f"Gesloten Opties: {len(self.repository_snapshot_gesloten_opties)} rijen")
         if self.repository_snapshot_gesloten_opties_no_broker is not None:
@@ -76,6 +85,8 @@ class SnapshotStore:
             parts.append(f"Gesloten Sprinters: {len(self.repository_snapshot_gesloten_sprinters)} rijen")
         if self.snapshot_asset_rollup_data is not None:
             parts.append(f"Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
+        if self.repository_snapshot_sprinter_referentie_data is not None:
+            parts.append(f"Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
 

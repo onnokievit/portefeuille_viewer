@@ -37,9 +37,16 @@ def load_datasets():
     repository.load_gesloten_opties_no_broker()
     repository.load_open_sprinters_from_tx()
     repository.load_gesloten_sprinters_from_tx()
-    # engine.print_snapshot_columns("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: kolommen controleren
-    # engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: eerste rijen controleren
+    engine.print_snapshot_columns("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: kolommen controleren
+    engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: eerste rijen controleren
+
     repository.load_asset_rollup_data()
+    repository.load_sprinter_referentie_data()
+    engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
+    engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
+
+
+
     live_aggregator_aandelen = LiveAggregatorAandelen()
     live_aggregator_opties = LiveAggregatorOpties()
     live_aggregator_aandelen.process_live_update
