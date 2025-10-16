@@ -45,6 +45,7 @@ class SnapshotStore:
             self.snapshot_aandelen is not None,
             self.snapshot_aandelen_live is not None,
             self.snapshot_load_open_opties_from_tx is not None,
+            self.snapshot_load_open_opties_from_tx_live is not None,
             self.open_sprinters is not None,
             self.snapshot_gesloten_opties is not None,
             self.snapshot_gesloten_opties_no_broker is not None,
@@ -63,6 +64,8 @@ class SnapshotStore:
             parts.append(f"Live Aandelen: {len(self.snapshot_aandelen_live)} rijen")
         if self.snapshot_load_open_opties_from_tx is not None:
             parts.append(f"Open Opties: {len(self.snapshot_load_open_opties_from_tx)} rijen")
+        if self.snapshot_load_open_opties_from_tx_live is not None:
+            parts.append(f"Live Opties: {len(self.snapshot_load_open_opties_from_tx_live)} rijen")
         if self.open_sprinters is not None:
             parts.append(f"Open Sprinters: {len(self.open_sprinters)} rijen")
         if self.snapshot_gesloten_opties is not None:
@@ -76,7 +79,7 @@ class SnapshotStore:
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
 
-        return " | ".join(parts) if parts else "(geen data geladen)"
+        return " \n ".join(parts) if parts else "(geen data geladen)"
 
 
 
