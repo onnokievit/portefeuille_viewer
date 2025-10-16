@@ -11,7 +11,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 class OpenOptiesPolarsTab(QWidget):
     """
     Tabblad dat open opties toont met live prijzen.
-    Leest uit snapshot_load_open_opties_from_tx_live (gevuld door LiveAggregatorOpties).
+    Leest uit aggregator_snapshot_load_open_opties_from_tx_live (gevuld door LiveAggregatorOpties).
     """
     def __init__(self, portfolio_engine=None, parent=None):
         super().__init__(parent)
@@ -62,7 +62,7 @@ class OpenOptiesPolarsTab(QWidget):
     def reload_data(self):
         """Reload data from SnapshotStore."""
         # Haal data uit de live snapshot (gevuld door LiveAggregatorOpties)
-        df = SNAPSHOT_STORE.snapshot_load_open_opties_from_tx_live
+        df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         
         if df is None or df.is_empty():
             df = pl.DataFrame()

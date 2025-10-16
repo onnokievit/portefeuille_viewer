@@ -82,7 +82,7 @@ class LiveAggregatorAandelen(QObject):
             # 2. Laad en bereken complete DataFrame
             self.df = self._load_and_calculate()
             
-            # 3. Aggregeer en sla op in snapshot_aandelen_live
+            # 3. Aggregeer en sla op in aggregator_snapshot_aandelen_live
             self._save_to_snapshot_store()
             
             # 4. Signal UI dat aandelen data is geüpdatet
@@ -171,7 +171,7 @@ class LiveAggregatorAandelen(QObject):
         """Sla geaggregeerde data op in SnapshotStore."""
         try:
             aggregated = self.get_aggregated()
-            SNAPSHOT_STORE.snapshot_aandelen_live = aggregated
+            SNAPSHOT_STORE.aggregator_snapshot_aandelen_live = aggregated
         except Exception as e:
             print(f"LiveAggregatorAandelen: Error saving to SnapshotStore: {e}")
     

@@ -12,9 +12,9 @@ class SnapshotStore:
         # Polars DataFrames (standaard leeg)
         self.repository_snapshot_alle_transacties: pl.DataFrame | None = None
         self.repository_snapshot_aandelen: pl.DataFrame | None = None
-        self.snapshot_aandelen_live: pl.DataFrame | None = None  # NIEUW: live geaggregeerde aandelen data
+        self.aggregator_snapshot_aandelen_live: pl.DataFrame | None = None  # NIEUW: live geaggregeerde aandelen data
         self.repository_snapshot_load_open_opties: pl.DataFrame | None = None
-        self.snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
+        self.aggregator_snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
         self.repository_snapshot_open_sprinters: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_opties: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
@@ -28,9 +28,9 @@ class SnapshotStore:
         """Reset alle snapshots naar leeg."""
         self.repository_snapshot_alle_transacties = None
         self.repository_snapshot_aandelen = None
-        self.snapshot_aandelen_live = None
+        self.aggregator_snapshot_aandelen_live = None
         self.repository_snapshot_load_open_opties = None
-        self.snapshot_load_open_opties_from_tx_live = None
+        self.aggregator_snapshot_load_open_opties_from_tx_live = None
         self.repository_snapshot_open_sprinters = None
         self.repository_snapshot_gesloten_opties = None
         self.repository_snapshot_gesloten_opties_no_broker = None
@@ -43,9 +43,9 @@ class SnapshotStore:
         return any([
             self.repository_snapshot_alle_transacties is not None,
             self.repository_snapshot_aandelen is not None,
-            self.snapshot_aandelen_live is not None,
+            self.aggregator_snapshot_aandelen_live is not None,
             self.repository_snapshot_load_open_opties is not None,
-            self.snapshot_load_open_opties_from_tx_live is not None,
+            self.aggregator_snapshot_load_open_opties_from_tx_live is not None,
             self.repository_snapshot_open_sprinters is not None,
             self.repository_snapshot_gesloten_opties is not None,
             self.repository_snapshot_gesloten_opties_no_broker is not None,
@@ -60,12 +60,12 @@ class SnapshotStore:
             parts.append(f"Alle Transacties: {len(self.repository_snapshot_alle_transacties)} rijen")
         if self.repository_snapshot_aandelen is not None:
             parts.append(f"Open Aandelen: {len(self.repository_snapshot_aandelen)} rijen")
-        if self.snapshot_aandelen_live is not None:
-            parts.append(f"Live Aandelen: {len(self.snapshot_aandelen_live)} rijen")
+        if self.aggregator_snapshot_aandelen_live is not None:
+            parts.append(f"Live Aandelen: {len(self.aggregator_snapshot_aandelen_live)} rijen")
         if self.repository_snapshot_load_open_opties is not None:
             parts.append(f"Open Opties: {len(self.repository_snapshot_load_open_opties)} rijen")
-        if self.snapshot_load_open_opties_from_tx_live is not None:
-            parts.append(f"Live Opties: {len(self.snapshot_load_open_opties_from_tx_live)} rijen")
+        if self.aggregator_snapshot_load_open_opties_from_tx_live is not None:
+            parts.append(f"Live Opties: {len(self.aggregator_snapshot_load_open_opties_from_tx_live)} rijen")
         if self.repository_snapshot_open_sprinters is not None:
             parts.append(f"Open Sprinters: {len(self.repository_snapshot_open_sprinters)} rijen")
         if self.repository_snapshot_gesloten_opties is not None:
