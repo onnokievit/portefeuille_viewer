@@ -81,7 +81,7 @@ class AandelenTab2(QWidget):
         # Load directly from SnapshotStore instead of via engine
         from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
         
-        df = SNAPSHOT_STORE.snapshot_aandelen_live
+        df = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
         if df is None or df.is_empty():
             # Fallback: empty dataframe
             import polars as pl

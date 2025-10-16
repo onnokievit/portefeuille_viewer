@@ -270,6 +270,55 @@ def load_gesloten_opties_no_broker() -> pl.DataFrame:
     return df_final
 
 
+# ------------------------------------------------------------
+# open sprinters
+# ------------------------------------------------------------
+
+def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Bouwt de dataset 'open opties' na volgens de Access-query:
+    SELECT ... FROM transacties_bron_data
+    GROUP BY ...
+    HAVING asset_type='optie' AND exp_date>=Date() AND SUM(aantal)<>0
+    """
+
+    if df_tx is None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+
+    
+
+    vandaag = date.today()
+
+    # --- Eerste aggregatie (overeenkomend met Access GROUP BY) ---
+    per_uniek = (
+        df_tx
+        .group_by([
+            "uniek_id",
+            "broker",
+            "asset_rollup",
+            "asset_type",
+            "optie_strike",
+            "optie_call_put"
+        ])
+        .agg([
+            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_aantal").alias("SomVantransactie_aantal"),
+            (pl.col("optie_strike") * pl.col("transactie_aantal")).sum().alias("optie_waarde")
+        ])
+    )
+
+    # HAVING filter: alleen openstaande opties (exp_date >= vandaag, som(aantal) ≠ 0) ---
+    per_uniek_filtered = per_uniek.filter(
+        (pl.col("asset_type") == "sprinter")
+        & (pl.col("SomVantransactie_aantal") != 0)
+    )
+    # SNAPSHOT_STORE.repository_snapshot_open_sprinters = per_uniek_filtered
+    SNAPSHOT_STORE.repository_snapshot_open_sprinters = per_uniek_filtered
+    #return per_uniek_filtered
+
 
 
 # ------------------------------------------------------------
@@ -338,6 +387,7 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
 # ------------------------------------------------------------
 # ############## EINDE Snapshot store loaders
 # ------------------------------------------------------------
+
 
 
 
