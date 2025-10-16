@@ -16,8 +16,8 @@ class SnapshotStore:
         self.repository_snapshot_load_open_opties: pl.DataFrame | None = None
         self.snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
         self.repository_snapshot_open_sprinters: pl.DataFrame | None = None
-        self.snapshot_gesloten_opties: pl.DataFrame | None = None
-        self.snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
+        self.repository_snapshot_gesloten_opties: pl.DataFrame | None = None
+        self.repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_sprinters: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
         
@@ -32,8 +32,8 @@ class SnapshotStore:
         self.repository_snapshot_load_open_opties = None
         self.snapshot_load_open_opties_from_tx_live = None
         self.repository_snapshot_open_sprinters = None
-        self.snapshot_gesloten_opties = None
-        self.snapshot_gesloten_opties_no_broker = None
+        self.repository_snapshot_gesloten_opties = None
+        self.repository_snapshot_gesloten_opties_no_broker = None
         self.repository_snapshot_gesloten_sprinters = None
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
@@ -47,8 +47,8 @@ class SnapshotStore:
             self.repository_snapshot_load_open_opties is not None,
             self.snapshot_load_open_opties_from_tx_live is not None,
             self.repository_snapshot_open_sprinters is not None,
-            self.snapshot_gesloten_opties is not None,
-            self.snapshot_gesloten_opties_no_broker is not None,
+            self.repository_snapshot_gesloten_opties is not None,
+            self.repository_snapshot_gesloten_opties_no_broker is not None,
             self.repository_snapshot_gesloten_sprinters is not None,
             self.snapshot_asset_rollup_data is not None
         ])
@@ -68,10 +68,10 @@ class SnapshotStore:
             parts.append(f"Live Opties: {len(self.snapshot_load_open_opties_from_tx_live)} rijen")
         if self.repository_snapshot_open_sprinters is not None:
             parts.append(f"Open Sprinters: {len(self.repository_snapshot_open_sprinters)} rijen")
-        if self.snapshot_gesloten_opties is not None:
-            parts.append(f"Gesloten Opties: {len(self.snapshot_gesloten_opties)} rijen")
-        if self.snapshot_gesloten_opties_no_broker is not None:
-            parts.append(f"Gesloten Opties (zonder broker): {len(self.snapshot_gesloten_opties_no_broker)} rijen")
+        if self.repository_snapshot_gesloten_opties is not None:
+            parts.append(f"Gesloten Opties: {len(self.repository_snapshot_gesloten_opties)} rijen")
+        if self.repository_snapshot_gesloten_opties_no_broker is not None:
+            parts.append(f"Gesloten Opties (zonder broker): {len(self.repository_snapshot_gesloten_opties_no_broker)} rijen")
         if self.repository_snapshot_gesloten_sprinters is not None:
             parts.append(f"Gesloten Sprinters: {len(self.repository_snapshot_gesloten_sprinters)} rijen")
         if self.snapshot_asset_rollup_data is not None:
