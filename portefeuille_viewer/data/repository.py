@@ -171,8 +171,8 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         & (pl.col("optie_exp_date") >= vandaag)
         & (pl.col("SomVantransactie_aantal") != 0)
     )
-    # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
-    SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
+    # SNAPSHOT_STORE.snapshot_load_open_opties = per_uniek_filtered
+    SNAPSHOT_STORE.snapshot_load_open_opties = per_uniek_filtered
     #return per_uniek_filtered
 
 
@@ -264,6 +264,121 @@ def load_gesloten_opties_no_broker() -> pl.DataFrame:
     # Sla het resultaat op in snapshot_gesloten_opties_no_broker
     SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker = df_final
     return df_final
+
+# ------------------------------------------------------------
+# Open sprinters
+# ------------------------------------------------------------
+
+def load_snapshot_open_sprinters(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Bouwt de dataset 'open opties' na volgens de Access-query:
+    SELECT ... FROM transacties_bron_data
+    GROUP BY ...
+    HAVING asset_type='optie' AND exp_date>=Date() AND SUM(aantal)<>0
+    """
+
+    if df_tx is None:
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.snapshot_alle_transacties
+
+    
+
+    vandaag = date.today()
+
+    # --- Eerste aggregatie (overeenkomend met Access GROUP BY) ---
+    per_uniek = (
+        df_tx
+        .group_by([
+            "uniek_id",
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "asset_type",
+            
+            "optie_strike",
+            "optie_call_put"
+        ])
+        .agg([
+            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_aantal").alias("SomVantransactie_aantal"),
+            (pl.col("optie_strike") * pl.col("transactie_aantal")).sum().alias("sprinter_waarde")
+        ])
+    )
+
+    # HAVING filter: alleen openstaande opties (exp_date >= vandaag, som(aantal) ≠ 0) ---
+    per_uniek_filtered = per_uniek.filter(
+        (pl.col("asset_type") == "sprinter")
+        & (pl.col("SomVantransactie_aantal") != 0)
+    )
+    # SNAPSHOT_STORE.snapshot_load_open_opties = per_uniek_filtered
+    SNAPSHOT_STORE.snapshot_load_open_sprinters = per_uniek_filtered
+    print(per_uniek_filtered)
+    #return per_uniek_filtered
+
+# ------------------------------------------------------------
+# Gesloten sprinters
+# ------------------------------------------------------------
+
+def load_snapshot_gesloten_sprinters(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
+    """
+    Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:
+    1. Groepeer transacties per uniek_id, broker, asset_rollup, exp_date, strike, call_put.
+    2. Bereken sommen van aantal, fee, euro_totaal.
+    3. Filter alleen 'optie' waarvan:
+       - exp_date < vandaag,  of
+       - som(transactie_aantal) == 0.
+    4. Groepeer opnieuw per broker + asset_rollup om series op te rollen.
+    """
+
+    if df_tx is None:
+        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
+        df_tx = SNAPSHOT_STORE.snapshot_alle_transacties
+
+    vandaag = date.today()
+        # --- Eerste aggregatie (komt overeen met Opties_closed_series_opgerold_op_uniek_id) ---
+    per_uniek = (
+        df_tx
+        .group_by([
+            "uniek_id",
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "asset_type",
+            
+        ])
+        .agg([
+            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_aantal").alias("SomVantransactie_aantal")
+        ])
+    )
+
+    # --- Filter volgens HAVING-voorwaarden ---
+    per_uniek_filtered = per_uniek.filter(
+        (pl.col("asset_type") == "sprinter")
+        & (
+            (pl.col("SomVantransactie_aantal") == 0)
+        )
+    )
+    # --- Tweede aggregatie (komt overeen met 2e Access-query) ---
+    df_final = (
+        per_uniek_filtered
+        .group_by(["broker", "asset_rollup", "asset_detail"])
+        .agg([
+            pl.sum("SomVantransactie_fee").alias("SomVanSomVantransactie_fee"),
+            pl.sum("SomVantransactie_euro_totaal").alias("SomVanSomVantransactie_euro_totaal"),
+            pl.sum("SomVantransactie_aantal").alias("SomVanSomVantransactie_aantal")
+        ])
+        .sort(["broker", "asset_rollup"])
+    )
+    SNAPSHOT_STORE.snapshot_gesloten_sprinters = df_final
+    
+    # return df_final
+
+
 
 
 # ------------------------------------------------------------

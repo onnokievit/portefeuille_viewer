@@ -35,7 +35,10 @@ def load_datasets():
     # engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: kolommen controleren
     # engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: eerste rijen controleren
     repository.load_gesloten_opties_no_broker()
-    # engine.print_snapshot_columns("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: kolommen controleren
+    repository.load_snapshot_open_sprinters()
+    engine.print_snapshot_columns("snapshot_gesloten_sprinters", SNAPSHOT_STORE.snapshot_load_open_sprinters) # Debug: kolommen controleren
+    repository.load_snapshot_gesloten_sprinters()
+    
     # engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.snapshot_gesloten_opties_no_broker) # Debug: eerste rijen controleren
     repository.load_asset_rollup_data()
     live_aggregator_aandelen = LiveAggregatorAandelen()

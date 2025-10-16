@@ -259,7 +259,7 @@ def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
                   └───────────┬───────────────┘
                               │
                               ├→ snapshot_aandelen_live
-                              └→ snapshot_load_open_opties_from_tx_live
+                              └→ snapshot_load_open_opties_live
 ```
 
 **Key Principles:**
@@ -302,7 +302,7 @@ PortfolioEngine._process_batched_updates()
    │     └→ Emit aandelenUpdated signal
    │
    └→ LiveAggregatorOpties.process_live_update()
-         ├→ Update snapshot_load_open_opties_from_tx_live
+         ├→ Update snapshot_load_open_opties_live
          └→ Emit optiesUpdated signal
               ↓
          GUI Updates (QTableView)

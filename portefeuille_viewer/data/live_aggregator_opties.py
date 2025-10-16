@@ -6,7 +6,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 class LiveAggregatorOpties(QObject):
     """
     Specialized aggregator voor opties met live price updates.
-    Laadt data uit snapshot_load_open_opties_from_tx en voegt live koersen toe.
+    Laadt data uit snapshot_load_open_opties en voegt live koersen toe.
     """
     
     # Signal voor UI updates
@@ -31,8 +31,8 @@ class LiveAggregatorOpties(QObject):
     
     def _load_and_prepare_data(self):
         """Laad basisdata uit SnapshotStore en join met asset_map voor IB symbolen."""
-        if SNAPSHOT_STORE.snapshot_load_open_opties_from_tx is None:
-            raise ValueError("snapshot_load_open_opties_from_tx is niet geladen in SnapshotStore")
+        if SNAPSHOT_STORE.snapshot_load_open_opties is None:
+            raise ValueError("snapshot_load_open_opties is niet geladen in SnapshotStore")
         
         # Laad asset_map voor IB symbolen
         asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
@@ -45,9 +45,8 @@ class LiveAggregatorOpties(QObject):
         ])
         
         # Haal opties data op en join met asset_map
-        df = SNAPSHOT_STORE.snapshot_load_open_opties_from_tx.clone()
+        df = SNAPSHOT_STORE.snapshot_load_open_opties.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
-        
         # Voeg LAST kolom toe met live prijzen van onderliggende asset (via ib_symbol)
         df = df.with_columns([
             pl.col("ib_symbol").map_elements(
@@ -55,12 +54,11 @@ class LiveAggregatorOpties(QObject):
                 return_dtype=pl.Float64
             ).alias("LAST")
         ])
-        
         return df
     
     def _load_and_calculate(self):
         """
-        Laad snapshot_load_open_opties_from_tx en voeg berekende kolommen toe.
+    Laad snapshot_load_open_opties en voeg berekende kolommen toe.
         """
         # Laad basisdata met LAST kolom
         df = self._load_and_prepare_data()
@@ -141,18 +139,18 @@ class LiveAggregatorOpties(QObject):
         """
         Verwerk live update trigger van PortfolioEngine.
         PortfolioEngine roept alleen deze methode aan - geen data doorgeven.
-        LiveAggregator laadt zelf snapshot_load_open_opties_from_tx en verwerkt het.
+    LiveAggregator laadt zelf snapshot_load_open_opties en verwerkt het.
         """
         try:
             # 1. Laad fresh data uit SnapshotStore
-            if SNAPSHOT_STORE.snapshot_load_open_opties_from_tx is None:
-                print("LiveAggregatorOpties: snapshot_load_open_opties_from_tx niet beschikbaar")
+            if SNAPSHOT_STORE.snapshot_load_open_opties is None:
+                print("LiveAggregatorOpties: snapshot_load_open_opties niet beschikbaar")
                 return
             
             # 2. Laad en bereken complete DataFrame
             self.df = self._load_and_calculate()
             
-            # 3. Sla op in snapshot_load_open_opties_from_tx_live
+            # 3. Sla op in snapshot_load_open_opties_live
             self._save_to_snapshot_store()
             
             # 4. Signal UI dat opties data is geüpdatet
@@ -165,6 +163,6 @@ class LiveAggregatorOpties(QObject):
     def _save_to_snapshot_store(self):
         """Sla verwerkte DataFrame op in SnapshotStore."""
         if self.df is not None and not self.df.is_empty():
-            SNAPSHOT_STORE.snapshot_load_open_opties_from_tx_live = self.df.clone()
+            SNAPSHOT_STORE.snapshot_load_open_opties_live = self.df.clone()
         else:
             print("LiveAggregatorOpties: Geen data om op te slaan")
