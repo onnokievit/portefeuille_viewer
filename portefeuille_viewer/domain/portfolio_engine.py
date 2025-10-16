@@ -1,6 +1,7 @@
 from PySide6.QtCore import QObject, Signal, QTimer
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
+from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
 
 class PortfolioEngine(QObject):
     """
@@ -29,8 +30,10 @@ class PortfolioEngine(QObject):
         self.live_aggregator_aandelen = LiveAggregatorAandelen()
         self.live_aggregator_opties = LiveAggregatorOpties()
         
-        # TODO: Add when implemented
-        # self.live_aggregator_sprinters = LiveAggregatorSprinters()
+        
+        # Sprinters aggregator toevoegen
+        
+        self.live_aggregator_sprinters = LiveAggregatorSprinters()
         
         # Throttling: batch updates instead of processing each price immediately
         self._pending_updates = False
@@ -46,6 +49,8 @@ class PortfolioEngine(QObject):
         # Connect aggregator signals to main signal
         self.live_aggregator_aandelen.aandelenUpdated.connect(self.dataUpdated.emit)
         self.live_aggregator_opties.optiesUpdated.connect(self.dataUpdated.emit)
+        if self.live_aggregator_sprinters:
+            self.live_aggregator_sprinters.sprintersUpdated.connect(self.dataUpdated.emit)
         
         print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
     
@@ -59,9 +64,11 @@ class PortfolioEngine(QObject):
             currency: Price currency 
             price: New price value
         """
-        # Update live prijs in beide aggregators (just store, don't process yet)
+        # Update live prijs in alle aggregators (just store, don't process yet)
         self.live_aggregator_aandelen.update_live_price(symbol, price)
         self.live_aggregator_opties.update_live_price(symbol, price)
+        if self.live_aggregator_sprinters:
+            self.live_aggregator_sprinters.update_live_price(symbol, price)
         
         # Mark that we have pending updates and start/restart timer
         self._pending_updates = True
@@ -75,9 +82,11 @@ class PortfolioEngine(QObject):
         
         # print(f"PortfolioEngine: Processing batched updates...") # Debug log
         
-        # Process updates for both aggregators
+        # Process updates for all aggregators
         self.live_aggregator_aandelen.process_live_update()
         self.live_aggregator_opties.process_live_update()
+        if self.live_aggregator_sprinters:
+            self.live_aggregator_sprinters.process_live_update()
         
         self._pending_updates = False
         # print(f"PortfolioEngine: Batch processing complete") # Debug log

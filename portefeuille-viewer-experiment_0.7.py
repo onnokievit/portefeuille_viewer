@@ -38,7 +38,7 @@ def load_datasets():
     repository.load_open_sprinters_from_tx()
     repository.load_gesloten_sprinters_from_tx()
     engine.print_snapshot_columns("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: kolommen controleren
-    engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: eerste rijen controleren
+    engine.print_snapshot_head("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: eerste rijen controleren
 
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
