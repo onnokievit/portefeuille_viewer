@@ -804,6 +804,67 @@ Lookback: Up to 60 days (intraday), years (daily)
 **Workaround:** Manual symbol verification  
 **Solution:** Implement reqContractDetails flow (documented above)
 
+---
+
+## 🆕 Option Chain Explorer Module (experiment_0.7)
+
+### Overzicht
+De Option Chain Explorer is een nieuwe, volledig geïsoleerde tab in de Portfolio Viewer waarmee gebruikers optie series kunnen verkennen via IBKR. De module is ontworpen als MVP en bevindt zich in de folder `ui/option_explorer/`.
+
+### Architectuur
+- **option_chain_tab.py**: Main UI, symbol/selectie, filters, tabelweergave (ca. 300 regels)
+- **option_chain_service.py**: IBKR API logica, contract retrieval, filtering (ca. 200 regels)
+- **option_chain_model.py**: Polars-gebaseerde tabelmodel voor snelle rendering (ca. 120 regels)
+- **README.md**: Module documentatie, features, technische details
+
+### Features (MVP)
+- Symbol dropdown uit `asset_rollup_data`
+- Expiry range selectie (calendar picker)
+- Strike range filter (optioneel)
+- Call/Put/Both radio buttons
+- Refresh-knop voor ophalen option chain
+- Tabel met: conId, strike, type, expiry, trading class, multiplier
+- Kleurcodering: Calls = groen, Puts = rood
+- Sorteerbare kolommen
+
+### Technische Details
+- **IBKR API**: Gebruikt `reqContractDetails` voor ophalen van alle opties, daarna client-side filtering
+- **Polars**: DataFrame operaties voor snelle filtering en sortering
+- **PySide6**: Qt UI componenten
+- **SNAPSHOT_STORE**: Leest asset data, read-only
+
+### Isolatie & Integratie
+- Volledig geïsoleerd van bestaande tabs en code
+- Enige integratiepunt: tab toevoegen in `main_window.py` (3 regels)
+- Geen wijzigingen aan andere modules vereist
+
+### Bekende Beperkingen
+- Geen live prijzen (Bid/Ask/Last) in MVP
+- Geen volume, open interest, Greeks
+- Geen caching: elke refresh = nieuwe IBKR call
+- Grote datasets (>1000 opties) kunnen UI vertragen
+- Europese opties met meerdere series vereisen conId lookup (zie IBKR Integration)
+
+### Toekomstige Uitbreidingen
+- Live prijzen en auto-update
+- Volume, open interest, implied volatility, Greeks
+- Export naar Excel
+- Right-click menu acties
+
+### Testing Checklist
+- Symbol dropdown werkt
+- Date pickers en strike filters werken
+- Refresh haalt opties op
+- Tabel toont resultaten, sortering werkt
+- Calls/Puts kleurcodering
+- Status/error messages
+
+### Status
+- MVP geïmplementeerd en klaar voor handmatige testing
+- Documentatie up-to-date in README.md
+
+---
+
 ### 3. Option Live Prices
 **Issue:** Options not subscribed for live prices  
 **Impact:** Option positions show static prices only  
