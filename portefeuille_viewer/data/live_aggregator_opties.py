@@ -31,7 +31,7 @@ class LiveAggregatorOpties(QObject):
     
     def _load_and_prepare_data(self):
         """Laad basisdata uit SnapshotStore en join met asset_map voor IB symbolen."""
-        if SNAPSHOT_STORE.snapshot_load_open_opties_from_tx is None:
+        if SNAPSHOT_STORE.repository_snapshot_load_open_opties is None:
             raise ValueError("snapshot_load_open_opties_from_tx is niet geladen in SnapshotStore")
         
         # Laad asset_map voor IB symbolen
@@ -45,7 +45,7 @@ class LiveAggregatorOpties(QObject):
         ])
         
         # Haal opties data op en join met asset_map
-        df = SNAPSHOT_STORE.snapshot_load_open_opties_from_tx.clone()
+        df = SNAPSHOT_STORE.repository_snapshot_load_open_opties.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
         
         # Voeg LAST kolom toe met live prijzen van onderliggende asset (via ib_symbol)
@@ -145,7 +145,7 @@ class LiveAggregatorOpties(QObject):
         """
         try:
             # 1. Laad fresh data uit SnapshotStore
-            if SNAPSHOT_STORE.snapshot_load_open_opties_from_tx is None:
+            if SNAPSHOT_STORE.repository_snapshot_load_open_opties is None:
                 print("LiveAggregatorOpties: snapshot_load_open_opties_from_tx niet beschikbaar")
                 return
             
