@@ -287,10 +287,10 @@ def load_gesloten_opties_no_broker() -> pl.DataFrame:
 
 def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     """
-    Bouwt de dataset 'open opties' na volgens de Access-query:
+    Bouwt de dataset 'open sprinters' na volgens de Access-query:
     SELECT ... FROM transacties_bron_data
     GROUP BY ...
-    HAVING asset_type='optie' AND exp_date>=Date() AND SUM(aantal)<>0
+    HAVING asset_type='sprinter' AND  SUM(aantal)<>0
     """
 
     if df_tx is None:
@@ -309,7 +309,9 @@ def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFra
             "uniek_id",
             "broker",
             "asset_rollup",
+            "asset_detail",
             "asset_type",
+            "optie_exp_date",
             "optie_strike",
             "optie_call_put"
         ])

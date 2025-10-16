@@ -1275,7 +1275,9 @@ class OrdersTab(QWidget):
             load_aandelen_from_tx,
             load_open_opties_from_tx,
             load_gesloten_opties_from_tx,
-            load_gesloten_opties_no_broker
+            load_gesloten_opties_no_broker,
+            load_open_sprinters_from_tx,
+            load_gesloten_sprinters_from_tx
         )
         
         print("🔄 Refresh afgeleide snapshots...")
@@ -1317,6 +1319,21 @@ class OrdersTab(QWidget):
             traceback.print_exc()
         
         print("ℹ️ Sprinter snapshots (open/gesloten) nog niet geïmplementeerd - overgeslagen")
+        try:
+            load_open_sprinters_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+            print("✅ repository_snapshot_open_sprinters bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken repository_snapshot_open_sprinters: {e}")
+            import traceback
+            traceback.print_exc()
+
+        try:
+            load_gesloten_sprinters_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+            print("✅ repository_snapshot_gesloten_sprinters bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken repository_snapshot_gesloten_sprinters: {e}")
+            import traceback
+            traceback.print_exc()
 
     # --------------------------------------------------------
     # Data loading - FROM SNAPSHOT (not database!)

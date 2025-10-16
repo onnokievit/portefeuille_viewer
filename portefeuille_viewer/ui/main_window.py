@@ -65,6 +65,19 @@ class MainWindow(QMainWindow):
         # self.aandelen_tab = AandelenPolarsTab(self.feed_service)
         
         self.settings_tab = SettingsTab()
+
+        # SprintersTab importeren en toevoegen
+        try:
+            from portefeuille_viewer.ui.sprinters_tab import SprintersTab
+            if self.portfolio_engine:
+                self.sprinters_tab = SprintersTab(portfolio_engine=self.portfolio_engine)
+            else:
+                self.sprinters_tab = SprintersTab()
+        except Exception as e:
+            print(f"SprintersTab kon niet worden geladen: {e}")
+            self.sprinters_tab = QWidget()
+        
+        
         
         
 
@@ -81,6 +94,7 @@ class MainWindow(QMainWindow):
             
 
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
+        self.tabs.addTab(self.sprinters_tab, "Sprinters (Live)")
         #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
         
         # Option Chain Explorer Tab (NEW - MVP)
@@ -89,7 +103,6 @@ class MainWindow(QMainWindow):
         
         self.tabs.addTab(self.settings_tab, "Settings")
         
-
         self.setCentralWidget(self.tabs)
 
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
