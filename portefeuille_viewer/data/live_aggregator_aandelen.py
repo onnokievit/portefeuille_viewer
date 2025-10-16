@@ -28,8 +28,8 @@ class LiveAggregatorAandelen(QObject):
     
     def _load_and_prepare_data(self):
         """Laad basisdata uit SnapshotStore en join met asset_map."""
-        if SNAPSHOT_STORE.snapshot_aandelen is None:
-            raise ValueError("snapshot_aandelen is niet geladen in SnapshotStore")
+        if SNAPSHOT_STORE.repository_snapshot_aandelen is None:
+            raise ValueError("repository_snapshot_aandelen is niet geladen in SnapshotStore")
         
         # Laad asset_map voor IB symbolen
         asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
@@ -42,7 +42,7 @@ class LiveAggregatorAandelen(QObject):
         ])
         
         # Join met aandelen data
-        aandelen = SNAPSHOT_STORE.snapshot_aandelen
+        aandelen = SNAPSHOT_STORE.repository_snapshot_aandelen
         df = asset_map.join(aandelen, on="asset_rollup", how="left")
         
         # Voeg Koers kolom toe met live prijzen of 0.0 als fallback
@@ -71,11 +71,11 @@ class LiveAggregatorAandelen(QObject):
         """
         Verwerk live update trigger van PortfolioEngine.
         PortfolioEngine roept alleen deze methode aan - geen data doorgeven.
-        LiveAggregator laadt zelf snapshot_aandelen en verwerkt het.
+        LiveAggregator laadt zelf repository_snapshot_aandelen en verwerkt het.
         """
         try:
             # 1. Laad fresh data uit SnapshotStore
-            if SNAPSHOT_STORE.snapshot_aandelen is None:
+            if SNAPSHOT_STORE.repository_snapshot_aandelen is None:
                 print("LiveAggregatorAandelen: snapshot_aandelen niet beschikbaar")
                 return
             

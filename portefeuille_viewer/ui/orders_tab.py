@@ -825,12 +825,12 @@ class OrdersTab(QWidget):
 
     def _add_transaction_to_snapshot(self, order_dict: dict, record_id: int):
         """
-        Voegt een nieuw record toe aan snapshot_alle_transacties.
+        Voegt een nieuw record toe aan repository_snapshot_alle_transacties.
         Zorgt ervoor dat de snapshot gesynchroniseerd blijft met de database na een INSERT.
         
         We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
         """
-        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan record niet toevoegen")
             return  # Geen snapshot geladen, niets te doen
         
@@ -849,11 +849,11 @@ class OrdersTab(QWidget):
                 return
             
             # Voeg toe aan de snapshot
-            SNAPSHOT_STORE.snapshot_alle_transacties = pl.concat([
-                SNAPSHOT_STORE.snapshot_alle_transacties,
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([
+                SNAPSHOT_STORE.repository_snapshot_alle_transacties,
                 new_df
             ])
-            print(f"✅ Record {record_id} toegevoegd aan snapshot (totaal: {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen)")
+            print(f"✅ Record {record_id} toegevoegd aan snapshot (totaal: {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen)")
         except Exception as e:
             print(f"❌ Fout bij toevoegen record {record_id} aan snapshot: {e}")
             import traceback
@@ -861,12 +861,12 @@ class OrdersTab(QWidget):
 
     def _update_transaction_in_snapshot(self, record_id: int, data_dict: dict):
         """
-        Update een bestaand record in snapshot_alle_transacties.
+        Update een bestaand record in repository_snapshot_alle_transacties.
         Zorgt ervoor dat de snapshot gesynchroniseerd blijft met de database na een UPDATE.
         
         We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
         """
-        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan record niet updaten")
             return  # Geen snapshot geladen, niets te doen
         
@@ -885,9 +885,9 @@ class OrdersTab(QWidget):
             
             # Verwijder het oude record en voeg het nieuwe toe
             # Dit is eenvoudiger dan veld-voor-veld updaten en garandeert consistentie
-            mask = SNAPSHOT_STORE.snapshot_alle_transacties["Id"] != record_id
-            SNAPSHOT_STORE.snapshot_alle_transacties = pl.concat([
-                SNAPSHOT_STORE.snapshot_alle_transacties.filter(mask),
+            mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([
+                SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask),
                 updated_df
             ])
             print(f"✅ Record {record_id} geüpdatet in snapshot")
@@ -907,11 +907,11 @@ class OrdersTab(QWidget):
 
         print(f"🔄 Database gewisseld naar: {name}")
         
-        # Herlaad snapshot_alle_transacties uit de nieuwe database
+        # Herlaad repository_snapshot_alle_transacties uit de nieuwe database
         try:
-            print("📥 Laden van snapshot_alle_transacties uit nieuwe database...")
+            print("📥 Laden van repository_snapshot_alle_transacties uit nieuwe database...")
             repo.load_alle_transacties()
-            print(f"✅ snapshot_alle_transacties geladen: {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen")
+            print(f"✅ repository_snapshot_alle_transacties geladen: {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen")
         except Exception as e:
             QMessageBox.critical(self, "Database", f"Kon transacties niet laden:\n{e}")
             print(f"❌ Fout bij laden transacties: {e}")
@@ -1247,17 +1247,17 @@ class OrdersTab(QWidget):
 
     def _delete_transactions_from_snapshot_by_ids(self, ids_to_delete: list):
         """Verwijder transacties met specifieke Id's uit snapshot."""
-        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan records niet verwijderen")
             return
         
         try:
             # Filter out records with these Id's
-            before_count = len(SNAPSHOT_STORE.snapshot_alle_transacties)
-            SNAPSHOT_STORE.snapshot_alle_transacties = SNAPSHOT_STORE.snapshot_alle_transacties.filter(
+            before_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(
                 ~pl.col("Id").is_in(ids_to_delete)
             )
-            after_count = len(SNAPSHOT_STORE.snapshot_alle_transacties)
+            after_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
             deleted = before_count - after_count
             id_list_str = ", ".join(map(str, ids_to_delete))
             print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
@@ -1268,8 +1268,8 @@ class OrdersTab(QWidget):
 
     def _refresh_derived_snapshots(self):
         """
-        Herbereken alle afgeleide snapshots na wijzigingen in snapshot_alle_transacties.
-        Deze functie roept de bestaande load functies aan die snapshot_alle_transacties als bron gebruiken.
+        Herbereken alle afgeleide snapshots na wijzigingen in repository_snapshot_alle_transacties.
+        Deze functie roept de bestaande load functies aan die repository_snapshot_alle_transacties als bron gebruiken.
         """
         from portefeuille_viewer.data.repository import (
             load_aandelen_from_tx,
@@ -1282,7 +1282,7 @@ class OrdersTab(QWidget):
         
         try:
             # Herbereken aandelen snapshot
-            load_aandelen_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            load_aandelen_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
             print("✅ snapshot_aandelen bijgewerkt")
         except Exception as e:
             print(f"⚠️ Fout bij bijwerken snapshot_aandelen: {e}")
@@ -1291,7 +1291,7 @@ class OrdersTab(QWidget):
         
         try:
             # Herbereken open opties snapshot
-            load_open_opties_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            load_open_opties_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
             print("✅ snapshot_load_open_opties_from_tx bijgewerkt")
         except Exception as e:
             print(f"⚠️ Fout bij bijwerken snapshot_load_open_opties_from_tx: {e}")
@@ -1300,7 +1300,7 @@ class OrdersTab(QWidget):
         
         try:
             # Herbereken gesloten opties snapshot
-            load_gesloten_opties_from_tx(df_tx=SNAPSHOT_STORE.snapshot_alle_transacties)
+            load_gesloten_opties_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
             print("✅ snapshot_gesloten_opties bijgewerkt")
         except Exception as e:
             print(f"⚠️ Fout bij bijwerken snapshot_gesloten_opties: {e}")
@@ -1322,24 +1322,24 @@ class OrdersTab(QWidget):
     # Data loading - FROM SNAPSHOT (not database!)
     # --------------------------------------------------------
     def load_initial_records(self):
-        """Laad data uit snapshot_alle_transacties met filters en sorting."""
+        """Laad data uit repository_snapshot_alle_transacties met filters en sorting."""
         print("🔄 load_initial_records() aangeroepen")
         
         # Check if snapshot is loaded
-        if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("❌ Snapshot is None - kan data niet laden!")
             QMessageBox.warning(self, "Error", "Transactiedata is niet geladen. Start de applicatie opnieuw.")
             self.model.set_df(pd.DataFrame())
             return
         
-        print(f"📊 Snapshot bevat {len(SNAPSHOT_STORE.snapshot_alle_transacties)} rijen")
+        print(f"📊 Snapshot bevat {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen")
         
         # Reset paging state
         self._reset_seek()
         self._current_offset = 0  # Track offset for paging
         
         # Get data from snapshot (Polars)
-        df_pl = SNAPSHOT_STORE.snapshot_alle_transacties
+        df_pl = SNAPSHOT_STORE.repository_snapshot_alle_transacties
         
         # Apply filters (convert to Polars expressions)
         df_pl = self._apply_snapshot_filters(df_pl)
@@ -1372,12 +1372,12 @@ class OrdersTab(QWidget):
         self._loading_more = True
         try:
             # Check snapshot
-            if SNAPSHOT_STORE.snapshot_alle_transacties is None:
+            if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
                 self._no_more_records = True
                 return
             
             # Get filtered/sorted data
-            df_pl = SNAPSHOT_STORE.snapshot_alle_transacties
+            df_pl = SNAPSHOT_STORE.repository_snapshot_alle_transacties
             df_pl = self._apply_snapshot_filters(df_pl)
             df_pl = self._apply_snapshot_sorting(df_pl)
             
