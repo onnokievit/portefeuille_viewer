@@ -1,4 +1,5 @@
 from PySide6.QtCore import QObject, Signal, QTimer
+import polars as pl
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
@@ -115,12 +116,35 @@ class PortfolioEngine(QObject):
             # Converteer naar format (ib_symbol, ib_currency, prim_exchange)
             from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
             asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
-            subs = asset_map.select(["ib_symbol", "ib_currency", "prim_exchange"]).unique().to_numpy().tolist()
-            
-            print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbols...")
-            self.pricefeed.ensure_subscriptions(subs)
-            print("PortfolioEngine: Subscriptions started successfully")
-            
+
+            if asset_map is None or asset_map.is_empty():
+                print("PortfolioEngine: asset_rollup_data snapshot empty, nothing to subscribe")
+                return
+
+            # If the INCL_EXCL column exists, only include rows where its value signals inclusion (1 / "1" / True)
+            if "INCL_EXCL" in asset_map.columns:
+                try:
+                    filtered = asset_map.filter(
+                        (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL") == True)
+                    )
+                except Exception:
+                    # Fallback: try numeric equality only
+                    filtered = asset_map.filter(pl.col("INCL_EXCL") == 1)
+            else:
+                # Column missing -> include all (backward compatible)
+                filtered = asset_map
+
+            subs_df = filtered.select(["ib_symbol", "ib_currency", "prim_exchange"]).unique()
+            # Convert to list of tuples for ensure_subscriptions and drop rows with missing symbol/currency
+            subs = [tuple(x) for x in subs_df.to_numpy().tolist() if x[0] is not None and x[0] != "" and x[1] is not None and x[1] != ""]
+
+            print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbol-currency pairs (filtered by INCL_EXCL if present)...")
+            if subs:
+                self.pricefeed.ensure_subscriptions(subs)
+                print("PortfolioEngine: Subscriptions started successfully")
+            else:
+                print("PortfolioEngine: No valid subscriptions after filtering (no ib_symbol/ib_currency pairs)")
+
         except Exception as e:
             print(f"PortfolioEngine: Error starting subscriptions: {e}")
     
@@ -140,16 +164,28 @@ class PortfolioEngine(QObject):
         
         try:
             # Haal alle ib_symbol waarden uit snapshot_asset_rollup_data
-            symbols_df = SNAPSHOT_STORE.snapshot_asset_rollup_data.select("ib_symbol").unique()
+            asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+            if asset_map is None or asset_map.is_empty():
+                return []
+
+            # Apply INCL_EXCL filter if available
+            if "INCL_EXCL" in asset_map.columns:
+                try:
+                    asset_map = asset_map.filter(
+                        (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL") == True)
+                    )
+                except Exception:
+                    asset_map = asset_map.filter(pl.col("INCL_EXCL") == 1)
+
+            symbols_df = asset_map.select("ib_symbol").unique()
             symbols = symbols_df.to_series().to_list()
-            
+
             # Filter out None/empty values
             unique_symbols = [s for s in symbols if s is not None and s != ""]
-            
-            print(f"PortfolioEngine: Collected {len(unique_symbols)} symbols for subscription from asset_rollup_data")
+
+            print(f"PortfolioEngine: Collected {len(unique_symbols)} symbols for subscription from asset_rollup_data (after INCL_EXCL filter)")
             return unique_symbols
-            
         except Exception as e:
             print(f"PortfolioEngine: Error getting symbols for subscription: {e}")
-        return unique_symbols
+            return []
 
