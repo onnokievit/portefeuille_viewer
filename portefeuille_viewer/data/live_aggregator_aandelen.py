@@ -171,7 +171,7 @@ class LiveAggregatorAandelen(QObject):
         """Sla geaggregeerde data op in SnapshotStore."""
         try:
             aggregated = self.get_aggregated()
-            SNAPSHOT_STORE.aggregator_snapshot_aandelen_live = aggregated
+            SNAPSHOT_STORE.safe_write("aggregator_snapshot_aandelen_live", aggregated)
         except Exception as e:
             print(f"LiveAggregatorAandelen: Error saving to SnapshotStore: {e}")
     
