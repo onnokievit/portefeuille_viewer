@@ -46,7 +46,7 @@ class LiveAggregatorSprinters(QObject):
             pl.col("ib_symbol").map_elements(
                 lambda symbol: self.live_prices.get(symbol, 0.0) if symbol else 0.0,
                 return_dtype=pl.Float64
-            ).alias("LAST")
+            ).alias("Koers")
         ])
         return df
 
@@ -58,7 +58,7 @@ class LiveAggregatorSprinters(QObject):
         ])
         # Selecteer relevante kolommen
         select_cols = [
-            "broker", "asset_rollup", "ib_symbol","asset_detail", "LAST","optie_exp_date", "optie_strike", "optie_call_put",
+            "broker", "asset_rollup", "asset_detail", "Koers", # "optie_exp_date", "optie_strike", "optie_call_put",
             "sprinter_funding", "sprinter_ratio", "SomVantransactie_aantal", "SomVantransactie_euro_totaal", "winst"
         ]
         df = df.select([col for col in select_cols if col in df.columns])
