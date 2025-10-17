@@ -47,13 +47,13 @@ class LiveAggregatorOpties(QObject):
         # Haal opties data op en join met asset_map
         df = SNAPSHOT_STORE.repository_snapshot_load_open_opties.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
-        
-        # Voeg LAST kolom toe met live prijzen van onderliggende asset (via ib_symbol)
+
+        # Voeg Koers kolom toe met live prijzen van onderliggende asset (via ib_symbol)
         df = df.with_columns([
             pl.col("ib_symbol").map_elements(
                 lambda symbol: self.live_prices.get(symbol, 0.0) if symbol else 0.0,
                 return_dtype=pl.Float64
-            ).alias("LAST")
+            ).alias("Koers")
         ])
         
         return df
@@ -62,7 +62,7 @@ class LiveAggregatorOpties(QObject):
         """
         Laad snapshot_load_open_opties_from_tx en voeg berekende kolommen toe.
         """
-        # Laad basisdata met LAST kolom
+        # Laad basisdata met Koers kolom
         df = self._load_and_prepare_data()
         
         # Bereken ITM/OTM waarde
@@ -77,7 +77,7 @@ class LiveAggregatorOpties(QObject):
         df = df.select([
             "broker",
             "asset_rollup", 
-            "LAST",
+            "Koers",
             "optie_call_put",
             "optie_strike",
             "optie_exp_date",
@@ -108,13 +108,13 @@ class LiveAggregatorOpties(QObject):
         """
         df = df.with_columns([
             pl.when(
-                (pl.col("optie_call_put") == "call") & (pl.col("LAST") > pl.col("optie_strike"))
+                (pl.col("optie_call_put") == "call") & (pl.col("Koers") > pl.col("optie_strike"))
             ).then(
-                (pl.col("LAST") - pl.col("optie_strike"))*pl.col("SomVantransactie_aantal")
+                (pl.col("Koers") - pl.col("optie_strike"))*pl.col("SomVantransactie_aantal")
             ).when(
-                (pl.col("optie_call_put") == "put") & (pl.col("LAST") < pl.col("optie_strike"))
+                (pl.col("optie_call_put") == "put") & (pl.col("Koers") < pl.col("optie_strike"))
             ).then(
-                (pl.col("optie_strike") - pl.col("LAST"))*pl.col("SomVantransactie_aantal")
+                (pl.col("optie_strike") - pl.col("Koers"))*pl.col("SomVantransactie_aantal")
             ).otherwise(
                 0.0
             ).alias("ITM_OTM")

@@ -332,6 +332,17 @@ def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFra
     SNAPSHOT_STORE.repository_snapshot_open_sprinters = per_uniek_filtered
     #return per_uniek_filtered
 
+    ######################### DEBUG CODE om het totaal te checken van open sprinters#
+    #     # Functie: totaal euro gesloten sprinters
+    # def print_sprinter_gesloten_euro_totaal(df): ######################### DEBUG CODE om het totaal te checken van open sprinters#
+    #     if df is not None and "SomVantransactie_euro_totaal" in df.columns:
+    #         totaal = df["SomVantransactie_euro_totaal"].sum()
+    #         print(f"euro totaal open sprinters = {totaal}")
+    #     else:
+    #         print("Geen euro totaal open sprinters beschikbaar.")
+
+    # print_sprinter_gesloten_euro_totaal(per_uniek_filtered)
+
 
 
 # ------------------------------------------------------------
@@ -364,6 +375,8 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
             "broker",
             "asset_rollup",
             "asset_detail",
+            "optie_exp_date",
+            "optie_strike",
             "asset_type",
         ])
         .agg([
@@ -394,6 +407,18 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
     )
     SNAPSHOT_STORE.repository_snapshot_gesloten_sprinters = df_final
     # return df_final
+
+
+    ######################### DEBUG CODE om het totaal te checken van gesloten sprinters#
+    # # Functie: totaal euro gesloten sprinters
+    # def print_sprinter_gesloten_euro_totaal(df):
+    #     if df is not None and "SomVanSomVantransactie_euro_totaal" in df.columns:
+    #         totaal = df["SomVanSomVantransactie_euro_totaal"].sum()
+    #         print(f"euro totaal gesloten sprinters = {totaal}")
+    #     else:
+    #         print("Geen euro totaal gesloten sprinters beschikbaar.")
+
+    # print_sprinter_gesloten_euro_totaal(df_final)
 
 
 
