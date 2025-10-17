@@ -52,6 +52,14 @@ def switch_database(name: str):
     except Exception:
         # Niet kritisch, maar nuttig om te weten tijdens debugging
         print(f"Waarschuwing: kon SNAPSHOT_STORE.active_database_name niet instellen op {name}")
+    else:
+        # Emit central databaseChanged signal so UI can react (queued to main thread)
+        try:
+            from portefeuille_viewer.signals import signals
+            signals.queued_emit_databaseChanged(name)
+        except Exception:
+            # If signals are not available, ignore silently (no hard dependency)
+            pass
 
 
 # ------------------------------------------------------------

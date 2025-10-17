@@ -13,6 +13,7 @@ from portefeuille_viewer.ui.option_explorer import OptionChainTab
 import logging
 import os
 from datetime import datetime
+from portefeuille_viewer.signals import signals
 
 
 APP_TITLE = "🧭 Portefeuille Viewer"
@@ -133,6 +134,12 @@ class MainWindow(QMainWindow):
         # Connect settings changes (database config wijzigingen)
         self.settings_tab.configChanged.connect(self._on_database_config_changed)
 
+        # Central databaseChanged signal: ensure tabs reload when DB changes
+        try:
+            signals.databaseChanged.connect(self._on_central_database_changed)
+        except Exception:
+            pass
+
         # Menu
         act_quit = QAction("Quit", self)
         act_quit.triggered.connect(self.close)
@@ -182,6 +189,22 @@ class MainWindow(QMainWindow):
             pass
 
         super().closeEvent(event)
+
+    def _on_central_database_changed(self, db_name: str):
+        """Called when the central signals.databaseChanged is emitted.
+        Iterate over tabs and call reload_data() if available.
+        """
+        try:
+            for i in range(self.tabs.count()):
+                w = self.tabs.widget(i)
+                if w is not None and hasattr(w, 'reload_data'):
+                    try:
+                        w.reload_data()
+                    except Exception:
+                        # Defensive: don't let one failing tab prevent others
+                        pass
+        except Exception:
+            pass
     
     def _setup_logging(self):
         """Setup file logging voor IB feed meldingen."""

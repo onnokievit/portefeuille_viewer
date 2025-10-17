@@ -223,6 +223,38 @@ def safe_write(key, df):
 - [ ] Add unit tests and integration tests for the items in section 7.
 
 ---
+
+## 🔧 Recent changes (experiment_0.8)
+
+These entries reflect edits made in the `experiment_0.8` working copy to centralize signals and wire DB-switch behavior. The changes were applied to the local 0.8 working tree for testing (not yet committed by the developer during the session unless noted).
+
+- Added central signals package:
+    - `portefeuille_viewer/signals/__init__.py` defines a small `Signals(QObject)` class and exports module-level `signals` instance.
+    - Signals provided: `databaseChanged(str)`, `snapshotUpdated(str)`, and `debugSignal(str)` plus queued emit helpers (`queued_emit_databaseChanged`, `queued_emit_snapshotUpdated`).
+
+- Wired repository to emit central signal on DB switch:
+    - `portefeuille_viewer/data/repository.py` now sets `SNAPSHOT_STORE.active_database_name = name` (existing behavior) and calls `signals.queued_emit_databaseChanged(name)` after successful switch.
+    - The import and emit are guarded with try/except to avoid hard dependency during progressive rollout.
+
+- Wired MainWindow to listen for central DB-change events:
+    - `portefeuille_viewer/ui/main_window.py` imports `signals` and connects `signals.databaseChanged` to a new handler `_on_central_database_changed(self, db_name)` which defensively iterates tabs and calls `reload_data()` on tabs that expose it.
+
+- Notes about this change:
+    - The signals package is intentionally minimal and only imports PySide6 to avoid circular imports.
+    - Emission uses `QTimer.singleShot(0, ...)` helper to ensure the signal is delivered on the Qt main thread, which avoids threading issues if DB-switch is invoked from a worker thread.
+    - The wiring provides immediate end-to-end behavior: calling `repository.switch_database(name)` will now cause tabs that have `reload_data()` to refresh automatically (via MainWindow handler).
+
+Test instructions (local, before committing):
+1. Start the app from the `experiment_0.8` folder (same startup script you normally use).
+2. Trigger a DB switch via Orders tab or Settings → apply. Observe the UI tabs (Sprinters, Open Opties, Aandelen Tab) reload.
+3. Optional debug check: in Python REPL inside the same virtualenv run:
+     - `from portefeuille_viewer.signals import signals; print(signals)` should show the signals instance.
+
+Next recommended steps:
+- If tests look good, commit the changes in `experiment_0.8` and open a small PR describing the signals centralization.
+- Replace ad-hoc per-tab `dbChanged` emits over time with the central `signals.databaseChanged` to avoid duplication.
+- Add unit tests: `switch_database` emits the central signal and sets `SNAPSHOT_STORE.active_database_name`.
+
     val = self._df[index.row(), index.column()]
     
     if role == Qt.DisplayRole:

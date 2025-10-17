@@ -67,29 +67,29 @@ class SnapshotStore:
         """Korte tekstuele samenvatting voor debug/log."""
         parts = []
         if self.repository_snapshot_alle_transacties is not None:
-            parts.append(f"Alle Transacties: {len(self.repository_snapshot_alle_transacties)} rijen")
+            parts.append(f"Repository Alle Transacties: {len(self.repository_snapshot_alle_transacties)} rijen")
         if self.repository_snapshot_aandelen is not None:
-            parts.append(f"Open Aandelen: {len(self.repository_snapshot_aandelen)} rijen")
+            parts.append(f"Repository Open Aandelen: {len(self.repository_snapshot_aandelen)} rijen")
         if self.aggregator_snapshot_aandelen_live is not None:
-            parts.append(f"Live Aandelen: {len(self.aggregator_snapshot_aandelen_live)} rijen")
+            parts.append(f"Aggregator Live Aandelen: {len(self.aggregator_snapshot_aandelen_live)} rijen")
         if self.repository_snapshot_load_open_opties is not None:
-            parts.append(f"Open Opties: {len(self.repository_snapshot_load_open_opties)} rijen")
+            parts.append(f"Repository Open Opties: {len(self.repository_snapshot_load_open_opties)} rijen")
         if self.aggregator_snapshot_load_open_opties_from_tx_live is not None:
-            parts.append(f"Live Opties: {len(self.aggregator_snapshot_load_open_opties_from_tx_live)} rijen")
+            parts.append(f"Aggregator Live Opties: {len(self.aggregator_snapshot_load_open_opties_from_tx_live)} rijen")
         if self.repository_snapshot_open_sprinters is not None:
-            parts.append(f"Open Sprinters: {len(self.repository_snapshot_open_sprinters)} rijen")
+            parts.append(f"Repository Open Sprinters: {len(self.repository_snapshot_open_sprinters)} rijen")
         if self.aggregator_snapshot_open_sprinters_live is not None:
-            parts.append(f"Live Sprinters: {len(self.aggregator_snapshot_open_sprinters_live)} rijen")
+            parts.append(f"Aggregator Live Sprinters: {len(self.aggregator_snapshot_open_sprinters_live)} rijen")
         if self.repository_snapshot_gesloten_opties is not None:
-            parts.append(f"Gesloten Opties: {len(self.repository_snapshot_gesloten_opties)} rijen")
+            parts.append(f"Repository Gesloten Opties: {len(self.repository_snapshot_gesloten_opties)} rijen")
         if self.repository_snapshot_gesloten_opties_no_broker is not None:
-            parts.append(f"Gesloten Opties (zonder broker): {len(self.repository_snapshot_gesloten_opties_no_broker)} rijen")
+            parts.append(f"Repository Gesloten Opties (zonder broker): {len(self.repository_snapshot_gesloten_opties_no_broker)} rijen")
         if self.repository_snapshot_gesloten_sprinters is not None:
-            parts.append(f"Gesloten Sprinters: {len(self.repository_snapshot_gesloten_sprinters)} rijen")
+            parts.append(f"Repository Gesloten Sprinters: {len(self.repository_snapshot_gesloten_sprinters)} rijen")
         if self.snapshot_asset_rollup_data is not None:
-            parts.append(f"Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
+            parts.append(f"Repository Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
         if self.repository_snapshot_sprinter_referentie_data is not None:
-            parts.append(f"Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
+            parts.append(f"Repository Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
 
