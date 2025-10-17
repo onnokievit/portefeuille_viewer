@@ -61,6 +61,25 @@ class SmartCombo(QComboBox):
             self.setEditText("")
         self.blockSignals(False)
 
+    def reset(self):
+        """Reset combo to empty/editable state and ensure completer is attached to the current model.
+        Use this when the form is cleared to avoid stale completer/model state after hide/show cycles.
+        """
+        try:
+            self.blockSignals(True)
+            # detach/reattach model to ensure completer uses the live model
+            self.completer.setModel(self.model())
+            self.setCurrentIndex(-1)
+            if self.isEditable():
+                self.setEditText("")
+            # ensure the lineEdit selection/focus state is clean
+            try:
+                self.lineEdit().deselect()
+            except Exception:
+                pass
+        finally:
+            self.blockSignals(False)
+
     def _force_inline_completion(self):
         if self._match_contains:
             return
@@ -1061,13 +1080,35 @@ class OrdersTab(QWidget):
         for part in [self.order1, self.order2]:
             for k in ["cb_oorsprong", "broker", "asset_rollup", "asset_type",
                     "trans_type", "detail", "cp"]:
-                if part.get(k) is not None:
-                    part[k].setCurrentIndex(-1)
-                    part[k].setEditText("") if hasattr(part[k], "setEditText") else None
+                w = part.get(k)
+                if w is not None:
+                    # Prefer a dedicated reset() when available (SmartCombo)
+                    if hasattr(w, "reset"):
+                        try:
+                            w.reset()
+                        except Exception:
+                            # fallback to safer clears
+                            if hasattr(w, "setCurrentIndex"): w.setCurrentIndex(-1)
+                            if hasattr(w, "setEditText"): w.setEditText("")
+                    else:
+                        if hasattr(w, "setCurrentIndex"): w.setCurrentIndex(-1)
+                        if hasattr(w, "setEditText"): w.setEditText("")
             for k in ["aantal", "prijs", "fee", "exp", "strike"]:
                 if part.get(k) is not None:
                     part[k].clear()
         self.toggle_order1_fields()
+        # Ensure order2 reference lists are reattached before toggling visibility
+        # so that when the row is shown again its combos have fresh models.
+        try:
+            # reapply lists from current references
+            if hasattr(self, "brokers"):
+                self.order2["broker"].set_items(self.brokers)
+            if hasattr(self, "asset_rollups"):
+                self.order2["asset_rollup"].set_items(self.asset_rollups)
+            if hasattr(self, "sprinter_details"):
+                self.order2["detail"].set_items(self.sprinter_details)
+        except Exception:
+            pass
         self.toggle_order2_visibility()
 
     def on_table_select(self, selected, deselected):
@@ -1118,6 +1159,15 @@ class OrdersTab(QWidget):
             # leegmaken (optioneel maar netjes)
             for k in ["broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee","exp","strike","cp","detail"]:
                 w = self.order2.get(k)
+                if w is None:
+                    continue
+                # Prefer SmartCombo.reset when available
+                if hasattr(w, "reset"):
+                    try:
+                        w.reset()
+                        continue
+                    except Exception:
+                        pass
                 if hasattr(w, "setCurrentIndex"): w.setCurrentIndex(-1)
                 if hasattr(w, "setEditText"): w.setEditText("")
                 if hasattr(w, "clear"): w.clear()
