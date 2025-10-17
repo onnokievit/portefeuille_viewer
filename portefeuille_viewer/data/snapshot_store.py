@@ -25,6 +25,8 @@ class SnapshotStore:
         
         # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
+        # Active database name (set by repository.switch_database)
+        self.active_database_name: str | None = None
 
     def clear(self):
         """Reset alle snapshots naar leeg."""
@@ -41,6 +43,7 @@ class SnapshotStore:
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
         self.repository_snapshot_sprinter_referentie_data = None
+        self.active_database_name = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""

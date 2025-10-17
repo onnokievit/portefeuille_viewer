@@ -110,58 +110,119 @@ def opslaan_orders(self):
         self._refresh_derived_snapshots()  # ← ADDED (line 772)
 ```
 
-**Snapshot Refresh Flow:**
-```python
-def _refresh_derived_snapshots(self):
-    """Regenerate all derived snapshots from base snapshot"""
-    repository.load_aandelen_from_tx()
-    repository.load_open_opties_from_tx()
-    repository.load_gesloten_opties_from_tx()
-    repository.load_gesloten_opties_no_broker()
+
+### Snapshot Architecture
+
+This section gives a complete, implementation-oriented snapshot architecture for the app. It explains the snapshot keys, lifecycle, concurrency model, signals, optional persistence, recommended schema names, and verification steps.
+
+High-level goals:
+- Single source of truth for DB-derived data (base snapshot)
+- Deterministic derived snapshots for UI consumption
+- Lightweight live snapshots for frequent price updates
+- Explicit lifecycle and signal-based synchronization for UI refresh
+
+1) Snapshot keys (recommended canonical names)
+- `repository_snapshot_alle_transacties` (base snapshot loaded from DB)
+- `repository_snapshot_aandelen` (derived static aggregation)
+- `repository_snapshot_load_open_opties` (derived static open options)
+- `repository_snapshot_open_sprinters` (derived static open sprinters)
+- `repository_snapshot_gesloten_opties` (derived closed options)
+- `repository_snapshot_gesloten_sprinters` (derived closed sprinters)
+- `snapshot_asset_rollup_data` (reference table: asset metadata)
+- `repository_snapshot_sprinter_referentie_data` (sprinter ref data)
+
+- Live snapshots (updated by aggregators / PortfolioEngine):
+    - `aggregator_snapshot_aandelen_live` (live aggregated aandelen)
+    - `aggregator_snapshot_load_open_opties_from_tx_live` (live opties)
+    - `aggregator_snapshot_open_sprinters_live` (live sprinters with prices)
+    - `snapshot_aggregated_portfolio` (portfolio-level aggregation)
+
+- Metadata stored on the snapshot store:
+    - `active_database_name: str|None` — current DB name
+    - `snapshot_timestamps: dict[str, datetime]` — optional timestamps for each key
+    - `snapshot_source: dict[str,str]` — optional source/version info for derived snapshots
+
+2) Snapshot lifecycle (recommended operations)
+- Initialize app: `SNAPSHOT_STORE.clear()` (empty) and then `repository.load_alle_transacties()` to populate base snapshot.
+- After base load: always call `_refresh_derived_snapshots()` which will regenerate all derived repository snapshots from the base snapshot.
+- On INSERT/UPDATE/DELETE (orders tab):
+    1. Apply change to DB (INSERT/UPDATE/DELETE)
+    2. Update `repository_snapshot_alle_transacties` accordingly (either reload fully or apply delta)
+    3. Call `_refresh_derived_snapshots()` to recompute derived repository snapshots
+    4. Notify interested listeners via a DB-change signal (see Signals below)
+- On Price Feed updates:
+    1. Live aggregators collect price updates into an in-memory map
+    2. After a debounce interval (e.g., 300-500ms) `PortfolioEngine` calls each aggregator.process_live_update()
+    3. Aggregator writes a new DataFrame into its `aggregator_snapshot_*_live` slot (overwrite semantics)
+    4. Aggregator emits a specific Qt signal (e.g., `aandelenUpdated`, `optiesUpdated`, `sprintersUpdated`) so UI tabs reload.
+
+3) Atomicity & Concurrency
+- Treat each snapshot assignment as atomic: build the full Polars DataFrame off-thread if needed, then assign the attribute on the main snapshot store in one statement.
+- Add an optional lock on the snapshot store for safety if multiple threads may write simultaneously. Example pattern (Python):
+
+```py
+import threading
+SNAPSHOT_STORE._lock = threading.RLock()
+
+def safe_write(key, df):
+        with SNAPSHOT_STORE._lock:
+                setattr(SNAPSHOT_STORE, key, df)
 ```
+
+- UI readers should not mutate snapshots. If a UI needs a copy, it should call `.clone()` or convert to a new Polars DataFrame.
+
+4) Signals and event wiring (recommended)
+- Central signals module (create `portefeuille_viewer/signals.py`) with a QObject carrying these signals:
+    - `databaseChanged = Signal(str)` — emitted when active DB changes; passes the new DB name
+    - `snapshotUpdated = Signal(str)` — emitted when a snapshot key is updated (passes key name)
+
+- Existing signals to use/standardize:
+    - OrdersTab currently emits `dbChanged` — ensure MainWindow connects it to the central `databaseChanged` or directly to tab reloads.
+    - Aggregators already emit granular signals (`sprintersUpdated`, `optiesUpdated`, etc.). Continue using these.
+
+- Recommended wiring in `MainWindow.__init__`:
+    - Connect `orders_tab.dbChanged` → central `signals.databaseChanged.emit(name)` or call `SNAPSHOT_STORE.active_database_name = name` and then `signals.databaseChanged.emit(name)`
+    - Connect `signals.databaseChanged` → all tabs' reload methods (if available)
+    - Connect aggregator signals → corresponding tab `reload_data()` for immediate live updates
+
+5) Storage & persistence (optional but recommended for faster startup)
+- Persist snapshots to disk on clean shutdown or periodically (Parquet or Polars IPC):
+    - Path layout: `.snapshots/<db_name>/<snapshot_key>.parquet`
+    - On startup, if snapshots exist for the active DB, load `repository_snapshot_alle_transacties` from disk before hitting the DB to improve cold-start.
+- Keep a small manifest file with snapshot timestamps and file sizes to validate consistency.
+
+6) Snapshot naming conventions and schema expectations
+- Snapshot keys should follow the `repository_snapshot_*` (DB-derived) and `aggregator_snapshot_*_live` (live) pattern.
+- For UI tables we expect consistent column names; examples:
+    - Sprinters live snapshot: ["broker","asset_rollup","asset_detail","last","sprinter_funding","sprinter_ratio","SomVantransactie_aantal","SomVantransactie_euro_totaal","winst"] — note: prefer `last` or `price` as canonical numeric column; UI can alias `Koers`.
+    - Opties live snapshot: include `uniek_id, broker, asset_rollup, optie_exp_date, optie_strike, optie_call_put, SomVantransactie_aantal, SomVantransactie_euro_totaal, last, iv`.
+    - Aandelen live snapshot: include `asset_rollup, ib_symbol, koers, aantal_bezit, eq_total_fee, total_result`.
+
+7) Validation & tests (must add)
+- Unit tests:
+    - test_switch_database_sets_active_name: call `repository.switch_database(name)` and assert `SNAPSHOT_STORE.active_database_name == name`.
+    - test_live_aggregator_writes_empty_snapshot: ensure aggregator writes an empty DataFrame into `aggregator_snapshot_open_sprinters_live` when no data.
+    - test_orders_insert_triggers_derived_refresh: simulate an insert, call the OrdersTab save routine, assert derived snapshots were regenerated.
+
+- Integration tests:
+    - Simulate DB switch: call `orders_tab.apply_database_by_name(name)`, assert `signals.databaseChanged` emitted and tabs' `reload_data()` invoked (use a test double for tabs).
+
+8) Debugging & observability
+- Add `snapshot_store.snapshot_store_summary()` (already present) to log a quick summary on DB switch and after major operations.
+- Log snapshot writes with DEBUG level (include key name, row count, timestamp).
+
+9) Backward compatibility notes and migration
+- Existing code currently inspects `repository.db_path` and `DB_MAP` to determine the active DB — replace these lookups with `SNAPSHOT_STORE.active_database_name` gradually.
+- Ensure `repository.switch_database()` sets `SNAPSHOT_STORE.active_database_name` immediately after a successful test connection.
+
+10) Quick checklist to implement in code (small incremental PRs)
+- [ ] Add `active_database_name`, `snapshot_timestamps`, and optional `_lock` to `SnapshotStore`.
+- [ ] Ensure `repository.switch_database()` sets `SNAPSHOT_STORE.active_database_name` and optionally writes a small manifest file in `.snapshots/<db>/manifest.json`.
+- [ ] Create `portefeuille_viewer/signals.py` with `databaseChanged` and `snapshotUpdated` and use it in `MainWindow` to wire tabs.
+- [ ] Update all tabs to prefer `SNAPSHOT_STORE.active_database_name` for display and rely on `signals.databaseChanged` to refresh.
+- [ ] Add unit tests and integration tests for the items in section 7.
 
 ---
-
-### 3. Database Switch Enhancement
-
-**Problem:**
-- Database switch only updated dropdown
-- Base snapshot (`snapshot_alle_transacties`) not reloaded
-- Derived snapshots contained old data
-
-**Solution:**
-```python
-# orders_tab.py, line ~900
-def apply_database_by_name(self, db_name):
-    """Switch database and reload all snapshots"""
-    repository.switch_database(db_name)
-    repository.load_alle_transacties()      # ← Reload base snapshot
-    self._refresh_derived_snapshots()       # ← Regenerate derived snapshots
-    self.load_initial_records()             # ← Update UI
-```
-
-**Git Commit:**
-```bash
-git commit -m "feat(orders): Add database switch with full snapshot reload
-
-- Reload snapshot_alle_transacties after database switch
-- Refresh all derived snapshots
-- Update UI with new data"
-```
-
----
-
-### 4. Date Formatting (Options Tab)
-
-**Problem:**
-- Date columns showing timestamp: "2025-10-17 00:00:00"
-- User wanted clean date format: "17/10/2025"
-
-**Solution:**
-Modified `PolarsTableModel.data()` method:
-```python
-# models.py, line ~103
-def data(self, index, role=Qt.DisplayRole):
     val = self._df[index.row(), index.column()]
     
     if role == Qt.DisplayRole:
@@ -219,6 +280,59 @@ def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
 [17:36:18] IB-Feed: IB ERROR 200 for AAPL (USD): No security definition has been found
 ```
 
+
+## 🔔 Recent repository changes (added Oct 17, 2025)
+
+This section documents changes that were implemented after the main session above. They are important to keep the development notes aligned with the current codebase and to identify follow-ups that still need work.
+
+### Summary of key changes
+- Sprinters tab (UI) was refactored to match the Options tab behaviour: uses a Polars-backed table model, QSortFilterProxyModel, preserves user sort state on refresh and exposes a `reload_data()` method that reads from the live snapshot.
+- Live aggregator for sprinters (`LiveAggregatorSprinters`) now always writes a DataFrame into the snapshot store even when there are no sprinter transactions. This prevents the UI from failing to refresh when a database has zero sprinter records.
+- The sprinters UI now shows an explicit message and an empty table with sensible columns when the active database has no sprinter transactions. The message includes the active database name (resolved dynamically from `repository.DB_MAP` / `db_path`).
+- `LiveAggregatorSprinters` received a `verbose` flag to control console logging (suppress or enable debug prints). Default is `verbose=False` so the console stays quiet in normal runs.
+- Several fixes were applied to ensure snapshot refresh after DB switch / order changes propagate to tabs: orders tab triggers derived snapshot reload and now live aggregators react to the live base snapshot.
+
+### Files changed (high level)
+- `portefeuille_viewer/ui/sprinters_tab.py` — new reload logic, proxy-model, sort-state preservation, DB-name-aware empty-table message.
+- `portefeuille_viewer/data/live_aggregator_sprinters.py` — always save empty DataFrame to snapshot, added `verbose` parameter and conditional logging, process_live_update emits `sprintersUpdated`.
+- `portefeuille-viewer-experiment_0.7.py` — dataset loading and debug prints adjusted (some debug prints commented out to avoid syntax issues).
+- `portefeuille_viewer/data/snapshot_store.py` — snapshot keys for sprinters are used; consider adding an explicit `active_database_name` or exposing current DB selection for UI components (see follow-ups).
+- `portefeuille_viewer/ui/orders_tab.py` — ensured `_refresh_derived_snapshots()` is called after changes and DB switches.
+
+### Why these changes were made
+- Previously, when a database had no sprinter transactions the live aggregator printed "Geen data om op te slaan" and did not write a snapshot. The UI relied on a snapshot existing to refresh, so the Sprinters tab looked empty and unrefreshed, causing confusion.
+- Writing an explicit empty DataFrame into the snapshot makes the UI deterministic: it will always render a table (possibly empty) and show a clear message about the active DB status.
+- The DB name shown in the UI is now derived from the repository's current `db_path` → `DB_MAP` mapping, avoiding stale display of the default DB name.
+
+### Things missing / follow-ups (recommended)
+1. Centralize the "active database name" in `SNAPSHOT_STORE` or `PortfolioEngine` and emit a signal on DB change. Right now the UI resolves the active DB by inspecting `repository.db_path` and `DB_MAP` — this is fragile. Proposed change:
+    - Add `SNAPSHOT_STORE.active_database_name` (string) and update it in `repository.switch_database()`.
+    - Emit a Qt signal `databaseChanged(name)` from the Orders tab / MainWindow when switching databases; tabs subscribe and call their `reload_data()` on change.
+
+2. Add unit/integration tests for the sprinters refresh flow:
+    - Test that `LiveAggregatorSprinters._save_to_snapshot_store()` writes an empty DataFrame when `self.df` is empty or None.
+    - Test that `SprintersTab.reload_data()` populates an empty table with correct columns and that the label shows the correct DB name.
+
+3. Persist `verbose` configuration in settings, or wire the aggregator to the central logger instead of printing. Right now `verbose` defaults to False but is passed in code construction; consider a global logging config.
+
+4. Add a small visible UI hint (e.g. secondary label or colored bar) when a tab is intentionally empty because the active DB has no relevant data. The current single-line label is good, but a persistent subtle UI affordance would reduce confusion further.
+
+5. Consider moving the default column list for empty sprinters table out of UI code and into a single schema/metadata source so all tabs share consistent headers.
+
+### Proposed immediate tasks (prioritized)
+1. (P0) Add `SNAPSHOT_STORE.active_database_name` and update `repository.switch_database()` to set it and trigger a signal. Have `SprintersTab` listen to that signal and refresh (and likewise the other tabs). Estimated: 2–4 hours.
+2. (P1) Add automated tests for sprinter snapshot write and UI reload behaviour (mock snapshot store). Estimated: 3–6 hours.
+3. (P1) Persist `verbose` setting in app settings/config (or use Python logging with log levels). Estimated: 1–2 hours.
+4. (P2) Create a small UI affordance (colored banner or icon) that indicates "no data for active DB" across tabs. Estimated: 2–3 hours.
+
+### Quick verification steps
+1. Start app with database A (with sprinters) and confirm Sprinters tab shows rows.
+2. Switch active DB to B (no sprinters) via Orders tab → DB dropdown. Confirm:
+    - Label updates to `DATABASE <name> heeft geen sprinter transacties.`
+    - Table displays empty rows but header columns are visible.
+3. Switch back to A, confirm table repopulates.
+4. Run unit tests for snapshot write and tab reload (as implemented above).
+
 ---
 
 ## 🏗️ Architecture & Design Decisions
@@ -228,38 +342,53 @@ def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
 **Design Pattern:** In-Memory Snapshot with Lazy Loading
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    DATABASE                             │
-│              transacties_bron_data_org                  │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     │ load_alle_transacties()
-                     ↓
-         ┌───────────────────────────┐
-         │  snapshot_alle_transacties │  ← BASE SNAPSHOT
-         │     (17,323 rows)         │     (Polars DataFrame)
-         └───────────┬───────────────┘
-                     │
-                     ├──→ load_aandelen_from_tx()
-                     │   └→ snapshot_aandelen (135 rows)
-                     │
-                     ├──→ load_open_opties_from_tx()
-                     │   └→ snapshot_load_open_opties_from_tx (85 rows)
-                     │
-                     ├──→ load_gesloten_opties_from_tx()
-                     │   └→ snapshot_gesloten_opties (149 rows)
-                     │
-                     └──→ load_gesloten_opties_no_broker()
-                         └→ snapshot_gesloten_opties_no_broker (82 rows)
-                              │
-                              ↓
-                  ┌───────────────────────────┐
-                  │   LIVE UPDATES            │
-                  │   (PortfolioEngine)       │
-                  └───────────┬───────────────┘
-                              │
-                              ├→ snapshot_aandelen_live
-                              └→ snapshot_load_open_opties_from_tx_live
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              DATABASE                                    │
+│                        transacties_bron_data_org                         │
+└──────────────────────────────┬─────────────────────────────────────────────┘
+                                         │
+                                         │ load_alle_transacties()  (reads DB once)
+                                         ↓
+                        ┌──────────────────────────────────────────┐
+                        │  repository_snapshot_alle_transacties    │  ← BASE SNAPSHOT
+                        │        (Polars DataFrame - persistent)   │
+                        └───────────────┬──────────────────────────┘
+                                             │
+            ┌────────────────────────┼────────────────────────┬────────────────────────┐
+            │                        │                        │                        │
+            │                        │                        │                        │
+ load_aandelen_from_tx()   load_open_opties_from_tx()  load_gesloten_opties_from_tx()  load_gesloten_opties_no_broker()
+     ↓                        ↓                         ↓                            ↓
+ snapshot_repository_aandelen  snapshot_load_open_opties   snapshot_gesloten_opties   snapshot_gesloten_opties_no_broker
+
+     (derived, recomputed from base snapshot by `_refresh_derived_snapshots()`)
+
+                                             │
+                                             ↓
+                        ┌──────────────────────────────────────────┐
+                        │           LIVE UPDATES (PortfolioEngine) │
+                        │  - batch price updates (debounce 300-500ms)│
+                        └───────────────┬──────────────────────────┘
+                                             │
+              ┌──────────────────────┴──────────────────────────┐
+              │                                                 │
+              │                                                 │
+aggregator_snapshot_aandelen_live                      aggregator_snapshot_load_open_opties_from_tx_live
+     (aandelen live)                                          (opties live)
+              │                                                 │
+              └───────────────┬─────────────────────────────────┘
+                                    │
+                                    ↓
+                    (Aggregators emit signals: aandelenUpdated, optiesUpdated, sprintersUpdated)
+
+Metadata & persistence:
+- SNAPSHOT_STORE.active_database_name  ← set on DB switch (repository.switch_database)
+- SNAPSHOT_STORE.snapshot_timestamps[name]  ← updated after each write
+- Optional disk cache: .snapshots/<db_name>/<snapshot_key>.parquet (load on startup)
+
+Notes:
+- Write snapshots atomically (build off-thread, then assign under lock)
+- UI tabs subscribe to aggregator signals and to a central databaseChanged signal for DB switches
 ```
 
 **Key Principles:**
@@ -297,6 +426,23 @@ LiveAggregatorAandelen.update_live_price()
       ↓
 PortfolioEngine._process_batched_updates()
       ↓
+      
+    Sprinters batching flow (confirmed)
+    ----------------------------------
+    - `PortfolioEngine` creates and owns a `LiveAggregatorSprinters` instance (`self.live_aggregator_sprinters`).
+    - On each incoming price update the engine calls `live_aggregator_sprinters.update_live_price(symbol, price)` to stash the latest price in the aggregator's `live_prices` map.
+    - After the debounce interval `PortfolioEngine._process_batched_updates()` calls `live_aggregator_sprinters.process_live_update()`. The aggregator rebuilds its DataFrame from `repository_snapshot_open_sprinters`, applies the latest `live_prices`, writes the result to `SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live`, and emits the Qt signal `sprintersUpdated`.
+    - `SprintersTab` connects to `sprintersUpdated` and reacts by calling `reload_data()`; `reload_data()` reads the snapshot and repopulates the table (showing an empty table + DB-specific message when no rows are present).
+
+    Implementation locations:
+    - `portefeuille_viewer/domain/portfolio_engine.py` — initializes `LiveAggregatorSprinters`, `_on_live_price()` calls `update_live_price()`, `_process_batched_updates()` calls `process_live_update()`.
+    - `portefeuille_viewer/data/live_aggregator_sprinters.py` — implements `update_live_price()`, `process_live_update()`, snapshot write and `sprintersUpdated` emission.
+    - `portefeuille_viewer/ui/sprinters_tab.py` — subscribes to `sprintersUpdated` and implements `reload_data()`.
+
+    Recommended quick tests:
+    - Call `_on_live_price(symbol, currency, price)` and assert `live_aggregator_sprinters.live_prices` contains the value.
+    - Trigger `_process_batched_updates()` and assert `SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live` is updated (rows or empty DataFrame) and that `sprintersUpdated` was emitted.
+
    ├→ LiveAggregatorAandelen.process_live_update()
    │     ├→ Update snapshot_aandelen_live
    │     └→ Emit aandelenUpdated signal

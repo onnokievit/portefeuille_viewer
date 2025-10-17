@@ -46,6 +46,12 @@ def switch_database(name: str):
         pass
     db_path = new_path
     conn_str = test_conn_str
+    # Sla ook de actieve database-naam op in de snapshot store voor UI-consumptie
+    try:
+        SNAPSHOT_STORE.active_database_name = name
+    except Exception:
+        # Niet kritisch, maar nuttig om te weten tijdens debugging
+        print(f"Waarschuwing: kon SNAPSHOT_STORE.active_database_name niet instellen op {name}")
 
 
 # ------------------------------------------------------------
