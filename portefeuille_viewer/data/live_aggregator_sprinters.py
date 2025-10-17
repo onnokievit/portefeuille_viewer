@@ -10,19 +10,22 @@ class LiveAggregatorSprinters(QObject):
     """
     sprintersUpdated = Signal()
 
-    def __init__(self):
+    def __init__(self, verbose=False):
         super().__init__()
         self.df = None
         self.live_prices = {}  # Dict: {ib_symbol: koers}
+        self.verbose = verbose
         self._initialize_data()
 
     def _initialize_data(self):
         try:
             self.df = self._load_and_calculate()
-            print(f"LiveAggregatorSprinters: Initialized with {len(self.df)} rows")
+            if self.verbose:
+                print(f"LiveAggregatorSprinters: Initialized with {len(self.df)} rows")
             self._save_to_snapshot_store()
         except Exception as e:
-            print(f"LiveAggregatorSprinters initialization error: {e}")
+            if self.verbose:
+                print(f"LiveAggregatorSprinters initialization error: {e}")
             self.df = pl.DataFrame()
 
     def _load_and_prepare_data(self):
@@ -76,20 +79,23 @@ class LiveAggregatorSprinters(QObject):
         """
         try:
             if SNAPSHOT_STORE.repository_snapshot_open_sprinters is None:
-                print("LiveAggregatorSprinters: repository_snapshot_open_sprinters niet beschikbaar")
+                if self.verbose:
+                    print("LiveAggregatorSprinters: repository_snapshot_open_sprinters niet beschikbaar")
                 return
             self.df = self._load_and_calculate()
             self._save_to_snapshot_store()
             self.sprintersUpdated.emit()
         except Exception as e:
-            print(f"LiveAggregatorSprinters process error: {e}")
+            if self.verbose:
+                print(f"LiveAggregatorSprinters process error: {e}")
 
     def _save_to_snapshot_store(self):
         # Altijd een DataFrame in de snapshot zetten, ook als deze leeg is
         if self.df is not None:
             SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live = self.df.clone()
-            if self.df.is_empty():
+            if self.df.is_empty() and self.verbose:
                 print("LiveAggregatorSprinters: Geen data om op te slaan (lege DataFrame opgeslagen)")
         else:
             SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live = pl.DataFrame()
-            print("LiveAggregatorSprinters: Geen data om op te slaan (None, lege DataFrame opgeslagen)")
+            if self.verbose:
+                print("LiveAggregatorSprinters: Geen data om op te slaan (None, lege DataFrame opgeslagen)")
