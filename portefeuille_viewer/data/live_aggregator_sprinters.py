@@ -85,7 +85,11 @@ class LiveAggregatorSprinters(QObject):
             print(f"LiveAggregatorSprinters process error: {e}")
 
     def _save_to_snapshot_store(self):
-        if self.df is not None and not self.df.is_empty():
+        # Altijd een DataFrame in de snapshot zetten, ook als deze leeg is
+        if self.df is not None:
             SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live = self.df.clone()
+            if self.df.is_empty():
+                print("LiveAggregatorSprinters: Geen data om op te slaan (lege DataFrame opgeslagen)")
         else:
-            print("LiveAggregatorSprinters: Geen data om op te slaan")
+            SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live = pl.DataFrame()
+            print("LiveAggregatorSprinters: Geen data om op te slaan (None, lege DataFrame opgeslagen)")

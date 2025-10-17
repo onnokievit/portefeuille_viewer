@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QLineEdit, QComboBox, QPushButton, QTableView, QHeaderView,
     QAbstractItemView, QCompleter, QMessageBox, QSpacerItem, QSizePolicy, QMenu, QInputDialog
 )
-from portefeuille_viewer.domain import engine
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -1278,8 +1277,6 @@ class OrdersTab(QWidget):
             load_gesloten_opties_from_tx,
             load_gesloten_opties_no_broker,
             load_open_sprinters_from_tx,
-            engine.print_snapshot_columns("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: kolommen controleren
-            engine.print_snapshot_head("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: eerste rijen controleren
             load_gesloten_sprinters_from_tx
         )
         
