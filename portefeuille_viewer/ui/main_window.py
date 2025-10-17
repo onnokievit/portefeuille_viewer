@@ -14,6 +14,7 @@ import logging
 import os
 from datetime import datetime
 from portefeuille_viewer.signals import signals
+ 
 
 
 APP_TITLE = "🧭 Portefeuille Viewer"
@@ -77,6 +78,15 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"SprintersTab kon niet worden geladen: {e}")
             self.sprinters_tab = QWidget()
+
+        # Lightweight test tab: Repository Aggregator Tester
+        try:
+            from portefeuille_viewer.ui.repository_aggretator_tester_tab import RepositoryAggregatorTesterTab
+            # Use the exact name requested: repository_aggretator_tester_tab
+            self.repository_aggretator_tester_tab = RepositoryAggregatorTesterTab()
+        except Exception as e:
+            print(f"RepositoryAggregatorTesterTab kon niet worden geladen: {e}")
+            self.repository_aggretator_tester_tab = QWidget()
         
         
         
@@ -89,21 +99,24 @@ class MainWindow(QMainWindow):
         
         # Pass the centralized portfolio_engine if available, otherwise let tab create its own
         if self.portfolio_engine:
-            self.tabs.addTab(AandelenTab2(portfolio_engine=self.portfolio_engine), "Aandelen 2 (Agg)")
+            self.tabs.addTab(AandelenTab2(portfolio_engine=self.portfolio_engine), "Aandelen (Live)")
         else:
-            self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen 2 (Agg)")
+            self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen")
             
 
-        self.tabs.addTab(self.open_opties_tab, "Open Opties (Polars)")
+        self.tabs.addTab(self.open_opties_tab, "Open Opties (Live)")
         self.tabs.addTab(self.sprinters_tab, "Sprinters (Live)")
+        # Add test tab (repository aggregator tester)
+        # Tab label set to the exact identifier requested
+        self.tabs.addTab(self.repository_aggretator_tester_tab, "repository_aggregator_tester_tab")
         #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
-        
+
         # Option Chain Explorer Tab (NEW - MVP)
         self.option_chain_tab = OptionChainTab(feed_service=self.feed_service)
         self.tabs.addTab(self.option_chain_tab, "Option Chain Explorer")
-        
+
         self.tabs.addTab(self.settings_tab, "Settings")
-        
+
         self.setCentralWidget(self.tabs)
 
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
