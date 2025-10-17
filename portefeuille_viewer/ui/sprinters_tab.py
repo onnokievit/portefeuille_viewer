@@ -40,22 +40,28 @@ class SprintersTab(QWidget):
 
     def reload_data(self):
         df = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
-        # Bepaal database-naam indien mogelijk
+        # Bepaal database-naam: prefer SNAPSHOT_STORE.active_database_name if available
+        db_name = None
         try:
-            import importlib
-            repository = importlib.import_module('portefeuille_viewer.data.repository')
-            # Haal de actuele database-naam uit repository.db_path (pad), zoek de key in DB_MAP
-            db_path = getattr(repository, 'db_path', None)
-            db_map = getattr(repository, 'DB_MAP', {})
-            db_name = None
-            for name, path in db_map.items():
-                if path == db_path:
-                    db_name = name
-                    break
-            if not db_name:
-                db_name = "(onbekend)"
+            db_name = SNAPSHOT_STORE.active_database_name
         except Exception:
-            db_name = "(onbekend)"
+            db_name = None
+
+        if not db_name:
+            # Fallback: inspect repository mapping
+            try:
+                import importlib
+                repository = importlib.import_module('portefeuille_viewer.data.repository')
+                db_path = getattr(repository, 'db_path', None)
+                db_map = getattr(repository, 'DB_MAP', {})
+                for name, path in db_map.items():
+                    if path == db_path:
+                        db_name = name
+                        break
+                if not db_name:
+                    db_name = "(onbekend)"
+            except Exception:
+                db_name = "(onbekend)"
 
         # Bepaal kolommen voor lege tabel (indien geen data)
         default_columns = [

@@ -106,8 +106,29 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
-        # self.orders_tab.ordersCommitted.connect(self.live_tab.reload_from_snapshots)
-        # self.orders_tab.dbChanged.connect(self.live_tab.reload_from_db)
+        # Als orders_tab de database wijzigt, herlaad relevante tabs
+        # Connect only if the tabs expose a reload_data method
+        try:
+            if hasattr(self.sprinters_tab, 'reload_data'):
+                self.orders_tab.dbChanged.connect(self.sprinters_tab.reload_data)
+        except Exception:
+            pass
+        try:
+            if hasattr(self.open_opties_tab, 'reload_data'):
+                self.orders_tab.dbChanged.connect(self.open_opties_tab.reload_data)
+        except Exception:
+            pass
+        try:
+            # AandelenTab2 exposes reload_data
+            if hasattr(self.tabs, 'widget') and hasattr(self, 'tabs'):
+                # Connect directly to the instantiated AandelenTab2 we added earlier (second tab or by reference)
+                # We created AandelenTab2 instance when adding tabs above; try to find it among tabs
+                for i in range(self.tabs.count()):
+                    w = self.tabs.widget(i)
+                    if w is not None and w.__class__.__name__ == 'AandelenTab2' and hasattr(w, 'reload_data'):
+                        self.orders_tab.dbChanged.connect(w.reload_data)
+        except Exception:
+            pass
         
         # Connect settings changes (database config wijzigingen)
         self.settings_tab.configChanged.connect(self._on_database_config_changed)
