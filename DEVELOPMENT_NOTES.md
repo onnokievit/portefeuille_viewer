@@ -367,6 +367,55 @@ This section documents changes that were implemented after the main session abov
 
 ---
 
+## 🛡️ SnapshotStore.safe_write contract (added Oct 17, 2025)
+
+Summary:
+- Use `SNAPSHOT_STORE.safe_write(key, value)` for any code that assigns snapshot attributes (both repository-derived and aggregator live snapshots).
+- `safe_write` performs three responsibilities:
+    1. Atomically sets `setattr(SNAPSHOT_STORE, key, value)`
+    2. Records a best-effort timestamp in `SNAPSHOT_STORE._last_update_ts[key] = time.time()`
+    3. Emits `signals.queued_emit_snapshotUpdated(key)` (queued helper) so subscribers on the Qt event loop receive the notification safely
+
+Why:
+- Ensures consistent observability (timestamps + central notification) across all snapshot writes.
+- Guarantees the notify happens on the Qt main thread via queued emit (avoids threading issues when writers run in worker threads).
+
+Usage examples:
+
+- From an aggregator (recommended):
+```py
+# inside LiveAggregator.process_live_update()
+aggregated = self.get_aggregated()
+SNAPSHOT_STORE.safe_write("aggregator_snapshot_aandelen_live", aggregated)
+```
+
+- From repository after building a derived snapshot:
+```py
+per_uniek_filtered = ...  # polars DataFrame
+SNAPSHOT_STORE.safe_write("repository_snapshot_open_sprinters", per_uniek_filtered)
+```
+
+Testing notes:
+- Unit test (`tests/test_snapshot_store.py`) monkeypatches `signals.signals.queued_emit_snapshotUpdated` to assert the helper is called synchronously.
+- Integration test (`tests/test_snapshot_integration.py`) connects a real Qt slot to `signals.snapshotUpdated` and uses the Qt event loop (pytest-qt) to ensure queued emits are delivered. This verifies end-to-end behavior including the `QTimer.singleShot(0, ...)` queued delivery.
+
+How to run the tests locally:
+1. Install test dependencies:
+```powershell
+& C:/Python311/python.exe -m pip install --user pytest pytest-qt
+```
+2. Run only the new tests (keeps output tight):
+```powershell
+cd c:\python_coding\portefeuille_viewer\portefeuille_viewer_experiment_0.8
+& C:/Python311/python.exe -m pytest -q tests/test_snapshot_store.py tests/test_snapshot_integration.py
+```
+
+Expected output on success: `..` or `2 passed`.
+
+Notes on CI:
+- If adding to CI, ensure the test runner has access to a Qt platform plugin (headless). On GitHub Actions use the `xvfb` service or the `pytest-qt` recommended setup for headless runs.
+
+
 ## 🏗️ Architecture & Design Decisions
 
 ### Snapshot Architecture
