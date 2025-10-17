@@ -1431,3 +1431,41 @@ User klikt "Opslaan" (edit mode) → `opslaan_orders()` → `update_transactions
 - Orders tab is nu volledig snapshot-centric, met snelle UI updates en betere maintainability.
 
 ---
+
+## ✨ Session: experiment_0.8 — recente wijzigingen (toegevoegd)
+
+Onderstaande sectie is automatisch toegevoegd om kort en concreet vast te leggen wat in deze ontwikkelsessie is gedaan en welke stappen nog openstaan.
+
+Wat er is gedaan (belangrijkste punten):
+- Orders-tab UI: toegevoegd `SmartCombo.reset()` en toegepast in `reset_form()` en `on_table_select()` om de foutmelding "staat niet in de lijst" bij het resetten te verhelpen.
+    - Bestand: `portefeuille_viewer/ui/orders_tab.py`
+- Loader: `load_asset_rollup_data()` bevat nu de kolom `INCL_EXCL` in de SQL-select en schrijft de resulterende DataFrame naar de snapshot `snapshot_asset_rollup_data`.
+    - Bestand: `portefeuille_viewer/data/repository.py`
+- Subscripties / Price feed: in `PortfolioEngine` is de subscription-logica aangepast zodat alleen rijen met `INCL_EXCL == 1` (of equivalente waarden: numeric 1, string "1", boolean True) worden meegenomen bij het opbouwen van subscriptions.
+    - Bestanden/functies: `portefeuille_viewer/domain/portfolio_engine.py` (`start_subscriptions`, `get_symbols_to_subscribe`)
+    - Compatibiliteit: als de `INCL_EXCL` kolom afwezig is, valt de logica terug naar het includen van alle rijen (backwards compatible).
+- Algemene housekeeping: workspace todo is bijgewerkt om resterende taken bij te houden.
+
+Wat nog openstaat / aanbevolen vervolgstappen:
+- Documentatie: deze sectie is nu toegevoegd; controleer of de schrijfstijl/plaatsing voldoet — zo niet, ik kan verplaatsen of herformuleren.
+- Tests: voer de unit tests uit (pytest) in de juiste virtuele omgeving en los eventuele regressies op.
+- UI verificatie: voer een interactieve GUI-sessie uit om de Orders-tab Reset/Completer fix handmatig te verifiëren.
+- Snapshot sync: implementatie voor DELETE-sync ontbreekt nog (aanbevolen voor volledige CRUD-consistentie).
+- Robustheid: overweeg extra parsing/normalisatie voor `INCL_EXCL` (bv. 'Y'/'N', 'true'/'false') en vervang verspreide prints door een logging-framework.
+- Optioneel: uitbreiden van subscription policies (rotatie / prioriteit) zodra het aantal symbols > 100 wordt.
+
+Verificatie uitgevoerd tijdens sessie:
+- `portfolio_engine.py` importeerde succesvol (import smoke-test uitgevoerd).
+- `repository.load_asset_rollup_data()` bevat de `INCL_EXCL` kolom (gecontroleerd in bestand).
+- `orders_tab.py` wijzigingen zijn toegepast; runtime GUI-verificatie nog aanbevolen.
+
+Bestanden gewijzigd tijdens deze sessie (voor referentie):
+- `portefeuille_viewer/ui/orders_tab.py` — SmartCombo.reset() + reset integratie
+- `portefeuille_viewer/domain/portfolio_engine.py` — filter op INCL_EXCL bij subscriptions
+
+Als je wilt, kan ik nu één van de volgende acties uitvoeren (kies A of B of beide):
+A) Run pytest in de project venv en rapporteren welke tests falen/ slagen.
+B) Start een GUI-run (indien je in een GUI-geschikte omgeving werkt) en voer een korte handmatige verificatie uit van Orders-tab gedrag.
+
+Datum toevoegen: automatisch gegenereerd in deze sessie.
+
