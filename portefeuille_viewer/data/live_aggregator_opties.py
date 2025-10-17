@@ -165,6 +165,7 @@ class LiveAggregatorOpties(QObject):
     def _save_to_snapshot_store(self):
         """Sla verwerkte DataFrame op in SnapshotStore."""
         if self.df is not None and not self.df.is_empty():
-            SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live = self.df.clone()
+            SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", self.df.clone())
         else:
-            print("LiveAggregatorOpties: Geen data om op te slaan")
+            # Schrijf een lege frame zodat subscribers niet wachten op een niet-bestaande key
+            SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", pl.DataFrame())

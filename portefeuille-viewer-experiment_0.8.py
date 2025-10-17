@@ -42,8 +42,8 @@ def load_datasets():
 
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
-    engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
-    engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
+    # engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
+    # engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
 
 
 

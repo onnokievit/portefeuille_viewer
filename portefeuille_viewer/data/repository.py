@@ -75,7 +75,7 @@ def load_asset_rollup_data() -> pl.DataFrame:
     sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.snapshot_asset_rollup_data = df
+    SNAPSHOT_STORE.safe_write("snapshot_asset_rollup_data", df)
     # return compact_float64(df)
 
 # ------------------------------------------------------------
@@ -88,7 +88,7 @@ def load_sprinter_referentie_data() -> pl.DataFrame:
     sql = "SELECT * FROM sprinters_referentie_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data = df
+    SNAPSHOT_STORE.safe_write("repository_snapshot_sprinter_referentie_data", df)
     # return compact_float64(df)
 
 
@@ -105,7 +105,7 @@ def load_alle_transacties() -> pl.DataFrame:
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     compact_float64(df)
-    SNAPSHOT_STORE.repository_snapshot_alle_transacties = df
+    SNAPSHOT_STORE.safe_write("repository_snapshot_alle_transacties", df)
     
     
 
@@ -145,7 +145,7 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("eq_total_fee"),
     ]
     )
-    SNAPSHOT_STORE.repository_snapshot_aandelen = df
+    SNAPSHOT_STORE.safe_write("repository_snapshot_aandelen", df)
     
     
 
@@ -197,7 +197,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         & (pl.col("SomVantransactie_aantal") != 0)
     )
     # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
-    SNAPSHOT_STORE.repository_snapshot_load_open_opties = per_uniek_filtered
+    SNAPSHOT_STORE.safe_write("repository_snapshot_load_open_opties", per_uniek_filtered)
     #return per_uniek_filtered
 
 
@@ -264,7 +264,7 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
         ])
         .sort(["broker", "asset_rollup"])
     )
-    SNAPSHOT_STORE.repository_snapshot_gesloten_opties = df_final
+    SNAPSHOT_STORE.safe_write("repository_snapshot_gesloten_opties", df_final)
     # return df_final
 
 # ------------------------------------------------------------
@@ -291,7 +291,7 @@ def load_gesloten_opties_no_broker() -> pl.DataFrame:
     )
 
     # Sla het resultaat op in snapshot_gesloten_opties_no_broker
-    SNAPSHOT_STORE.repository_snapshot_gesloten_opties_no_broker = df_final
+    SNAPSHOT_STORE.safe_write("repository_snapshot_gesloten_opties_no_broker", df_final)
     return df_final
 
 
@@ -343,7 +343,7 @@ def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFra
         & (pl.col("SomVantransactie_aantal") != 0)
     )
     # SNAPSHOT_STORE.repository_snapshot_open_sprinters = per_uniek_filtered
-    SNAPSHOT_STORE.repository_snapshot_open_sprinters = per_uniek_filtered
+    SNAPSHOT_STORE.safe_write("repository_snapshot_open_sprinters", per_uniek_filtered)
     #return per_uniek_filtered
 
     ######################### DEBUG CODE om het totaal te checken van open sprinters#
@@ -419,7 +419,7 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
         ])
         .sort(["broker", "asset_rollup"])
     )
-    SNAPSHOT_STORE.repository_snapshot_gesloten_sprinters = df_final
+    SNAPSHOT_STORE.safe_write("repository_snapshot_gesloten_sprinters", df_final)
     # return df_final
 
 

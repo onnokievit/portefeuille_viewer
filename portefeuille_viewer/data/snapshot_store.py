@@ -27,6 +27,8 @@ class SnapshotStore:
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
         # Active database name (set by repository.switch_database)
         self.active_database_name: str | None = None
+        # internal bookkeeping for last update timestamps per snapshot key
+        self._last_update_ts = {}
 
     def clear(self):
         """Reset alle snapshots naar leeg."""
@@ -94,6 +96,34 @@ class SnapshotStore:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
+
+    def safe_write(self, attr_name: str, value):
+        """Schrijf een snapshot-attribuut op een veilige manier.
+
+        - Voert de setattr uit
+        - Houdt een timestamp bij in self._last_update_ts
+        - Roept queued emit van central signals aan (zodat UI/main-thread reageert)
+
+        We importeren `signals` lokaal om circulaire import-problemen bij module-load te vermijden.
+        """
+        setattr(self, attr_name, value)
+        import time
+        # record timestamp
+        try:
+            self._last_update_ts[attr_name] = time.time()
+        except Exception:
+            # Best effort; niet kritisch
+            pass
+
+        # Notify subscribers that this snapshot key is updated. Import local to avoid cycles.
+        try:
+            from portefeuille_viewer.signals import signals
+
+            # Use queued emit helper to ensure main-thread delivery
+            signals.queued_emit_snapshotUpdated(attr_name)
+        except Exception:
+            # If signals cannot be imported (rare), silently continue
+            pass
 
 
 
