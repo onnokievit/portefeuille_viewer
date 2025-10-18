@@ -131,6 +131,46 @@ class LiveAggregatorAandelen(QObject):
         return df
     
 
+    def get_not_aggregated(self):
+        """
+        Haal geaggregeerde dataset op, gegroepeerd per asset_rollup.
+        Gebruikt de data die al verwerkt is door PortfolioEngine.
+        
+        Returns:
+            pl.DataFrame: Geaggregeerde aandelen data
+        """
+        if self.df is None or self.df.is_empty():
+            return pl.DataFrame({
+                "broker": [],
+                "asset_rollup": [],
+                "koers": [],
+                "aantal_bezit": [],
+                "eq_total_fee": [],
+                "total_result": []
+            })
+        
+        # Aggregeer per asset_rollup (data komt al verwerkt van PortfolioEngine)
+        aggregated_df = (
+            self.df.group_by("broker","asset_rollup")
+            .agg([
+                # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
+                pl.col("Koers").max().alias("koers"),
+                pl.col("aantal_bezit").sum(),
+                pl.col("aantal_koop").sum(),
+                pl.col("euro_koop").sum(),
+                pl.col("aantal_verkoop").sum(),
+                pl.col("euro_verkoop").sum(),
+                
+                pl.col("eq_total_fee").sum(),
+                pl.col("total_result").sum()
+                
+            ])
+        )
+        
+        return aggregated_df
+
+
+
     
     def get_aggregated(self):
         """
@@ -170,7 +210,7 @@ class LiveAggregatorAandelen(QObject):
     def _save_to_snapshot_store(self):
         """Sla geaggregeerde data op in SnapshotStore."""
         try:
-            aggregated = self.get_aggregated()
+            aggregated = self.get_not_aggregated()
             SNAPSHOT_STORE.safe_write("aggregator_snapshot_aandelen_live", aggregated)
         except Exception as e:
             print(f"LiveAggregatorAandelen: Error saving to SnapshotStore: {e}")
