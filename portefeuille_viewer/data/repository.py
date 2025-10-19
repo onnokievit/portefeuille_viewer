@@ -483,6 +483,12 @@ def insert_transaction(data: dict) -> int:
         cursor.execute("SELECT @@IDENTITY")
         new_id = cursor.fetchone()[0]
         conn.commit()
+    # Emit centraal signaal na insert
+    try:
+        from portefeuille_viewer.signals import signals
+        signals.ordersCommitted.emit()
+    except Exception:
+        pass
     return new_id
 
 
@@ -518,6 +524,12 @@ def delete_transactions_by_ids(ids_to_delete: list) -> int:
         cursor.execute(sql, ids_to_delete)
         deleted_count = cursor.rowcount
         conn.commit()
+    # Emit centraal signaal na delete
+    try:
+        from portefeuille_viewer.signals import signals
+        signals.ordersCommitted.emit()
+    except Exception:
+        pass
     return deleted_count
 
 
@@ -732,6 +744,12 @@ def update_transactions_atomic(record_id1: int, data1: dict,
         except pyodbc.Error:
             conn.rollback()
             raise
+    # Emit centraal signaal na update
+    try:
+        from portefeuille_viewer.signals import signals
+        signals.ordersCommitted.emit()
+    except Exception:
+        pass
 
 def _clean(x): ########################## niet genoemd door chatgpt om te blijven?????? 
     return "" if x is None else str(x).strip()
@@ -833,3 +851,19 @@ def get_next_order_item_no(order_id: int) -> int:
         row = cur.fetchone()
         return (row[0] or 0) + 1
 
+def refresh_all_snapshots():
+    load_alle_transacties()
+    load_aandelen_from_tx()
+    load_open_opties_from_tx()
+    load_gesloten_opties_from_tx()
+    load_gesloten_opties_no_broker()
+    load_open_sprinters_from_tx()
+    load_gesloten_sprinters_from_tx()
+
+try:
+    from portefeuille_viewer.signals import signals
+    signals.ordersCommitted.connect(refresh_all_snapshots)
+    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
+    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
+except Exception as e:
+    print(f"Waarschuwing: kon signaal niet koppelen: {e}")

@@ -106,6 +106,7 @@ class AandelenTab2(QWidget):
                 pl.col("aantal_verkoop").sum().alias("eq_aantal_verkoop"),
                 pl.col("euro_verkoop").sum().alias("eq_euro_verkoop"),
                 pl.col("total_result").sum().alias("eq_total_result"),
+                pl.col("eq_total_fee").sum().alias("eq_total_fee"),
             ])
         else:
             df_aandelen_sum = df
@@ -149,17 +150,19 @@ class AandelenTab2(QWidget):
             df_open_opt_sum = df_open_opties
 
 
-        df_open_sprinters = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
+        df_open_sprinters = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
         if self.selected_brokers is not None and "broker" in df.columns:
             df_open_sprinters = df_open_sprinters.filter(pl.col("broker").is_in(list(self.selected_brokers)))
                 # Sum na filtering (groepeer op asset_rollup)
         if not df_open_sprinters.is_empty():
-            df_open_opt_sum = df_open_sprinters.group_by("asset_rollup").agg([
-                pl.col("opt_total_result").sum().alias("open_opt_total_result"),
-                pl.col("SomVantransactie_fee").sum().alias("open_opt_transactie_fee"),
+            df_open_sp_sum = df_open_sprinters.group_by("asset_rollup").agg([
+                pl.col("sp_result").sum().alias("open_sp_result"),
+                pl.col("SomVantransactie_fee").sum().alias("open_sp_transactie_fee"),
+                pl.col("SomVantransactie_aantal").sum().alias("open_sp_aantal"),
              ])
         else:
-            df_open_opt_sum = df_open_sprinters
+            df_open_sp_sum = df_open_sprinters
+
 
 
 
@@ -180,39 +183,77 @@ class AandelenTab2(QWidget):
             df_aand_opt_sp_open_opt = df_aand_opt_sp_open_opt.with_columns([
                 pl.coalesce([pl.col("asset_rollup"), pl.col("asset_rollup_opt_o_open")]).alias("asset_rollup")
         ])
-
-
-
-        # # Filter op broker
-        # if self.selected_brokers is not None and "broker" in df.columns:
-        #     df = df.filter(pl.col("broker").is_in(list(self.selected_brokers)))
-        
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_laad_random_dataframes = df_aand_opt_sp_open_opt  # of df_sum als je de gesumde versie wilt zien
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
-        # # Sum na filtering (groepeer op asset_rollup)
-        # if not df.is_empty():
-        #     df_sum = df.group_by("asset_rollup","koers").agg([
-        #         pl.col("koers").sum().alias("koers"),
-        #         pl.col("aantal_bezit").sum().alias("eq_aantal_bezit"),
-        #         pl.col("aantal_koop").sum().alias("eq_aantal_koop"),
-        #         pl.col("euro_koop").sum().alias("eq_euro_koop"),
-        #         pl.col("aantal_verkoop").sum().alias("eq_aantal_verkoop"),
-        #         pl.col("euro_verkoop").sum().alias("eq_euro_verkoop"),
-        #         pl.col("total_result").sum().alias("eq_total_result"),
-
-        #         pl.col("eq_total_fee").sum().alias("eq_total_fee"),
-        #         pl.col("clos_opt_transactie_fee").sum(),
-        #         pl.col("clos_sp_transactie_fee").sum(),
-                
-                
-        #     ])
-        # else:
-        #     df_sum = df
             
-        self.model = PolarsTableModel(df_aand_opt_sp_open_opt, self)
+
+        df_open_sp_sum = df_aand_opt_sp_open_opt.join(df_open_sp_sum, on=["asset_rollup"], how="full", suffix="_sp_open")
+        if "asset_rollup_opt_o_open" in df_aand_opt_sp_open_opt.columns:
+            df_open_sp_sum = df_open_sp_sum.with_columns([
+                pl.coalesce([pl.col("asset_rollup"), pl.col("asset_rollup_sp_open")]).alias("asset_rollup")
+        ])
+
+
+
+
+        # Sum na filtering (groepeer op asset_rollup)
+        if not df_open_sp_sum.is_empty():
+            df_sum = df_open_sp_sum.group_by("asset_rollup", "koers").agg([
+                pl.col("eq_aantal_bezit").sum().alias("eq_aantal_bezit"),
+                pl.col("open_sp_aantal").sum().alias("open_sp_aantal"),
+                pl.col("eq_total_result").sum().alias("eq_total_result"),
+                pl.col("clos_opt_transactie_euro_totaal").sum().alias("clos_opt_transactie_euro_totaal"),
+                pl.col("clos_sp_transactie_euro_totaal").sum().alias("clos_sp_transactie_euro_totaal"),
+                pl.col("open_opt_total_result").sum().alias("open_opt_total_result"),
+                pl.col("open_sp_result").sum().alias("open_sp_result"),
+                pl.col("eq_total_fee").sum().alias("eq_total_fee"),
+                pl.col("clos_opt_transactie_fee").sum().alias("clos_opt_transactie_fee"),
+                pl.col("clos_sp_transactie_fee").sum().alias("clos_sp_transactie_fee"),
+                pl.col("open_opt_transactie_fee").sum().alias("open_opt_transactie_fee"),
+                pl.col("open_sp_transactie_fee").sum().alias("open_sp_transactie_fee"),
+            ]).with_columns([
+                (
+                    pl.col("eq_total_result")
+                    + pl.col("clos_opt_transactie_euro_totaal")
+                    + pl.col("clos_sp_transactie_euro_totaal")
+                    + pl.col("open_opt_total_result")
+                    + pl.col("open_sp_result")
+                ).alias("totaal_resultaat"),
+                (
+                    pl.col("eq_total_fee")
+                    + pl.col("clos_opt_transactie_fee")
+                    + pl.col("clos_sp_transactie_fee")
+                    + pl.col("open_opt_transactie_fee")
+                    + pl.col("open_sp_transactie_fee")
+                ).alias("totaal_fee")
+            ])
+        else:
+            df_sum = df
+
+        df_sum = df_sum.select([
+            "asset_rollup",
+            "koers",
+            "eq_aantal_bezit",
+            "open_sp_aantal",
+            "eq_total_result",
+            "clos_opt_transactie_euro_totaal",
+            "clos_sp_transactie_euro_totaal",
+            "open_opt_total_result",
+            "open_sp_result",
+            "totaal_resultaat",  # <-- zet deze waar je wilt
+            "eq_total_fee",
+            "clos_opt_transactie_fee",
+            "clos_sp_transactie_fee",
+            "open_opt_transactie_fee",
+            "open_sp_transactie_fee",
+            "totaal_fee",  # <-- zet deze waar je wilt
+])
+
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_sum  # of df_sum als je de gesumde versie wilt zien
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+            
+        self.model = PolarsTableModel(df_sum, self)
         self.proxy_model = QSortFilterProxyModel(self)
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setSortRole(Qt.UserRole)

@@ -1,4 +1,5 @@
 import re
+from portefeuille_viewer.signals import signals
 from datetime import date, datetime
 from typing import Optional
 import pandas as pd
@@ -790,7 +791,7 @@ class OrdersTab(QWidget):
                     self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
                 
                 # Refresh afgeleide snapshots na UPDATE
-                self._refresh_derived_snapshots()
+                # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
                     
             except pyodbc.Error as e:
                 QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}"); return
@@ -805,6 +806,9 @@ class OrdersTab(QWidget):
             self.load_initial_records()
             self.reset_form()
             self.ordersCommitted.emit()    # Live-tab verversen
+            self.ordersCommitted.emit()    # Live-tab verversen
+            from portefeuille_viewer.signals import signals
+            signals.ordersCommitted.emit()
             return
 
         # 4) INSERT-pad
@@ -828,7 +832,7 @@ class OrdersTab(QWidget):
                 self._add_transaction_to_snapshot(tweede_order, tweede_id)
             
             # Refresh afgeleide snapshots na INSERT
-            self._refresh_derived_snapshots()
+            # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
 
         except pyodbc.Error as e:
             QMessageBox.critical(self, "Databasefout", f"Kon niet opslaan:\n{e}"); return
@@ -841,6 +845,9 @@ class OrdersTab(QWidget):
         self.load_initial_records()
         self.reset_form()
         self.ordersCommitted.emit()
+        self.ordersCommitted.emit()
+        from portefeuille_viewer.signals import signals
+        signals.ordersCommitted.emit()
 
     def _add_transaction_to_snapshot(self, order_dict: dict, record_id: int):
         """
@@ -938,8 +945,8 @@ class OrdersTab(QWidget):
             traceback.print_exc()
             return
         
-        # Refresh alle afgeleide snapshots ###################################### DATABASE WISSEL #############
-        self._refresh_derived_snapshots()
+    # Refresh alle afgeleide snapshots ###################################### DATABASE WISSEL #############
+    # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
 
         # ververs alle referentielijsten
         self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
@@ -966,6 +973,9 @@ class OrdersTab(QWidget):
         
         self.load_initial_records()
         self.dbChanged.emit()
+        # Zend centraal signaal uit voor app-brede database-wissel
+        if hasattr(self, 'active_db_name'):
+            signals.databaseChanged.emit(self.active_db_name)
         
 
     def apply_filters(self):
@@ -1275,7 +1285,7 @@ class OrdersTab(QWidget):
             self._delete_transactions_from_snapshot_by_ids(ids_to_delete)
             
             # Refresh afgeleide snapshots
-            self._refresh_derived_snapshots()
+            # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
             
             # Success message
             id_list_str = ", ".join(map(str, ids_to_delete))
@@ -1317,102 +1327,7 @@ class OrdersTab(QWidget):
             import traceback
             traceback.print_exc()
 
-    def _refresh_derived_snapshots(self):
-        """
-        Herbereken alle afgeleide snapshots na wijzigingen in repository_snapshot_alle_transacties.
-        Deze functie roept de bestaande load functies aan die repository_snapshot_alle_transacties als bron gebruiken.
-        """
-        from portefeuille_viewer.data.repository import (
-            load_aandelen_from_tx,
-            load_open_opties_from_tx,
-            load_gesloten_opties_from_tx,
-            load_gesloten_opties_no_broker,
-            load_open_sprinters_from_tx,
-            load_gesloten_sprinters_from_tx
-        )
-        
-        print("🔄 Refresh afgeleide snapshots...")
-        
-        try:
-            # Herbereken aandelen snapshot
-            load_aandelen_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-            print("✅ snapshot_aandelen bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken snapshot_aandelen: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        try:
-            # Herbereken open opties snapshot
-            load_open_opties_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-            print("✅ snapshot_load_open_opties_from_tx bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken snapshot_load_open_opties_from_tx: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        try:
-            # Herbereken gesloten opties snapshot
-            load_gesloten_opties_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-            print("✅ snapshot_gesloten_opties bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken snapshot_gesloten_opties: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        try:
-            # Herbereken gesloten opties no broker snapshot (afgeleid van snapshot_gesloten_opties)
-            load_gesloten_opties_no_broker()
-            print("✅ snapshot_gesloten_opties_no_broker bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken snapshot_gesloten_opties_no_broker: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        print("ℹ️ Sprinter snapshots (open/gesloten) nog niet geïmplementeerd - overgeslagen")
-        try:
-            load_open_sprinters_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-            print("✅ repository_snapshot_open_sprinters bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken repository_snapshot_open_sprinters: {e}")
-            import traceback
-            traceback.print_exc()
 
-        try:
-            load_gesloten_sprinters_from_tx(df_tx=SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-            print("✅ repository_snapshot_gesloten_sprinters bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken repository_snapshot_gesloten_sprinters: {e}")
-            import traceback
-            traceback.print_exc()
-            # Update aggregator_snapshot_aandelen_live
-
-        
-        # Update aggregator_snapshot_aandelen_live
-        try:
-            from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
-            LiveAggregatorAandelen().refresh_data()
-            print("✅ aggregator_snapshot_aandelen_live bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_aandelen_live: {e}")
-            import traceback
-            traceback.print_exc()
-        try:
-            from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
-            LiveAggregatorOpties().refresh_data()
-            print("✅ aggregator_snapshot_opties_live bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_opties_live: {e}")
-            import traceback
-            traceback.print_exc()
-        try:
-            from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
-            LiveAggregatorSprinters().refresh_data()
-            print("✅ aggregator_snapshot_sprinters_live bijgewerkt")
-        except Exception as e:
-            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_sprinters_live: {e}")
-            import traceback
-            traceback.print_exc()
 
     # --------------------------------------------------------
     # Data loading - FROM SNAPSHOT (not database!)

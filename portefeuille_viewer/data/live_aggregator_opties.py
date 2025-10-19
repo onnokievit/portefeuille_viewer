@@ -1,5 +1,6 @@
 import polars as pl
 from PySide6.QtCore import QObject, Signal
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
 
@@ -17,7 +18,17 @@ class LiveAggregatorOpties(QObject):
         self.df = None
         self.live_prices = {}  # Dict: {asset_rollup: koers}
         self._initialize_data()
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
+        signals.databaseChanged.connect(self._on_database_changed)
+        signals.ordersCommitted.connect(self.refresh_data)
+
+    def _on_database_changed(self, db_name):
+        # Indien relevant, herlaad data bij database wissel
+        self.refresh_data()
     
+    def _on_snapshot_updated(self, snapshot_key):
+        if snapshot_key == "repository_snapshot_load_open_opties":
+            self.refresh_data()
     def _initialize_data(self):
         """Laad initiële data uit SnapshotStore en bereid DataFrame voor."""
         try:
@@ -175,4 +186,4 @@ class LiveAggregatorOpties(QObject):
         self._initialize_data()
         if self.df is not None and not self.df.is_empty():
             self._save_to_snapshot_store()
-            self.aandelenUpdated.emit()
+            self.optiesUpdated.emit()

@@ -9,11 +9,15 @@ class Signals(QObject):
     from worker threads.
     """
 
+
     # Emitted when the active database changes. Payload: database name (str)
     databaseChanged = Signal(str)
 
     # Emitted when a snapshot key is updated. Payload: snapshot key (str)
     snapshotUpdated = Signal(str)
+
+    # Emitted when orders are committed (insert/update/delete). No payload
+    ordersCommitted = Signal()
 
     # Optional debug signal
     debugSignal = Signal(str)
