@@ -867,3 +867,14 @@ try:
     # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
 except Exception as e:
     print(f"Waarschuwing: kon signaal niet koppelen: {e}")
+
+def load_last_prices_dict():
+    from portefeuille_viewer.data.repository import get_connection
+    last_prices = {}
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT ib_symbol, price FROM asset_last_prices")
+        for row in cursor.fetchall():
+            symbol, price = row
+            last_prices[symbol] = price
+    return last_prices
