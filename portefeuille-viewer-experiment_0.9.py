@@ -32,16 +32,13 @@ def load_datasets():
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()
     repository.load_gesloten_opties_from_tx()
-    # engine.print_snapshot_columns("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: kolommen controleren
-    # engine.print_snapshot_head("snapshot_gesloten_opties", SNAPSHOT_STORE.snapshot_gesloten_opties) # Debug: eerste rijen controleren
     repository.load_gesloten_opties_no_broker()
     repository.load_open_sprinters_from_tx()
     repository.load_gesloten_sprinters_from_tx()
-    # engine.print_snapshot_columns("repository_snapshot_open_sprinters", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: kolommen controleren
-    # engine.print_snapshot_head("snapshot_gesloten_opties_no_broker", SNAPSHOT_STORE.repository_snapshot_open_sprinters) # Debug: eerste rijen controleren
-
+    
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
+    repository.load_dividend_data()
     # engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
     # engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
 

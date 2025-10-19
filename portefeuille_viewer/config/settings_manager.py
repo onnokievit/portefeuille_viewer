@@ -10,7 +10,7 @@ from typing import Dict, Optional
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
 
 # Pad naar user config (in home directory)
-USER_CONFIG_DIR = Path.home() / ".portefeuille_viewer"
+USER_CONFIG_DIR = Path(__file__).parent / ".portefeuille_viewer"
 USER_CONFIG_PATH = USER_CONFIG_DIR / "settings.ini"
 
 

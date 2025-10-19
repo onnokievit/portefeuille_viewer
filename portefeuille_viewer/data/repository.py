@@ -72,15 +72,16 @@ def load_asset_rollup_data() -> pl.DataFrame:
     """
     Laadt de asset_rollup_data-tabel uit de database.
     """
-    sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
+    sql = "SELECT * FROM asset_rollup_data"
+    # sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.safe_write("snapshot_asset_rollup_data", df)
-    # return compact_float64(df)
+    return compact_float64(df)
 
 # ------------------------------------------------------------
 # sprinter_refenctie_data referentie tabel ophalen
-# ------------------------------------------------------------
+# # ------------------------------------------------------------
 def load_sprinter_referentie_data() -> pl.DataFrame:
     """
     Laadt de sprinter referentie tabel  uit de database.
@@ -91,6 +92,28 @@ def load_sprinter_referentie_data() -> pl.DataFrame:
     SNAPSHOT_STORE.safe_write("repository_snapshot_sprinter_referentie_data", df)
     # return compact_float64(df)
 
+# ------------------------------------------------------------
+# dividend_data tabel ophalen
+# ------------------------------------------------------------
+def load_dividend_data() -> pl.DataFrame:
+    """
+    Laadt de dividend tabel  uit de database.
+    """
+    sql = "SELECT * FROM fees_dividend"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+
+    # return compact_float64(df)
+
+    df = (
+        df.filter(pl.col("fee_type").is_in(["dividend", "div_belasting"]))
+        .rename({"asset": "asset_rollup"})
+        .group_by(["broker", "asset_rollup"])
+        .agg([
+            pl.sum("amount").alias("div_en_bel"),
+        ])
+    )
+    SNAPSHOT_STORE.safe_write("repository_portfolio_dividend", df)
 
 
 # ------------------------------------------------------------
@@ -859,6 +882,7 @@ def refresh_all_snapshots():
     load_gesloten_opties_no_broker()
     load_open_sprinters_from_tx()
     load_gesloten_sprinters_from_tx()
+    load_dividend_data()
 
 try:
     from portefeuille_viewer.signals import signals

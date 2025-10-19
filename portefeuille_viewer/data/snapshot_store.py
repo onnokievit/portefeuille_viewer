@@ -23,6 +23,8 @@ class SnapshotStore:
         self.repository_snapshot_gesloten_sprinters_no_asset_detail: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
+        self.repository_portfolio_dividend: pl.DataFrame | None = None
+        
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         
@@ -49,6 +51,7 @@ class SnapshotStore:
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
         self.repository_snapshot_sprinter_referentie_data = None
+        self.repository_portfolio_dividend = None
         self.active_database_name = None
 
     def is_loaded(self) -> bool:
@@ -68,6 +71,7 @@ class SnapshotStore:
             self.snapshot_asset_rollup_data is not None,
             
             self.repository_snapshot_sprinter_referentie_data is not None,
+            self.repository_portfolio_dividend is not None,
         ])
 
     def snapshot_store_summary(self) -> str:
@@ -99,6 +103,8 @@ class SnapshotStore:
             parts.append(f"Repository Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
         if self.repository_snapshot_sprinter_referentie_data is not None:
             parts.append(f"Repository Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
+        if self.repository_portfolio_dividend is not None:
+            parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
 
