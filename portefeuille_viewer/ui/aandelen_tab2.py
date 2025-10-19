@@ -92,7 +92,7 @@ class AandelenTab2(QWidget):
     def reload_data(self):
         """Laad en toon de geaggregeerde dataset."""
         from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-
+        ########### import data ##################################
         df = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
         # Filter op broker
         if self.selected_brokers is not None and "broker" in df.columns:
@@ -163,9 +163,30 @@ class AandelenTab2(QWidget):
         else:
             df_open_sp_sum = df_open_sprinters
 
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_open_sp_sum  # of df_sum als je de gesumde versie wilt zien
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
 
 
+        df_dividend = SNAPSHOT_STORE.repository_portfolio_dividend
+        if self.selected_brokers is not None and "broker" in df.columns:
+            df_dividend = df_dividend.filter(pl.col("broker").is_in(list(self.selected_brokers)))
+                # Sum na filtering (groepeer op asset_rollup)
+        if not df_dividend.is_empty():
+            df_div_bel = df_dividend.group_by("asset_rollup").agg([
+                pl.col("div_en_bel").sum().alias("div_en_bel"),
+             ])
+        else:
+            df_div_bel = df_dividend
+
+
+
+        ########### einde import data ##################################
+
+
+        ########### Joins ##################################
         df_aand_opt = df_aandelen_sum.join(df_clos_opt_sum, on=["asset_rollup"], how="full", suffix="_opt_gesloten")
         if "asset_rollup_opt_gesloten" in df_aand_opt.columns:
             df_aand_opt = df_aand_opt.with_columns([
@@ -185,18 +206,55 @@ class AandelenTab2(QWidget):
         ])
             
 
-        df_open_sp_sum = df_aand_opt_sp_open_opt.join(df_open_sp_sum, on=["asset_rollup"], how="full", suffix="_sp_open")
+        df_open_sp_sum_join = df_aand_opt_sp_open_opt.join(df_open_sp_sum, on=["asset_rollup"], how="full", suffix="_sp_open")
         if "asset_rollup_opt_o_open" in df_aand_opt_sp_open_opt.columns:
-            df_open_sp_sum = df_open_sp_sum.with_columns([
+            df_open_sp_sum_join = df_open_sp_sum_join.with_columns([
                 pl.coalesce([pl.col("asset_rollup"), pl.col("asset_rollup_sp_open")]).alias("asset_rollup")
         ])
 
 
 
+        df_final = df_open_sp_sum_join.join(df_div_bel, on=["asset_rollup"], how="full", suffix="_div_bel")
+        if "asset_rollup_div_bel" in df_open_sp_sum_join.columns:
+            df_final = df_final.with_columns([
+                pl.coalesce([pl.col("asset_rollup"), pl.col("asset_rollup_div_bel")]).alias("asset_rollup")
+        ])
+
+        required_columns = {
+            "open_sp_aantal": 0,
+            "open_sp_result": 0,
+            "open_sp_transactie_fee": 0,
+            "clos_sp_transactie_euro_totaal": 0,
+            "clos_sp_transactie_fee": 0,
+            "eq_aantal_bezit": 0,
+            "eq_total_result": 0,
+            "clos_opt_transactie_euro_totaal": 0,
+            "clos_opt_transactie_fee": 0,
+            "open_opt_total_result": 0,
+            "open_opt_transactie_fee": 0,
+            "div_en_bel": 0,
+            "totaal_resultaat": 0,
+            "totaal_fee": 0,
+            "koers": 0,
+            "asset_rollup": "",
+}
+        # Zorg dat df_final altijd alle kolommen heeft
+        for col, default in required_columns.items():
+            if col not in df_final.columns:
+                df_final = df_final.with_columns(pl.lit(default).alias(col))
+
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_final  # of df_sum als je de gesumde versie wilt zien
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+        ########### Einde Joins ##################################
+
+        ########### Sum en berekende kolommen ##################################
 
         # Sum na filtering (groepeer op asset_rollup)
-        if not df_open_sp_sum.is_empty():
-            df_sum = df_open_sp_sum.group_by("asset_rollup", "koers").agg([
+        if not df_final.is_empty():
+            df_sum = df_final.group_by("asset_rollup", "koers").agg([
                 pl.col("eq_aantal_bezit").sum().alias("eq_aantal_bezit"),
                 pl.col("open_sp_aantal").sum().alias("open_sp_aantal"),
                 pl.col("eq_total_result").sum().alias("eq_total_result"),
@@ -209,6 +267,7 @@ class AandelenTab2(QWidget):
                 pl.col("clos_sp_transactie_fee").sum().alias("clos_sp_transactie_fee"),
                 pl.col("open_opt_transactie_fee").sum().alias("open_opt_transactie_fee"),
                 pl.col("open_sp_transactie_fee").sum().alias("open_sp_transactie_fee"),
+                pl.col("div_en_bel").sum().alias("div_en_bel"),
             ]).with_columns([
                 (
                     pl.col("eq_total_result")
@@ -216,6 +275,7 @@ class AandelenTab2(QWidget):
                     + pl.col("clos_sp_transactie_euro_totaal")
                     + pl.col("open_opt_total_result")
                     + pl.col("open_sp_result")
+                    + pl.col("div_en_bel")
                 ).alias("totaal_resultaat"),
                 (
                     pl.col("eq_total_fee")
@@ -228,6 +288,12 @@ class AandelenTab2(QWidget):
         else:
             df_sum = df
 
+
+        ########### einde Sum en berekende kolommen ##################################
+
+
+        ########### Kolom indeling ##################################
+
         df_sum = df_sum.select([
             "asset_rollup",
             "koers",
@@ -238,6 +304,7 @@ class AandelenTab2(QWidget):
             "clos_sp_transactie_euro_totaal",
             "open_opt_total_result",
             "open_sp_result",
+            "div_en_bel",
             "totaal_resultaat",  # <-- zet deze waar je wilt
             "eq_total_fee",
             "clos_opt_transactie_fee",
@@ -247,10 +314,6 @@ class AandelenTab2(QWidget):
             "totaal_fee",  # <-- zet deze waar je wilt
 ])
 
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_sum  # of df_sum als je de gesumde versie wilt zien
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
             
         self.model = PolarsTableModel(df_sum, self)
