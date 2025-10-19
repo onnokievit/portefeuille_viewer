@@ -20,8 +20,11 @@ class SnapshotStore:
         self.repository_snapshot_gesloten_opties: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_sprinters: pl.DataFrame | None = None
+        self.repository_snapshot_gesloten_sprinters_no_asset_detail: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
+        self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
+        self.test_repository_load_output_test_dataframes: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         
         # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
@@ -42,6 +45,7 @@ class SnapshotStore:
         self.repository_snapshot_gesloten_opties = None
         self.repository_snapshot_gesloten_opties_no_broker = None
         self.repository_snapshot_gesloten_sprinters = None
+        self.repository_snapshot_gesloten_sprinters_no_asset_detail = None
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
         self.repository_snapshot_sprinter_referentie_data = None
@@ -60,6 +64,7 @@ class SnapshotStore:
             self.repository_snapshot_gesloten_opties is not None,
             self.repository_snapshot_gesloten_opties_no_broker is not None,
             self.repository_snapshot_gesloten_sprinters is not None,
+            self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None,
             self.snapshot_asset_rollup_data is not None,
             
             self.repository_snapshot_sprinter_referentie_data is not None,
@@ -88,6 +93,8 @@ class SnapshotStore:
             parts.append(f"Repository Gesloten Opties (zonder broker): {len(self.repository_snapshot_gesloten_opties_no_broker)} rijen")
         if self.repository_snapshot_gesloten_sprinters is not None:
             parts.append(f"Repository Gesloten Sprinters: {len(self.repository_snapshot_gesloten_sprinters)} rijen")
+        if self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None:
+            parts.append(f"Repository Gesloten Sprinters (zonder asset_detail): {len(self.repository_snapshot_gesloten_sprinters_no_asset_detail)} rijen")
         if self.snapshot_asset_rollup_data is not None:
             parts.append(f"Repository Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
         if self.repository_snapshot_sprinter_referentie_data is not None:

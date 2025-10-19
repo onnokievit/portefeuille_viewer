@@ -966,6 +966,7 @@ class OrdersTab(QWidget):
         
         self.load_initial_records()
         self.dbChanged.emit()
+        
 
     def apply_filters(self):
         q = self.filter_q.text().strip() if hasattr(self, "filter_q") else ""
@@ -1382,6 +1383,34 @@ class OrdersTab(QWidget):
             print("✅ repository_snapshot_gesloten_sprinters bijgewerkt")
         except Exception as e:
             print(f"⚠️ Fout bij bijwerken repository_snapshot_gesloten_sprinters: {e}")
+            import traceback
+            traceback.print_exc()
+            # Update aggregator_snapshot_aandelen_live
+
+        
+        # Update aggregator_snapshot_aandelen_live
+        try:
+            from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
+            LiveAggregatorAandelen().refresh_data()
+            print("✅ aggregator_snapshot_aandelen_live bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_aandelen_live: {e}")
+            import traceback
+            traceback.print_exc()
+        try:
+            from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
+            LiveAggregatorOpties().refresh_data()
+            print("✅ aggregator_snapshot_opties_live bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_opties_live: {e}")
+            import traceback
+            traceback.print_exc()
+        try:
+            from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
+            LiveAggregatorSprinters().refresh_data()
+            print("✅ aggregator_snapshot_sprinters_live bijgewerkt")
+        except Exception as e:
+            print(f"⚠️ Fout bij bijwerken aggregator_snapshot_sprinters_live: {e}")
             import traceback
             traceback.print_exc()
 

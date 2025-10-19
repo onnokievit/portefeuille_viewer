@@ -38,7 +38,8 @@ class RepositoryAggregatorTesterTab(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setStretchLastSection(True)
         layout.addWidget(self.table)
-
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        
         # Populate selector with snapshot-like attributes
         self._populate_selector()
         self.selector.currentIndexChanged.connect(self._on_selection_changed)

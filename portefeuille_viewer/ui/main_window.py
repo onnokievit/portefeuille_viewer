@@ -144,6 +144,26 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         
+        # After creating the tabs, add these connections:
+        try:
+            if hasattr(self.sprinters_tab, 'reload_data'):
+                self.orders_tab.ordersCommitted.connect(self.sprinters_tab.reload_data)
+        except Exception:
+            pass
+        try:
+            if hasattr(self.open_opties_tab, 'reload_data'):
+                self.orders_tab.ordersCommitted.connect(self.open_opties_tab.reload_data)
+        except Exception:
+            pass
+        try:
+            for i in range(self.tabs.count()):
+                w = self.tabs.widget(i)
+                if w is not None and w.__class__.__name__ == 'AandelenTab2' and hasattr(w, 'reload_data'):
+                    self.orders_tab.ordersCommitted.connect(w.reload_data)
+        except Exception:
+            pass
+
+
         # Connect settings changes (database config wijzigingen)
         self.settings_tab.configChanged.connect(self._on_database_config_changed)
 
