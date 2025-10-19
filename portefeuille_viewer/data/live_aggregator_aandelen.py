@@ -2,6 +2,7 @@ from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.signals import signals
 import polars as pl
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.data.repository import load_last_prices_dict
 
 class LiveAggregatorAandelen(QObject):
     """
@@ -18,6 +19,7 @@ class LiveAggregatorAandelen(QObject):
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.databaseChanged.connect(self._on_database_changed)
         signals.ordersCommitted.connect(self.refresh_data)
+        self.last_prices = load_last_prices_dict()
     
     def _on_database_changed(self, db_name):
         # Indien relevant, herlaad data bij database wissel
