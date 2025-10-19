@@ -258,8 +258,8 @@ def load_gesloten_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFr
         per_uniek_filtered
         .group_by(["broker", "asset_rollup"])
         .agg([
-            pl.sum("SomVantransactie_fee").alias("SomVanSomVantransactie_fee"),
-            pl.sum("SomVantransactie_euro_totaal").alias("SomVanSomVantransactie_euro_totaal"),
+            pl.sum("SomVantransactie_fee").alias("clos_opt_transactie_fee"),
+            pl.sum("SomVantransactie_euro_totaal").alias("clos_opt_transactie_euro_totaal"),
             pl.sum("SomVantransactie_aantal").alias("SomVanSomVantransactie_aantal")
         ])
         .sort(["broker", "asset_rollup"])
@@ -284,8 +284,8 @@ def load_gesloten_opties_no_broker() -> pl.DataFrame:
         SNAPSHOT_STORE.repository_snapshot_gesloten_opties
         .group_by("asset_rollup")
         .agg([
-            pl.sum("SomVanSomVantransactie_fee").alias("clos_opt_transactie_fee"),
-            pl.sum("SomVanSomVantransactie_euro_totaal").alias("clos_opt_transactie_euro_totaal"),
+            pl.sum("clos_opt_transactie_fee").alias("clos_opt_transactie_fee"),
+            pl.sum("clos_opt_transactie_euro_totaal").alias("clos_opt_transactie_euro_totaal"),
         ])
         .sort("asset_rollup")
     )
@@ -394,8 +394,8 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
             "asset_type",
         ])
         .agg([
-            pl.sum("transactie_fee").alias("SomVantransactie_fee"),
-            pl.sum("transactie_euro_totaal").alias("SomVantransactie_euro_totaal"),
+            pl.sum("transactie_fee").alias("clos_sp_transactie_fee"),
+            pl.sum("transactie_euro_totaal").alias("clos_opt_transactie_euro_totaal"),
             pl.sum("transactie_aantal").alias("SomVantransactie_aantal")
         ])
     )
@@ -413,13 +413,25 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
         per_uniek_filtered
         .group_by(["broker", "asset_rollup", "asset_detail"])
         .agg([
-            pl.sum("SomVantransactie_fee").alias("SomVanSomVantransactie_fee"),
-            pl.sum("SomVantransactie_euro_totaal").alias("SomVanSomVantransactie_euro_totaal"),
-            pl.sum("SomVantransactie_aantal").alias("SomVanSomVantransactie_aantal")
+            pl.sum("clos_sp_transactie_fee").alias("clos_sp_transactie_fee"),
+            pl.sum("clos_opt_transactie_euro_totaal").alias("clos_sp_transactie_euro_totaal"),
+            
         ])
         .sort(["broker", "asset_rollup"])
     )
     SNAPSHOT_STORE.safe_write("repository_snapshot_gesloten_sprinters", df_final)
+
+    df_no_asset_detail = (
+        df_final
+        .group_by(["broker", "asset_rollup"])
+        .agg([
+            pl.sum("clos_sp_transactie_fee").alias("clos_sp_transactie_fee"),
+            pl.sum("clos_sp_transactie_euro_totaal").alias("clos_sp_transactie_euro_totaal"),
+        ])
+        .sort(["broker", "asset_rollup"])
+    )
+    SNAPSHOT_STORE.safe_write("repository_snapshot_gesloten_sprinters_no_asset_detail", df_no_asset_detail)
+
     # return df_final
 
 

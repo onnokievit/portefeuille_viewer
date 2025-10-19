@@ -51,21 +51,63 @@ class LiveAggregatorSprinters(QObject):
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])
+
         return df
 
     def _load_and_calculate(self):
         df = self._load_and_prepare_data()
+
         # Voeg placeholder winst kolom toe
         df = df.with_columns([
             pl.lit(0.0).alias("winst")  # Placeholder, later vervangen door echte berekening
         ])
         # Selecteer relevante kolommen
+        df = self._calculate_sprinter_resultaat(df)
+
         select_cols = [
             "broker", "asset_rollup", "asset_detail", "Koers", # "optie_exp_date", "optie_strike", "optie_call_put",
-            "sprinter_funding", "sprinter_ratio", "SomVantransactie_aantal", "SomVantransactie_euro_totaal", "winst"
+            "sprinter_funding", "sprinter_ratio", "SomVantransactie_fee","SomVantransactie_aantal", "SomVantransactie_euro_totaal", "sp_result"
         ]
         df = df.select([col for col in select_cols if col in df.columns])
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframes = df  # of df_sum als je de gesumde versie wilt zien
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
         return df
+
+    def _calculate_sprinter_resultaat(self, df):
+        # Placeholder voor echte winstberekening
+        """
+        berekening winst op een sprinter:
+        - als koers > sprrinter_funding: sp_bruto_result = (Koers - sprinter_funding) *  SomVantransactie_aantal
+        
+        - als koers < sprinter_funding: sp_sp_bruto_result = 0
+        - sp_net_result = (sp_bruto_result + SomVantransactie_euro_totaal)/ sprinter_ratio
+        """
+
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+        df = df.with_columns([
+            (pl.col("Koers").cast(pl.Float32) - pl.col("sprinter_funding").cast(pl.Float32)).alias("sp_diff")])
+        df = df.with_columns([
+            pl.when(pl.col("sp_diff") > 0)
+            .then((pl.col("sp_diff")/pl.col("sprinter_ratio")) * pl.col("SomVantransactie_aantal"))
+            .otherwise(0.0)
+            .alias("sp_bruto_result")
+        ])
+        
+        df = df.with_columns([
+            ((pl.col("sp_bruto_result") + pl.col("SomVantransactie_euro_totaal")) ).alias("sp_result")
+        ])
+
+
+        return df
+
+
 
     def update_live_price(self, symbol, price):
         if price is not None and price > 0:
@@ -99,3 +141,9 @@ class LiveAggregatorSprinters(QObject):
             SNAPSHOT_STORE.safe_write("aggregator_snapshot_open_sprinters_live", pl.DataFrame())
             if self.verbose:
                 print("LiveAggregatorSprinters: Geen data om op te slaan (None, lege DataFrame opgeslagen)")
+
+    def on_scroll(self, _value):
+        sb = self.table.verticalScrollBar()
+        # marge van ~50 pixels voor ‘bijna onderaan’
+        if sb.value() >= sb.maximum() - 50:
+            self.load_more_records()

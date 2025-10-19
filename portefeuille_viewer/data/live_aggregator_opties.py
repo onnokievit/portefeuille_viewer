@@ -70,7 +70,7 @@ class LiveAggregatorOpties(QObject):
         
         # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
         df = df.with_columns([
-            (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("W/V")
+            (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("opt_total_result")
         ])
         
         # Selecteer en herorden kolommen volgens screenshot
@@ -85,7 +85,7 @@ class LiveAggregatorOpties(QObject):
             "SomVantransactie_euro_totaal",
             
             "ITM_OTM",
-            "W/V",
+            "opt_total_result",
             "SomVantransactie_fee"
         ])
         
@@ -169,3 +169,10 @@ class LiveAggregatorOpties(QObject):
         else:
             # Schrijf een lege frame zodat subscribers niet wachten op een niet-bestaande key
             SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", pl.DataFrame())
+    
+    def refresh_data(self):
+        """Herlaad data uit SnapshotStore (voor manual refresh)."""
+        self._initialize_data()
+        if self.df is not None and not self.df.is_empty():
+            self._save_to_snapshot_store()
+            self.aandelenUpdated.emit()
