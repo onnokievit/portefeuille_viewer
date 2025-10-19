@@ -226,6 +226,33 @@ class PriceFeedService(QObject):
         self._feed = PriceFeedIB(host, port, client_id)
         self._feed.priceUpdated.connect(self._on_price)
 
+        # Timer voor periodiek opslaan
+        from PySide6.QtCore import QTimer
+        import datetime
+        from portefeuille_viewer.data.repository import get_connection
+        self._save_timer = QTimer(self)
+        self._save_timer.timeout.connect(self.save_last_prices_to_db)
+        self._save_timer.start(60_000)  # elke 60 sec
+
+    def save_last_prices_to_db(self):
+        from portefeuille_viewer.data.repository import get_connection
+        import datetime
+        prices = self.store.snapshot()
+        now = datetime.datetime.now()
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            for (sym, cur), price in prices.items():
+                cursor.execute(
+                    "UPDATE asset_last_prices SET price=?, last_update=? WHERE ib_symbol=? AND ib_currency=?",
+                    (price, now, sym, cur)
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        "INSERT INTO asset_last_prices (ib_symbol, ib_currency, price, last_update) VALUES (?, ?, ?, ?)",
+                        (sym, cur, price, now)
+                    )
+            conn.commit()
+
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float):
         self.store.set(sym, cur, px)
