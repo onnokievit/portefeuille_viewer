@@ -877,4 +877,5 @@ def load_last_prices_dict():
         for row in cursor.fetchall():
             symbol, price = row
             last_prices[symbol] = price
+    print(f"[DEBUG] Loaded last_prices: {len(last_prices)} items, sample: {list(last_prices.items())[:5]}")
     return last_prices
