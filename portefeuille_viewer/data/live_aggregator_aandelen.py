@@ -14,12 +14,14 @@ class LiveAggregatorAandelen(QObject):
     def __init__(self):
         super().__init__()
         self.df = None
+        self.last_prices = load_last_prices_dict()
         self.live_prices = {}  # Dict om live prijzen bij te houden: {ib_symbol: price}
+        
         self._initialize_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.databaseChanged.connect(self._on_database_changed)
         signals.ordersCommitted.connect(self.refresh_data)
-        self.last_prices = load_last_prices_dict()
+        
     
     def _on_database_changed(self, db_name):
         # Indien relevant, herlaad data bij database wissel
@@ -59,10 +61,16 @@ class LiveAggregatorAandelen(QObject):
         aandelen = SNAPSHOT_STORE.repository_snapshot_aandelen
         df = asset_map.join(aandelen, on="asset_rollup", how="left")
         
+        # print("[DEBUG is live prices in live aggregator?] live_prices sample:", list(self.live_prices.items())[:5])
+        # print("[DEBUG is last prices in live aggregator?] last_prices sample:", list(self.last_prices.items())[:5])
+
         # Voeg Koers kolom toe met live prijzen of 0.0 als fallback
         df = df.with_columns([
             pl.col("ib_symbol").map_elements(
-                lambda symbol: self.live_prices.get(symbol, 0.0) if symbol else 0.0,
+                lambda symbol: (
+                    self.live_prices.get(symbol) if symbol and self.live_prices and self.live_prices.get(symbol) not in (None, 0.0)
+                    else self.last_prices.get(symbol, 0.0) if symbol and self.last_prices else 0.0
+                ),
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])

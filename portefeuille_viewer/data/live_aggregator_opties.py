@@ -2,6 +2,7 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.data.repository import load_last_prices_dict
 
 
 class LiveAggregatorOpties(QObject):
@@ -16,6 +17,7 @@ class LiveAggregatorOpties(QObject):
     def __init__(self):
         super().__init__()
         self.df = None
+        self.last_prices = load_last_prices_dict()
         self.live_prices = {}  # Dict: {asset_rollup: koers}
         self._initialize_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
@@ -62,7 +64,10 @@ class LiveAggregatorOpties(QObject):
         # Voeg Koers kolom toe met live prijzen van onderliggende asset (via ib_symbol)
         df = df.with_columns([
             pl.col("ib_symbol").map_elements(
-                lambda symbol: self.live_prices.get(symbol, 0.0) if symbol else 0.0,
+                lambda symbol: (
+                    self.live_prices.get(symbol) if symbol and self.live_prices and self.live_prices.get(symbol) not in (None, 0.0)
+                    else self.last_prices.get(symbol, 0.0) if symbol and self.last_prices else 0.0
+                ),
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])

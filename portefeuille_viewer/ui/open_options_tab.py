@@ -64,6 +64,21 @@ class OpenOptiesPolarsTab(QWidget):
         # Haal data uit de live snapshot (gevuld door LiveAggregatorOpties)
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         
+        df = df.select([
+            "broker",
+            "asset_rollup",
+            "Koers",  # Live koers kolom toegevoegd door LiveAggregatorOpties
+            pl.col("optie_call_put").alias("optie_call_put"),
+            pl.col("optie_strike").alias("optie_strike"),
+            pl.col("optie_exp_date").alias("optie_exp_date"),
+            pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
+            pl.col("SomVantransactie_euro_totaal").alias("premie"),
+            pl.col("ITM_OTM").alias("itm_otm"),
+            pl.col("opt_total_result").alias("totaal_resultaat_optie"),
+            pl.col("SomVantransactie_fee").alias("totaal_fees"),
+        ])
+
+
         if df is None or df.is_empty():
             df = pl.DataFrame()
             self.label.setText("Geen opties data beschikbaar (wacht op live prices)")
