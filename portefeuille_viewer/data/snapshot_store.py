@@ -24,7 +24,7 @@ class SnapshotStore:
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
-        self.test_repository_load_output_test_dataframes: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
+        self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         
         # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None

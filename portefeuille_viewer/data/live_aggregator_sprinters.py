@@ -1,5 +1,6 @@
 import polars as pl
 from PySide6.QtCore import QObject, Signal
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
 class LiveAggregatorSprinters(QObject):
@@ -16,7 +17,17 @@ class LiveAggregatorSprinters(QObject):
         self.live_prices = {}  # Dict: {ib_symbol: koers}
         self.verbose = verbose
         self._initialize_data()
-
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
+        signals.databaseChanged.connect(self._on_database_changed)
+        signals.ordersCommitted.connect(self.refresh_data)
+    
+    def _on_database_changed(self, db_name):
+        # Indien relevant, herlaad data bij database wissel
+        self.refresh_data()
+    
+    def _on_snapshot_updated(self, snapshot_key):
+        if snapshot_key == "repository_snapshot_open_sprinters":
+            self.refresh_data()
     def _initialize_data(self):
         try:
             self.df = self._load_and_calculate()
@@ -69,10 +80,10 @@ class LiveAggregatorSprinters(QObject):
             "sprinter_funding", "sprinter_ratio", "SomVantransactie_fee","SomVantransactie_aantal", "SomVantransactie_euro_totaal", "sp_result"
         ]
         df = df.select([col for col in select_cols if col in df.columns])
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframes = df  # of df_sum als je de gesumde versie wilt zien
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        # SNAPSHOT_STORE.test_repository_load_output_test_dataframes = df  # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         return df
 
@@ -86,10 +97,6 @@ class LiveAggregatorSprinters(QObject):
         - sp_net_result = (sp_bruto_result + SomVantransactie_euro_totaal)/ sprinter_ratio
         """
 
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         df = df.with_columns([
             (pl.col("Koers").cast(pl.Float32) - pl.col("sprinter_funding").cast(pl.Float32)).alias("sp_diff")])
@@ -104,6 +111,10 @@ class LiveAggregatorSprinters(QObject):
             ((pl.col("sp_bruto_result") + pl.col("SomVantransactie_euro_totaal")) ).alias("sp_result")
         ])
 
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         return df
 
@@ -147,3 +158,10 @@ class LiveAggregatorSprinters(QObject):
         # marge van ~50 pixels voor ‘bijna onderaan’
         if sb.value() >= sb.maximum() - 50:
             self.load_more_records()
+
+    def refresh_data(self):
+        """Herlaad data uit SnapshotStore (voor manual refresh)."""
+        self._initialize_data()
+        if self.df is not None and not self.df.is_empty():
+            self._save_to_snapshot_store()
+            self.sprintersUpdated.emit()
