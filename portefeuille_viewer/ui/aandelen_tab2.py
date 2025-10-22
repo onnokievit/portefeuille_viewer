@@ -99,7 +99,7 @@ class AandelenTab2(QWidget):
             df = df.filter(pl.col("broker").is_in(list(self.selected_brokers)))
         # Sum na filtering (groepeer op asset_rollup)
         if not df.is_empty():
-            df_aandelen_sum = df.group_by("asset_rollup","koers").agg([
+            df_aandelen_sum = df.group_by("asset_rollup","koers","regio", "sector","value_grow").agg([
                 pl.col("aantal_bezit").sum().alias("eq_aantal_bezit"),
                 pl.col("aantal_koop").sum().alias("eq_aantal_koop"),
                 pl.col("euro_koop").sum().alias("eq_euro_koop"),
@@ -110,6 +110,12 @@ class AandelenTab2(QWidget):
             ])
         else:
             df_aandelen_sum = df
+
+                ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_aandelen_sum  # of df_sum als je de gesumde versie wilt zien
+        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
 
         df_gesloten_opties = SNAPSHOT_STORE.repository_snapshot_gesloten_opties
         if self.selected_brokers is not None and "broker" in df.columns:
@@ -243,10 +249,6 @@ class AandelenTab2(QWidget):
             if col not in df_final.columns:
                 df_final = df_final.with_columns(pl.lit(default).alias(col))
 
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_final  # of df_sum als je de gesumde versie wilt zien
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         ########### Einde Joins ##################################
 
@@ -254,7 +256,7 @@ class AandelenTab2(QWidget):
 
         # Sum na filtering (groepeer op asset_rollup)
         if not df_final.is_empty():
-            df_sum = df_final.group_by("asset_rollup", "koers").agg([
+            df_sum = df_final.group_by("asset_rollup", "koers","regio", "sector","value_grow").agg([
                 pl.col("eq_aantal_bezit").sum().alias("eq_aantal_bezit"),
                 pl.col("open_sp_aantal").sum().alias("open_sp_aantal"),
                 pl.col("eq_total_result").sum().alias("eq_total_result"),
@@ -276,7 +278,20 @@ class AandelenTab2(QWidget):
                     + pl.col("open_opt_total_result")
                     + pl.col("open_sp_result")
                     + pl.col("div_en_bel")
-                ).alias("totaal_resultaat"),
+                ).alias("totaal_ex_fee"),
+                (
+                    pl.col("eq_total_result")
+                    + pl.col("clos_opt_transactie_euro_totaal")
+                    + pl.col("clos_sp_transactie_euro_totaal")
+                    + pl.col("open_opt_total_result")
+                    + pl.col("open_sp_result")
+                    + pl.col("div_en_bel")
+                    + pl.col("eq_total_fee")
+                    + pl.col("clos_opt_transactie_fee")
+                    + pl.col("clos_sp_transactie_fee")
+                    + pl.col("open_opt_transactie_fee")
+                    + pl.col("open_sp_transactie_fee")
+                ).alias("totaal_inc_fee"),
                 (
                     pl.col("eq_total_fee")
                     + pl.col("clos_opt_transactie_fee")
@@ -305,13 +320,15 @@ class AandelenTab2(QWidget):
             "open_opt_total_result",
             "open_sp_result",
             "div_en_bel",
-            "totaal_resultaat",  # <-- zet deze waar je wilt
-            "eq_total_fee",
-            "clos_opt_transactie_fee",
-            "clos_sp_transactie_fee",
-            "open_opt_transactie_fee",
-            "open_sp_transactie_fee",
+            "totaal_ex_fee",  # <-- zet deze waar je wilt
+            "totaal_inc_fee",  # <-- zet deze waar je wilt
+            # "eq_total_fee",
+            # "clos_opt_transactie_fee",
+            # "clos_sp_transactie_fee",
+            # "open_opt_transactie_fee",
+            # "open_sp_transactie_fee",
             "totaal_fee",  # <-- zet deze waar je wilt
+            "regio", "sector","value_grow"
 ])
 
 

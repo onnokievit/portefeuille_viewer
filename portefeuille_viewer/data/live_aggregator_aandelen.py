@@ -54,7 +54,7 @@ class LiveAggregatorAandelen(QObject):
         
         # Selecteer relevante velden uit asset_map
         asset_map = asset_map.select([
-            "asset_rollup", "ib_symbol", "ib_currency", "prim_exchange"
+            "asset_rollup", "ib_symbol", "ib_currency", "prim_exchange","regio", "sector", "value_grow"
         ])
         
         # Join met aandelen data
@@ -75,6 +75,7 @@ class LiveAggregatorAandelen(QObject):
             ).alias("Koers")
         ])
         
+
         return df
     
     def update_live_price(self, symbol, price):
@@ -150,6 +151,9 @@ class LiveAggregatorAandelen(QObject):
             (pl.col("eq_bezit") + pl.col("result_realised")).alias("total_result"),
         ])
         
+
+
+
         return df
     
 
@@ -168,12 +172,13 @@ class LiveAggregatorAandelen(QObject):
                 "koers": [],
                 "aantal_bezit": [],
                 "eq_total_fee": [],
-                "total_result": []
+                "total_result": [],
+                "regio": []
             })
         
         # Aggregeer per asset_rollup (data komt al verwerkt van PortfolioEngine)
         aggregated_df = (
-            self.df.group_by("broker","asset_rollup")
+            self.df.group_by("broker","asset_rollup","regio","sector","value_grow")
             .agg([
                 # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
                 pl.col("Koers").max().alias("koers"),
@@ -184,11 +189,11 @@ class LiveAggregatorAandelen(QObject):
                 pl.col("euro_verkoop").sum(),
                 
                 pl.col("eq_total_fee").sum(),
-                pl.col("total_result").sum()
+                pl.col("total_result").sum(),
                 
             ])
         )
-        
+
         return aggregated_df
 
 

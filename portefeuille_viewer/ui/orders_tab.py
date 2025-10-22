@@ -782,33 +782,26 @@ class OrdersTab(QWidget):
                     record_id1=int(self.EDIT_ID), data1=data_update_1,
                     record_id2=(int(self.EDIT_ID2) if self.EDIT_ID2 is not None else None), data2=data_update_2
                 )
-                
                 # Sync met snapshot: update eerste record
                 self._update_transaction_in_snapshot(int(self.EDIT_ID), data_update_1)
-                
                 # Sync met snapshot: update tweede record (indien gekoppeld)
                 if self.EDIT_ID2 is not None and data_update_2 is not None:
                     self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
-                
                 # Refresh afgeleide snapshots na UPDATE
                 # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
-                    
             except pyodbc.Error as e:
                 QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}"); return
-
             msg = f"✅ Record {self.EDIT_ID} bijgewerkt"
             if self.EDIT_ID2 is not None and data_update_2 is not None:
                 msg = f"✅ Records {self.EDIT_ID} en {self.EDIT_ID2} bijgewerkt"
             QMessageBox.information(self, "Succes", msg)
-
             # reset + refresh
             self.EDIT_ID = None; self.EDIT_ID2 = None
             self.load_initial_records()
             self.reset_form()
-            self.ordersCommitted.emit()    # Live-tab verversen
-            self.ordersCommitted.emit()    # Live-tab verversen
-            from portefeuille_viewer.signals import signals
-            signals.ordersCommitted.emit()
+            # self.ordersCommitted.emit()    # Live-tab verversen
+            # from portefeuille_viewer.signals import signals
+            # signals.ordersCommitted.emit()
             return
 
         # 4) INSERT-pad
@@ -818,7 +811,7 @@ class OrdersTab(QWidget):
             eerste_order["order_id"] = new_order_id
             eerste_order["order_id_number"] = get_next_order_item_no(new_order_id)
             eerste_id = insert_transaction(eerste_order)
-
+            print(f"insert_transaction aangeroepen voor order: {eerste_order} → id={eerste_id}")
             # Sync met snapshot: voeg eerste record toe
             self._add_transaction_to_snapshot(eerste_order, eerste_id)
 
@@ -827,7 +820,7 @@ class OrdersTab(QWidget):
                 tweede_order["order_id"] = new_order_id
                 tweede_order["order_id_number"] = get_next_order_item_no(new_order_id)
                 tweede_id = insert_transaction(tweede_order)
-                
+                print(f"insert_transaction aangeroepen voor order: {eerste_order} → id={eerste_id}")
                 # Sync met snapshot: voeg tweede record toe
                 self._add_transaction_to_snapshot(tweede_order, tweede_id)
             
@@ -844,10 +837,10 @@ class OrdersTab(QWidget):
 
         self.load_initial_records()
         self.reset_form()
-        self.ordersCommitted.emit()
-        self.ordersCommitted.emit()
-        from portefeuille_viewer.signals import signals
-        signals.ordersCommitted.emit()
+        #self.ordersCommitted.emit()
+        #self.ordersCommitted.emit()
+        #from portefeuille_viewer.signals import signals
+        #signals.ordersCommitted.emit()
 
     def _add_transaction_to_snapshot(self, order_dict: dict, record_id: int):
         """
@@ -856,6 +849,7 @@ class OrdersTab(QWidget):
         
         We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
         """
+        print(f"_add_transaction_to_snapshot aangeroepen met record_id={record_id}")
         if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan record niet toevoegen")
             return  # Geen snapshot geladen, niets te doen
@@ -874,6 +868,9 @@ class OrdersTab(QWidget):
                 print(f"⚠️ Record {record_id} niet gevonden in database na INSERT")
                 return
             
+            # Verwijder bestaande rijen met hetzelfde Id uit de snapshot
+            mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask)
             # Voeg toe aan de snapshot
             SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([
                 SNAPSHOT_STORE.repository_snapshot_alle_transacties,
@@ -1299,7 +1296,7 @@ class OrdersTab(QWidget):
             self.EDIT_ID2 = None
             self.reset_form()
             self.load_initial_records()
-            self.ordersCommitted.emit()  # Trigger refresh van andere tabs
+            # self.ordersCommitted.emit()  # Trigger refresh van andere tabs
             
         except Exception as e:
             QMessageBox.critical(self, "Fout", f"Kon order niet verwijderen:\n{e}")
