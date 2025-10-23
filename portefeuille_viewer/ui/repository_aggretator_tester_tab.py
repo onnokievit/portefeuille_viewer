@@ -82,8 +82,11 @@ class RepositoryAggregatorTesterTab(QWidget):
                 # Detecteer tuple of string keys
                 first_key = next(iter(df.keys()))
                 if isinstance(first_key, tuple):
-                    # Meerdere kolommen
-                    colnames = [f"key_{i+1}" for i in range(len(first_key))]
+                    # Speciaal voor live_prices: gebruik asset_rollup en currency als kolomnamen
+                    if key == "live_prices" and len(first_key) == 2:
+                        colnames = ["asset_rollup", "currency"]
+                    else:
+                        colnames = [f"key_{i+1}" for i in range(len(first_key))]
                     rows = [dict(zip(colnames, k), value=v) for k, v in df.items()]
                     df = pl.DataFrame(rows)
                 else:
