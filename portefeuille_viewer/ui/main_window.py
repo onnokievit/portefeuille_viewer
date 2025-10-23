@@ -14,6 +14,7 @@ import logging
 import os
 from datetime import datetime
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui.single_asset_analyse_tab import SingleAssetAnalyseTab
  
 
 
@@ -62,10 +63,7 @@ class MainWindow(QMainWindow):
         else:
             self.open_opties_tab = OpenOptiesPolarsTab()
         
-        #self.aandelen_tab = AandelenPolarsTab()
-        
         # self.aandelen_tab = AandelenPolarsTab(self.feed_service)
-        
         self.settings_tab = SettingsTab()
 
         # SprintersTab importeren en toevoegen
@@ -89,7 +87,7 @@ class MainWindow(QMainWindow):
             self.repository_aggretator_tester_tab = QWidget()
         
         
-        
+        self.tabs.addTab(SingleAssetAnalyseTab(), "Single Asset Analyse")
         
 
 

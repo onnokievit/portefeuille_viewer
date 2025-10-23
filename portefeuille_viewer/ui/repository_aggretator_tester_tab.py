@@ -76,6 +76,22 @@ class RepositoryAggregatorTesterTab(QWidget):
         if df is None:
             self.label.setText(f"Snapshot '{key}' is leeg of niet geladen.")
             df = pl.DataFrame({})
+        elif isinstance(df, dict):
+            # Dict (zoals live_prices): omzetten naar DataFrame
+            if df:
+                # Detecteer tuple of string keys
+                first_key = next(iter(df.keys()))
+                if isinstance(first_key, tuple):
+                    # Meerdere kolommen
+                    colnames = [f"key_{i+1}" for i in range(len(first_key))]
+                    rows = [dict(zip(colnames, k), value=v) for k, v in df.items()]
+                    df = pl.DataFrame(rows)
+                else:
+                    # Enkelvoudige key
+                    df = pl.DataFrame([{"key": k, "value": v} for k, v in df.items()])
+            else:
+                df = pl.DataFrame({})
+            self.label.setText(f"Snapshot '{key}': {len(df)} regels (dict omgezet naar DataFrame)")
         else:
             try:
                 nr = len(df)

@@ -16,6 +16,8 @@ import sys, os
 from portefeuille_viewer.domain import engine
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
+from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
+
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
@@ -39,6 +41,9 @@ def load_datasets():
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
+
+    
+
     # engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
     # engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
 
@@ -73,13 +78,18 @@ def main():
     
     # Get settings for IB configuration
     settings = get_settings()
-    
+
     # Initialize centralized services
     price_feed = PriceFeedService(
         settings.get_ib_host(), 
         settings.get_ib_port(), 
         settings.get_ib_client_id()
     )
+
+    # Start de live price updater (centrale live_prices snapshot)
+
+    start_live_price_updater(price_feed)
+
     portfolio_engine = PortfolioEngine(price_feed)
     
     # Create main window with centralized services FIRST
