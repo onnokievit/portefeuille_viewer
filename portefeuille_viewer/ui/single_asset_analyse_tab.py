@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QHeaderView
 from PySide6.QtCore import QTimer
 
 
+
 class SingleAssetAnalyseTab(QWidget):
 
     def __init__(self, parent=None):
@@ -30,7 +31,7 @@ class SingleAssetAnalyseTab(QWidget):
         
         self.payoff_table = QTableWidget()
         self.payoff_table.setColumnCount(21)  # 10 stappen links, 1 center, 10 rechts
-        self.payoff_table.setRowCount(6)  # open opties, gesloten opties, open sprinters, gesloten sprinters, aandelen, totaal
+        self.payoff_table.setRowCount(7)  # open opties, gesloten opties, open sprinters, gesloten sprinters, open aandelen, gesloten aandelen, totaal
         self.payoff_table.setMinimumHeight(400)
         self.payoff_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # Kolombreedte meeschalend met de widget
@@ -124,7 +125,8 @@ class SingleAssetAnalyseTab(QWidget):
             "Gesloten opties",
             "Open sprinters",
             "Gesloten sprinters",
-            "Aandelen",
+            "Open aandelen",
+            "Gesloten aandelen",
             "Totaal"
         ]
         for row, label in enumerate(row_labels):
@@ -144,15 +146,18 @@ class SingleAssetAnalyseTab(QWidget):
         # 4. Gesloten sprinters
         payoff_gesloten_sprinters = [self._payoff_gesloten_sprinters(s) for s in steps]
         payoff_matrix.append(payoff_gesloten_sprinters)
-        # 5. Aandelen
-        payoff_aandelen = [self._payoff_aandelen(s) for s in steps]
-        payoff_matrix.append(payoff_aandelen)
-        # 6. Totaal
+        # 5. Open aandelen
+        payoff_open_aandelen = [self._payoff_open_aandelen(s) for s in steps]
+        payoff_matrix.append(payoff_open_aandelen)
+        # 6. Gesloten aandelen (gerealiseerd resultaat, koers-onafhankelijk)
+        payoff_gesloten_aandelen = [self._payoff_gesloten_aandelen() for _ in steps]
+        payoff_matrix.append(payoff_gesloten_aandelen)
+        # 7. Totaal
         for i in range(21):
-            totaal = sum(payoff_matrix[row][i] for row in range(5))
-            if len(payoff_matrix) < 6:
+            totaal = sum(payoff_matrix[row][i] for row in range(6))
+            if len(payoff_matrix) < 7:
                 payoff_matrix.append([0]*21)
-            payoff_matrix[5][i] = totaal
+            payoff_matrix[6][i] = totaal
 
         # Zet waarden in de tabel
         for row in range(6):
@@ -202,10 +207,15 @@ class SingleAssetAnalyseTab(QWidget):
                 return float(self.df_gesloten_sprinters["clos_sp_transactie_euro_totaal"].sum())
         return 0.0
 
-    def _payoff_aandelen(self, koers):
-        # TODO: implementeer echte payoff-berekening voor aandelen
-        if self.df_aandelen is not None and self.df_aandelen.height > 0:
-            return float(self.df_aandelen.height) * 0.0
+    def _payoff_open_aandelen(self, koers):
+        from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_aandelen_payoff
+        return bereken_open_aandelen_payoff(self.df_aandelen, koers)
+
+    def _payoff_gesloten_aandelen(self):
+        from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_gesloten_aandelen_payoff
+        # Gesloten aandelen: gerealiseerd resultaat
+        if hasattr(self, 'df_gesloten_aandelen'):
+            return bereken_gesloten_aandelen_payoff(self.df_gesloten_aandelen)
         return 0.0
     # (verwijderd: dubbele __init__-definitie en alles erbuiten)
 
@@ -242,10 +252,15 @@ class SingleAssetAnalyseTab(QWidget):
             self.df_gesloten_sprinters = store.repository_snapshot_gesloten_sprinters.filter(pl.col("asset_rollup") == asset_rollup)
         else:
             self.df_gesloten_sprinters = None
-        # Aandelen
+        # Open aandelen
         if store.repository_snapshot_aandelen is not None:
             self.df_aandelen = store.repository_snapshot_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
         else:
             self.df_aandelen = None
+        # Gesloten aandelen
+        if hasattr(store, 'repository_snapshot_gesloten_aandelen') and store.repository_snapshot_gesloten_aandelen is not None:
+            self.df_gesloten_aandelen = store.repository_snapshot_gesloten_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
+        else:
+            self.df_gesloten_aandelen = None
         # Update payoff tabel na selectie
         self.update_payoff_table()
