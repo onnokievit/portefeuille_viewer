@@ -214,6 +214,13 @@ class PriceFeedIB(QObject):
 # PriceFeedService (Qt wrapper rond IB + PriceStore)
 # ------------------------------------------------------------
 class PriceFeedService(QObject):
+    def get_all_prices(self):
+        """
+        Geeft alle actuele prijzen terug als dict met tuple key.
+        Voor aandelen: (sym, cur)
+        Voor opties (in de toekomst): (asset_rollup, cur, exp_date, strike, call_put)
+        """
+        return self.snapshot()
     """
     Qt-vriendelijke wrapper rond PriceFeedIB + PriceStore.
     Deze gebruik je in je UI.

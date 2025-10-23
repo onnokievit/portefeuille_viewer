@@ -1,3 +1,4 @@
+
 import pandas as pd
 import pyodbc
 from datetime import date, datetime, timedelta
@@ -903,3 +904,13 @@ def load_last_prices_dict():
             last_prices[symbol] = price
     # print(f"[DEBUG load last prices werkt] Loaded last_prices: {len(last_prices)} items, sample: {list(last_prices.items())[:5]}")
     return last_prices
+
+def load_live_prices():
+    """
+    Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.
+    Eerst vullen met laatste bekende prijzen uit de database.
+    """
+    from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+    last_prices = load_last_prices_dict()
+    SNAPSHOT_STORE.live_prices = last_prices
+

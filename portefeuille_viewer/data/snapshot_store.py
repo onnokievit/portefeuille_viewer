@@ -24,10 +24,14 @@ class SnapshotStore:
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         self.repository_portfolio_dividend: pl.DataFrame | None = None
-        
+
+        # Centrale store voor live prijzen (aandelen, opties, etc.)
+        # Dict: key = asset_id (bijv. ib_symbol, optie_id, etc.), value = prijs of dict met meer info
+        self.live_prices: dict | None = None
+
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
-        
+
         # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
         # Active database name (set by repository.switch_database)
@@ -53,6 +57,7 @@ class SnapshotStore:
         self.repository_snapshot_sprinter_referentie_data = None
         self.repository_portfolio_dividend = None
         self.active_database_name = None
+        self.live_prices = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -72,6 +77,7 @@ class SnapshotStore:
             
             self.repository_snapshot_sprinter_referentie_data is not None,
             self.repository_portfolio_dividend is not None,
+            self.live_prices is not None,
         ])
 
     def snapshot_store_summary(self) -> str:
@@ -107,6 +113,8 @@ class SnapshotStore:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
+        if self.live_prices is not None:
+            parts.append(f"Live Prices: {len(self.live_prices)} items") 
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
 
