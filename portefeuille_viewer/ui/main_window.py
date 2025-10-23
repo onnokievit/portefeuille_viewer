@@ -65,6 +65,7 @@ class MainWindow(QMainWindow):
         
         # self.aandelen_tab = AandelenPolarsTab(self.feed_service)
         self.settings_tab = SettingsTab()
+        self.option_chain_tab = OptionChainTab(feed_service=self.feed_service)
 
         # SprintersTab importeren en toevoegen
         try:
@@ -86,34 +87,21 @@ class MainWindow(QMainWindow):
             print(f"RepositoryAggregatorTesterTab kon niet worden geladen: {e}")
             self.repository_aggretator_tester_tab = QWidget()
         
-        
-        self.tabs.addTab(SingleAssetAnalyseTab(), "Single Asset Analyse")
-        
-
-
-
         self.tabs.addTab(self.orders_tab, "Orders")
-        # self.tabs.addTab(self.aandelen_tab, "Open Aandelen (Polars)")
-        
-        # Pass the centralized portfolio_engine if available, otherwise let tab create its own
         if self.portfolio_engine:
             self.tabs.addTab(AandelenTab2(portfolio_engine=self.portfolio_engine), "Aandelen (Live)")
         else:
             self.tabs.addTab(AandelenTab2(pricefeed=self.feed_service), "Aandelen")
-            
-
+        self.tabs.addTab(SingleAssetAnalyseTab(), "Single Asset Analyse")
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Live)")
         self.tabs.addTab(self.sprinters_tab, "Sprinters (Live)")
-        # Add test tab (repository aggregator tester)
-        # Tab label set to the exact identifier requested
-        self.tabs.addTab(self.repository_aggretator_tester_tab, "repository_aggregator_tester_tab")
-        #self.tabs.addTab(self.aandelen_tab, "Aandelen (Polars)")
+        
 
         # Option Chain Explorer Tab (NEW - MVP)
-        self.option_chain_tab = OptionChainTab(feed_service=self.feed_service)
+        
         self.tabs.addTab(self.option_chain_tab, "Option Chain Explorer")
-
         self.tabs.addTab(self.settings_tab, "Settings")
+        self.tabs.addTab(self.repository_aggretator_tester_tab, "Repository Aggregator Tester")
 
         self.setCentralWidget(self.tabs)
 

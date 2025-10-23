@@ -9,7 +9,14 @@ def update_live_prices(new_prices: dict):
     """
     if SNAPSHOT_STORE.live_prices is None:
         SNAPSHOT_STORE.live_prices = {}
-    SNAPSHOT_STORE.live_prices.update(new_prices)
+    # Verwacht: new_prices = {(asset_rollup, currency): prijs, ...}
+    # Zet alles om naar (asset_rollup, currency) als key
+    for k, v in new_prices.items():
+        if isinstance(k, tuple) and len(k) == 2:
+            SNAPSHOT_STORE.live_prices[k] = v
+        else:
+            # fallback: als key een string is, zet currency op None
+            SNAPSHOT_STORE.live_prices[(k, None)] = v
     # Eventueel kun je hier extra logica toevoegen, zoals timestamp, logging, etc.
 
 def clear_live_prices():
