@@ -1,5 +1,28 @@
 import polars as pl
 
+def bereken_open_aandelen_payoff(df_open_aandelen: pl.DataFrame, koers: float) -> float:
+	"""
+	Bereken de payoff van open aandelen bij een bepaalde koers.
+	Verwacht kolom: SomVantransactie_aantal
+	"""
+	if df_open_aandelen is None or df_open_aandelen.height == 0:
+		return 0.0
+	aantallen = df_open_aandelen['SomVantransactie_aantal'].to_numpy() if 'SomVantransactie_aantal' in df_open_aandelen.columns else [0.0]
+	payoff = sum(float(aantal) * koers for aantal in aantallen)
+	return payoff
+
+def bereken_gesloten_aandelen_payoff(df_gesloten_aandelen: pl.DataFrame) -> float:
+	"""
+	Bereken de payoff van gesloten aandelen (gerealiseerd resultaat).
+	Verwacht kolom: clos_aand_transactie_euro_totaal
+	"""
+	if df_gesloten_aandelen is None or df_gesloten_aandelen.height == 0:
+		return 0.0
+	if 'clos_aand_transactie_euro_totaal' in df_gesloten_aandelen.columns:
+		return float(df_gesloten_aandelen['clos_aand_transactie_euro_totaal'].sum())
+	return 0.0
+
+
 def bereken_open_sprinters_payoff(df_open_sprinters: pl.DataFrame, koers: float) -> float:
 	"""
 	Bereken de totale payoff van open sprinters bij een bepaalde koers.

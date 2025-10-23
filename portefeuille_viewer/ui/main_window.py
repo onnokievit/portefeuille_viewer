@@ -26,6 +26,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_TITLE)
         self.resize(1800, 950)
         
+        
         # Setup logging
         self._setup_logging()
 
