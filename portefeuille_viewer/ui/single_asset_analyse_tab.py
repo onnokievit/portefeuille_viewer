@@ -7,6 +7,8 @@ from PySide6.QtCore import QTimer
 
 
 
+
+
 class SingleAssetAnalyseTab(QWidget):
 
     def __init__(self, parent=None):
@@ -31,7 +33,7 @@ class SingleAssetAnalyseTab(QWidget):
         
         self.payoff_table = QTableWidget()
         self.payoff_table.setColumnCount(21)  # 10 stappen links, 1 center, 10 rechts
-        self.payoff_table.setRowCount(7)  # open opties, gesloten opties, open sprinters, gesloten sprinters, open aandelen, gesloten aandelen, totaal
+        self.payoff_table.setRowCount(10)  # open opties, gesloten opties, open sprinters, gesloten sprinters, open aandelen, gesloten aandelen, dividend, totaal zonder fees, fees, totaal
         self.payoff_table.setMinimumHeight(400)
         self.payoff_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # Kolombreedte meeschalend met de widget
@@ -127,6 +129,9 @@ class SingleAssetAnalyseTab(QWidget):
             "Gesloten sprinters",
             "Open aandelen",
             "Gesloten aandelen",
+            "Dividend",
+            "Totaal zonder fees",
+            "Fees",
             "Totaal"
         ]
         for row, label in enumerate(row_labels):
@@ -152,17 +157,38 @@ class SingleAssetAnalyseTab(QWidget):
         # 6. Gesloten aandelen (gerealiseerd resultaat, koers-onafhankelijk)
         payoff_gesloten_aandelen = [self._payoff_gesloten_aandelen() for _ in steps]
         payoff_matrix.append(payoff_gesloten_aandelen)
-        # 7. Totaal
-        for i in range(21):
-            totaal = sum(payoff_matrix[row][i] for row in range(6))
-            if len(payoff_matrix) < 7:
-                payoff_matrix.append([0]*21)
-            payoff_matrix[6][i] = totaal
+        # 7. Dividend (zelfde waarde voor alle kolommen)
+        asset_rollup = self.asset_selector.currentText()
+        dividend_val = 0.0
+        df_div = getattr(SNAPSHOT_STORE, 'repository_portfolio_dividend', None)
+        if df_div is not None and hasattr(df_div, 'filter'):
+            try:
+                row = df_div.filter(pl.col('asset_rollup') == asset_rollup)
+                if row.height > 0 and 'div_en_bel' in row.columns:
+                    dividend_val = float(row['div_en_bel'][0])
+            except Exception:
+                pass
+        payoff_dividend = [dividend_val for _ in steps]
+        payoff_matrix.append(payoff_dividend)
 
-        # Zet waarden in de tabel
-        for row in range(6):
+        # 8. Totaal zonder fees (som van alle rijen behalve fees)
+        payoff_totaal_zonder_fees = [sum(payoff_matrix[row][i] for row in range(7)) for i in range(21)]
+        payoff_matrix.append(payoff_totaal_zonder_fees)
+
+        # 9. Fees-rij: altijd nullen
+        payoff_fees = [0.0 for _ in steps]
+        payoff_matrix.append(payoff_fees)
+
+        # 10. Totaal: som van 'Totaal zonder fees' en 'Fees' (rij 7 en 8)
+        payoff_totaal = [payoff_matrix[7][i] + payoff_matrix[8][i] for i in range(21)]
+        payoff_matrix.append(payoff_totaal)
+
+        # Zet waarden in de tabel, pas omrekenfactor toe
+        factor = getattr(self, 'currency_factor', 1.0)
+        for row in range(10):
             for col in range(21):
                 val = payoff_matrix[row][col]
+                val = val / factor if factor != 1.0 else val
                 self.payoff_table.setItem(row, col, QTableWidgetItem(str(round(val, 2))))
 
         # Forceer update/repaint
@@ -263,4 +289,15 @@ class SingleAssetAnalyseTab(QWidget):
         else:
             self.df_gesloten_aandelen = None
         # Update payoff tabel na selectie
+        
+        df = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        factor = 1.0
+        if df is not None and df.height > 0:
+            row = df.filter(pl.col('asset_rollup') == asset_rollup)
+            if row.height > 0 and 'ib_currency' in row.columns:
+                currency = row['ib_currency'][0]
+                if currency == 'USD':
+                    factor = 1.16
+        self.currency_factor = factor
+        
         self.update_payoff_table()
