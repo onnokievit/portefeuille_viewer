@@ -163,9 +163,9 @@ class SingleAssetAnalyseTab(QWidget):
         df_div = getattr(SNAPSHOT_STORE, 'repository_portfolio_dividend', None)
         if df_div is not None and hasattr(df_div, 'filter'):
             try:
-                row = df_div.filter(pl.col('asset_rollup') == asset_rollup)
-                if row.height > 0 and 'div_en_bel' in row.columns:
-                    dividend_val = float(row['div_en_bel'][0])
+                rows = df_div.filter(pl.col('asset_rollup') == asset_rollup)
+                if rows.height > 0 and 'div_en_bel' in rows.columns:
+                    dividend_val = float(rows['div_en_bel'].sum())
             except Exception:
                 pass
         payoff_dividend = [dividend_val for _ in steps]
@@ -231,6 +231,13 @@ class SingleAssetAnalyseTab(QWidget):
         boldfont = QFont()
         boldfont.setBold(True)
 
+        # Kolomkoppen (x-as): bold en lichtgrijs
+        for col in range(21):
+            header_item = self.payoff_table.horizontalHeaderItem(col)
+            if header_item:
+                header_item.setFont(boldfont)
+                header_item.setBackground(lightgrey)
+
         for row in range(10):
             for col in range(21):
                 val = payoff_matrix[row][col]
@@ -244,10 +251,6 @@ class SingleAssetAnalyseTab(QWidget):
                 if row == total_row:
                     item.setFont(boldfont)
                     item.setBackground(lightblue)
-                # Koersrij (header) bold en lichtgrijs
-                if row == 0:
-                    item.setFont(boldfont)
-                    item.setBackground(lightgrey)
 
                 self.payoff_table.setItem(row, col, item)
 
