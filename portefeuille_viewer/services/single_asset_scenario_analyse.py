@@ -40,7 +40,7 @@ def bereken_gesloten_aandelen_payoff(df_aandelen: pl.DataFrame) -> float:
 	avg_buy = euro_koop / aantal_koop if aantal_koop != 0 else 0.0
 	
 	winst_verkocht = euro_verkoop - (aantal_verkoop * avg_buy)
-	print(f"DEBUG: Gesloten aandelen payoff berekend: asset= {asset_rollup}, euro_koop={euro_koop}, aantal_koop={aantal_koop}, euro_verkoop={euro_verkoop}, aantal_verkoop={aantal_verkoop}, avg_buy={avg_buy}, winst_verkocht={winst_verkocht}")
+	# print(f"DEBUG: Gesloten aandelen payoff berekend: asset= {asset_rollup}, euro_koop={euro_koop}, aantal_koop={aantal_koop}, euro_verkoop={euro_verkoop}, aantal_verkoop={aantal_verkoop}, avg_buy={avg_buy}, winst_verkocht={winst_verkocht}")
 	return winst_verkocht
 
 
