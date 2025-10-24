@@ -142,6 +142,7 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
         df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
 
+    # Koop-aggregatie
     df_koop = (
         df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "koop"))
         .group_by(["broker", "asset_rollup", "asset_type"])
@@ -152,6 +153,7 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         ])
     )
 
+    # Verkoop-aggregatie
     df_verkoop = (
         df_tx.filter((pl.col("asset_type") == "aandeel") & (pl.col("transactie_type") == "verkoop"))
         .group_by(["broker", "asset_rollup", "asset_type"])
@@ -162,16 +164,22 @@ def load_aandelen_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         ])
     )
 
-    df = df_koop.join(df_verkoop, on=["broker", "asset_rollup", "asset_type"], how="outer").fill_null(0)
-    
+    # Verzamel alle unieke asset keys uit beide kanten (koop en verkoop)
+    koop_keys = df_koop.select(["broker", "asset_rollup", "asset_type"])
+    verkoop_keys = df_verkoop.select(["broker", "asset_rollup", "asset_type"])
+    all_keys = pl.concat([koop_keys, verkoop_keys]).unique()
+
+    # Outer join koop en verkoop op alle unieke asset keys
+    df = all_keys
+    df = df.join(df_koop, on=["broker", "asset_rollup", "asset_type"], how="left")
+    df = df.join(df_verkoop, on=["broker", "asset_rollup", "asset_type"], how="left")
+    df = df.fill_null(0)
+
     df = df.with_columns([
         (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
         (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("eq_total_fee"),
-    ]
-    )
+    ])
     SNAPSHOT_STORE.safe_write("repository_snapshot_aandelen", df)
-    
-    
 
 
 # ------------------------------------------------------------

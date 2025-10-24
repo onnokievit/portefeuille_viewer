@@ -1,26 +1,47 @@
 import polars as pl
 
-def bereken_open_aandelen_payoff(df_open_aandelen: pl.DataFrame, koers: float) -> float:
+def bereken_open_aandelen_payoff(df_aandelen: pl.DataFrame, koers: float) -> float:
 	"""
-	Bereken de payoff van open aandelen bij een bepaalde koers.
-	Verwacht kolom: SomVantransactie_aantal
+	Bereken de ongerealiseerde winst op open aandelen (nog in bezit).
+	Verwacht kolommen: euro_koop, aantal_koop, euro_verkoop, aantal_verkoop
 	"""
-	if df_open_aandelen is None or df_open_aandelen.height == 0:
+	if df_aandelen is None or df_aandelen.height == 0:
 		return 0.0
-	aantallen = df_open_aandelen['SomVantransactie_aantal'].to_numpy() if 'SomVantransactie_aantal' in df_open_aandelen.columns else [0.0]
-	payoff = sum(float(aantal) * koers for aantal in aantallen)
-	return payoff
+	# Sommeer alle aankopen en verkopen
+	euro_koop = float(df_aandelen['euro_koop'].sum()) if 'euro_koop' in df_aandelen.columns else 0.0
+	aantal_koop = float(df_aandelen['aantal_koop'].sum()) if 'aantal_koop' in df_aandelen.columns else 0.0
+	euro_verkoop = float(df_aandelen['euro_verkoop'].sum()) if 'euro_verkoop' in df_aandelen.columns else 0.0
+	aantal_verkoop = float(df_aandelen['aantal_verkoop'].sum()) if 'aantal_verkoop' in df_aandelen.columns else 0.0
+	avg_buy = euro_koop / aantal_koop if aantal_koop != 0 else 0.0
+	aantal_bezit = aantal_koop + aantal_verkoop
+	# Normale long-positie of geen positie
+	if aantal_bezit >= 0:
+		waarde_bezit = aantal_bezit * koers
+		kostprijs_bezit = aantal_bezit * avg_buy
+		winst_bezit = waarde_bezit + kostprijs_bezit
+	else:
+		# Short-only: winst = euro_verkoop + aantal_bezit * koers
+		winst_bezit = euro_verkoop + aantal_bezit * koers
+	return winst_bezit
 
-def bereken_gesloten_aandelen_payoff(df_gesloten_aandelen: pl.DataFrame) -> float:
+def bereken_gesloten_aandelen_payoff(df_aandelen: pl.DataFrame) -> float:
 	"""
-	Bereken de payoff van gesloten aandelen (gerealiseerd resultaat).
-	Verwacht kolom: clos_aand_transactie_euro_totaal
+	Bereken de gerealiseerde winst op gesloten aandelen (al verkocht).
+	Verwacht kolommen: euro_koop, aantal_koop, euro_verkoop, aantal_verkoop
 	"""
-	if df_gesloten_aandelen is None or df_gesloten_aandelen.height == 0:
+	if df_aandelen is None or df_aandelen.height == 0:
 		return 0.0
-	if 'clos_aand_transactie_euro_totaal' in df_gesloten_aandelen.columns:
-		return float(df_gesloten_aandelen['clos_aand_transactie_euro_totaal'].sum())
-	return 0.0
+	# Sommeer alle aankopen en verkopen
+	asset_rollup = df_aandelen['asset_rollup'][0] if 'asset_rollup' in df_aandelen.columns else 'onbekend'
+	euro_koop = float(df_aandelen['euro_koop'].sum()) if 'euro_koop' in df_aandelen.columns else 0.0
+	aantal_koop = float(df_aandelen['aantal_koop'].sum()) if 'aantal_koop' in df_aandelen.columns else 0.0
+	euro_verkoop = float(df_aandelen['euro_verkoop'].sum()) if 'euro_verkoop' in df_aandelen.columns else 0.0
+	aantal_verkoop = float(df_aandelen['aantal_verkoop'].sum()) if 'aantal_verkoop' in df_aandelen.columns else 0.0
+	avg_buy = euro_koop / aantal_koop if aantal_koop != 0 else 0.0
+	
+	winst_verkocht = euro_verkoop - (aantal_verkoop * avg_buy)
+	print(f"DEBUG: Gesloten aandelen payoff berekend: asset= {asset_rollup}, euro_koop={euro_koop}, aantal_koop={aantal_koop}, euro_verkoop={euro_verkoop}, aantal_verkoop={aantal_verkoop}, avg_buy={avg_buy}, winst_verkocht={winst_verkocht}")
+	return winst_verkocht
 
 
 def bereken_open_sprinters_payoff(df_open_sprinters: pl.DataFrame, koers: float) -> float:
