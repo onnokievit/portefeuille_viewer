@@ -175,8 +175,42 @@ class SingleAssetAnalyseTab(QWidget):
         payoff_totaal_zonder_fees = [sum(payoff_matrix[row][i] for row in range(7)) for i in range(21)]
         payoff_matrix.append(payoff_totaal_zonder_fees)
 
-        # 9. Fees-rij: altijd nullen
-        payoff_fees = [0.0 for _ in steps]
+        # 9. Fees-rij: sommeer relevante fee-velden per asset
+        # Aandelen: fee_koop en fee_verkoop (koers-onafhankelijk)
+        fee_aandelen = 0.0
+        if self.df_aandelen is not None and self.df_aandelen.height > 0:
+            if "fee_koop" in self.df_aandelen.columns:
+                fee_aandelen += float(self.df_aandelen["fee_koop"].sum())
+            if "fee_verkoop" in self.df_aandelen.columns:
+                fee_aandelen += float(self.df_aandelen["fee_verkoop"].sum())
+
+        # Open opties: SomVantransactie_fee (per koers, dus per stap berekenen)
+        fee_open_opties = [0.0 for _ in steps]
+        if self.df_open_opties is not None and self.df_open_opties.height > 0 and "SomVantransactie_fee" in self.df_open_opties.columns:
+            fee_val = float(self.df_open_opties["SomVantransactie_fee"].sum())
+            fee_open_opties = [fee_val for _ in steps]
+
+        # Gesloten opties: clos_opt_transactie_fee (koers-onafhankelijk)
+        fee_gesloten_opties = 0.0
+        if self.df_gesloten_opties is not None and self.df_gesloten_opties.height > 0 and "clos_opt_transactie_fee" in self.df_gesloten_opties.columns:
+            fee_gesloten_opties = float(self.df_gesloten_opties["clos_opt_transactie_fee"].sum())
+
+        # Open sprinters: SomVantransactie_fee (per koers, dus per stap berekenen)
+        fee_open_sprinters = [0.0 for _ in steps]
+        if self.df_open_sprinters is not None and self.df_open_sprinters.height > 0 and "SomVantransactie_fee" in self.df_open_sprinters.columns:
+            fee_val = float(self.df_open_sprinters["SomVantransactie_fee"].sum())
+            fee_open_sprinters = [fee_val for _ in steps]
+
+        # Gesloten sprinters: clos_sp_transactie_fee (koers-onafhankelijk)
+        fee_gesloten_sprinters = 0.0
+        if self.df_gesloten_sprinters is not None and self.df_gesloten_sprinters.height > 0 and "clos_sp_transactie_fee" in self.df_gesloten_sprinters.columns:
+            fee_gesloten_sprinters = float(self.df_gesloten_sprinters["clos_sp_transactie_fee"].sum())
+
+        # Fees per kolom: som van alle fees per assettype (open opties/sprinters per stap, rest koers-onafhankelijk)
+        payoff_fees = [
+            fee_open_opties[i] + fee_gesloten_opties + fee_open_sprinters[i] + fee_gesloten_sprinters + fee_aandelen
+            for i in range(len(steps))
+        ]
         payoff_matrix.append(payoff_fees)
 
         # 10. Totaal: som van 'Totaal zonder fees' en 'Fees' (rij 7 en 8)
@@ -185,11 +219,37 @@ class SingleAssetAnalyseTab(QWidget):
 
         # Zet waarden in de tabel, pas omrekenfactor toe
         factor = getattr(self, 'currency_factor', 1.0)
+
+        from PySide6.QtGui import QColor, QBrush, QFont
+
+        middle_col = 10  # 0-based index, center
+        total_row = 9    # 0-based index, laatste rij
+
+        # Kleuren
+        lightgrey = QBrush(QColor(220, 220, 220))
+        lightblue = QBrush(QColor(200, 220, 255))
+        boldfont = QFont()
+        boldfont.setBold(True)
+
         for row in range(10):
             for col in range(21):
                 val = payoff_matrix[row][col]
                 val = val / factor if factor != 1.0 else val
-                self.payoff_table.setItem(row, col, QTableWidgetItem(str(round(val, 2))))
+                item = QTableWidgetItem(str(round(val, 2)))
+
+                # Middelste kolom lichtgrijs
+                if col == middle_col:
+                    item.setBackground(lightgrey)
+                # Total-rij bold en lichtblauw
+                if row == total_row:
+                    item.setFont(boldfont)
+                    item.setBackground(lightblue)
+                # Koersrij (header) bold en lichtgrijs
+                if row == 0:
+                    item.setFont(boldfont)
+                    item.setBackground(lightgrey)
+
+                self.payoff_table.setItem(row, col, item)
 
         # Forceer update/repaint
         self.payoff_table.viewport().update()
