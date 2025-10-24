@@ -257,9 +257,9 @@ class SingleAssetAnalyseTab(QWidget):
             self.df_aandelen = store.repository_snapshot_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
         else:
             self.df_aandelen = None
-        # Gesloten aandelen
-        if hasattr(store, 'repository_snapshot_gesloten_aandelen') and store.repository_snapshot_gesloten_aandelen is not None:
-            self.df_gesloten_aandelen = store.repository_snapshot_gesloten_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
+        # Gesloten aandelen: gebruik hetzelfde snapshot als open aandelen
+        if store.repository_snapshot_aandelen is not None:
+            self.df_gesloten_aandelen = store.repository_snapshot_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
         else:
             self.df_gesloten_aandelen = None
         # Update payoff tabel na selectie
