@@ -74,11 +74,6 @@ class SingleAssetAnalyseTab(QWidget):
             self._refresh_timer.setInterval(1000)
             self._refresh_phase = 1
 
-    def update_payoff_table(self):
-        # Normale update
-        self._advance_refresh_timer()
-        # ...rest van bestaande code...
-
 
     def update_payoff_table(self):
         self._advance_refresh_timer()
