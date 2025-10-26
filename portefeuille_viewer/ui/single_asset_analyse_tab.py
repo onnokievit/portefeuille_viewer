@@ -1,10 +1,13 @@
-from PySide6.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QTableWidget, QTableWidgetItem
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-import polars as pl
 from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_opties_payoff
-from PySide6.QtWidgets import QHeaderView
-from PySide6.QtCore import QTimer
-
+from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_sprinters_payoff
+from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_gesloten_aandelen_payoff
+from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_aandelen_payoff
+import polars as pl
+from PySide6.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QTableWidget, QTableWidgetItem, QHeaderView
+from PySide6.QtCore import QTimer, Qt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 
 
@@ -29,12 +32,18 @@ class SingleAssetAnalyseTab(QWidget):
 
         main_layout.addLayout(selector_layout)
 
+        self.figure = Figure(figsize=(6, 4))
+        self.canvas = FigureCanvas(self.figure)
+        main_layout.addWidget(self.canvas)
+
+
         # Payoff tabel (placeholder)
         
         self.payoff_table = QTableWidget()
         self.payoff_table.setColumnCount(21)  # 10 stappen links, 1 center, 10 rechts
         self.payoff_table.setRowCount(10)  # open opties, gesloten opties, open sprinters, gesloten sprinters, open aandelen, gesloten aandelen, dividend, totaal zonder fees, fees, totaal
         self.payoff_table.setMinimumHeight(400)
+        self.payoff_table.setFixedWidth(1400)
         self.payoff_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # Kolombreedte meeschalend met de widget
         self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -66,6 +75,7 @@ class SingleAssetAnalyseTab(QWidget):
         # Initiele payoff tabel/dataframes forceren voor eerste asset
         if self.asset_selector.count() > 0:
             self.on_asset_selected(self.asset_selector.currentText())
+            # self.update_chart()
 
     def _advance_refresh_timer(self):
         # Na 2s (8 ticks van 250ms), ga naar 1s interval
@@ -237,7 +247,13 @@ class SingleAssetAnalyseTab(QWidget):
             for col in range(21):
                 val = payoff_matrix[row][col]
                 val = val / factor if factor != 1.0 else val
-                item = QTableWidgetItem(str(round(val, 2)))
+                item = QTableWidgetItem(str(int(round(val, 0))))
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+                from PySide6.QtGui import QColor
+
+                if val < 0:
+                    item.setForeground(QColor(220, 0, 0))  # Rood
 
                 # Middelste kolom lichtgrijs
                 if col == middle_col:
@@ -251,6 +267,8 @@ class SingleAssetAnalyseTab(QWidget):
 
         # Forceer update/repaint
         self.payoff_table.viewport().update()
+        self.update_chart()
+
     def closeEvent(self, event):
         # Stop de timer als de widget wordt gesloten
         if hasattr(self, '_refresh_timer'):
@@ -281,7 +299,6 @@ class SingleAssetAnalyseTab(QWidget):
         return 0.0
 
     def _payoff_open_sprinters(self, koers):
-        from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_sprinters_payoff
         return bereken_open_sprinters_payoff(self.df_open_sprinters, koers)
 
     def _payoff_gesloten_sprinters(self, koers):
@@ -292,11 +309,10 @@ class SingleAssetAnalyseTab(QWidget):
         return 0.0
 
     def _payoff_open_aandelen(self, koers):
-        from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_open_aandelen_payoff
         return bereken_open_aandelen_payoff(self.df_aandelen, koers)
 
     def _payoff_gesloten_aandelen(self):
-        from portefeuille_viewer.services.single_asset_scenario_analyse import bereken_gesloten_aandelen_payoff
+        
         # Gesloten aandelen: gerealiseerd resultaat
         if hasattr(self, 'df_gesloten_aandelen'):
             return bereken_gesloten_aandelen_payoff(self.df_gesloten_aandelen)
@@ -359,3 +375,47 @@ class SingleAssetAnalyseTab(QWidget):
         self.currency_factor = factor
         
         self.update_payoff_table()
+
+
+    def update_chart(self):
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        # x-as: koers (kolomheaders)
+        x = []
+        for i in range(self.payoff_table.columnCount()):
+            header_item = self.payoff_table.horizontalHeaderItem(i)
+            if header_item:
+                try:
+                    x.append(float(header_item.text()))
+                except ValueError:
+                    x.append(header_item.text())
+            else:
+                x.append(i)
+        # y-as: totaalrij (laatste rij, index 9)
+        y_totaal = []
+        y_open_opties = []
+        for i in range(self.payoff_table.columnCount()):
+            item_totaal = self.payoff_table.item(9, i)
+            item_open_opties = self.payoff_table.item(0, i)
+            try:
+                totaal_val = float(item_totaal.text()) if item_totaal and item_totaal.text() else 0
+            except ValueError:
+                totaal_val = 0
+            try:
+                open_opties_val = float(item_open_opties.text()) if item_open_opties and item_open_opties.text() else 0
+            except ValueError:
+                open_opties_val = 0
+            y_totaal.append(totaal_val)
+            y_open_opties.append(open_opties_val)
+        # Verschil: totaal - open opties
+        y_verschil = [t - o for t, o in zip(y_totaal, y_open_opties)]
+        ax.axhline(0, color='black', linewidth=0.5)
+        # Plot beide lijnen
+        ax.plot(x, y_totaal, color='#C8F5D6', label='Totaal')
+        ax.plot(x, y_verschil, color='blue', label='Totaal - Open opties')
+        ax.plot(x, y_open_opties, color='red', label='Open opties')
+        ax.set_xlabel("Koers")
+        ax.set_ylabel("Waarde")
+        ax.set_title("Payoff per koersstap")
+        ax.legend()
+        self.canvas.draw()
