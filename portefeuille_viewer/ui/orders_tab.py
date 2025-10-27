@@ -240,7 +240,7 @@ class OrdersTab(QWidget):
     def _build_order_row(self, grid, row, side):
         cb_oorspr = SmartCombo() if side == 1 else None
         if cb_oorspr:
-            cb_oorspr.set_items(["OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"])
+            cb_oorspr.set_items(["HEDGE","OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"])
 
         broker = SmartCombo(); broker.set_items(self.brokers)
         rollup = SmartCombo(); rollup.set_items(self.asset_rollups)
