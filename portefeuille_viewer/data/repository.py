@@ -206,6 +206,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     per_uniek = (
         df_tx
         .group_by([
+            "transactie_oorsprong", 
             "uniek_id",
             "broker",
             "asset_rollup",
@@ -227,6 +228,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         (pl.col("asset_type") == "optie")
         & (pl.col("optie_exp_date") >= vandaag)
         & (pl.col("SomVantransactie_aantal") != 0)
+        
     )
     # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
     SNAPSHOT_STORE.safe_write("repository_snapshot_load_open_opties", per_uniek_filtered)
