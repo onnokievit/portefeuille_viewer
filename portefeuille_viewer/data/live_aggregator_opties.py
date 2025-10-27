@@ -91,7 +91,7 @@ class LiveAggregatorOpties(QObject):
         
         # Selecteer en herorden kolommen volgens screenshot
         df = df.select([
-            "transactie_oorsprong",
+            #"transactie_oorsprong",
             "broker",
             "asset_rollup", 
             "Koers",
