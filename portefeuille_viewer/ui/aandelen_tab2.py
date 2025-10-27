@@ -176,7 +176,7 @@ class AandelenTab2(QWidget):
         if self.selected_brokers is not None and "broker" in df.columns:
             df_open_opties = df_open_opties.filter(pl.col("broker").is_in(list(self.selected_brokers)))
                 # Sum na filtering (groepeer op asset_rollup)
-        df_open_opties = df_open_opties.filter(pl.col("transactie_oorsprong") != "HEDGE")
+        #df_open_opties = df_open_opties.filter(pl.col("transactie_oorsprong") != "HEDGE")
         if not df_open_opties.is_empty():
             df_open_opt_sum = df_open_opties.group_by("asset_rollup").agg([
                 pl.col("opt_total_result").sum().alias("open_opt_total_result"),

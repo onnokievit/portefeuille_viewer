@@ -198,7 +198,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
         df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
 
-    
+    df_tx = df_tx.filter(pl.col("transactie_oorsprong") != "HEDGE")
 
     vandaag = date.today()
 
@@ -206,7 +206,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     per_uniek = (
         df_tx
         .group_by([
-            "transactie_oorsprong", 
+             
             "uniek_id",
             "broker",
             "asset_rollup",
