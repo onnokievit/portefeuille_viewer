@@ -86,10 +86,7 @@ class LiveAggregatorSprinters(QObject):
             "sprinter_funding", "sprinter_ratio", "SomVantransactie_fee","SomVantransactie_aantal", "SomVantransactie_euro_totaal", "sp_result"
         ]
         df = df.select([col for col in select_cols if col in df.columns])
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_load_output_test_dataframes = df  # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
 
         return df
 

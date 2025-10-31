@@ -94,7 +94,21 @@ def load_sprinter_referentie_data() -> pl.DataFrame:
     # return compact_float64(df)
 
 # ------------------------------------------------------------
-# dividend_data tabel ophalen
+# OPTIE_refenctie_data referentie tabel ophalen
+# # ------------------------------------------------------------
+def load_optie_referentie_data() -> pl.DataFrame:
+    """
+    Laadt de sprinter referentie tabel  uit de database.
+    """
+    sql = "SELECT * FROM optie_referentie_data"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_optie_referentie_data", df)
+    # return compact_float64(df)
+
+
+# ------------------------------------------------------------
+# OPTIE_refenctie_data referentie tabel ophalen
 # ------------------------------------------------------------
 def load_dividend_data() -> pl.DataFrame:
     """
