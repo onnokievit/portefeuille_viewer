@@ -1,5 +1,5 @@
-import sys
-from PySide6.QtWidgets import QApplication
+import sys, os
+from PySide6.QtWidgets import QApplication, QTableView
 from PySide6.QtGui import QFont
 
 from portefeuille_viewer.ui.main_window import MainWindow
@@ -7,24 +7,24 @@ from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
-import time 
-import pandas as pd
-from PySide6.QtWidgets import QApplication, QTableView
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
-import sys, os
 from portefeuille_viewer.domain import engine
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
 
+import time 
+import pandas as pd
+
+
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
-# sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(__file__))
 
 # # Controleer welke repository daadwerkelijk geladen wordt:
-# print("✅ Repository geladen uit:", repository.__file__)
+print("✅ Repository geladen uit:", repository.__file__)
 
 
 
@@ -41,6 +41,7 @@ def load_datasets():
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
+    repository.load_optie_referentie_data()
 
     
 

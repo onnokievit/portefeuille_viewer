@@ -81,19 +81,30 @@ class LiveAggregatorOpties(QObject):
         # Laad basisdata met Koers kolom
         df = self._load_and_prepare_data()
         
+
+
         # Bereken ITM/OTM waarde
         df = self._calculate_itm_otm(df)
+
+
         
         # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
         df = df.with_columns([
             (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("opt_total_result")
         ])
         
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframes = df  # of df_sum als je de gesumde versie wilt zien
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
         # Selecteer en herorden kolommen volgens screenshot
         df = df.select([
             #"transactie_oorsprong",
             "broker",
             "asset_rollup", 
+            "ib_symbol",
             "Koers",
             "optie_call_put",
             "optie_strike",
