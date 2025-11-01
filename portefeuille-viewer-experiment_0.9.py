@@ -18,14 +18,12 @@ import time
 import pandas as pd
 
 
-
 # # --- Forceer Python om deze map als eerste te gebruiken ---
 # # Hierdoor wordt altijd de versie in portefeuille_viewer_experiment geladen
 sys.path.insert(0, os.path.dirname(__file__))
 
 # # Controleer welke repository daadwerkelijk geladen wordt:
 print("✅ Repository geladen uit:", repository.__file__)
-
 
 
 def load_datasets():
