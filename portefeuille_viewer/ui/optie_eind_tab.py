@@ -5,8 +5,10 @@ from portefeuille_viewer.ui.models import PolarsTableModel, PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from datetime import datetime
 import polars as pl
+import pandas as pd
 
 class OptieEindTab(QWidget):
+
     def __init__(self, broker=None, asset=None):
         super().__init__()
         self.asset = asset
@@ -222,8 +224,43 @@ class OptieEindTab(QWidget):
             "itm_otm",
             "transactie_oorsprong"
         ]
+        
         pdf = pdf.reindex(columns=output_cols)
-        self.model = PandasTableModel(pdf)
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_input_test_data = pl.DataFrame(pdf)  # of df_sum als je de gesumde versie wilt zien
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+
+        pdf_aandelen = self.maak_aandelen_records(pdf, transactie_datum)
+
+        # # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        SNAPSHOT_STORE.test_repository_load_output_test_data = pl.DataFrame(pdf_aandelen)  # of df_sum als je de gesumde versie wilt zien
+        # # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+        # Zet naar alleen datum en dan naar datetime64[ms] zodat Polars kan samenvoegen
+        for col in ["transactie_datum", "optie_exp_date"]:
+            pdf[col] = pd.to_datetime(pdf[col]).dt.date
+            pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).dt.date
+            pdf[col] = pd.to_datetime(pdf[col]).astype("datetime64[ms]")
+            pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).astype("datetime64[ms]")
+
+        pl_pdf = pl.DataFrame(pdf)
+        pl_pdf_aandelen = pl.DataFrame(pdf_aandelen)
+        print(pdf.dtypes)
+        print(pdf_aandelen.dtypes)
+
+
+        pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
+        # pdf2 = pl_merged.to_pandas()
+        # print(pdf2.index)
+        # print(pdf2.columns)
+
+
+        self.model = PandasTableModel(pl_merged.to_pandas())
         self.table.setModel(self.model)
 
     def on_fetch_clicked(self):
@@ -232,3 +269,55 @@ class OptieEindTab(QWidget):
     def add_records_to_db(self):
         # Placeholder: hier records toevoegen aan transactiedatabase
         QMessageBox.information(self, "Toevoegen", "Records zijn toegevoegd aan transactiedatabase (dummy)")
+
+    def maak_aandelen_records(self, pdf, transactie_datum):
+        
+
+        nieuwe_records = []
+        kolommen = list(pdf.columns)
+        for idx, row in pdf.iterrows():
+            if row.get("transactie_oorsprong") == "ASSIGN":
+                nieuw = {col: None for col in kolommen}
+                nieuw["transactie_datum"] = transactie_datum
+                nieuw["broker"] = row.get("broker")
+                nieuw["asset_rollup"] = row.get("asset_rollup")
+                nieuw["asset_detail"] = row.get("asset_detail")
+                nieuw["asset_type"] = "aandeel"
+                nieuw["optie_exp_date"] = row.get("optie_exp_date")
+                nieuw["optie_strike"] = row.get("optie_strike")
+                nieuw["optie_call_put"] = row.get("optie_call_put")
+                nieuw["Koers"] = row.get("Koers")
+                nieuw["SomVantransactie_aantal"] = row.get("SomVantransactie_aantal")
+                # Bepaal transactie_type
+                if row.get("optie_call_put") == "call":
+                    if row.get("transactie_type") == "verkoop":
+                        nieuw["transactie_type"] = "koop"
+                    elif row.get("transactie_type") == "koop":
+                        nieuw["transactie_type"] = "verkoop"
+                elif row.get("optie_call_put") == "put":
+                    nieuw["transactie_type"] = row.get("transactie_type")
+                else:
+                    nieuw["transactie_type"] = row.get("transactie_type")
+                nieuw["transactie_prijs"] = 0
+                nieuw["itm_otm"] = row.get("itm_otm")
+                nieuw["transactie_oorsprong"] = "ASSIGN"
+                nieuw["transactie_oorsprong_detail"] = None
+                nieuwe_records.append(nieuw)
+
+        if nieuwe_records:
+            df_aandelen = pd.DataFrame(nieuwe_records, columns=kolommen)
+            # Zorg dat dtypes overeenkomen met pdf
+            for col in ["transactie_datum", "optie_exp_date"]:
+                if col in df_aandelen.columns and col in pdf.columns:
+                    # Gebruik dtype van pdf
+                    dtype_pdf = pdf[col].dtype
+                    if pd.api.types.is_datetime64_any_dtype(dtype_pdf):
+                        df_aandelen[col] = pd.to_datetime(df_aandelen[col])
+                    else:
+                        df_aandelen[col] = df_aandelen[col].astype(dtype_pdf)
+            print("Aandelenrecords gegenereerd:")
+            print(df_aandelen)
+            return df_aandelen
+        else:
+            print("Geen aandelenrecords gegenereerd.")
+            return pd.DataFrame(columns=kolommen)
