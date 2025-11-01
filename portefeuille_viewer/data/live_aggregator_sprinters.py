@@ -82,10 +82,11 @@ class LiveAggregatorSprinters(QObject):
         df = self._calculate_sprinter_resultaat(df)
 
         select_cols = [
-            "broker", "asset_rollup", "asset_detail", "Koers", # "optie_exp_date", "optie_strike", "optie_call_put",
+            "broker", "asset_rollup", "asset_detail", "Koers", "optie_exp_date", "optie_strike", "optie_call_put",
             "sprinter_funding", "sprinter_ratio", "SomVantransactie_fee","SomVantransactie_aantal", "SomVantransactie_euro_totaal", "sp_result"
         ]
         df = df.select([col for col in select_cols if col in df.columns])
+
 
 
         return df

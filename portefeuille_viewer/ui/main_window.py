@@ -96,6 +96,14 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(SingleAssetAnalyseTab(), "Single Asset Analyse")
         self.tabs.addTab(self.open_opties_tab, "Open Opties (Live)")
         self.tabs.addTab(self.sprinters_tab, "Sprinters (Live)")
+        # Optie Eind Tab toevoegen
+        try:
+            from portefeuille_viewer.ui.optie_eind_tab import OptieEindTab
+            self.optie_eind_tab = OptieEindTab()
+        except Exception as e:
+            print(f"OptieEindTab kon niet worden geladen: {e}")
+            self.optie_eind_tab = QWidget()
+        self.tabs.addTab(self.optie_eind_tab, "Optie Eind")
         
 
         # Option Chain Explorer Tab (NEW - MVP)
