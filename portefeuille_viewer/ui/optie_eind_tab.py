@@ -1,13 +1,13 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QPushButton, QMessageBox, QHBoxLayout, QLabel, QDateEdit
 from PySide6.QtCore import QDate
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-import polars as pl
 from portefeuille_viewer.ui.models import PolarsTableModel, PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from datetime import datetime
+import polars as pl
 
 class OptieEindTab(QWidget):
-    def __init__(self, broker="interactive", asset=None):
+    def __init__(self, broker=None, asset=None):
         super().__init__()
         self.asset = asset
         self.setWindowTitle("Optie Eind")
