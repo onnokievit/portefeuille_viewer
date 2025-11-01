@@ -225,21 +225,21 @@ class OptieEindTab(QWidget):
             "transactie_oorsprong"
         ]
         
+        # Voeg order_id en order_id_number toe
         pdf = pdf.reindex(columns=output_cols)
+        pdf = pdf.copy()
+        pdf["order_id"] = range(1, len(pdf) + 1)
+        pdf["order_id_number"] = 1
         # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
         SNAPSHOT_STORE.test_repository_load_input_test_data = pl.DataFrame(pdf)  # of df_sum als je de gesumde versie wilt zien
         # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
-
-
         pdf_aandelen = self.maak_aandelen_records(pdf, transactie_datum)
-
         # # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
         SNAPSHOT_STORE.test_repository_load_output_test_data = pl.DataFrame(pdf_aandelen)  # of df_sum als je de gesumde versie wilt zien
         # # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
 
         # Zet naar alleen datum en dan naar datetime64[ms] zodat Polars kan samenvoegen
         for col in ["transactie_datum", "optie_exp_date"]:
@@ -250,14 +250,7 @@ class OptieEindTab(QWidget):
 
         pl_pdf = pl.DataFrame(pdf)
         pl_pdf_aandelen = pl.DataFrame(pdf_aandelen)
-        print(pdf.dtypes)
-        print(pdf_aandelen.dtypes)
-
-
         pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
-        # pdf2 = pl_merged.to_pandas()
-        # print(pdf2.index)
-        # print(pdf2.columns)
 
 
         self.model = PandasTableModel(pl_merged.to_pandas())
@@ -275,6 +268,11 @@ class OptieEindTab(QWidget):
 
         nieuwe_records = []
         kolommen = list(pdf.columns)
+        # Voeg order_id en order_id_number toe aan kolommen als ze nog niet bestaan
+        if "order_id" not in kolommen:
+            kolommen.append("order_id")
+        if "order_id_number" not in kolommen:
+            kolommen.append("order_id_number")
         for idx, row in pdf.iterrows():
             if row.get("transactie_oorsprong") == "ASSIGN":
                 nieuw = {col: None for col in kolommen}
@@ -302,6 +300,8 @@ class OptieEindTab(QWidget):
                 nieuw["itm_otm"] = row.get("itm_otm")
                 nieuw["transactie_oorsprong"] = "ASSIGN"
                 nieuw["transactie_oorsprong_detail"] = None
+                nieuw["order_id"] = row.get("order_id")
+                nieuw["order_id_number"] = 2
                 nieuwe_records.append(nieuw)
 
         if nieuwe_records:
