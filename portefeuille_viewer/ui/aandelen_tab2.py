@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QPushButton, QHeaderView
+from PySide6.QtWidgets import QTableWidget
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
-import polars as pl
-from PySide6.QtWidgets import QComboBox
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 import polars as pl
+
+
+
 
 class AandelenTab2(QWidget):
     def clear_all_filters(self):
@@ -76,7 +78,7 @@ class AandelenTab2(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.table)
         # Totals als horizontale tabel onder de QTableView
-        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
+        
         self.totals_table = QTableWidget(1, 16, self)  # 1 rij, 16 kolommen (aantal kolommen in df_sum)
         self.totals_table.setFixedHeight(32)
         self.totals_table.verticalHeader().setVisible(False)

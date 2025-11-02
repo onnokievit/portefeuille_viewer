@@ -3,10 +3,9 @@
 # -----------------------------------------------------
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QLabel, QHeaderView
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
-from portefeuille_viewer.data import repository
 from portefeuille_viewer.ui.models import PolarsTableModel
-import polars as pl
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+import polars as pl
 
 class OpenOptiesPolarsTab(QWidget):
     """

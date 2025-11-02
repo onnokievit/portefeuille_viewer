@@ -1,21 +1,20 @@
+import contextlib
 from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget
 from PySide6.QtGui import QAction
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.ui.orders_tab import OrdersTab
-
 from portefeuille_viewer.ui.settings_tab import SettingsTab
-from portefeuille_viewer.config import get_settings
-from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.open_options_tab import OpenOptiesPolarsTab
-# from portefeuille_viewer.ui.aandelen_tab import AandelenPolarsTab
 from portefeuille_viewer.ui.aandelen_tab2 import AandelenTab2
 from portefeuille_viewer.ui.option_explorer import OptionChainTab
+from portefeuille_viewer.ui.single_asset_analyse_tab import SingleAssetAnalyseTab
+from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.signals import signals
+
 import logging
 import os
 from datetime import datetime
-from portefeuille_viewer.signals import signals
-from portefeuille_viewer.ui.single_asset_analyse_tab import SingleAssetAnalyseTab
- 
+
 
 
 APP_TITLE = "🧭 Portefeuille Viewer"
@@ -25,8 +24,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
         self.resize(1800, 950)
-        
-        
+
+
         # Setup logging
         self._setup_logging()
 
@@ -45,10 +44,10 @@ class MainWindow(QMainWindow):
                 settings.get_ib_client_id(), 
                 self
             )
-        
+
         # Store portfolio engine reference
         self.portfolio_engine = portfolio_engine
-        
+
         # Connect feed service signals with improved logging
         self.feed_service._feed.log.connect(self._log_message)
         self.feed_service._feed.ready.connect(lambda: self._log_message("IB-feed ready"))
@@ -57,13 +56,13 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.orders_tab = OrdersTab()
 
-        
+
         # Pass portfolio_engine to OpenOptiesPolarsTab for live updates
         if self.portfolio_engine:
             self.open_opties_tab = OpenOptiesPolarsTab(portfolio_engine=self.portfolio_engine)
         else:
             self.open_opties_tab = OpenOptiesPolarsTab()
-        
+
         # self.aandelen_tab = AandelenPolarsTab(self.feed_service)
         self.settings_tab = SettingsTab()
         self.option_chain_tab = OptionChainTab(feed_service=self.feed_service)
@@ -87,7 +86,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"RepositoryAggregatorTesterTab kon niet worden geladen: {e}")
             self.repository_aggretator_tester_tab = QWidget()
-        
+
         self.tabs.addTab(self.orders_tab, "Orders")
         if self.portfolio_engine:
             self.tabs.addTab(AandelenTab2(portfolio_engine=self.portfolio_engine), "Aandelen (Live)")
@@ -104,10 +103,10 @@ class MainWindow(QMainWindow):
             print(f"OptieEindTab kon niet worden geladen: {e}")
             self.optie_eind_tab = QWidget()
         self.tabs.addTab(self.optie_eind_tab, "Optie Eind")
-        
+
 
         # Option Chain Explorer Tab (NEW - MVP)
-        
+
         self.tabs.addTab(self.option_chain_tab, "Option Chain Explorer")
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.repository_aggretator_tester_tab, "Repository Aggregator Tester")
@@ -117,17 +116,13 @@ class MainWindow(QMainWindow):
         # Koppeling: als Orders-tab iets opslaat of DB wijzigt → Live-tab herladen
         # Als orders_tab de database wijzigt, herlaad relevante tabs
         # Connect only if the tabs expose a reload_data method
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self.sprinters_tab, 'reload_data'):
                 self.orders_tab.dbChanged.connect(self.sprinters_tab.reload_data)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self.open_opties_tab, 'reload_data'):
                 self.orders_tab.dbChanged.connect(self.open_opties_tab.reload_data)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             # AandelenTab2 exposes reload_data
             if hasattr(self.tabs, 'widget') and hasattr(self, 'tabs'):
                 # Connect directly to the instantiated AandelenTab2 we added earlier (second tab or by reference)
@@ -136,38 +131,24 @@ class MainWindow(QMainWindow):
                     w = self.tabs.widget(i)
                     if w is not None and w.__class__.__name__ == 'AandelenTab2' and hasattr(w, 'reload_data'):
                         self.orders_tab.dbChanged.connect(w.reload_data)
-        except Exception:
-            pass
-        
         # After creating the tabs, add these connections:
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self.sprinters_tab, 'reload_data'):
                 self.orders_tab.ordersCommitted.connect(self.sprinters_tab.reload_data)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self.open_opties_tab, 'reload_data'):
                 self.orders_tab.ordersCommitted.connect(self.open_opties_tab.reload_data)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             for i in range(self.tabs.count()):
                 w = self.tabs.widget(i)
                 if w is not None and w.__class__.__name__ == 'AandelenTab2' and hasattr(w, 'reload_data'):
                     self.orders_tab.ordersCommitted.connect(w.reload_data)
-        except Exception:
-            pass
-
-
         # Connect settings changes (database config wijzigingen)
         self.settings_tab.configChanged.connect(self._on_database_config_changed)
 
         # Central databaseChanged signal: ensure tabs reload when DB changes
-        try:
+        with contextlib.suppress(Exception):
             signals.databaseChanged.connect(self._on_central_database_changed)
-        except Exception:
-            pass
-
         # Menu
         act_quit = QAction("Quit", self)
         act_quit.triggered.connect(self.close)
@@ -204,35 +185,24 @@ class MainWindow(QMainWindow):
         self.logger.info(f"✅ Database configuratie herladen: {len(repository.DB_MAP)} databases, actief: {target_db}")
 
     def closeEvent(self, event):
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self.live_tab, "_kpi_timer") and self.live_tab._kpi_timer is not None:
                 self.live_tab._kpi_timer.stop()
-        except Exception:
-            pass
-
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self, "feed_service") and self.feed_service is not None:
                 self.feed_service.shutdown()
-        except Exception:
-            pass
-
         super().closeEvent(event)
 
     def _on_central_database_changed(self, db_name: str):
         """Called when the central signals.databaseChanged is emitted.
         Iterate over tabs and call reload_data() if available.
         """
-        try:
+        with contextlib.suppress(Exception):
             for i in range(self.tabs.count()):
                 w = self.tabs.widget(i)
                 if w is not None and hasattr(w, 'reload_data'):
-                    try:
+                    with contextlib.suppress(Exception):
                         w.reload_data()
-                    except Exception:
-                        # Defensive: don't let one failing tab prevent others
-                        pass
-        except Exception:
-            pass
     
     def _setup_logging(self):
         """Setup file logging voor IB feed meldingen."""
