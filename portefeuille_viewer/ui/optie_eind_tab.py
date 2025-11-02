@@ -51,6 +51,9 @@ class OptieEindTab(QWidget):
         self.btn_clear = QPushButton("Test account leegmaken")
         top_layout.addWidget(self.btn_clear)
 
+        self.btn_move_to_prod = QPushButton("Move records to productie")
+        top_layout.addWidget(self.btn_move_to_prod)
+
         top_layout.addStretch()
         self.layout.addLayout(top_layout)
 
@@ -60,6 +63,9 @@ class OptieEindTab(QWidget):
         self.btn_fetch.clicked.connect(self.on_fetch_clicked)
         self.btn_add.clicked.connect(self.add_records_to_db)
         self.btn_clear.clicked.connect(self.clear_test_account)
+        self.btn_move_to_prod.clicked.connect(self.move_records_to_productie)
+    def move_records_to_productie(self):
+        QMessageBox.information(self, "Move to productie", "Deze functionaliteit is nog niet geïmplementeerd.")
         
     def clear_test_account(self):
         from portefeuille_viewer.data.repository import conn_str
@@ -449,8 +455,8 @@ class OptieEindTab(QWidget):
                         df_aandelen[col] = pd.to_datetime(df_aandelen[col])
                     else:
                         df_aandelen[col] = df_aandelen[col].astype(dtype_pdf)
-            print("Aandelenrecords gegenereerd:")
-            print(df_aandelen)
+            # print("Aandelenrecords gegenereerd:")
+            # print(df_aandelen)
             return df_aandelen
         else:
             print("Geen aandelenrecords gegenereerd.")
