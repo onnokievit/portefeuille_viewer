@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QPushButton, QMessageBox, QHBoxLayout, QLabel, QDateEdit
 from PySide6.QtCore import QDate
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.ui.models import PolarsTableModel, PandasTableModel
+from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
-from datetime import datetime
+
 import polars as pl
 import pandas as pd
 
@@ -16,7 +16,7 @@ class OptieEindTab(QWidget):
         self.layout = QVBoxLayout(self)
 
         # Selectievelden voor datum en broker
-        from PySide6.QtWidgets import QHBoxLayout
+        
         top_layout = QHBoxLayout()
         top_layout.addWidget(QLabel("Optie Eind Datum:"))
         self.eind_select_edit = QDateEdit()
@@ -90,7 +90,7 @@ class OptieEindTab(QWidget):
             df_opties = df_opties.filter(pl.col("broker").is_in(list(self.selected_brokers)))
         if self.asset:
             df_opties = df_opties.filter(pl.col("asset_rollup") == self.asset)
-        
+
 
         # Voeg asset_detail toe aan opties, altijd leeg
         if "asset_detail" not in df_opties.columns:
@@ -117,7 +117,7 @@ class OptieEindTab(QWidget):
             df_sprinters = df_sprinters.filter(pl.col("broker").is_in(list(self.selected_brokers)))
         if self.asset:
             df_sprinters = df_sprinters.filter(pl.col("asset_rollup") == self.asset)
-        
+
         # kolommen selecteren
         df_sprinters = df_sprinters.select([
             "broker",
@@ -142,9 +142,8 @@ class OptieEindTab(QWidget):
         kolommen_union = set(df_opties.columns) | set(df_sprinters.columns)
         # Vul ontbrekende kolommen met het juiste type
         def get_dtype(df, col):
-            if col in df.columns:
-                return df.schema[col]
-            return None
+            return df.schema[col] if col in df.columns else None
+
         for col in kolommen_union:
             # Opties
             if col not in df_opties.columns:
@@ -172,6 +171,7 @@ class OptieEindTab(QWidget):
             except Exception:
                 aantal = 0
             return "koop" if aantal < 0 else "verkoop"
+
         pdf["transactie_type"] = pdf.apply(transactie_type, axis=1)
 
         # Herbereken SomVantransactie_aantal: altijd positief
@@ -181,6 +181,7 @@ class OptieEindTab(QWidget):
                 return abs(float(aantal))
             except Exception:
                 return 0
+
         pdf["SomVantransactie_aantal"] = pdf.apply(abs_aantal, axis=1)
 
         # Voeg transactie_prijs toe (altijd 0)
@@ -193,6 +194,7 @@ class OptieEindTab(QWidget):
             elif row.get("optie_call_put") == "put":
                 return "ITM" if row.get("Koers", 0) < row.get("optie_strike", 0) else "OTM"
             return "?"
+
         pdf["itm_otm"] = pdf.apply(itm_otm, axis=1)
 
         # Voeg transactie_oorsprong toe
@@ -203,9 +205,10 @@ class OptieEindTab(QWidget):
             elif val == "OTM":
                 return "EXPIRE"
             return "?"
+
         pdf["transactie_oorsprong"] = pdf.apply(transactie_oorsprong, axis=1)
 
-        
+
 
         # Zet kolomvolgorde
         output_cols = [
@@ -224,7 +227,7 @@ class OptieEindTab(QWidget):
             "itm_otm",
             "transactie_oorsprong"
         ]
-        
+
         # Voeg order_id en order_id_number toe
         pdf = pdf.reindex(columns=output_cols)
         pdf = pdf.copy()

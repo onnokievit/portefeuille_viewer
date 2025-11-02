@@ -1,5 +1,6 @@
-import sys, os
-from PySide6.QtWidgets import QApplication, QTableView
+import sys
+import os
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 
 from portefeuille_viewer.ui.main_window import MainWindow
@@ -7,15 +8,15 @@ from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
-from portefeuille_viewer.ui.models import PandasTableModel
+
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
-from portefeuille_viewer.domain import engine
+
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
 
 import time 
-import pandas as pd
+
 
 
 # # --- Forceer Python om deze map als eerste te gebruiken ---
