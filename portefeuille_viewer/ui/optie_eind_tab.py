@@ -6,6 +6,7 @@ from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 
 import polars as pl
 import pandas as pd
+import numpy as np
 
 class OptieEindTab(QWidget):
 
@@ -231,7 +232,17 @@ class OptieEindTab(QWidget):
         # Voeg order_id en order_id_number toe
         pdf = pdf.reindex(columns=output_cols)
         pdf = pdf.copy()
-        pdf["order_id"] = range(1, len(pdf) + 1)
+        # Haal hoogste order_id uit repository_snapshot_alle_transacties
+        repo_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+        if repo_tx is not None and "order_id" in repo_tx.columns:
+            try:
+                max_order_id = repo_tx["order_id"].max()
+                start_order_id = int(max_order_id) + 1 if pd.notnull(max_order_id) else 1
+            except Exception:
+                start_order_id = 1
+        else:
+            start_order_id = 1
+        pdf["order_id"] = range(start_order_id, start_order_id + len(pdf))
         pdf["order_id_number"] = 1
         # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -250,6 +261,14 @@ class OptieEindTab(QWidget):
             pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).dt.date
             pdf[col] = pd.to_datetime(pdf[col]).astype("datetime64[ms]")
             pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).astype("datetime64[ms]")
+
+        # Harmoniseer dtypes voor numerieke kolommen zodat Polars geen typefout geeft
+        num_cols = ["transactie_prijs", "optie_strike", "SomVantransactie_aantal", "order_id"]
+        for col in num_cols:
+            if col in pdf.columns:
+                pdf[col] = pd.to_numeric(pdf[col], errors="coerce").astype("float64")
+            if col in pdf_aandelen.columns:
+                pdf_aandelen[col] = pd.to_numeric(pdf_aandelen[col], errors="coerce").astype("float64")
 
         pl_pdf = pl.DataFrame(pdf)
         pl_pdf_aandelen = pl.DataFrame(pdf_aandelen)
@@ -284,9 +303,9 @@ class OptieEindTab(QWidget):
                 nieuw["asset_rollup"] = row.get("asset_rollup")
                 nieuw["asset_detail"] = row.get("asset_detail")
                 nieuw["asset_type"] = "aandeel"
-                nieuw["optie_exp_date"] = row.get("optie_exp_date")
-                nieuw["optie_strike"] = row.get("optie_strike")
-                nieuw["optie_call_put"] = row.get("optie_call_put")
+                nieuw["optie_exp_date"] = pd.NaT  # altijd leeg voor aandelen
+                nieuw["optie_strike"] = np.nan    # altijd leeg voor aandelen
+                nieuw["optie_call_put"] = ""     # altijd leeg voor aandelen
                 nieuw["Koers"] = row.get("Koers")
                 nieuw["SomVantransactie_aantal"] = row.get("SomVantransactie_aantal")
                 # Bepaal transactie_type
@@ -299,7 +318,8 @@ class OptieEindTab(QWidget):
                     nieuw["transactie_type"] = row.get("transactie_type")
                 else:
                     nieuw["transactie_type"] = row.get("transactie_type")
-                nieuw["transactie_prijs"] = 0
+                # transactie_prijs bij aandelen komt uit optie_strike van het originele record
+                nieuw["transactie_prijs"] = row.get("optie_strike")
                 nieuw["itm_otm"] = row.get("itm_otm")
                 nieuw["transactie_oorsprong"] = "ASSIGN"
                 nieuw["transactie_oorsprong_detail"] = None
