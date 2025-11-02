@@ -850,7 +850,7 @@ def parse_int_field(s):
 
 def _date_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
     d = _parse_date(x)
-    return "" if not d else f"{d.day}-{d.month}-{d.year}"
+    return f"{d.day}-{d.month}-{d.year}" if d else ""
 
 def _norm_dec_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
     if x in (None, ""): 

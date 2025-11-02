@@ -114,20 +114,14 @@ class PolarsTableModel(QAbstractTableModel):
             if isinstance(val, float):
                 return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             # Format date columns without timestamp
-            if isinstance(val, datetime.date):
-                return val.strftime("%d/%m/%Y")
-            return str(val)
-        
+            return val.strftime("%d/%m/%Y") if isinstance(val, datetime.date) else str(val)
         # --- Sorteer data (echte waarden voor QSortFilterProxyModel) ---
         if role == Qt.UserRole:
             # Geef de echte waarde terug voor sorting
             if val is None:
                 return None
             # Converteer Polars types naar Python types
-            if isinstance(val, (int, float)):
-                return float(val)  # Altijd float voor consistente sorting
-            return str(val)
-
+            return float(val) if isinstance(val, (int, float)) else str(val)
         if role == Qt.TextAlignmentRole:
             if isinstance(val, (int, float)):
                 return Qt.AlignRight | Qt.AlignVCenter
@@ -139,16 +133,10 @@ class PolarsTableModel(QAbstractTableModel):
         # if role == Qt.ForegroundRole and col_name.lower().startswith("totaal"):
         #     if isinstance(val, (int, float)):
         #         return QBrush(QColor("darkgreen") if val >= 0 else QColor("red"))
-        if role == Qt.BackgroundRole and col_name.lower().startswith("totaal"):
-            if isinstance(val, (int, float)):
-                return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
+        if role == Qt.BackgroundRole and col_name.lower().startswith("totaal") and isinstance(val, (int, float)):
+            return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
 
         return None
-
-
-# ------------------------------------------------------------
-# filter model, gerbruikt in Orders-tab en live_tab
-# ------------------------------------------------------------
 
 
 
@@ -168,11 +156,15 @@ class MultiColFilterProxy(QSortFilterProxyModel):
         self.setDynamicSortFilter(True)
 
     def clearAll(self):
-        self._in.clear(); self._eq.clear(); self._contains.clear()
+        self._in.clear()
+        self._eq.clear()
+        self._contains.clear()
         self.invalidateFilter()
 
     def clearFor(self, col: str):
-        self._in.pop(col, None); self._eq.pop(col, None); self._contains.pop(col, None)
+        self._in.pop(col, None)
+        self._eq.pop(col, None)
+        self._contains.pop(col, None)
         self.invalidateFilter()
 
     def setIn(self, col: str, values: set):
@@ -199,13 +191,9 @@ class MultiColFilterProxy(QSortFilterProxyModel):
 
         for col, want in self._in.items():
             if want:
-                cidx = self._cols.index(col)
                 val = df.iloc[source_row][col]
                 # None/"" worden in set gerepresenteerd als None
-                if pd.isna(val) or str(val).strip() == "":
-                    v = None
-                else:
-                    v = str(val)
+                v = None if pd.isna(val) or not str(val).strip() else str(val)
                 if v not in want:
                     return False
 
