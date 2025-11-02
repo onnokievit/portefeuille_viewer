@@ -22,7 +22,7 @@ def _load_db_config():
     databases = get_databases()
     db_map = {name: db["path"] for name, db in databases.items()}
     db_styles = {name: {"fg": db["fg_color"], "bg": db["bg_color"]} 
-                 for name, db in databases.items()}
+    for name, db in databases.items()}
     return db_map, db_styles
 
 DB_MAP, DB_STYLES = _load_db_config()
@@ -138,7 +138,7 @@ def load_alle_transacties() -> pl.DataFrame:
     """
     Laadt alle transacties uit de database.
     """
-    sql = "SELECT * FROM transacties_bron_data_org"  # vervang door jouw Access-query
+    sql = "SELECT * FROM transacties_bron_data"  # vervang door jouw Access-query
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     compact_float64(df)

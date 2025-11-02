@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QPushButton, QMessageBox, QHBoxLayout, QLabel, QDateEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QPushButton, QHBoxLayout, QLabel, QDateEdit, QMessageBox
 from PySide6.QtCore import QDate
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
+from portefeuille_viewer.signals import signals
 
 import polars as pl
 import pandas as pd
@@ -10,9 +11,11 @@ import numpy as np
 
 class OptieEindTab(QWidget):
 
+
     def __init__(self, broker=None, asset=None):
         super().__init__()
         self.asset = asset
+        self.active_db_name = "transacties_bron_data_test_accounts"  # Database name for signal
         self.setWindowTitle("Optie Eind")
         self.layout = QVBoxLayout(self)
 
@@ -45,6 +48,9 @@ class OptieEindTab(QWidget):
         self.btn_add = QPushButton("Records toevoegen aan transactiedatabase")
         top_layout.addWidget(self.btn_add)
 
+        self.btn_clear = QPushButton("Test account leegmaken")
+        top_layout.addWidget(self.btn_clear)
+
         top_layout.addStretch()
         self.layout.addLayout(top_layout)
 
@@ -53,6 +59,17 @@ class OptieEindTab(QWidget):
 
         self.btn_fetch.clicked.connect(self.on_fetch_clicked)
         self.btn_add.clicked.connect(self.add_records_to_db)
+        self.btn_clear.clicked.connect(self.clear_test_account)
+        
+    def clear_test_account(self):
+        from portefeuille_viewer.data.repository import conn_str
+        import pyodbc
+        with pyodbc.connect(conn_str) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM transacties_bron_data_test_accounts")
+            conn.commit()
+        QMessageBox.information(self, "Test account", "Alle records zijn verwijderd uit transacties_bron_data_test_accounts.")
+        signals.databaseChanged.emit(self.active_db_name)
 
         # Tabel pas vullen na klikken
         self.model = None
@@ -272,7 +289,18 @@ class OptieEindTab(QWidget):
 
         pl_pdf = pl.DataFrame(pdf)
         pl_pdf_aandelen = pl.DataFrame(pdf_aandelen)
-        pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
+        # pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
+
+        if pl_pdf.shape[0] == 0 and pl_pdf_aandelen.shape[0] == 0:
+            # Beide leeg: maak een lege DataFrame met juiste kolommen/dtypes
+            pl_merged = pl.DataFrame({col: [] for col in pl_pdf.columns})
+        elif pl_pdf.shape[0] == 0:
+            pl_merged = pl_pdf_aandelen
+        elif pl_pdf_aandelen.shape[0] == 0:
+            pl_merged = pl_pdf
+        else:
+            pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
+
 
 
         self.model = PandasTableModel(pl_merged.to_pandas())
@@ -281,13 +309,96 @@ class OptieEindTab(QWidget):
     def on_fetch_clicked(self):
         self.load_data()
 
-    def add_records_to_db(self):
-        # Placeholder: hier records toevoegen aan transactiedatabase
-        QMessageBox.information(self, "Toevoegen", "Records zijn toegevoegd aan transactiedatabase (dummy)")
 
-    def maak_aandelen_records(self, pdf, transactie_datum):
+    def add_records_to_db(self):
+        # 1. Kolommen die je wilt uploaden (selecteer hier, comment/uncomment voor debug)
+        upload_cols = [
+            "datum",
+            "broker",
+            "asset_rollup",
+            "asset_type",
+            "transactie_type",
+            "aantal",
+            "transactie_prijs",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put",
+            "transactie_oorsprong",
+            "order_id",
+            "order_id_number"
+        ]
+        # 2. Mapping van DataFrame naar db-kolommen
+        col_map = {
+            "transactie_datum": "datum",
+            "broker": "broker",
+            "asset_rollup": "asset_rollup",
+            "asset_type": "asset_type",
+            "transactie_type": "transactie_type",
+            "SomVantransactie_aantal": "aantal",
+            "transactie_prijs": "transactie_prijs",
+            "optie_exp_date": "optie_exp_date",
+            "optie_strike": "optie_strike",
+            "optie_call_put": "optie_call_put",
+            "transactie_oorsprong": "transactie_oorsprong",
+            "order_id": "order_id",
+            "order_id_number": "order_id_number"
+        }
+        df = self.model._df if hasattr(self.model, '_df') else self.model._data
+        df_db = df[list(col_map.keys())].rename(columns=col_map)
+        df_db = self._convert_df_for_access(df_db)
+        # 3. Selecteer de kolommen die je wilt uploaden
+        df_db = df_db[upload_cols]
+        if "optie_call_put" in df_db.columns:
+            df_db["optie_call_put"] = df_db["optie_call_put"].replace("", None)
+        if "optie_exp_date" in df_db.columns:
+            # Zet alles wat geen geldige datum is naar None
+            df_db["optie_exp_date"] = pd.to_datetime(df_db["optie_exp_date"], errors="coerce")
+            df_db["optie_exp_date"] = df_db["optie_exp_date"].apply(lambda x: x.date() if pd.notnull(x) else None)
+        # 4. Upload naar Access database
+        from portefeuille_viewer.data.repository import conn_str
+        import pyodbc
+        with pyodbc.connect(conn_str) as conn:
+            cursor = conn.cursor()
+            for _, row in df_db.iterrows():
+                placeholders = ','.join(['?'] * len(df_db.columns))
+                sql = f"INSERT INTO transacties_bron_data_test_accounts ({','.join(df_db.columns)}) VALUES ({placeholders})"
+                cursor.execute(sql, tuple(row))
+            conn.commit()
+        QMessageBox.information(self, "Toevoegen", f"{len(df_db)} records toegevoegd aan transacties_bron_data_test_accounts.")
+        signals.databaseChanged.emit(self.active_db_name)
         
 
+    def _convert_df_for_access(self, df):
+        """
+        Zet kolommen van df om naar de juiste types voor Access:
+        - Datumkolommen: naar datetime.date
+        - Numerieke kolommen: naar float
+        - Tekstkolommen: naar str
+        """
+        # Pas aan naar jouw kolomnamen!
+        date_cols = ["datum", "optie_exp_date"]
+        num_cols = ["aantal", "transactie_prijs", "optie_strike", "order_id", "order_id_number"]
+        text_cols = ["broker", "asset_rollup", "asset_type", "transactie_type", "optie_call_put", "transactie_oorsprong"]
+
+        # Datumkolommen
+        for col in date_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+
+        # Numerieke kolommen
+        for col in num_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(float)
+
+        # Tekstkolommen
+        for col in text_cols:
+            if col in df.columns:
+                df[col] = df[col].fillna('').astype(str)
+
+        return df
+
+
+    def maak_aandelen_records(self, pdf, transactie_datum):
         nieuwe_records = []
         kolommen = list(pdf.columns)
         # Voeg order_id en order_id_number toe aan kolommen als ze nog niet bestaan
@@ -305,7 +416,7 @@ class OptieEindTab(QWidget):
                 nieuw["asset_type"] = "aandeel"
                 nieuw["optie_exp_date"] = pd.NaT  # altijd leeg voor aandelen
                 nieuw["optie_strike"] = np.nan    # altijd leeg voor aandelen
-                nieuw["optie_call_put"] = ""     # altijd leeg voor aandelen
+                nieuw["optie_call_put"] = ""    # altijd leeg voor aandelen
                 nieuw["Koers"] = row.get("Koers")
                 nieuw["SomVantransactie_aantal"] = row.get("SomVantransactie_aantal")
                 # Bepaal transactie_type
