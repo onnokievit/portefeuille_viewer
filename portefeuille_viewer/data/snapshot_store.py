@@ -1,3 +1,4 @@
+import contextlib
 import polars as pl
 
 
@@ -135,21 +136,14 @@ class SnapshotStore:
         setattr(self, attr_name, value)
         import time
         # record timestamp
-        try:
+        with contextlib.suppress(Exception):
             self._last_update_ts[attr_name] = time.time()
-        except Exception:
-            # Best effort; niet kritisch
-            pass
-
         # Notify subscribers that this snapshot key is updated. Import local to avoid cycles.
-        try:
+        with contextlib.suppress(Exception):
             from portefeuille_viewer.signals import signals
 
             # Use queued emit helper to ensure main-thread delivery
             signals.queued_emit_snapshotUpdated(attr_name)
-        except Exception:
-            # If signals cannot be imported (rare), silently continue
-            pass
 
 
 
