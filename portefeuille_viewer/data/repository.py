@@ -1,12 +1,15 @@
 
+import contextlib
 import pandas as pd
 import pyodbc
-from datetime import date, datetime, timedelta
-from portefeuille_viewer.domain.engine import compact_float64
-import warnings
 import polars as pl
-from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+
+from datetime import date, timedelta
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database
+from portefeuille_viewer.signals import signals
+from portefeuille_viewer.domain.engine import compact_float64
+
 import warnings # importeer warnings module om waarschuwingen te beheren
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas") # onderdruk specifieke waarschuwingen van pandas
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -55,12 +58,8 @@ def switch_database(name: str):
         print(f"Waarschuwing: kon SNAPSHOT_STORE.active_database_name niet instellen op {name}")
     else:
         # Emit central databaseChanged signal so UI can react (queued to main thread)
-        try:
-            from portefeuille_viewer.signals import signals
+        with contextlib.suppress(Exception):
             signals.queued_emit_databaseChanged(name)
-        except Exception:
-            # If signals are not available, ignore silently (no hard dependency)
-            pass
 
 
 # ------------------------------------------------------------
@@ -362,7 +361,7 @@ def load_open_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFra
 
     
 
-    vandaag = date.today()
+    
 
     # --- Eerste aggregatie (overeenkomend met Access GROUP BY) ---
     per_uniek = (
@@ -427,7 +426,7 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
         df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
 
-    vandaag = date.today()
+    
 
     # --- Eerste aggregatie (komt overeen met Opties_closed_series_opgerold_op_uniek_id) ---
     per_uniek = (
@@ -518,7 +517,8 @@ def get_connection():
 
 def insert_transaction(data: dict) -> int:
     """Nieuwe transactie invoegen en Id teruggeven."""
-    data = dict(data); data.pop("uniek_id", None)
+    data = dict(data)
+    data.pop("uniek_id", None)
     cols = ", ".join(data.keys())
     placeholders = ", ".join(["?"] * len(data))
     values = list(data.values())
@@ -532,11 +532,8 @@ def insert_transaction(data: dict) -> int:
         new_id = cursor.fetchone()[0]
         conn.commit()
     # Emit centraal signaal na insert
-    try:
-        from portefeuille_viewer.signals import signals
+    with contextlib.suppress(Exception):
         signals.ordersCommitted.emit()
-    except Exception:
-        pass
     return new_id
 
 
@@ -563,22 +560,27 @@ def delete_transactions_by_ids(ids_to_delete: list) -> int:
     """
     if not ids_to_delete:
         return 0
-    
+
     with get_connection() as conn:
-        cursor = conn.cursor()
-        # Maak placeholders voor IN clause
-        placeholders = ",".join("?" * len(ids_to_delete))
-        sql = f"DELETE FROM transacties_bron_data_org WHERE Id IN ({placeholders})"
-        cursor.execute(sql, ids_to_delete)
-        deleted_count = cursor.rowcount
-        conn.commit()
+        deleted_count = _extracted_from_delete_transactions_by_ids_10(
+            conn, ids_to_delete
+        )
     # Emit centraal signaal na delete
-    try:
-        from portefeuille_viewer.signals import signals
+    with contextlib.suppress(Exception):
         signals.ordersCommitted.emit()
-    except Exception:
-        pass
     return deleted_count
+
+
+# TODO Rename this here and in `delete_transactions_by_ids`
+def _extracted_from_delete_transactions_by_ids_10(conn, ids_to_delete):
+    cursor = conn.cursor()
+    # Maak placeholders voor IN clause
+    placeholders = ",".join("?" * len(ids_to_delete))
+    sql = f"DELETE FROM transacties_bron_data_org WHERE Id IN ({placeholders})"
+    cursor.execute(sql, ids_to_delete)
+    result = cursor.rowcount
+    conn.commit()
+    return result
 
 
 ##############################versie met build_where_and_params, niet meer nodig omdat client side filtering goed genoeg is
@@ -595,7 +597,7 @@ def get_distinct_values(column: str, table: str = "transacties_bron_data_org", b
         df = pd.read_sql(sql, conn, params=params)
     vals = []
     for x in df["v"].tolist():
-        if pd.isna(x) or str(x).strip() == "":
+        if pd.isna(x) or not str(x).strip():
             vals.append(None)
         else:
             vals.append(x)
@@ -612,7 +614,8 @@ def _build_where_and_params(filters: dict | None) -> tuple[str, list]:
     conds, params = [], []
     ar = (filters.get("asset_rollup") or "").strip()
     if ar:
-        conds.append("asset_rollup = ?"); params.append(ar)
+        conds.append("asset_rollup = ?")
+        params.append(ar)
     q = (filters.get("q") or "").strip()
     if q:
         like = f"%{q}%"
@@ -656,45 +659,54 @@ def _build_where_and_params(filters: dict | None) -> tuple[str, list]:
                 conds.append("(" + " OR ".join(parts) + ")")
 
         elif op == "eq":
-            conds.append(f"[{col}] = ?"); params.append(v)
+            conds.append(f"[{col}] = ?")
+            params.append(v)
 
         elif op == "contains":
-            conds.append(f"[{col}] LIKE ?"); params.append(f"%{v}%")
+            conds.append(f"[{col}] LIKE ?")
+            params.append(f"%{v}%")
 
         elif op == "startswith":
-            conds.append(f"[{col}] LIKE ?"); params.append(f"{v}%")
+            conds.append(f"[{col}] LIKE ?")
+            params.append(f"{v}%")
 
         elif op == "endswith":
-            conds.append(f"[{col}] LIKE ?"); params.append(f"%{v}")
+            conds.append(f"[{col}] LIKE ?")
+            params.append(f"%{v}")
 
         elif op == "date_on":
             d = _parse_date(v)
             if d:
-                conds.append(f"([{col}] >= ? AND [{col}] < ?)"); params.extend([d, d + timedelta(days=1)])
+                conds.append(f"([{col}] >= ? AND [{col}] < ?)")
+                params.extend([d, d + timedelta(days=1)])
 
         elif op == "date_between":
             if isinstance(v, (list, tuple)) and len(v) >= 2:
-                d1 = _parse_date(v[0]); d2 = _parse_date(v[1])
+                d1 = _parse_date(v[0])
+                d2 = _parse_date(v[1])
                 if d1 and d2:
-                    conds.append(f"[{col}] BETWEEN ? AND ?"); params.extend([d1, d2])
+                    conds.append(f"[{col}] BETWEEN ? AND ?")
+                    params.extend([d1, d2])
 
         elif op == "gte":
-            conds.append(f"[{col}] >= ?"); params.append(v)
+            conds.append(f"[{col}] >= ?")
+            params.append(v)
 
         elif op == "lte":
-            conds.append(f"[{col}] <= ?"); params.append(v)
+            conds.append(f"[{col}] <= ?")
+            params.append(v)
     
     where_sql = (" WHERE " + " AND ".join(conds)) if conds else ""
     return where_sql, params
 
 def _order_by_for_seek(col: str, direction: str) -> str: ########################## niet genoemd door chatgpt om te blijven?
     col_db = ALLOWED_SORT_COLS.get(col, "Id")
-    dirn = "DESC" if str(direction).upper() == "DESC" else "ASC"
+    dirn = "DESC" if direction.upper() == "DESC" else "ASC"
     return f" ORDER BY {col_db} {dirn}, Id {dirn}"
 
 def _seek_predicate(col: str, direction: str) -> str: ########################## niet genoemd door chatgpt om te blijven?
     col_db = ALLOWED_SORT_COLS.get(col, "Id")
-    dirn = str(direction).upper()
+    dirn = direction.upper()
     if dirn == "ASC":
         return f"(({col_db} > ?) OR ({col_db} = ? AND Id > ?))"
     else:
@@ -719,7 +731,7 @@ def fetch_records_page( ################## dit is de oude versie van fetch_recor
     with get_connection() as conn:
         if seek_value is None or seek_id is None:
             sql = f"""
-                SELECT TOP {int(limit)} *
+                SELECT TOP {limit} *
                 FROM [{table}]
                 {where_sql}
                 {_order_by_for_seek(sort_col, sort_dir)}
@@ -729,7 +741,7 @@ def fetch_records_page( ################## dit is de oude versie van fetch_recor
             pred = _seek_predicate(sort_col, sort_dir)
             where2 = where_sql + (" AND " if where_sql else " WHERE ") + pred
             sql = f"""
-                SELECT TOP {int(limit)} *
+                SELECT TOP {limit} *
                 FROM [{table}]
                 {where2}
                 {_order_by_for_seek(sort_col, sort_dir)}
@@ -749,7 +761,7 @@ def load_reference_lists():
     return brokers, rollups, sprinters
 
 
-import pyodbc
+
 
 def _sanitize_update_dict(d: dict) -> dict:
     d = dict(d or {})
@@ -793,20 +805,20 @@ def update_transactions_atomic(record_id1: int, data1: dict,
             conn.rollback()
             raise
     # Emit centraal signaal na update
-    try:
-        from portefeuille_viewer.signals import signals
+    with contextlib.suppress(Exception):
         signals.ordersCommitted.emit()
-    except Exception:
-        pass
 
 def _clean(x): ########################## niet genoemd door chatgpt om te blijven?????? 
     return "" if x is None else str(x).strip()
 
 def _parse_date(x):
     from datetime import date, datetime
-    if x in (None, ""): return None
-    if isinstance(x, datetime): return x.date()
-    if isinstance(x, date): return x
+    if x in (None, ""): 
+        return None
+    if isinstance(x, datetime): 
+        return x.date()
+    if isinstance(x, date): 
+        return x
     s = str(x).strip().replace("\\", "/").replace("-", "/")
     p = s.split("/")
     try:
@@ -827,7 +839,7 @@ def parse_int_field(s):
     if s is None:
         return None
     s = str(s).strip().replace(",", ".")
-    if s == "":
+    if not s:
         return None
     try:
         return int(float(s))
@@ -841,7 +853,8 @@ def _date_for_id(x): ########################## niet genoemd door chatgpt om te 
     return "" if not d else f"{d.day}-{d.month}-{d.year}"
 
 def _norm_dec_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
-    if x in (None, ""): return ""
+    if x in (None, ""): 
+        return ""
     s = str(x).strip().replace(",", ".")
     try:
         f = float(s)
