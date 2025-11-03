@@ -13,6 +13,13 @@ from portefeuille_viewer.config import (
 )
 
 class SettingsTab(QWidget):
+    def save_eurusd(self):
+        try:
+            value = float(self.eurusd_input.value())
+            self.settings.set_eurusd(value)
+            QMessageBox.information(self, "Succes", "✅ EUR/USD opgeslagen.")
+        except Exception as e:
+            QMessageBox.warning(self, "Fout", f"Kon EUR/USD niet opslaan: {e}")
     configChanged = Signal()  # Signal voor database wijzigingen
     
     def __init__(self):
@@ -20,6 +27,22 @@ class SettingsTab(QWidget):
         self.settings = get_settings()
 
         layout = QVBoxLayout()
+
+        # === EURUSD SETTINGS ===
+        from PySide6.QtWidgets import QDoubleSpinBox
+        eurusd_group = QGroupBox("EUR/USD Instelling")
+        eurusd_form = QFormLayout()
+        self.eurusd_input = QDoubleSpinBox()
+        self.eurusd_input.setDecimals(4)
+        self.eurusd_input.setRange(0.0001, 100.0)
+        self.eurusd_input.setSingleStep(0.0001)
+        self.eurusd_input.setValue(self.settings.get_eurusd())
+        eurusd_form.addRow("EUR/USD:", self.eurusd_input)
+        save_eurusd_button = QPushButton("💾 EUR/USD Opslaan")
+        save_eurusd_button.clicked.connect(self.save_eurusd)
+        eurusd_form.addRow(save_eurusd_button)
+        eurusd_group.setLayout(eurusd_form)
+        layout.addWidget(eurusd_group)
         
         # === IB SETTINGS ===
         ib_group = QGroupBox("Interactive Brokers Instellingen")

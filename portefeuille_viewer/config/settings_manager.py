@@ -15,6 +15,15 @@ USER_CONFIG_PATH = USER_CONFIG_DIR / "settings.ini"
 
 
 class SettingsManager:
+    # === EURUSD Setting ===
+    def get_eurusd(self) -> float:
+        return self.config.getfloat('app', 'eurusd', fallback=1.0)
+
+    def set_eurusd(self, value: float):
+        if not self.config.has_section('app'):
+            self.config.add_section('app')
+        self.config.set('app', 'eurusd', str(value))
+        self.save()
     """Centraal beheer voor alle applicatie settings."""
     
     def __init__(self):
