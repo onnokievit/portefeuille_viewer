@@ -858,21 +858,21 @@ class OrdersTab(QWidget):
         if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan record niet toevoegen")
             return  # Geen snapshot geladen, niets te doen
-        
+
         try:
             # Haal het zojuist toegevoegde record op uit de database
             # Dit garandeert dat we exact dezelfde schema krijgen als de snapshot
             from portefeuille_viewer.data.repository import get_connection
             import polars as pl
-            
+
             with get_connection() as conn:
                 sql = "SELECT * FROM transacties_bron_data_org WHERE Id = ?"
                 new_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
-            
+
             if new_df.is_empty():
                 print(f"⚠️ Record {record_id} niet gevonden in database na INSERT")
                 return
-            
+
             # Verwijder bestaande rijen met hetzelfde Id uit de snapshot
             mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
             SNAPSHOT_STORE.repository_snapshot_alle_transacties = SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask)
@@ -883,9 +883,9 @@ class OrdersTab(QWidget):
             ])
             print(f"✅ Record {record_id} toegevoegd aan snapshot (totaal: {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen)")
         except Exception as e:
-            print(f"❌ Fout bij toevoegen record {record_id} aan snapshot: {e}")
-            import traceback
-            traceback.print_exc()
+            self._extracted_from__update_transaction_in_snapshot_37(
+                '❌ Fout bij toevoegen record ', record_id, ' aan snapshot: ', e
+            )
 
     def _update_transaction_in_snapshot(self, record_id: int, data_dict: dict):
         """
@@ -897,20 +897,20 @@ class OrdersTab(QWidget):
         if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
             print("⚠️ Snapshot niet geladen - kan record niet updaten")
             return  # Geen snapshot geladen, niets te doen
-        
+
         try:
             # Haal het bijgewerkte record op uit de database
             from portefeuille_viewer.data.repository import get_connection
             import polars as pl
-            
+
             with get_connection() as conn:
                 sql = "SELECT * FROM transacties_bron_data_org WHERE Id = ?"
                 updated_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
-            
+
             if updated_df.is_empty():
                 print(f"⚠️ Record {record_id} niet gevonden in database na UPDATE")
                 return
-            
+
             # Verwijder het oude record en voeg het nieuwe toe
             # Dit is eenvoudiger dan veld-voor-veld updaten en garandeert consistentie
             mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
@@ -920,9 +920,15 @@ class OrdersTab(QWidget):
             ])
             print(f"✅ Record {record_id} geüpdatet in snapshot")
         except Exception as e:
-            print(f"❌ Fout bij updaten record {record_id} in snapshot: {e}")
-            import traceback
-            traceback.print_exc()
+            self._extracted_from__update_transaction_in_snapshot_37(
+                '❌ Fout bij updaten record ', record_id, ' in snapshot: ', e
+            )
+
+    # TODO Rename this here and in `_add_transaction_to_snapshot` and `_update_transaction_in_snapshot`
+    def _extracted_from__update_transaction_in_snapshot_37(self, arg0, record_id, arg2, e):
+        print(f"{arg0}{record_id}{arg2}{e}")
+        import traceback
+        traceback.print_exc()
 
 
     def apply_database_by_name(self, name):
