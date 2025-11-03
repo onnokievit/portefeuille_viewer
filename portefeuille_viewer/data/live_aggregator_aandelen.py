@@ -175,11 +175,11 @@ class LiveAggregatorAandelen(QObject):
                 "total_result": [],
                 "regio": []
             })
-        
-        # Aggregeer per asset_rollup (data komt al verwerkt van PortfolioEngine)
-        aggregated_df = (
-            self.df.group_by("broker","asset_rollup","regio","sector","value_grow")
-            .agg([
+
+        return self.df.group_by(
+            "broker", "asset_rollup", "regio", "sector", "value_grow"
+        ).agg(
+            [
                 # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
@@ -187,14 +187,10 @@ class LiveAggregatorAandelen(QObject):
                 pl.col("euro_koop").sum(),
                 pl.col("aantal_verkoop").sum(),
                 pl.col("euro_verkoop").sum(),
-                
                 pl.col("eq_total_fee").sum(),
                 pl.col("total_result").sum(),
-                
-            ])
+            ]
         )
-
-        return aggregated_df
 
 
 
@@ -217,22 +213,18 @@ class LiveAggregatorAandelen(QObject):
                 "eq_total_fee": [],
                 "total_result": []
             })
-        
-        # Aggregeer per asset_rollup (data komt al verwerkt van PortfolioEngine)
-        aggregated_df = (
-            self.df.group_by("asset_rollup")
-            .agg([
+
+        return self.df.group_by("asset_rollup").agg(
+            [
                 # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
                 pl.col("result_realised").sum(),
                 pl.col("result_non_realised").sum(),
                 pl.col("eq_total_fee").sum(),
-                pl.col("total_result").sum()
-            ])
+                pl.col("total_result").sum(),
+            ]
         )
-        
-        return aggregated_df
     
     def _save_to_snapshot_store(self):
         """Sla geaggregeerde data op in SnapshotStore."""

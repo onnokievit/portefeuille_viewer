@@ -121,11 +121,11 @@ class LiveAggregatorOpties(QObject):
         
         Logica:
         - CALL optie: 
-          - Als koers > strike: ITM_OTM = koers - strike
-          - Anders: ITM_OTM = 0
+            - Als koers > strike: ITM_OTM = koers - strike
+            - Anders: ITM_OTM = 0
         - PUT optie:
-          - Als koers < strike: ITM_OTM = strike - koers
-          - Anders: ITM_OTM = 0
+            - Als koers < strike: ITM_OTM = strike - koers
+            - Anders: ITM_OTM = 0
         
         Returns:
             pl.DataFrame: DataFrame met toegevoegde ITM_OTM kolom
