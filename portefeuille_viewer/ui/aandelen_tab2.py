@@ -4,6 +4,7 @@ from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
+from portefeuille_viewer.config import get_settings
 import polars as pl
 
 
@@ -283,7 +284,7 @@ class AandelenTab2(QWidget):
 
 
         ########### Einde Joins ##################################
-        EURUSD = 1.16
+        EURUSD = get_settings().get_eurusd()
         df_final = df_final.with_columns(
             (pl.col("eq_total_result") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("eq_total_result"),
             (pl.col("clos_opt_transactie_euro_totaal") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("clos_opt_transactie_euro_totaal"),
