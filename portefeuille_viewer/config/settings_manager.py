@@ -88,7 +88,7 @@ class SettingsManager:
         return next(iter(databases.keys()), None)
     
     def add_database(self, name: str, path: str, fg_color: str = 'black', 
-                     bg_color: str = 'white', is_default: bool = False):
+        bg_color: str = 'white', is_default: bool = False):
         """Voeg nieuwe database toe."""
         if not self.config.has_section('databases'):
             self.config.add_section('databases')
@@ -108,7 +108,7 @@ class SettingsManager:
             self.save()
     
     def update_database(self, name: str, path: str = None, fg_color: str = None, 
-                       bg_color: str = None, is_default: bool = None):
+        bg_color: str = None, is_default: bool = None):
         """Update database configuratie."""
         databases = self.get_databases()
         if name not in databases:

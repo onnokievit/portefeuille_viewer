@@ -81,17 +81,20 @@ def compute_equity_flows(raw: pl.DataFrame) -> pl.DataFrame:
         ])
     )
 
-    # Outer join met null-opvulling
-    flows = (
+    return (
         buy.join(sell, on="asset_rollup", how="outer")
         .fill_null(0.0)
-        .with_columns([
-            (pl.col("buy_qty") - pl.col("sell_qty")).cast(pl.Float32).alias("qty_eq"),
-            (pl.col("fee_buy") + pl.col("fee_sell")).cast(pl.Float32).alias("fee_eq")
-        ])
+        .with_columns(
+            [
+                (pl.col("buy_qty") - pl.col("sell_qty"))
+                .cast(pl.Float32)
+                .alias("qty_eq"),
+                (pl.col("fee_buy") + pl.col("fee_sell"))
+                .cast(pl.Float32)
+                .alias("fee_eq"),
+            ]
+        )
     )
-
-    return flows
 
 def print_snapshot_head(snapshot_name: str, snapshot: pl.DataFrame, n: int = 50):
     """
