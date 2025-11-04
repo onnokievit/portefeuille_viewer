@@ -3,24 +3,25 @@ import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 
-from portefeuille_viewer.ui.main_window import MainWindow
+# Importeer hoofdvenster en benodigde modules
+from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
-from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE 
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
-import time 
+import time
 
-# # --- Forceer Python om deze map als eerste te gebruiken ---
+# Forceer Python om deze map als eerste te gebruiken
 sys.path.insert(0, os.path.dirname(__file__))
-# # Controleer welke repository daadwerkelijk geladen wordt:
+
 print("✅ Repository geladen uit:", repository.__file__)
 
 def load_datasets():
-    start_time = time.time()            
+    start_time = time.time()
     repository.load_alle_transacties()
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()
@@ -32,8 +33,6 @@ def load_datasets():
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
     repository.load_optie_referentie_data()
-    # engine.print_snapshot_columns("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: kolommen controleren
-    # engine.print_snapshot_head("repository_snapshot_sprinter_referentie_data", SNAPSHOT_STORE.repository_snapshot_sprinter_referentie_data) # Debug: eerste rijen controleren
     live_aggregator_aandelen = LiveAggregatorAandelen()
     live_aggregator_opties = LiveAggregatorOpties()
     live_aggregator_aandelen.process_live_update
@@ -45,48 +44,31 @@ def load_datasets():
 
 def main():
     app = QApplication(sys.argv)
-    # Globale app-font
     font = QFont()
     font.setPointSize(9)
-    # PySide6 compat: nieuwe enum (Weight) óf oudere attribuut (DemiBold)
     try:
         font.setWeight(QFont.Weight.DemiBold)
     except AttributeError:
         font.setWeight(QFont.DemiBold)
     app.setFont(font)
-    
-    # Load datasets first
     load_datasets()
-    
-    # Get settings for IB configuration
     settings = get_settings()
-
-    # Initialize centralized services
     price_feed = PriceFeedService(
-        settings.get_ib_host(), 
-        settings.get_ib_port(), 
+        settings.get_ib_host(),
+        settings.get_ib_port(),
         settings.get_ib_client_id()
     )
-
-    # Start de live price updater (centrale live_prices snapshot)
-
-    start_live_price_updater(price_feed)
-
+    
+    stop_event, thread = start_live_price_updater(price_feed)
     portfolio_engine = PortfolioEngine(price_feed)
+    w = MainWindow(portfolio_engine,price_feed, live_price_updater_stop_event=stop_event) 
     
-    # Create main window with centralized services FIRST
-    w = MainWindow(portfolio_engine, price_feed)
+    
     w.show()
-    
-    # Start live price subscriptions only after IB is ready
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()
     else:
-        # Wait for IB ready signal, then start subscriptions once
         price_feed._feed.ready.connect(lambda: portfolio_engine.start_subscriptions())
-    
-    # Note: LiveAggregator automatically initializes its data on instantiation
-
     sys.exit(app.exec())
 
 if __name__ == "__main__":
