@@ -10,6 +10,8 @@ from portefeuille_viewer.ui.option_explorer import OptionChainTab
 from portefeuille_viewer.ui.single_asset_analyse_tab import SingleAssetAnalyseTab
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui.repository_aggregator_tester_tab import RepositoryAggregatorTesterTab
+from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
 
 import logging
 import os
@@ -80,7 +82,7 @@ class MainWindow(QMainWindow):
 
         # Lightweight test tab: Repository Aggregator Tester
         try:
-            from portefeuille_viewer.ui.repository_aggretator_tester_tab import RepositoryAggregatorTesterTab
+            
             # Use the exact name requested: repository_aggretator_tester_tab
             self.repository_aggretator_tester_tab = RepositoryAggregatorTesterTab()
         except Exception as e:
@@ -110,6 +112,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.option_chain_tab, "Option Chain Explorer")
         self.tabs.addTab(self.settings_tab, "Settings")
         self.tabs.addTab(self.repository_aggretator_tester_tab, "Repository Aggregator Tester")
+        
+        self.tabs.addTab(RepositoryTesterTab(), "Repository Tester")
 
         self.setCentralWidget(self.tabs)
 

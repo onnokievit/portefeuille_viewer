@@ -189,3 +189,15 @@ class PortfolioEngine(QObject):
             print(f"PortfolioEngine: Error getting symbols for subscription: {e}")
             return []
 
+    def shutdown(self):
+        # Stop de update timer
+        if self._update_timer.isActive():
+            self._update_timer.stop()
+        # Voeg hier eventueel shutdown/stop-calls toe voor aggregators als die threads/timers gebruiken
+        # Bijvoorbeeld:
+        # if hasattr(self.live_aggregator_aandelen, "shutdown"):
+        #     self.live_aggregator_aandelen.shutdown()
+        # if hasattr(self.live_aggregator_opties, "shutdown"):
+        #     self.live_aggregator_opties.shutdown()
+        # if hasattr(self.live_aggregator_sprinters, "shutdown"):
+        #     self.live_aggregator_sprinters.shutdown()
