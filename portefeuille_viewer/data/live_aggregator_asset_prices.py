@@ -39,22 +39,17 @@ def clear_live_prices():
     SNAPSHOT_STORE.live_prices = {}
 
 def start_live_price_updater(price_feed, interval_sec=2):
-    """
-    Start een background thread die periodiek de live prijzen uit de price_feed service haalt
-    en deze in SNAPSHOT_STORE.live_prices bijwerkt.
-    - price_feed: een instantie van PriceFeedService
-    - interval_sec: update-interval in seconden
-    """
+    stop_event = threading.Event()
     def updater():
-        while True:
-            # Haal alle actuele prijzen op uit de price_feed service
-            # Dit voorbeeld verwacht dat price_feed.get_all_prices() een dict teruggeeft
+        while not stop_event.is_set():
             try:
-                prices = price_feed.get_all_prices()  # {asset_id: prijs, ...}
+                prices = price_feed.get_all_prices()
                 if prices:
                     update_live_prices(prices)
             except Exception as e:
                 print(f"[LivePriceUpdater] Fout bij ophalen prijzen: {e}")
-            time.sleep(interval_sec)
+            stop_event.wait(interval_sec)
     thread = threading.Thread(target=updater, daemon=True)
     thread.start()
+    return stop_event, thread
+
