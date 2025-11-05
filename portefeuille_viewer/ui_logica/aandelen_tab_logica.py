@@ -11,6 +11,25 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 import polars as pl
 
 class AandelenTab(QWidget, Ui_AandelenTab):
+	@Slot()
+	def on_btnExportExcel_clicked(self):
+		"""Exporteer de huidige zichtbare tabel (df_sum) naar Excel."""
+		import pandas as pd
+		from PySide6.QtWidgets import QFileDialog, QMessageBox
+		try:
+			# self.model._df is de huidige zichtbare Polars DataFrame (df_sum)
+			df = self.model._df
+			if df is None or df.is_empty():
+				QMessageBox.warning(self, "Exporteren mislukt", "Geen data om te exporteren.")
+				return
+			# Converteer naar pandas DataFrame
+			pdf = df.to_pandas()
+			fname, _ = QFileDialog.getSaveFileName(self, "Opslaan als Excel", "aandelen_snapshot.xlsx", "Excel Files (*.xlsx)")
+			if fname:
+				pdf.to_excel(fname, index=False)
+				QMessageBox.information(self, "Export geslaagd", f"Snapshot succesvol opgeslagen als:\n{fname}")
+		except Exception as e:
+			QMessageBox.critical(self, "Exporteren mislukt", f"Fout bij exporteren:\n{e}")
 	"""
 	Tab voor het tonen van de geaggregeerde aandelen-posities uit PortfolioEngine.
 	Kolommen: asset_rollup, koers, aantal_bezit, result_realised, result_non_realised
