@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QMainWindow, QWidget
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
 from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
 from portefeuille_viewer.ui_logica.settings_tab_logica import SettingsTab
+from portefeuille_viewer.ui_logica.sprinters_open_tab_logica import SprintersOpenTab
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self , price_feed,portfolio_engine, live_price_updater_stop_event=None): #  price_feed,
@@ -18,6 +19,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Hier kun je later echte tab-klassen toevoegen
         self.repository_tester_tab = RepositoryTesterTab()
         self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
+        self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
+        self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
         self.settings_tab = SettingsTab()
         self.tabWidget.addTab(self.settings_tab, "Settings")
     
