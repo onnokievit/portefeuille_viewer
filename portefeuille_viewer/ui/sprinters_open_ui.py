@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'repository_tester.ui'
+## Form generated from reading UI file 'sprinters_open.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.3
 ##
@@ -15,35 +15,29 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QGridLayout, QHeaderView,
-    QSizePolicy, QTableView, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QHeaderView, QLabel, QSizePolicy,
+    QTableView, QVBoxLayout, QWidget)
 
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
-        Form.resize(1421, 964)
-        self.verticalLayout = QVBoxLayout(Form)
+        Form.resize(1392, 732)
+        self.verticalLayoutWidget = QWidget(Form)
+        self.verticalLayoutWidget.setObjectName(u"verticalLayoutWidget")
+        self.verticalLayoutWidget.setGeometry(QRect(0, 10, 1391, 791))
+        self.verticalLayout = QVBoxLayout(self.verticalLayoutWidget)
         self.verticalLayout.setObjectName(u"verticalLayout")
-        self.gridLayout = QGridLayout()
-        self.gridLayout.setObjectName(u"gridLayout")
-        self.comboBox = QComboBox(Form)
-        self.comboBox.setObjectName(u"comboBox")
-        self.comboBox.setMaximumSize(QSize(350, 16777215))
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel(self.verticalLayoutWidget)
+        self.label.setObjectName(u"label")
 
-        self.gridLayout.addWidget(self.comboBox, 0, 0, 1, 1)
+        self.verticalLayout.addWidget(self.label)
 
-        self.tableView = QTableView(Form)
+        self.tableView = QTableView(self.verticalLayoutWidget)
         self.tableView.setObjectName(u"tableView")
-        font = QFont()
-        font.setPointSize(8)
-        self.tableView.setFont(font)
-        self.tableView.setSortingEnabled(True)
 
-        self.gridLayout.addWidget(self.tableView, 1, 0, 1, 1)
-
-
-        self.verticalLayout.addLayout(self.gridLayout)
+        self.verticalLayout.addWidget(self.tableView)
 
 
         self.retranslateUi(Form)
@@ -53,5 +47,6 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
+        self.label.setText(QCoreApplication.translate("Form", u"TextLabel", None))
     # retranslateUi
 
