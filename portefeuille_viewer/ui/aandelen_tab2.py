@@ -79,7 +79,7 @@ class AandelenTab2(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.table)
         # Totals als horizontale tabel onder de QTableView
-        
+
         self.totals_table = QTableWidget(1, 16, self)  # 1 rij, 16 kolommen (aantal kolommen in df_sum)
         self.totals_table.setFixedHeight(32)
         self.totals_table.verticalHeader().setVisible(False)
@@ -107,14 +107,9 @@ class AandelenTab2(QWidget):
         if self.pricefeed and hasattr(self.pricefeed, 'priceUpdated'):
             self.pricefeed.priceUpdated.connect(self.on_ticker_display)
 
-        # Fallback: luister naar pricefeed signalen (backward compatibility)
         elif pricefeed and hasattr(pricefeed, 'priceUpdated'):
             pricefeed.priceUpdated.connect(self.on_price_update)
             self.pricefeed.priceUpdated.connect(self.on_ticker_display)
-        
-        # Fallback: luister naar pricefeed signalen (backward compatibility)
-        elif pricefeed and hasattr(pricefeed, 'priceUpdated'):
-            pricefeed.priceUpdated.connect(self.on_price_update)
 
     def on_sort_changed(self, column, order):
         """Track user's sort preferences."""
@@ -184,7 +179,7 @@ class AandelenTab2(QWidget):
             df_open_opt_sum = df_open_opties.group_by("asset_rollup").agg([
                 pl.col("opt_total_result").sum().alias("open_opt_total_result"),
                 pl.col("SomVantransactie_fee").sum().alias("open_opt_transactie_fee"),
-             ])
+            ])
         else:
             df_open_opt_sum = df_open_opties
 
@@ -198,15 +193,9 @@ class AandelenTab2(QWidget):
                 pl.col("sp_result").sum().alias("open_sp_result"),
                 pl.col("SomVantransactie_fee").sum().alias("open_sp_transactie_fee"),
                 pl.col("SomVantransactie_aantal").sum().alias("open_sp_aantal"),
-             ])
+            ])
         else:
             df_open_sp_sum = df_open_sprinters
-
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_open_sp_sum  # of df_sum als je de gesumde versie wilt zien
-        ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
 
 
         df_dividend = SNAPSHOT_STORE.repository_portfolio_dividend
@@ -216,7 +205,7 @@ class AandelenTab2(QWidget):
         if not df_dividend.is_empty():
             df_div_bel = df_dividend.group_by("asset_rollup").agg([
                 pl.col("div_en_bel").sum().alias("div_en_bel"),
-             ])
+            ])
         else:
             df_div_bel = df_dividend
 

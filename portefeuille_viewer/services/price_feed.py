@@ -228,6 +228,7 @@ class PriceFeedService(QObject):
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
 
     def __init__(self, host, port, client_id, parent=None):
+        # print("[DEBUG] PriceFeedService aangemaakt:", id(self))
         super().__init__(parent)
         self.store = PriceStore()
         self._feed = PriceFeedIB(host, port, client_id)
