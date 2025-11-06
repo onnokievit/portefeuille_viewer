@@ -79,7 +79,7 @@ class AandelenTab2(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.table)
         # Totals als horizontale tabel onder de QTableView
-        
+
         self.totals_table = QTableWidget(1, 16, self)  # 1 rij, 16 kolommen (aantal kolommen in df_sum)
         self.totals_table.setFixedHeight(32)
         self.totals_table.verticalHeader().setVisible(False)
@@ -107,14 +107,9 @@ class AandelenTab2(QWidget):
         if self.pricefeed and hasattr(self.pricefeed, 'priceUpdated'):
             self.pricefeed.priceUpdated.connect(self.on_ticker_display)
 
-        # Fallback: luister naar pricefeed signalen (backward compatibility)
         elif pricefeed and hasattr(pricefeed, 'priceUpdated'):
             pricefeed.priceUpdated.connect(self.on_price_update)
             self.pricefeed.priceUpdated.connect(self.on_ticker_display)
-        
-        # Fallback: luister naar pricefeed signalen (backward compatibility)
-        elif pricefeed and hasattr(pricefeed, 'priceUpdated'):
-            pricefeed.priceUpdated.connect(self.on_price_update)
 
     def on_sort_changed(self, column, order):
         """Track user's sort preferences."""
