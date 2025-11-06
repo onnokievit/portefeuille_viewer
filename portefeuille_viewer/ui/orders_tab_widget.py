@@ -3,7 +3,6 @@ from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -63,9 +62,125 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboAssetType1.currentTextChanged.connect(self.on_asset_type1_changed)
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)
+        self._current_offset = 0
+        self._page_size = 200
+        self._no_more_records = False
+        self._loading_more = False
+        self._sort_col = "Id"
+        self._sort_dir = "DESC"
+        self._init_table()
         # ...koppel overige events indien nodig
+        # self.load_table_data()
 
-        self.load_table_data()
+    def _apply_snapshot_filters(self, df_pl):
+        # Placeholder: voeg hier je eigen filterlogica toe, evt. met self._active_filters
+        # Voor nu geen filters, maar structuur is klaar voor uitbreiding
+        return df_pl
+
+    def _apply_snapshot_sorting(self, df_pl):
+        # Sorteer op de gekozen kolom en richting
+        sort_col = getattr(self, '_sort_col', 'Id')
+        sort_dir = getattr(self, '_sort_dir', 'DESC')
+        if sort_col in df_pl.columns:
+            descending = (sort_dir == 'DESC')
+            df_pl = df_pl.sort(sort_col, descending=descending)
+        return df_pl
+
+
+
+    def _init_table(self):
+        header = self.tableViewOrders.horizontalHeader()
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        from PySide6.QtCore import Qt
+        # Forceer sortering op Id DESC bij opstarten
+        self._sort_col = "Id"
+        self._sort_dir = "DESC"
+        header.setSortIndicator(0, Qt.DescendingOrder)
+
+        header.sortIndicatorChanged.connect(self._on_header_sort_changed)
+        self.tableViewOrders.verticalScrollBar().valueChanged.connect(self._on_table_scroll)
+        from PySide6.QtWidgets import QAbstractItemView
+        self.tableViewOrders.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tableViewOrders.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        self.tableViewOrders.setAlternatingRowColors(True)
+        self.tableViewOrders.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+
+        # Laad direct records met juiste sortering
+        self._load_initial_records()
+
+
+    def _load_initial_records(self):
+        self._current_offset = 0
+        self._no_more_records = False
+        self._loading_more = False
+        # Gebruik Polars snapshot, filter en sorteer vóór lazy loading
+        df_pl = getattr(self._snapshot_store, 'repository_snapshot_alle_transacties', None)
+        if df_pl is None or df_pl.is_empty():
+            df = self._pandas.DataFrame()
+        else:
+            df_pl = self._apply_snapshot_filters(df_pl)
+            df_pl = self._apply_snapshot_sorting(df_pl)
+            df = df_pl.head(self._page_size).to_pandas()
+        df_view = self._format_df_for_table(df)
+        self._orders_model = self._PandasTableModel(df_view, self)
+        self.tableViewOrders.setModel(self._orders_model)
+        self._current_offset = len(df)
+        self._no_more_records = (len(df) < self._page_size)
+
+    def _load_more_records(self, initial=False):
+        if self._loading_more or self._no_more_records:
+            return
+        self._loading_more = True
+        try:
+            df_pl = getattr(self._snapshot_store, 'repository_snapshot_alle_transacties', None)
+            if df_pl is None or df_pl.is_empty():
+                df = self._pandas.DataFrame()
+                df_view = self._format_df_for_table(df)
+                if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
+                    self._orders_model = self._PandasTableModel(df_view, self)
+                    self.tableViewOrders.setModel(self._orders_model)
+                else:
+                    self._orders_model.append_df(df_view.reset_index(drop=True))
+                self._no_more_records = True
+                return
+            # Filtering en sortering op Polars vóór slicing
+            df_pl = self._apply_snapshot_filters(df_pl)
+            df_pl = self._apply_snapshot_sorting(df_pl)
+            df_pl_page = df_pl.slice(self._current_offset, self._page_size)
+            if df_pl_page.is_empty():
+                self._no_more_records = True
+                return
+            df = df_pl_page.to_pandas()
+            df_view = self._format_df_for_table(df)
+            if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
+                self._orders_model = self._PandasTableModel(df_view, self)
+                self.tableViewOrders.setModel(self._orders_model)
+            else:
+                self._orders_model.append_df(df_view.reset_index(drop=True))
+            self._current_offset += len(df)
+            if len(df) < self._page_size:
+                self._no_more_records = True
+        finally:
+            self._loading_more = False
+
+    def _on_table_scroll(self, value):
+        sb = self.tableViewOrders.verticalScrollBar()
+        if sb.value() >= sb.maximum() - 50:
+            self._load_more_records()
+
+    def _on_header_sort_changed(self, section, order):
+        try:
+            colname = self._orders_model._df.columns[section]
+        except Exception:
+            colname = "Id"
+        self._sort_col = colname
+        from PySide6.QtCore import Qt
+        self._sort_dir = "ASC" if order == Qt.AscendingOrder else "DESC"
+        self._load_initial_records()
+
+
 
     def on_oorsprong1_changed(self, value):
         # Toon/verberg regel 2 afhankelijk van oorsprong
