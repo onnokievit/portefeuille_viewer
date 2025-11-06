@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QGridLayout, QGroupBox,
     QPushButton, QSizePolicy, QTableView, QVBoxLayout,
     QWidget)
 
+from portefeuille_viewer.ui_logica.smartcombo import SmartCombo
+
 class Ui_OrdersTabUI(object):
     def setupUi(self, OrdersTabUI):
         if not OrdersTabUI.objectName():
@@ -91,32 +93,32 @@ class Ui_OrdersTabUI(object):
 
         self.gridLayoutOrders.addWidget(self.labelOptieCP, 0, 11, 1, 1)
 
-        self.comboOorsprong1 = QComboBox(self.groupBoxOrders)
+        self.comboOorsprong1 = SmartCombo(self.groupBoxOrders)
         self.comboOorsprong1.setObjectName(u"comboOorsprong1")
 
         self.gridLayoutOrders.addWidget(self.comboOorsprong1, 1, 0, 1, 1)
 
-        self.comboBroker1 = QComboBox(self.groupBoxOrders)
+        self.comboBroker1 = SmartCombo(self.groupBoxOrders)
         self.comboBroker1.setObjectName(u"comboBroker1")
 
         self.gridLayoutOrders.addWidget(self.comboBroker1, 1, 1, 1, 1)
 
-        self.comboAssetRollup1 = QComboBox(self.groupBoxOrders)
+        self.comboAssetRollup1 = SmartCombo(self.groupBoxOrders)
         self.comboAssetRollup1.setObjectName(u"comboAssetRollup1")
 
         self.gridLayoutOrders.addWidget(self.comboAssetRollup1, 1, 2, 1, 1)
 
-        self.comboAssetType1 = QComboBox(self.groupBoxOrders)
+        self.comboAssetType1 = SmartCombo(self.groupBoxOrders)
         self.comboAssetType1.setObjectName(u"comboAssetType1")
 
         self.gridLayoutOrders.addWidget(self.comboAssetType1, 1, 3, 1, 1)
 
-        self.comboDetail1 = QComboBox(self.groupBoxOrders)
+        self.comboDetail1 = SmartCombo(self.groupBoxOrders)
         self.comboDetail1.setObjectName(u"comboDetail1")
 
         self.gridLayoutOrders.addWidget(self.comboDetail1, 1, 4, 1, 1)
 
-        self.comboTransType1 = QComboBox(self.groupBoxOrders)
+        self.comboTransType1 = SmartCombo(self.groupBoxOrders)
         self.comboTransType1.setObjectName(u"comboTransType1")
 
         self.gridLayoutOrders.addWidget(self.comboTransType1, 1, 5, 1, 1)
@@ -146,7 +148,7 @@ class Ui_OrdersTabUI(object):
 
         self.gridLayoutOrders.addWidget(self.lineEditOptieStrike1, 1, 10, 1, 1)
 
-        self.comboOptieCP1 = QComboBox(self.groupBoxOrders)
+        self.comboOptieCP1 = SmartCombo(self.groupBoxOrders)
         self.comboOptieCP1.setObjectName(u"comboOptieCP1")
 
         self.gridLayoutOrders.addWidget(self.comboOptieCP1, 1, 11, 1, 1)
@@ -156,27 +158,27 @@ class Ui_OrdersTabUI(object):
 
         self.gridLayoutOrders.addWidget(self.labelOorsprong2, 2, 0, 1, 1)
 
-        self.comboBroker2 = QComboBox(self.groupBoxOrders)
+        self.comboBroker2 = SmartCombo(self.groupBoxOrders)
         self.comboBroker2.setObjectName(u"comboBroker2")
 
         self.gridLayoutOrders.addWidget(self.comboBroker2, 2, 1, 1, 1)
 
-        self.comboAssetRollup2 = QComboBox(self.groupBoxOrders)
+        self.comboAssetRollup2 = SmartCombo(self.groupBoxOrders)
         self.comboAssetRollup2.setObjectName(u"comboAssetRollup2")
 
         self.gridLayoutOrders.addWidget(self.comboAssetRollup2, 2, 2, 1, 1)
 
-        self.comboAssetType2 = QComboBox(self.groupBoxOrders)
+        self.comboAssetType2 = SmartCombo(self.groupBoxOrders)
         self.comboAssetType2.setObjectName(u"comboAssetType2")
 
         self.gridLayoutOrders.addWidget(self.comboAssetType2, 2, 3, 1, 1)
 
-        self.comboDetail2 = QComboBox(self.groupBoxOrders)
+        self.comboDetail2 = SmartCombo(self.groupBoxOrders)
         self.comboDetail2.setObjectName(u"comboDetail2")
 
         self.gridLayoutOrders.addWidget(self.comboDetail2, 2, 4, 1, 1)
 
-        self.comboTransType2 = QComboBox(self.groupBoxOrders)
+        self.comboTransType2 = SmartCombo(self.groupBoxOrders)
         self.comboTransType2.setObjectName(u"comboTransType2")
 
         self.gridLayoutOrders.addWidget(self.comboTransType2, 2, 5, 1, 1)
@@ -206,7 +208,7 @@ class Ui_OrdersTabUI(object):
 
         self.gridLayoutOrders.addWidget(self.lineEditOptieStrike2, 2, 10, 1, 1)
 
-        self.comboOptieCP2 = QComboBox(self.groupBoxOrders)
+        self.comboOptieCP2 = SmartCombo(self.groupBoxOrders)
         self.comboOptieCP2.setObjectName(u"comboOptieCP2")
 
         self.gridLayoutOrders.addWidget(self.comboOptieCP2, 2, 11, 1, 1)
@@ -228,8 +230,6 @@ class Ui_OrdersTabUI(object):
 
         self.buttonDelete = QPushButton(OrdersTabUI)
         self.buttonDelete.setObjectName(u"buttonDelete")
-        self.buttonDelete.setStyleSheet(u"background-color: rgb(255, 107, 107);\n"
-"color: rgb(255, 255, 255);")
 
         self.horizontalLayoutButtons.addWidget(self.buttonDelete)
 

@@ -102,22 +102,22 @@
        </widget>
       </item>
       <item row="1" column="0">
-       <widget class="QComboBox" name="comboOorsprong1"/>
+     <widget class="SmartCombo" name="comboOorsprong1"/>
       </item>
       <item row="1" column="1">
-       <widget class="QComboBox" name="comboBroker1"/>
+     <widget class="SmartCombo" name="comboBroker1"/>
       </item>
       <item row="1" column="2">
-       <widget class="QComboBox" name="comboAssetRollup1"/>
+     <widget class="SmartCombo" name="comboAssetRollup1"/>
       </item>
       <item row="1" column="3">
-       <widget class="QComboBox" name="comboAssetType1"/>
+     <widget class="SmartCombo" name="comboAssetType1"/>
       </item>
       <item row="1" column="4">
-       <widget class="QComboBox" name="comboDetail1"/>
+     <widget class="SmartCombo" name="comboDetail1"/>
       </item>
       <item row="1" column="5">
-       <widget class="QComboBox" name="comboTransType1"/>
+     <widget class="SmartCombo" name="comboTransType1"/>
       </item>
       <item row="1" column="6">
        <widget class="QLineEdit" name="lineEditAantal1"/>
@@ -135,7 +135,7 @@
        <widget class="QLineEdit" name="lineEditOptieStrike1"/>
       </item>
       <item row="1" column="11">
-       <widget class="QComboBox" name="comboOptieCP1"/>
+     <widget class="SmartCombo" name="comboOptieCP1"/>
       </item>
       <item row="2" column="0">
        <widget class="QLabel" name="labelOorsprong2">
@@ -145,19 +145,19 @@
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="QComboBox" name="comboBroker2"/>
+     <widget class="SmartCombo" name="comboBroker2"/>
       </item>
       <item row="2" column="2">
-       <widget class="QComboBox" name="comboAssetRollup2"/>
+     <widget class="SmartCombo" name="comboAssetRollup2"/>
       </item>
       <item row="2" column="3">
-       <widget class="QComboBox" name="comboAssetType2"/>
+     <widget class="SmartCombo" name="comboAssetType2"/>
       </item>
       <item row="2" column="4">
-       <widget class="QComboBox" name="comboDetail2"/>
+     <widget class="SmartCombo" name="comboDetail2"/>
       </item>
       <item row="2" column="5">
-       <widget class="QComboBox" name="comboTransType2"/>
+     <widget class="SmartCombo" name="comboTransType2"/>
       </item>
       <item row="2" column="6">
        <widget class="QLineEdit" name="lineEditAantal2"/>
@@ -175,7 +175,7 @@
        <widget class="QLineEdit" name="lineEditOptieStrike2"/>
       </item>
       <item row="2" column="11">
-       <widget class="QComboBox" name="comboOptieCP2"/>
+     <widget class="SmartCombo" name="comboOptieCP2"/>
       </item>
      </layout>
     </widget>
@@ -198,10 +198,6 @@
      </item>
      <item>
       <widget class="QPushButton" name="buttonDelete">
-       <property name="styleSheet">
-        <string notr="true">background-color: rgb(255, 107, 107);
-color: rgb(255, 255, 255);</string>
-       </property>
        <property name="text">
         <string>Verwijderen</string>
        </property>
@@ -241,6 +237,13 @@ color: rgb(255, 255, 255);</string>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SmartCombo</class>
+   <extends>QComboBox</extends>
+   <header>ui_logica/smartcombo.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
