@@ -125,7 +125,7 @@ class PortfolioEngine(QObject):
             if "INCL_EXCL" in asset_map.columns:
                 try:
                     filtered = asset_map.filter(
-                        (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL") == True)
+                        (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL"))
                     )
                 except Exception:
                     # Fallback: try numeric equality only
@@ -157,37 +157,41 @@ class PortfolioEngine(QObject):
             list: All unique IB symbols that should be subscribed
         """
         from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        
+
         if SNAPSHOT_STORE.snapshot_asset_rollup_data is None or SNAPSHOT_STORE.snapshot_asset_rollup_data.is_empty():
             print("PortfolioEngine: No asset rollup data available for subscriptions")
             return []
-        
+
         try:
-            # Haal alle ib_symbol waarden uit snapshot_asset_rollup_data
-            asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
-            if asset_map is None or asset_map.is_empty():
-                return []
-
-            # Apply INCL_EXCL filter if available
-            if "INCL_EXCL" in asset_map.columns:
-                try:
-                    asset_map = asset_map.filter(
-                        (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL") == True)
-                    )
-                except Exception:
-                    asset_map = asset_map.filter(pl.col("INCL_EXCL") == 1)
-
-            symbols_df = asset_map.select("ib_symbol").unique()
-            symbols = symbols_df.to_series().to_list()
-
-            # Filter out None/empty values
-            unique_symbols = [s for s in symbols if s is not None and s != ""]
-
-            print(f"PortfolioEngine: Collected {len(unique_symbols)} symbols for subscription from asset_rollup_data (after INCL_EXCL filter)")
-            return unique_symbols
+            return self._extracted_from_get_symbols_to_subscribe_17(SNAPSHOT_STORE)
         except Exception as e:
             print(f"PortfolioEngine: Error getting symbols for subscription: {e}")
             return []
+
+    # TODO Rename this here and in `get_symbols_to_subscribe`
+    def _extracted_from_get_symbols_to_subscribe_17(self, SNAPSHOT_STORE):
+        # Haal alle ib_symbol waarden uit snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        if asset_map is None or asset_map.is_empty():
+            return []
+
+        # Apply INCL_EXCL filter if available
+        if "INCL_EXCL" in asset_map.columns:
+            try:
+                asset_map = asset_map.filter(
+                    (pl.col("INCL_EXCL") == 1) | (pl.col("INCL_EXCL") == "1") | (pl.col("INCL_EXCL"))
+                )
+            except Exception:
+                asset_map = asset_map.filter(pl.col("INCL_EXCL") == 1)
+
+        symbols_df = asset_map.select("ib_symbol").unique()
+        symbols = symbols_df.to_series().to_list()
+
+        # Filter out None/empty values
+        unique_symbols = [s for s in symbols if s is not None and s != ""]
+
+        print(f"PortfolioEngine: Collected {len(unique_symbols)} symbols for subscription from asset_rollup_data (after INCL_EXCL filter)")
+        return unique_symbols
 
     def shutdown(self):
         # Stop de update timer

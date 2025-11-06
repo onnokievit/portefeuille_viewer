@@ -14,7 +14,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 	@Slot()
 	def on_btnExportExcel_clicked(self):
 		"""Exporteer de huidige zichtbare tabel (df_sum) naar Excel."""
-		import pandas as pd
+		
 		from PySide6.QtWidgets import QFileDialog, QMessageBox
 		try:
 			# self.model._df is de huidige zichtbare Polars DataFrame (df_sum)

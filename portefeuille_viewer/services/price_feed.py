@@ -1,4 +1,6 @@
-import time, threading
+import contextlib
+import time
+import threading
 from typing import Dict, Tuple, Optional, List
 
 import pandas as pd
@@ -15,7 +17,7 @@ class PriceStore:
 
     def set(self, sym: str, cur: str, px: float):
         """Voeg of update prijs in de cache."""
-        self._cache[(sym, cur)] = float(px)
+        self._cache[(sym, cur)] = px
 
     def get(self, sym: str, cur: str) -> Optional[float]:
         """Haal prijs op, of None."""
@@ -203,11 +205,9 @@ class PriceFeedIB(QObject):
             return {k: v.copy() for k, v in self._prices.items()}
 
     def shutdown(self):
-        try:
+        with contextlib.suppress(Exception):
             if self._app:
                 self._app.disconnect()
-        except Exception:
-            pass
 
 
 # ------------------------------------------------------------
@@ -236,8 +236,7 @@ class PriceFeedService(QObject):
 
         # Timer voor periodiek opslaan
         from PySide6.QtCore import QTimer
-        import datetime
-        from portefeuille_viewer.data.repository import get_connection
+        
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self.save_last_prices_to_db)
         self._save_timer.start(60_000)  # elke 60 sec
@@ -264,7 +263,7 @@ class PriceFeedService(QObject):
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float):
         self.store.set(sym, cur, px)
-        self.priceUpdated.emit(sym, cur, float(px))
+        self.priceUpdated.emit(sym, cur, px)
 
     # convenience-methodes
     def get(self, sym: str, cur: str) -> Optional[float]:
