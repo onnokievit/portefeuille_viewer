@@ -21,29 +21,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._brokers, self._asset_rollups, self._sprinter_details = load_reference_lists()
 
         # Vul comboboxen (regel 1)
-        self.comboOorsprong1.clear()
-        self.comboOorsprong1.addItems(["HEDGE","OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"])
-        self.comboBroker1.clear()
-        self.comboBroker1.addItems(self._brokers)
-        self.comboAssetRollup1.clear()
-        self.comboAssetRollup1.addItems(self._asset_rollups)
-        self.comboAssetType1.clear()
-        self.comboAssetType1.addItems(["aandeel", "optie", "sprinter"])
-        self.comboDetail1.clear()
-        self.comboDetail1.addItems(self._sprinter_details)
+        self.comboOorsprong1.set_items(["HEDGE","OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"])
+        self.comboBroker1.set_items(self._brokers)
+        self.comboAssetRollup1.set_items(self._asset_rollups)
+        self.comboAssetType1.set_items(["aandeel", "optie", "sprinter"])
+        self.comboDetail1.set_items(self._sprinter_details)
         self.comboDetail1.setVisible(False)
-        self.comboTransType1.clear()
-        self.comboTransType1.addItems(["koop", "verkoop"])
+        self.comboTransType1.set_items(["koop", "verkoop"])
 
         # Vul comboboxen (regel 2)
-        self.comboBroker2.clear()
-        self.comboBroker2.addItems(self._brokers)
-        self.comboAssetRollup2.clear()
-        self.comboAssetRollup2.addItems(self._asset_rollups)
-        self.comboAssetType2.clear()
-        self.comboAssetType2.addItems(["aandeel", "optie", "sprinter"])
-        self.comboDetail2.clear()
-        self.comboDetail2.addItems(self._sprinter_details)
+        self.comboBroker2.set_items(self._brokers)
+        self.comboAssetRollup2.set_items(self._asset_rollups)
+        self.comboAssetType2.set_items(["aandeel", "optie", "sprinter"])
+        self.comboDetail2.set_items(self._sprinter_details)
         self.comboDetail2.setVisible(False)
         # Verberg alle widgets van regel 2 bij opstarten
         for widget in [
@@ -60,14 +50,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         ]:
             if lbl is not None:
                 lbl.setVisible(False)
-        self.comboTransType2.clear()
-        self.comboTransType2.addItems(["koop", "verkoop"])
+        self.comboTransType2.set_items(["koop", "verkoop"])
 
         # Optie CP (Call/Put) comboboxen
-        self.comboOptieCP1.clear()
-        self.comboOptieCP1.addItems(["call", "put"])
-        self.comboOptieCP2.clear()
-        self.comboOptieCP2.addItems(["call", "put"])
+        self.comboOptieCP1.set_items(["call", "put"])
+        self.comboOptieCP2.set_items(["call", "put"])
 
         # Koppel knoppen en comboboxen aan handlers
         self.buttonSave.clicked.connect(self.on_save_clicked)
