@@ -8,6 +8,11 @@ from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 
+from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
+from portefeuille_viewer.ui.orders_tab_widget import OrdersTabWidget
+
+
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self , portfolio_engine, price_feed, live_price_updater_stop_event=None): #  price_feed,
@@ -17,9 +22,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.portfolio_engine = portfolio_engine
         self.live_price_updater_stop_event = live_price_updater_stop_event
         
-        # Hier kun je later echte tab-klassen toevoegen
+    # Hier kun je later echte tab-klassen toevoegen
+        self.orders_tab = OrdersTabWidget() 
+        self.tabWidget.addTab(self.orders_tab, "Orders")
+
+        self.single_asset_analyse_tab = SingleAssetAnalyseTab()
+        self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
-        # print("[DEBUG] MainWindow: tab aangemaakt", self.aandelen_tab)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")

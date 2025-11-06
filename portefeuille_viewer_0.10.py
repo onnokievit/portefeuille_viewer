@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 print("✅ Repository geladen uit:", repository.__file__)
 
-def load_datasets():
+def initial_load_datasets():
     start_time = time.time()
     repository.load_alle_transacties()
     repository.load_aandelen_from_tx()
@@ -43,6 +43,7 @@ def load_datasets():
     print(SNAPSHOT_STORE.snapshot_store_summary())
 
 def main():
+    initial_load_datasets()
     app = QApplication(sys.argv)
     font = QFont()
     font.setPointSize(9)
@@ -51,7 +52,7 @@ def main():
     except AttributeError:
         font.setWeight(QFont.DemiBold)
     app.setFont(font)
-    load_datasets()
+    # inital_load_datasets()
     settings = get_settings()
     price_feed = PriceFeedService(
         settings.get_ib_host(),
