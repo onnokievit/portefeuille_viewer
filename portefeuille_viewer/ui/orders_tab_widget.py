@@ -16,10 +16,14 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.setupUi(self)
         # Importeer hier om circular import te voorkomen
         
+        self.lineEditFilter.returnPressed.connect(self.apply_filters)
         self.buttonClearFilters.clicked.connect(self._on_clear_filters)
         
         
         self._col_filters = {}  # dict om actieve filters per kolom op te slaan
+        self.active_filters = {}
+        self.seek_value = None
+        self.seek_id = None
         self._snapshot_store = SNAPSHOT_STORE
         self._pandas = pd
         self._PandasTableModel = PandasTableModel
@@ -80,17 +84,72 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # ...koppel overige events indien nodig
         # self.load_table_data()
 
+    def apply_filters(self):
+        print("apply_filters aangeroepen, tekst:", self.lineEditFilter.text())
+        q = self.lineEditFilter.text().strip()
+        filters = {"q": q} if q else {}
 
+        # kolomfilters omzetten naar generieke repo keys
+        for col, spec in (self._col_filters or {}).items():
+            if "in" in spec:
+                filters[f"__in__{col}"] = list(spec["in"])
+            if "contains" in spec:
+                filters[f"__contains__{col}"] = spec["contains"]
+            if "eq" in spec:
+                filters[f"__eq__{col}"] = spec["eq"]
+            if "date_on" in spec and spec["date_on"]:
+                filters[f"__date_on__{col}"] = spec["date_on"]
+
+        self.active_filters = filters
+        print("Filters dict:", filters)
+        self._reset_seek()
+        self._load_initial_records()
+    
+    def _reset_seek(self):
+        """Reset seek/paging state wanneer filters/sortering wijzigt of bij initial load."""
+        self.seek_value = None
+        self.seek_id = None
+        self._no_more_records = False
+        self._current_offset = 0  # NEW: track offset for snapshot paging
     
     def _apply_snapshot_filters(self, df_pl):
-        for col, filt_dict in self._col_filters.items():
+        # Pas tekstfilter toe (uit self.active_filters["q"])
+        q = self.active_filters.get("q", "").strip().lower()
+        if q:
+            df_pl = df_pl.filter(
+                pl.col("broker").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
+                pl.col("asset_rollup").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
+                pl.col("asset_detail").cast(pl.Utf8).str.to_lowercase().str.contains(q, literal=True) |
+                pl.col("uniek_id").cast(pl.Utf8).str.to_lowercase().str.contains(q)
+            )
+
+        # Kolomfilters toepassen (uit self._col_filters)
+        for col, filt_dict in (self._col_filters or {}).items():
             if col not in df_pl.columns:
                 continue
-            # voorbeeld: 'in' filter
             if "in" in filt_dict and filt_dict["in"]:
                 df_pl = df_pl.filter(pl.col(col).is_in(list(filt_dict["in"])))
-            # andere filtertypes kun je uitbreiden zoals in je oude tab
+            elif "eq" in filt_dict:
+                df_pl = df_pl.filter(pl.col(col) == filt_dict["eq"])
+            elif "contains" in filt_dict:
+                df_pl = df_pl.filter(
+                    pl.col(col).cast(pl.Utf8).str.to_lowercase()
+                    .str.contains(filt_dict["contains"].lower())
+                )
         return df_pl
+    
+    
+    
+    
+    # def _apply_snapshot_filters(self, df_pl):
+    #     for col, filt_dict in self._col_filters.items():
+    #         if col not in df_pl.columns:
+    #             continue
+    #         # voorbeeld: 'in' filter
+    #         if "in" in filt_dict and filt_dict["in"]:
+    #             df_pl = df_pl.filter(pl.col(col).is_in(list(filt_dict["in"])))
+    #         # andere filtertypes kun je uitbreiden zoals in je oude tab
+    #     return df_pl
 
     def _apply_snapshot_sorting(self, df_pl):
         # Sorteer op de gekozen kolom en richting
@@ -132,7 +191,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def _on_clear_filters(self):
         self._col_filters.clear()
         self._text_filter = ""
-        self.filter_q.clear()
+        self.lineEditFilter.clear()
         self._load_initial_records()
     
         
