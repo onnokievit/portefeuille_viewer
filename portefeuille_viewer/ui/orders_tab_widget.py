@@ -106,7 +106,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
         self.tableViewOrders.setAlternatingRowColors(True)
         self.tableViewOrders.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-
+        self.tableViewOrders.verticalHeader().setVisible(False)
         # Laad direct records met juiste sortering
         self._load_initial_records()
 
