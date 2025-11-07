@@ -987,9 +987,9 @@ class OrdersTab(QWidget):
         
 
     def apply_filters(self):
-        q = self.filter_q.text().strip() if hasattr(self, "filter_q") else ""
+        q = self.lineEditFilter.text().strip()
         filters = {"q": q} if q else {}
-
+        
         # kolomfilters omzetten naar generieke repo keys
         for col, spec in (self.col_filters or {}).items():
             if "in" in spec:
