@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt
+
 
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
@@ -16,6 +16,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.setupUi(self)
         # Importeer hier om circular import te voorkomen
         
+        self.buttonClearFilters.clicked.connect(self._on_clear_filters)
         
         
         self._col_filters = {}  # dict om actieve filters per kolom op te slaan
@@ -128,6 +129,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # Laad direct records met juiste sortering
         self._load_initial_records()
 
+    def _on_clear_filters(self):
+        self._col_filters.clear()
+        self._text_filter = ""
+        self.filter_q.clear()
+        self._load_initial_records()
     
         
     def _on_header_right_click(self, pos):
@@ -142,6 +148,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         pop = ColumnFilterPopup(f"Filter: {colname}", unique_values, pre_selected=set(self._col_filters.get(colname, {}).get("in", [])), parent=self)
         pop.move(global_pos)
         pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
+        pop.cleared.connect(lambda: self._apply_in_filter(colname, set()))
         pop.show()
 
     def _apply_in_filter(self, colname, selected):
