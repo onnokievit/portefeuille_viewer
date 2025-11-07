@@ -1,24 +1,31 @@
 from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt
+
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
+from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.ui.models import PandasTableModel
+from portefeuille_viewer.data.repository import load_reference_lists
+import pandas as pd
+import polars as pl
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
         # Importeer hier om circular import te voorkomen
-        from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        from portefeuille_viewer.ui.models import PandasTableModel
-        from portefeuille_viewer.data.repository import load_reference_lists
-        import pandas as pd
-
+        
+        
+        
+        self._col_filters = {}  # dict om actieve filters per kolom op te slaan
         self._snapshot_store = SNAPSHOT_STORE
         self._pandas = pd
         self._PandasTableModel = PandasTableModel
 
         # Laad referentielijsten
         self._brokers, self._asset_rollups, self._sprinter_details = load_reference_lists()
-
+        
         # Vul comboboxen (regel 1)
         self.comboOorsprong1.set_items(["HEDGE","OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"])
         self.comboBroker1.set_items(self._brokers)
@@ -72,9 +79,16 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # ...koppel overige events indien nodig
         # self.load_table_data()
 
+
+    
     def _apply_snapshot_filters(self, df_pl):
-        # Placeholder: voeg hier je eigen filterlogica toe, evt. met self._active_filters
-        # Voor nu geen filters, maar structuur is klaar voor uitbreiding
+        for col, filt_dict in self._col_filters.items():
+            if col not in df_pl.columns:
+                continue
+            # voorbeeld: 'in' filter
+            if "in" in filt_dict and filt_dict["in"]:
+                df_pl = df_pl.filter(pl.col(col).is_in(list(filt_dict["in"])))
+            # andere filtertypes kun je uitbreiden zoals in je oude tab
         return df_pl
 
     def _apply_snapshot_sorting(self, df_pl):
@@ -90,6 +104,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
     def _init_table(self):
         header = self.tableViewOrders.horizontalHeader()
+        
+        header.customContextMenuRequested.connect(self._on_header_right_click)
         header.setSectionsClickable(True)
         header.setSortIndicatorShown(True)
         from PySide6.QtCore import Qt
@@ -97,6 +113,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._sort_col = "Id"
         self._sort_dir = "DESC"
         header.setSortIndicator(0, Qt.DescendingOrder)
+
 
         header.sortIndicatorChanged.connect(self._on_header_sort_changed)
         self.tableViewOrders.verticalScrollBar().valueChanged.connect(self._on_table_scroll)
@@ -107,9 +124,32 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.tableViewOrders.setAlternatingRowColors(True)
         self.tableViewOrders.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.tableViewOrders.verticalHeader().setVisible(False)
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
         # Laad direct records met juiste sortering
         self._load_initial_records()
 
+    
+        
+    def _on_header_right_click(self, pos):
+        logical_index = self.tableViewOrders.horizontalHeader().logicalIndexAt(pos)
+        colname = self._orders_model._df.columns[logical_index]
+        unique_values = list(self._orders_model._df[colname].unique())
+        global_pos = self.tableViewOrders.horizontalHeader().mapToGlobal(pos)
+        self._open_value_popup_for_column(colname, unique_values, global_pos)
+    
+    def _open_value_popup_for_column(self, colname, unique_values, global_pos):
+        # Maak een nieuwe popup per kolom
+        pop = ColumnFilterPopup(f"Filter: {colname}", unique_values, pre_selected=set(self._col_filters.get(colname, {}).get("in", [])), parent=self)
+        pop.move(global_pos)
+        pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
+        pop.show()
+
+    def _apply_in_filter(self, colname, selected):
+        if not selected:
+            self._col_filters.pop(colname, None)
+        else:
+            self._col_filters[colname] = {"in": selected}
+        self._load_initial_records()
 
     def _load_initial_records(self):
         self._current_offset = 0
