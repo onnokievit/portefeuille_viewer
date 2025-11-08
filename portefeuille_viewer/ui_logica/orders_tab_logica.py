@@ -1,7 +1,7 @@
-
 import re
 from datetime import datetime
 import polars as pl
+
 
 class OrdersTabLogica:
 	@staticmethod
@@ -263,7 +263,7 @@ class OrdersTabLogica:
 				canonical = it
 				break
 		if canonical is None:
-			return False, f"{veldnaam}: '{text}' staat niet in de lijst. Kies een bestaande waarde."
+			return False, f"{veldnaam}: '{text}' staat niet in de lijst. Kies een bestaande waarde. dit is orders widget."
 		return True, canonical
 
 	@staticmethod

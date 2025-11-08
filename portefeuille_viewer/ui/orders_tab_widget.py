@@ -1,14 +1,24 @@
-from PySide6.QtWidgets import QWidget
+import contextlib
+from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox
+from PySide6.QtCore import Qt
 
-
+from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
-from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
+
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
-from portefeuille_viewer.data.repository import load_reference_lists
+
 import pandas as pd
 import polars as pl
+
+from portefeuille_viewer.data.repository import (
+    DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
+    get_connection,
+    load_reference_lists, insert_transaction, update_transactions_atomic,
+    build_uniek_id, is_pairable,
+    get_next_order_id, get_next_order_item_no,
+)
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def __init__(self, parent=None):
@@ -18,7 +28,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         
         self.lineEditFilter.returnPressed.connect(self.apply_filters)
         self.buttonClearFilters.clicked.connect(self._on_clear_filters)
-        
+        # self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         
         self._col_filters = {}  # dict om actieve filters per kolom op te slaan
         self.active_filters = {}
@@ -85,7 +95,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # self.load_table_data()
 
     def apply_filters(self):
-        print("apply_filters aangeroepen, tekst:", self.lineEditFilter.text())
+        # print("apply_filters aangeroepen, tekst:", self.lineEditFilter.text())
         q = self.lineEditFilter.text().strip()
         filters = {"q": q} if q else {}
 
@@ -101,7 +111,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 filters[f"__date_on__{col}"] = spec["date_on"]
 
         self.active_filters = filters
-        print("Filters dict:", filters)
+        # print("Filters dict:", filters)
         self._reset_seek()
         self._load_initial_records()
     
@@ -165,7 +175,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def _init_table(self):
         header = self.tableViewOrders.horizontalHeader()
         
-        header.customContextMenuRequested.connect(self._on_header_right_click)
+        header.customContextMenuRequested.connect(self.on_header_menu)
         header.setSectionsClickable(True)
         header.setSortIndicatorShown(True)
         from PySide6.QtCore import Qt
@@ -192,6 +202,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._col_filters.clear()
         self._text_filter = ""
         self.lineEditFilter.clear()
+        self.apply_filters()
+        self._reset_seek()
         self._load_initial_records()
     
         
@@ -202,13 +214,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         global_pos = self.tableViewOrders.horizontalHeader().mapToGlobal(pos)
         self._open_value_popup_for_column(colname, unique_values, global_pos)
     
-    def _open_value_popup_for_column(self, colname, unique_values, global_pos):
-        # Maak een nieuwe popup per kolom
-        pop = ColumnFilterPopup(f"Filter: {colname}", unique_values, pre_selected=set(self._col_filters.get(colname, {}).get("in", [])), parent=self)
-        pop.move(global_pos)
-        pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
-        pop.cleared.connect(lambda: self._apply_in_filter(colname, set()))
-        pop.show()
+    # def _open_value_popup_for_column(self, colname, unique_values, global_pos):
+    #     # Maak een nieuwe popup per kolom
+    #     pop = ColumnFilterPopup(f"Filter: {colname}", unique_values, pre_selected=set(self._col_filters.get(colname, {}).get("in", [])), parent=self)
+    #     pop.move(global_pos)
+    #     pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
+    #     pop.cleared.connect(lambda: self._apply_in_filter(colname, set()))
+    #     pop.show()
 
     def _apply_in_filter(self, colname, selected):
         if not selected:
@@ -373,7 +385,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         def validate_combo(combo, veldnaam, allow_empty=True):
             text = (combo.currentText() or "").strip()
             if text == "" and not allow_empty:
-                QMessageBox.critical(self, "Fout", f"{veldnaam}: waarde is verplicht.")
+                QMessageBox.critical(self, "Fout", f"{veldnaam}: waarde is verplicht. orders tab widget.")
                 if combo.isVisible():
                     combo.setFocus()
                     combo.lineEdit().selectAll()
@@ -385,7 +397,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                     canonical = it
                     break
             if canonical is None and text != "":
-                QMessageBox.critical(self, "Fout", f"{veldnaam}: ‘{text}’ staat niet in de lijst. Kies een bestaande waarde.")
+                QMessageBox.critical(self, "Fout", f"{veldnaam}: ‘{text}’ staat niet in de lijst. Kies een bestaande waarde. orders tab widget.")
                 if combo.isVisible():
                     combo.setFocus()
                     combo.lineEdit().selectAll()
@@ -559,3 +571,154 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # ...herhaal voor labels indien nodig
 
 # Je kunt de naam wijzigen naar orders_tab_methoden.py als je wilt, maar conventioneel is Widget of View gebruikelijk voor UI-klassen.
+    def on_header_menu(self, pos):
+        print("Header menu op aangeroepen, positie:", pos)
+        header = self.tableViewOrders.horizontalHeader()
+        section = header.logicalIndexAt(pos)
+        try:
+            colname = self._orders_model._df.columns[section]
+        except Exception:
+            return
+
+        menu = QMenu(self)
+        a_asc  = menu.addAction("Sorteren A → Z")
+        a_desc = menu.addAction("Sorteren Z → A")
+        menu.addSeparator()
+        a_clear = menu.addAction(f"Filter van {colname} wissen")
+        menu.addSeparator()
+        a_contains = menu.addAction("Tekst bevat…")
+        a_equals   = menu.addAction("Is precies…")
+        menu.addSeparator()
+        a_pick = menu.addAction("Waarden kiezen…")
+
+        act = menu.exec(header.mapToGlobal(pos))
+        if not act: 
+            return
+        if act in (a_asc, a_desc):
+            order = Qt.AscendingOrder if act == a_asc else Qt.DescendingOrder
+            header.setSortIndicator(section, order)
+            return
+
+        if act == a_clear:
+            self._col_filters.pop(colname, None)
+            self.apply_filters()
+            return
+        if act == a_contains:
+            text, ok = QInputDialog.getText(self, f"{colname} bevat", "Tekst:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"contains": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_equals:
+            text, ok = QInputDialog.getText(self, f"{colname} is precies", "Waarde:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"eq": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_pick:
+            self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
+            return
+
+    def _open_value_popup_for_column(self, colname: str, global_pos):
+        import portefeuille_viewer.data.repository as repo
+        # Base filters = alle actieve filters BEHALVE dit kolomfilter zelf
+        base = dict(getattr(self, "active_filters", {}) or {})
+        for k in list(base.keys()):
+            if k.startswith("__"):
+                try:
+                    _, kcol = k.strip("_").split("__", 1)   # b.v. "__in__broker" -> ("in","broker")
+                except ValueError:
+                    continue
+                if kcol == colname:
+                    base.pop(k, None)
+
+        try:
+            values = repo.get_distinct_values(colname, base_filters=base)
+        except Exception as e:
+            QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet laden:\n{e}")
+            return
+
+        pre = set()
+        if colname in (self._col_filters or {}) and "in" in self._col_filters[colname]:
+            pre = set(self.col_filters[colname]["in"])
+
+        pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
+        pop.move(global_pos)
+        pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
+        pop.cleared.connect(lambda: self._clear_col_filter(colname))
+        pop.show()
+        
+    def _clear_col_filter(self, colname: str):
+        self._col_filters.pop(colname, None)
+        self.apply_filters()
+
+
+    # def on_table_select(self, selected, deselected):
+    #     sel = self.table.selectionModel()
+    #     if sel is None:
+    #         return
+    #     rows = sel.selectedRows()
+    #     if not rows:
+    #         return
+
+    #     r = rows[0].row()
+    #     rec = self.model.get_row(r) if hasattr(self.model, "get_row") else {}
+    #     if not rec:
+    #         return
+
+    #     try:
+    #         with get_connection() as conn:
+    #             df_sel = pd.read_sql(
+    #                 "SELECT * FROM transacties_bron_data_org WHERE Id = ?",
+    #                 conn, params=[int(rec.get("Id"))]
+    #             )
+    #         if df_sel.empty:
+    #             return
+
+    #         r1 = df_sel.iloc[0].to_dict()
+    #         self.EDIT_ID = int(r1["Id"])
+    #         self.fill_form_from_row(self.order1, r1, side=1)
+
+    #         # probeer bijbehorende tweede
+    #         self.EDIT_ID2 = None
+    #         oid = r1.get("order_id")
+    #         if pd.notna(oid):
+    #             with get_connection() as conn:
+    #                 df_grp = pd.read_sql(
+    #                     "SELECT * FROM transacties_bron_data_org WHERE order_id = ? ORDER BY order_id_number, Id",
+    #                     conn, params=[int(oid)]
+    #                 )
+    #             others = df_grp[df_grp["Id"] != self.EDIT_ID]
+    #             if not others.empty:
+    #                 r2 = others.iloc[0].to_dict()
+    #                 self.EDIT_ID2 = int(r2["Id"])
+    #                 self.fill_form_from_row(self.order2, r2, side=2)
+    #                 self._show_order2(True)
+    #                 return
+
+    #         # geen tweede record → forceer weg
+    #         self.EDIT_ID2 = None
+    #         # leegmaken (optioneel maar netjes)
+    #         for k in ["broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee","exp","strike","cp","detail"]:
+    #             w = self.order2.get(k)
+    #             if w is None:
+    #                 continue
+    #             # Prefer SmartCombo.reset when available
+    #             if hasattr(w, "reset"):
+    #                 with contextlib.suppress(Exception):
+    #                     w.reset()
+    #                     continue
+    #             if hasattr(w, "setCurrentIndex"): 
+    #                 w.setCurrentIndex(-1)
+    #             if hasattr(w, "setEditText"): 
+    #                 w.setEditText("")
+    #             if hasattr(w, "clear"): 
+    #                 w.clear()
+    #         self._show_order2(False)
+
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
+
+
