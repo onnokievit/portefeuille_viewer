@@ -59,15 +59,15 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		if self.pricefeed and hasattr(self.pricefeed, 'priceUpdated'):
 			self.pricefeed.priceUpdated.connect(self.on_ticker_display)
 
-        
-        
+		
+		
 
 
 		# Koppel knoppen aan logica
 		self.btnSelecteerBrokers.clicked.connect(self.open_broker_popup)
 		self.btnWisFilters.clicked.connect(self.clear_all_filters)
 		
-        # Table setup
+		# Table setup
 		self.tblAandelen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
 		self.tblAandelen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
 		self.tblAandelen.verticalHeader().setVisible(False)
@@ -103,7 +103,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 
 	def reload_data(self):
 		
-        ########### import data ##################################
+		########### import data ##################################
 		df = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
 		if self.selected_brokers is not None and "broker" in df.columns:
 			df = df.filter(pl.col("broker").is_in(list(self.selected_brokers)))
@@ -176,8 +176,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			])
 		else:
 			df_div_bel = df_dividend
-        ########### einde import data ##################################
-        
+		########### einde import data ##################################
+		
 		########### Joins ##################################
 		df_aand_opt = df_aandelen_sum.join(df_clos_opt_sum, on=["asset_rollup"], how="full", suffix="_opt_gesloten")
 		if "asset_rollup_opt_gesloten" in df_aand_opt.columns:
@@ -226,8 +226,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		for col, default in required_columns.items():
 			if col not in df_final.columns:
 				df_final = df_final.with_columns(pl.lit(default).alias(col))
-        ########### Einde Joins ##################################
-        
+		########### Einde Joins ##################################
+		
 		EURUSD = get_settings().get_eurusd()
 		df_final = df_final.with_columns(
 			(pl.col("eq_total_result") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("eq_total_result"),
@@ -242,7 +242,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			(pl.col("open_sp_transactie_fee") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("open_sp_transactie_fee"),
 			(pl.col("div_en_bel") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("div_en_bel")
 		)
-        ########### Sum en berekende kolommen ###############
+		########### Sum en berekende kolommen ###############
 		if not df_final.is_empty():
 			df_sum = df_final.group_by("asset_rollup", "koers","regio", "sector","value_grow").agg([
 				pl.col("eq_aantal_bezit").sum().alias("eq_aantal_bezit"),
@@ -290,9 +290,9 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			])
 		else:
 			df_sum = df
-        ########### einde Sum en berekende kolommen ##################################
-        
-        ########### Kolom indeling ##################################
+		########### einde Sum en berekende kolommen ##################################
+		
+		########### Kolom indeling ##################################
 		df_sum = df_sum.select([
 			"asset_rollup",
 			"koers",
@@ -418,11 +418,13 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		if act == a_pick:
 			self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
 
+
+
 	def _open_value_popup_for_column(self, colname: str, global_pos=None):
 		df = self.model._df
 		if df is None or df.is_empty() or colname not in df.columns:
 			return
-		values = sorted(set(df[colname].to_list()))
+		values = sorted(x for x in set(df[colname].to_list()) if x is not None)
 		pre = set(self.col_filters[colname]["in"]) if colname in self.col_filters and "in" in self.col_filters[colname] else set(values)
 		pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
 		if global_pos:
