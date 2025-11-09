@@ -70,7 +70,7 @@ class OrdersTabLogica:
 	@staticmethod
 	def is_pairable(order: dict) -> bool:
 		oorspr = (order.get("transactie_oorsprong") or "").upper()
-		return oorspr in {"DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"}
+		return oorspr in {"DOORROL", "ASSIGN",  "EXERCISE"}
 	@staticmethod
 	def add_transaction_to_snapshot(snapshot, record_id, get_connection, pl):
 		"""
@@ -168,7 +168,7 @@ class OrdersTabLogica:
 		"""
 		Bepaalt of een tweede orderregel nodig is op basis van oorsprong.
 		"""
-		return oorsprong in {"DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"}
+		return oorsprong in {"DOORROL", "ASSIGN",  "EXERCISE"}
 
 	@staticmethod
 	def koppel_orders(eerste_order: dict, tweede_order: dict, build_uniek_id, is_pairable):
@@ -210,15 +210,20 @@ class OrdersTabLogica:
 		# Basis: alles uit behalve standaardvelden
 		zichtbaarheid = {
 			'detail': False,
-			'lbl_exp': False, 'exp': False,
-			'lbl_strike': False, 'strike': False,
-			'lbl_cp': False, 'cp': False
+			'exp': False,
+			'strike': False,
+			'cp': False,
+			# 'lbl_exp': False, 'lbl_strike': False, 'lbl_cp': False, 
+			'labelOptieExp': False, 'optie_exp': False,
+			'labelOptieStrike': False, 'optie_strike': False,
+			'labelOptieCP': False, 'optie_call_put': False,
+			'labelDetail': False
 		}
 		if asset_type == 'sprinter':
-			for k in zichtbaarheid:
+			for k in ['detail','exp','strike','cp','labelDetail','labelOptieExp','labelOptieStrike','labelOptieCP']:
 				zichtbaarheid[k] = True
 		elif asset_type == 'optie':
-			for k in ['lbl_exp','exp','lbl_strike','strike','lbl_cp','cp']:
+			for k in ['exp','strike','cp','labelOptieExp','labelOptieStrike','labelOptieCP']: #,'lbl_exp','lbl_strike','lbl_cp'
 				zichtbaarheid[k] = True
 		return zichtbaarheid
 
@@ -227,7 +232,7 @@ class OrdersTabLogica:
 		"""
 		Bepaalt of order2 zichtbaar moet zijn op basis van oorsprong.
 		"""
-		return oorsprong in ["DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"]
+		return oorsprong in ["DOORROL", "ASSIGN", "EXERCISE"]
 
 	@staticmethod
 	def auto_fill_year(date_str: str):
