@@ -1,34 +1,78 @@
 import contextlib
+import pyodbc
+import pandas as pd
+import polars as pl
+import traceback
+
 from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox
 from PySide6.QtCore import Qt
 
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
-
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 
-import pandas as pd
-import polars as pl
-
 from portefeuille_viewer.data.repository import (
-    DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
-    get_connection,
-    load_reference_lists, insert_transaction, update_transactions_atomic,
-    build_uniek_id, is_pairable,
-    get_next_order_id, get_next_order_item_no,
-)
+    get_connection,# DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
+    load_reference_lists, update_transactions_atomic, insert_transaction,
+    build_uniek_id, is_pairable, get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field
+    )
+
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self.tableViewOrders.setStyleSheet(
+            """
+            QTableView::item:hover { background-color: #E6F2FF; }
+            QTableView::item:selected { background-color: #FFF2CC; color: #000000; }
+            QTableView::item:selected:hover { background-color: #FFE08A; }
+            QTableView::item:selected:!active { background-color: #FFF8D6; }
+            """)
+        self.EDIT_ID = None
+        self.EDIT_ID2 = None
         # Importeer hier om circular import te voorkomen
+        
+        self.order1 = {
+            "cb_oorsprong": self.comboOorsprong1,
+            "broker": self.comboBroker1,
+            "asset_rollup": self.comboAssetRollup1,
+            "asset_type": self.comboAssetType1,
+            "trans_type": self.comboTransType1,
+            "detail": self.comboDetail1,
+            "aantal": self.lineEditAantal1,
+            "prijs": self.lineEditPrijs1,
+            "fee": self.lineEditFee1,
+            "exp": self.lineEditOptieExp1,
+            "strike": self.lineEditOptieStrike1,
+            "cp": self.comboOptieCP1,
+            "lbl_exp": getattr(self, "labelOptieExp1", None),
+            "lbl_strike": getattr(self, "labelOptieStrike1", None),
+            "lbl_cp": getattr(self, "labelOptieCP1", None),
+        }
+        self.order2 = {
+            "cb_oorsprong": None,
+            "broker": self.comboBroker2,
+            "asset_rollup": self.comboAssetRollup2,
+            "asset_type": self.comboAssetType2,
+            "trans_type": self.comboTransType2,
+            "detail": self.comboDetail2,
+            "aantal": self.lineEditAantal2,
+            "prijs": self.lineEditPrijs2,
+            "fee": self.lineEditFee2,
+            "exp": self.lineEditOptieExp2,
+            "strike": self.lineEditOptieStrike2,
+            "cp": self.comboOptieCP2,
+            "lbl_exp": getattr(self, "labelOptieExp2", None),
+            "lbl_strike": getattr(self, "labelOptieStrike2", None),
+            "lbl_cp": getattr(self, "labelOptieCP2", None),
+        }
         
         self.lineEditFilter.returnPressed.connect(self.apply_filters)
         self.buttonClearFilters.clicked.connect(self._on_clear_filters)
-        # self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
+        
         
         self._col_filters = {}  # dict om actieve filters per kolom op te slaan
         self.active_filters = {}
@@ -58,6 +102,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboDetail2.setVisible(False)
         # Verberg alle widgets van regel 2 bij opstarten
         for widget in [
+            self.comboDetail1,
+            self.lineEditOptieExp1, self.lineEditOptieStrike1, self.comboOptieCP1
+        ]:
+            widget.setVisible(False)
+        for widget in [
             self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, self.comboDetail2,
             self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,
             self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2
@@ -84,6 +133,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboAssetType1.currentTextChanged.connect(self.on_asset_type1_changed)
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)
+        
         self._current_offset = 0
         self._page_size = 200
         self._no_more_records = False
@@ -91,6 +141,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._sort_col = "Id"
         self._sort_dir = "DESC"
         self._init_table()
+        self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         # ...koppel overige events indien nodig
         # self.load_table_data()
 
@@ -123,9 +174,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._current_offset = 0  # NEW: track offset for snapshot paging
     
     def _apply_snapshot_filters(self, df_pl):
-        # Pas tekstfilter toe (uit self.active_filters["q"])
-        q = self.active_filters.get("q", "").strip().lower()
-        if q:
+        if q := self.active_filters.get("q", "").strip().lower():
             df_pl = df_pl.filter(
                 pl.col("broker").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
                 pl.col("asset_rollup").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
@@ -244,6 +293,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         df_view = self._format_df_for_table(df)
         self._orders_model = self._PandasTableModel(df_view, self)
         self.tableViewOrders.setModel(self._orders_model)
+        self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         self._current_offset = len(df)
         self._no_more_records = (len(df) < self._page_size)
 
@@ -259,6 +309,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
                     self._orders_model = self._PandasTableModel(df_view, self)
                     self.tableViewOrders.setModel(self._orders_model)
+                    self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
                 else:
                     self._orders_model.append_df(df_view.reset_index(drop=True))
                 self._no_more_records = True
@@ -275,6 +326,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
                 self._orders_model = self._PandasTableModel(df_view, self)
                 self.tableViewOrders.setModel(self._orders_model)
+                self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
             else:
                 self._orders_model.append_df(df_view.reset_index(drop=True))
             self._current_offset += len(df)
@@ -323,15 +375,21 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         """Laad transactiedata uit snapshot en vul de tabel."""
         # Haal snapshot op
         df_pl = getattr(self._snapshot_store, 'repository_snapshot_alle_transacties', None)
+        self._sort_col = "Id"
+        self._sort_dir = "DESC"
         if df_pl is None or df_pl.is_empty():
             df = self._pandas.DataFrame()
         else:
+            # Sorteer Polars DataFrame op Id DESC
+            df_pl = df_pl.sort("Id", descending=True)
             # Converteer naar pandas
             df = df_pl.to_pandas()
             df = self._format_df_for_table(df)
         # Zet model op de tableView
         self._orders_model = self._PandasTableModel(df, self)
         self.tableViewOrders.setModel(self._orders_model)
+        self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
+        print(f"✅ Orders tabel geladen met na updaten van een record (een save) {len(df)} records.")
 
     def _format_df_for_table(self, df):
         # Gekopieerd uit oude orders_tab.py, vereenvoudigd
@@ -375,12 +433,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         return out[TABLE_COLS]
 
     def on_save_clicked(self):
-        from portefeuille_viewer.data.repository import (
-            insert_transaction, update_transactions_atomic, build_uniek_id, is_pairable, get_next_order_id, get_next_order_item_no
-        )
-        from PySide6.QtWidgets import QMessageBox
-        import pyodbc
-
         # --- Strikte lijst-validatie: alleen waarden uit de combobox-lijsten toegestaan
         def validate_combo(combo, veldnaam, allow_empty=True):
             text = (combo.currentText() or "").strip()
@@ -447,11 +499,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 return float(text.replace(",", ".")) if text else None
             except Exception:
                 return None
-        def parse_int(text):
-            try:
-                return int(text)
-            except Exception:
-                return None
+
 
         eerste_order = dict(
             transactie_oorsprong=self.comboOorsprong1.currentText() or None,
@@ -460,7 +508,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             asset_type=at1 or None,
             asset_detail=self.comboDetail1.currentText() if at1 == "sprinter" else None,
             transactie_type=self.comboTransType1.currentText() or None,
-            aantal=parse_int(self.lineEditAantal1.text()),
+            aantal=parse_int_field(self.lineEditAantal1.text()),
             transactie_prijs=parse_float(self.lineEditPrijs1.text()),
             transactie_fee=-abs(parse_float(self.lineEditFee1.text())) if self.lineEditFee1.text() else None,
             optie_strike=parse_float(self.lineEditOptieStrike1.text()) if (at1 in ["optie", "sprinter"] and self.lineEditOptieStrike1.text()) else None,
@@ -478,7 +526,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 asset_type=at2 or None,
                 asset_detail=self.comboDetail2.currentText() if at2 == "sprinter" else None,
                 transactie_type=self.comboTransType2.currentText() or None,
-                aantal=parse_int(self.lineEditAantal2.text()),
+                aantal=parse_int_field(self.lineEditAantal2.text()),
                 transactie_prijs=parse_float(self.lineEditPrijs2.text()),
                 transactie_fee=-abs(parse_float(self.lineEditFee2.text())) if self.lineEditFee2.text() else None,
                 optie_strike=parse_float(self.lineEditOptieStrike2.text()) if (at2 in ["optie", "sprinter"] and self.lineEditOptieStrike2.text()) else None,
@@ -500,29 +548,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             eerste_order["transactie_oorsprong_detail"] = None
 
         # 3) UPDATE-pad (→ geen duplicaten)
-        if hasattr(self, "EDIT_ID") and self.EDIT_ID is not None:
-            try:
-                data_update_1 = dict(eerste_order)
-                data_update_2 = dict(tweede_order) if (hasattr(self, "EDIT_ID2") and self.EDIT_ID2 is not None and tweede_order is not None) else None
-                update_transactions_atomic(
-                    record_id1=int(self.EDIT_ID), data1=data_update_1,
-                    record_id2=(int(self.EDIT_ID2) if hasattr(self, "EDIT_ID2") and self.EDIT_ID2 is not None else None), data2=data_update_2
-                )
-                # TODO: snapshot sync indien nodig
-            except pyodbc.Error as e:
-                QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}")
-                return
-            msg = f"✅ Record {self.EDIT_ID} bijgewerkt"
-            if hasattr(self, "EDIT_ID2") and self.EDIT_ID2 is not None and data_update_2 is not None:
-                msg = f"✅ Records {self.EDIT_ID} en {self.EDIT_ID2} bijgewerkt"
-            QMessageBox.information(self, "Succes", msg)
-            self.EDIT_ID = None
-            self.EDIT_ID2 = None
-            self.load_table_data()
-            # self.reset_form()  # Optioneel: reset velden na update
-            return
+        print("start van de ceck of EDIT_ID bestaat:", getattr(self, "EDIT_ID", None))
+        if self.EDIT_ID is not None:
+            return self._update_existing_orders(eerste_order, tweede_order)
 
-        # 4) INSERT-pad
         try:
             new_order_id = get_next_order_id()
             eerste_order["order_id"] = new_order_id
@@ -533,7 +562,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 tweede_order["order_id"] = new_order_id
                 tweede_order["order_id_number"] = get_next_order_item_no(new_order_id)
                 tweede_id = insert_transaction(tweede_order)
-            # TODO: snapshot sync indien nodig
+        #     # TODO: snapshot sync indien nodig
         except pyodbc.Error as e:
             QMessageBox.critical(self, "Databasefout", f"Kon niet opslaan:\n{e}")
             return
@@ -542,16 +571,175 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             msg += f" (en gekoppeld aan {tweede_id})"
         QMessageBox.information(self, "Succes", msg)
         self.load_table_data()
-        # self.reset_form()  # Optioneel: reset velden na insert
+        self.reset_form()  # Optioneel: reset velden na insert
         return
 
+    def _update_existing_orders(self, eerste_order, tweede_order):
+        try:
+
+            data_update_1 = dict(eerste_order)
+            data_update_2 = dict(tweede_order) if (self.EDIT_ID2 is not None and tweede_order is not None) else None
+            update_transactions_atomic(
+                record_id1=int(self.EDIT_ID), data1=data_update_1,
+                record_id2=(int(self.EDIT_ID2) if self.EDIT_ID2 is not None else None), data2=data_update_2
+            )
+            # Sync met snapshot: update eerste record
+            self._update_transaction_in_snapshot(int(self.EDIT_ID), data_update_1)
+            # Sync met snapshot: update tweede record (indien gekoppeld)
+            if self.EDIT_ID2 is not None and data_update_2 is not None:
+                self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
+            # Refresh afgeleide snapshots na UPDATE
+            # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
+        except pyodbc.Error as e:
+            QMessageBox.critical(self, "Databasefout", f"Kon niet updaten:\n{e}")
+            return
+        msg = f"✅ Record {self.EDIT_ID} bijgewerkt"
+        if self.EDIT_ID2 is not None and data_update_2 is not None:
+            msg = f"✅ Records {self.EDIT_ID} en {self.EDIT_ID2} bijgewerkt"
+        QMessageBox.information(self, "Succes", msg)
+        # reset + refresh
+        self.EDIT_ID = None
+        self.EDIT_ID2 = None
+        self._load_initial_records()
+        self.reset_form()
+        # self.ordersCommitted.emit()    # Live-tab verversen
+        # from portefeuille_viewer.signals import signals
+        # signals.ordersCommitted.emit()
+        
+        #self.ordersCommitted.emit()
+        #self.ordersCommitted.emit()
+        #from portefeuille_viewer.signals import signals
+        #signals.ordersCommitted.emit()
+        return
+
+    def _update_transaction_in_snapshot(self, record_id: int, data_dict: dict):
+        """
+        Update een bestaand record in repository_snapshot_alle_transacties.
+        Zorgt ervoor dat de snapshot gesynchroniseerd blijft met de database na een UPDATE.
+        
+        We herladen het record vanuit de database om schema-compatibiliteit te garanderen.
+        """
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
+            print("⚠️ Snapshot niet geladen - kan record niet updaten")
+            return  # Geen snapshot geladen, niets te doen
+
+        try:
+            # Haal het bijgewerkte record op uit de database
+            from portefeuille_viewer.data.repository import get_connection
+            import polars as pl
+
+            with get_connection() as conn:
+                sql = "SELECT * FROM transacties_bron_data_org WHERE Id = ?"
+                updated_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
+
+            if updated_df.is_empty():
+                print(f"⚠️ Record {record_id} niet gevonden in database na UPDATE")
+                return
+
+            # Verwijder het oude record en voeg het nieuwe toe
+            # Dit is eenvoudiger dan veld-voor-veld updaten en garandeert consistentie
+            mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([
+                SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask),
+                updated_df
+            ])
+            print(f"✅ Record {record_id} geüpdatet in snapshot")
+        except Exception as e:
+            self._extracted_from__update_transaction_in_snapshot_37(
+                '❌ Fout bij updaten record ', record_id, ' in snapshot: ', e
+            )
+
+
     def on_reset_clicked(self):
-        # Reset alle velden naar default/empty
-        pass
+        # Reset formulier naar lege staat
+        self.EDIT_ID = None
+        self.EDIT_ID2 = None
+        self.reset_form()
+
 
     def on_delete_clicked(self):
         # Verwijder geselecteerde order(s)
-        pass
+        """Verwijder geselecteerde order(s) op basis van Id(s)."""
+        if self.EDIT_ID is None:
+            QMessageBox.warning(self, "Geen selectie", "Selecteer eerst een order om te verwijderen.")
+            return
+        
+        try:
+            # Verzamel alle Ids om te verwijderen (EDIT_ID en eventueel EDIT_ID2)
+            ids_to_delete = [self.EDIT_ID]
+            if self.EDIT_ID2 is not None:
+                ids_to_delete.append(self.EDIT_ID2)
+            
+            print(f"🔍 Te verwijderen Id(s): {ids_to_delete}")
+            
+            # Confirmation dialog
+            if len(ids_to_delete) > 1:
+                msg = f"Deze order bestaat uit {len(ids_to_delete)} gekoppelde transacties.\n\nWeet je zeker dat je deze orders wilt verwijderen?"
+            else:
+                msg = "Weet je zeker dat je deze order wilt verwijderen?"
+            
+            reply = QMessageBox.question(
+                self, "Bevestigen", msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply != QMessageBox.Yes:
+                print("❌ Verwijderen geannuleerd door gebruiker")
+                return
+            
+            # Delete from database
+            deleted_count = delete_transactions_by_ids(ids_to_delete)
+            print(f"🗑️ {deleted_count} record(s) verwijderd uit database")
+            
+            # Delete from snapshot
+            self._delete_transactions_from_snapshot_by_ids(ids_to_delete)
+            
+            # Refresh afgeleide snapshots
+            # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
+            
+            # Success message
+            id_list_str = ", ".join(map(str, ids_to_delete))
+            QMessageBox.information(
+                self, "Succes",
+                f"✅ Order verwijderd: {deleted_count} record(s) (Id: {id_list_str})"
+            )
+            
+            # Reset form en refresh
+            self.EDIT_ID = None
+            self.EDIT_ID2 = None
+            self.reset_form()
+            self._load_initial_records()
+            # self.ordersCommitted.emit()  # Trigger refresh van andere tabs
+
+        except Exception as e:
+            QMessageBox.critical(self, "Fout", f"Kon order niet verwijderen:\n{e}")
+            import traceback
+            traceback.print_exc()
+
+    def _delete_transactions_from_snapshot_by_ids(self, ids_to_delete: list):
+        """Verwijder transacties met specifieke Id's uit snapshot."""
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
+            print("⚠️ Snapshot niet geladen - kan records niet verwijderen")
+            return
+        try:
+            self._extracted_from__delete_transactions_from_snapshot_by_ids_9(ids_to_delete)
+        except Exception as e:
+            print(f"❌ Fout bij verwijderen uit snapshot: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    # TODO Rename this here and in `_delete_transactions_from_snapshot_by_ids`
+    def _extracted_from__delete_transactions_from_snapshot_by_ids_9(self, ids_to_delete):
+        # Filter out records with these Id's
+        before_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+        SNAPSHOT_STORE.repository_snapshot_alle_transacties = SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(
+            ~pl.col("Id").is_in(ids_to_delete)
+        )
+        after_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+        deleted = before_count - after_count
+        id_list_str = ", ".join(map(str, ids_to_delete))
+        print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
 
     def on_asset_type1_changed(self, value):
         # Gebruik OrdersTabLogica om te bepalen welke velden zichtbaar moeten zijn
@@ -655,70 +843,247 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.apply_filters()
 
 
-    # def on_table_select(self, selected, deselected):
-    #     sel = self.table.selectionModel()
-    #     if sel is None:
-    #         return
-    #     rows = sel.selectedRows()
-    #     if not rows:
-    #         return
+    def on_table_select(self, selected, deselected):
+        sel = self.tableViewOrders.selectionModel()
+        if sel is None:
+            return
+        rows = sel.selectedRows()
+        if not rows:
+            return
 
-    #     r = rows[0].row()
-    #     rec = self.model.get_row(r) if hasattr(self.model, "get_row") else {}
-    #     if not rec:
-    #         return
+        r = rows[0].row()
+        rec = self._orders_model.get_row(r) if hasattr(self._orders_model, "get_row") else {}
+        if not rec:
+            return
 
-    #     try:
-    #         with get_connection() as conn:
-    #             df_sel = pd.read_sql(
-    #                 "SELECT * FROM transacties_bron_data_org WHERE Id = ?",
-    #                 conn, params=[int(rec.get("Id"))]
-    #             )
-    #         if df_sel.empty:
-    #             return
+        try:
+            with get_connection() as conn:
+                df_sel = pd.read_sql(
+                    "SELECT * FROM transacties_bron_data_org WHERE Id = ?",
+                    conn, params=[int(rec.get("Id"))]
+                )
+            if df_sel.empty:
+                return
 
-    #         r1 = df_sel.iloc[0].to_dict()
-    #         self.EDIT_ID = int(r1["Id"])
-    #         self.fill_form_from_row(self.order1, r1, side=1)
+            r1 = df_sel.iloc[0].to_dict()
+            self.EDIT_ID = int(r1["Id"])
+            print(f"EDIT1 opgehaald. Loading record Id {self.EDIT_ID} into form")
+            self.fill_form_from_row(self.order1, r1, side=1)
 
-    #         # probeer bijbehorende tweede
-    #         self.EDIT_ID2 = None
-    #         oid = r1.get("order_id")
-    #         if pd.notna(oid):
-    #             with get_connection() as conn:
-    #                 df_grp = pd.read_sql(
-    #                     "SELECT * FROM transacties_bron_data_org WHERE order_id = ? ORDER BY order_id_number, Id",
-    #                     conn, params=[int(oid)]
-    #                 )
-    #             others = df_grp[df_grp["Id"] != self.EDIT_ID]
-    #             if not others.empty:
-    #                 r2 = others.iloc[0].to_dict()
-    #                 self.EDIT_ID2 = int(r2["Id"])
-    #                 self.fill_form_from_row(self.order2, r2, side=2)
-    #                 self._show_order2(True)
-    #                 return
+            # probeer bijbehorende tweede
+            self.EDIT_ID2 = None
+            oid = r1.get("order_id")
+            if pd.notna(oid):
+                with get_connection() as conn:
+                    df_grp = pd.read_sql(
+                        "SELECT * FROM transacties_bron_data_org WHERE order_id = ? ORDER BY order_id_number, Id",
+                        conn, params=[int(oid)]
+                    )
+                others = df_grp[df_grp["Id"] != self.EDIT_ID]
+                if not others.empty:
+                    r2 = others.iloc[0].to_dict()
+                    self.EDIT_ID2 = int(r2["Id"])
+                    print(f"EDIT2 opgehaald. Loading linked record Id {self.EDIT_ID2} into form")
+                    self.fill_form_from_row(self.order2, r2, side=2)
+                    self._show_order2(True)
+                    return
 
-    #         # geen tweede record → forceer weg
-    #         self.EDIT_ID2 = None
-    #         # leegmaken (optioneel maar netjes)
-    #         for k in ["broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee","exp","strike","cp","detail"]:
-    #             w = self.order2.get(k)
-    #             if w is None:
-    #                 continue
-    #             # Prefer SmartCombo.reset when available
-    #             if hasattr(w, "reset"):
-    #                 with contextlib.suppress(Exception):
-    #                     w.reset()
-    #                     continue
-    #             if hasattr(w, "setCurrentIndex"): 
-    #                 w.setCurrentIndex(-1)
-    #             if hasattr(w, "setEditText"): 
-    #                 w.setEditText("")
-    #             if hasattr(w, "clear"): 
-    #                 w.clear()
-    #         self._show_order2(False)
+            # geen tweede record → forceer weg
+            self.EDIT_ID2 = None
+            # leegmaken (optioneel maar netjes)
+            for k in ["broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee","exp","strike","cp","detail"]:
+                w = self.order2.get(k)
+                if w is None:
+                    continue
+                # Prefer SmartCombo.reset when available
+                if hasattr(w, "reset"):
+                    with contextlib.suppress(Exception):
+                        w.reset()
+                        continue
+                if hasattr(w, "setCurrentIndex"): 
+                    w.setCurrentIndex(-1)
+                if hasattr(w, "setEditText"): 
+                    w.setEditText("")
+                if hasattr(w, "clear"): 
+                    w.clear()
+            self._show_order2(False)
 
-    #     except Exception as e:
-    #         QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
+            
+    def fill_form_from_row(self, part, row: dict, side: int):
+        """
+        Vul alle velden van 'part' (order1 of order2) uit een DB-rij.
+        Zorgt er ook voor dat de juiste extra velden zichtbaar zijn.
+        """
+        # Oorsprong (alleen op regel 1 aanwezig)
+        if side == 1 and part.get("cb_oorsprong"):
+            part["cb_oorsprong"].setCurrentText(str(row.get("transactie_oorsprong") or ""))
+
+        # Standaardvelden
+        part["broker"].setCurrentText(str(row.get("broker") or ""))
+        part["asset_rollup"].setCurrentText(str(row.get("asset_rollup") or ""))
+        part["asset_type"].setCurrentText(str(row.get("asset_type") or ""))
+        part["trans_type"].setCurrentText(str(row.get("transactie_type") or ""))
+
+        # Numerieke/tekstvelden
+        def to_str_or_empty(v): return "" if v in (None, "") else str(v)
+
+        part["aantal"].setText(to_str_or_empty(row.get("aantal")))
+        part["prijs"].setText(to_str_or_empty(row.get("transactie_prijs")))
+        part["fee"].setText(to_str_or_empty(row.get("transactie_fee")))
+
+        # Sprinter detail
+        part["detail"].setCurrentText(str(row.get("asset_detail") or ""))
+
+        # Optievelden
+        part["strike"].setText(to_str_or_empty(row.get("optie_strike")))
+        # datum netjes weergeven
+        try:
+            d = row.get("optie_exp_date")
+            if pd.notna(d):
+                dstr = pd.to_datetime(d, errors="coerce").strftime("%d-%m-%y")
+            else:
+                dstr = ""
+        except Exception:
+            dstr = to_str_or_empty(row.get("optie_exp_date"))
+        part["exp"].setText(dstr)
+        part["cp"].setCurrentText(str(row.get("optie_call_put") or ""))
+
+        # Toon/verberg de juiste velden na het zetten van 'asset_type'
+        if side == 1:
+            self.toggle_order1_fields()
+        else:
+            # Zorg dat regel 2 zichtbaar wordt als er een tweede order is
+            for w in [part["broker"], part["asset_rollup"], part["asset_type"], part["trans_type"],
+                    part["aantal"], part["prijs"], part["fee"]]:
+                w.setVisible(True)
+            self.toggle_order2_fields()
+            
+    def _show_order2(self, visible: bool):
+        widgets = [
+            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
+            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+        ]
+        for key in widgets:
+            if self.order2[key] is not None:  # Skip None values
+                self.order2[key].setVisible(visible)
+        if visible:
+            self.toggle_order2_fields()
+    def reset_form(self):
+        for part in [self.order1, self.order2]:
+            for k in ["cb_oorsprong", "broker", "asset_rollup", "asset_type",
+                    "trans_type", "detail", "cp"]:
+                w = part.get(k)
+                if w is not None:
+                    # Prefer a dedicated reset() when available (SmartCombo)
+                    if hasattr(w, "reset"):
+                        try:
+                            w.reset()
+                        except Exception:
+                            # fallback to safer clears
+                            if hasattr(w, "setCurrentIndex"): 
+                                w.setCurrentIndex(-1)
+                            if hasattr(w, "setEditText"): 
+                                w.setEditText("")
+                    else:
+                        if hasattr(w, "setCurrentIndex"): 
+                            w.setCurrentIndex(-1)
+                        if hasattr(w, "setEditText"): 
+                            w.setEditText("")
+            for k in ["aantal", "prijs", "fee", "exp", "strike"]:
+                if part.get(k) is not None:
+                    part[k].clear()
+        self.toggle_order1_fields()
+        # Ensure order2 reference lists are reattached before toggling visibility
+        # so that when the row is shown again its combos have fresh models.
+        with contextlib.suppress(Exception):
+            # reapply lists from current references
+            if hasattr(self, "brokers"):
+                self.order2["broker"].set_items(self.brokers)
+            if hasattr(self, "asset_rollups"):
+                self.order2["asset_rollup"].set_items(self.asset_rollups)
+            if hasattr(self, "sprinter_details"):
+                self.order2["detail"].set_items(self.sprinter_details)
+        self.toggle_order2_visibility()
+        
+    def toggle_order2_visibility(self):
+        oorspr = self.order1["cb_oorsprong"].currentText() if self.order1["cb_oorsprong"] else ""
+        visible = oorspr in ["DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"]
+
+        widgets = [
+            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
+            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+        ]
+        for key in widgets:
+            if self.order2[key] is not None:  # Skip None values (like lbl_detail)
+                self.order2[key].setVisible(visible)
+
+        if visible:
+            self.toggle_order2_fields()
+
+    def toggle_order1_fields(self):
+        at = self.order1["asset_type"].currentText()
+        try:
+            for w in [ self.order1["detail"],
+                    self.order1["exp"],
+                    self.order1["strike"],
+                    self.order1["cp"]]:
+                if w is not None:
+                    w.setVisible(False)
+
+            # Sprinter: toon detail + exp/strike/cp velden
+            if at == "sprinter":
+                # lbl_detail zit nu in header, alleen detail widget toggen
+                for w in [self.order1["detail"],
+                        self.order1["lbl_exp"], self.order1["exp"],
+                        self.order1["lbl_strike"], self.order1["strike"],
+                        self.order1["lbl_cp"], self.order1["cp"]]:
+                    if w is not None:
+                        w.setVisible(True)
+
+
+            # Optie: toon alleen optievelden
+            elif at == "optie":
+                for w in [self.order1["lbl_exp"], self.order1["exp"],
+                        self.order1["lbl_strike"], self.order1["strike"],
+                        self.order1["lbl_cp"], self.order1["cp"]]:
+                    if w is not None:
+                        w.setVisible(True)
+        except Exception as e:
+            QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
+            traceback.print_exc()  # ← print de volledige stacktrace naar de terminal
+        # Eerst alles verbergen
+        
+
+    def toggle_order2_fields(self):
+        at = self.order2["asset_type"].currentText()
+        try:
+            
+        # Eerst alles verbergen
+            for w in [self.order2["detail"],
+                    self.order2["lbl_exp"], self.order2["exp"],
+                    self.order2["lbl_strike"], self.order2["strike"],
+                    self.order2["lbl_cp"], self.order2["cp"]]:
+                if w is not None:
+                    w.setVisible(False)
+
+            # Sprinter: toon detail + exp/strike/cp velden
+            if at == "sprinter":
+                for w in [self.order2["detail"],
+                        self.order1["lbl_exp"], self.order2["exp"],
+                        self.order1["lbl_strike"], self.order2["strike"],
+                        self.order1["lbl_cp"], self.order2["cp"]]:
+                    if w is not None:
+                        w.setVisible(True)
+
+            # Optie: toon alleen optievelden
+            elif at == "optie":
+                for w in [self.order1["lbl_exp"], self.order2["exp"], self.order1["lbl_strike"], self.order2["strike"], self.order1["lbl_cp"], self.order2["cp"]]:
+                    if w is not None:
+                        w.setVisible(True)
+        except Exception as e:
+            QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
+            traceback.print_exc()  # ← print de volledige stacktrace naar de terminal
 
 
