@@ -48,3 +48,44 @@ het moet als volgt gebouwd worden:
     ]
 
     4) tot slot de records in de db wegschrijven. 
+
+
+            self.order1 = {
+            "cb_oorsprong": self.comboOorsprong1,
+            "broker": self.comboBroker1,
+            "asset_rollup": self.comboAssetRollup1,
+            "asset_type": self.comboAssetType1,
+            "trans_type": self.comboTransType1,
+            "detail": self.comboDetail1,
+            "aantal": self.lineEditAantal1,
+            "prijs": self.lineEditPrijs1,
+            "fee": self.lineEditFee1,
+            "exp": self.lineEditOptieExp1,
+            "strike": self.lineEditOptieStrike1,
+            "cp": self.comboOptieCP1,
+            "lbl_exp": getattr(self, "labelOptieExp1", None),
+            "lbl_strike": getattr(self, "labelOptieStrike1", None),
+            "lbl_cp": getattr(self, "labelOptieCP1", None),
+        }
+        self.order2 = {
+            "cb_oorsprong": None,
+            "broker": self.comboBroker2,
+            "asset_rollup": self.comboAssetRollup2,
+            "asset_type": self.comboAssetType2,
+            "trans_type": self.comboTransType2,
+            "detail": self.comboDetail2,
+            "aantal": self.lineEditAantal2,
+            "prijs": self.lineEditPrijs2,
+            "fee": self.lineEditFee2,
+            "exp": self.lineEditOptieExp2,
+            "strike": self.lineEditOptieStrike2,
+            "cp": self.comboOptieCP2,
+            "lbl_exp": getattr(self, "labelOptieExp2", None),
+            "lbl_strike": getattr(self, "labelOptieStrike2", None),
+            "lbl_cp": getattr(self, "labelOptieCP2", None),
+
+        header = self.tableViewOrders.horizontalHeader()
+        header.setSortIndicator(0, Qt.DescendingOrder)
+        header.setSortIndicatorShown(True)
+        self._sort_col = "Id"
+        self._sort_dir = "DESC"

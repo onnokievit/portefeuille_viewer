@@ -9,7 +9,7 @@ from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
-from portefeuille_viewer.ui.orders_tab_widget import OrdersTabWidget
+from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
 
 
 
