@@ -4,7 +4,8 @@ import pandas as pd
 import polars as pl
 import traceback
 
-from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox
+
+from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox,QAbstractItemView
 from PySide6.QtCore import Qt
 
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
@@ -18,6 +19,7 @@ from portefeuille_viewer.data.repository import (
     load_reference_lists, update_transactions_atomic, insert_transaction,
     build_uniek_id, is_pairable, get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field
     )
+
 
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
@@ -48,9 +50,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             "exp": self.lineEditOptieExp1,
             "strike": self.lineEditOptieStrike1,
             "cp": self.comboOptieCP1,
-            "lbl_exp": getattr(self, "labelOptieExp1", None),
-            "lbl_strike": getattr(self, "labelOptieStrike1", None),
-            "lbl_cp": getattr(self, "labelOptieCP1", None),
         }
         self.order2 = {
             "cb_oorsprong": None,
@@ -65,15 +64,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             "exp": self.lineEditOptieExp2,
             "strike": self.lineEditOptieStrike2,
             "cp": self.comboOptieCP2,
-            "lbl_exp": getattr(self, "labelOptieExp2", None),
-            "lbl_strike": getattr(self, "labelOptieStrike2", None),
-            "lbl_cp": getattr(self, "labelOptieCP2", None),
         }
         
         self.lineEditFilter.returnPressed.connect(self.apply_filters)
         self.buttonClearFilters.clicked.connect(self._on_clear_filters)
-        
-        
+                
         self._col_filters = {}  # dict om actieve filters per kolom op te slaan
         self.active_filters = {}
         self.seek_value = None
@@ -101,15 +96,14 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboDetail2.set_items(self._sprinter_details)
         self.comboDetail2.setVisible(False)
         # Verberg alle widgets van regel 2 bij opstarten
+
         for widget in [
             self.comboDetail1,
-            self.lineEditOptieExp1, self.lineEditOptieStrike1, self.comboOptieCP1
-        ]:
-            widget.setVisible(False)
-        for widget in [
+            self.lineEditOptieExp1, self.lineEditOptieStrike1, self.comboOptieCP1,
             self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, self.comboDetail2,
             self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,
-            self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2
+            self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2, self.labelDetail, 
+            self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP
         ]:
             widget.setVisible(False)
         for lbl in [
@@ -196,19 +190,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                     .str.contains(filt_dict["contains"].lower())
                 )
         return df_pl
-    
-    
-    
-    
-    # def _apply_snapshot_filters(self, df_pl):
-    #     for col, filt_dict in self._col_filters.items():
-    #         if col not in df_pl.columns:
-    #             continue
-    #         # voorbeeld: 'in' filter
-    #         if "in" in filt_dict and filt_dict["in"]:
-    #             df_pl = df_pl.filter(pl.col(col).is_in(list(filt_dict["in"])))
-    #         # andere filtertypes kun je uitbreiden zoals in je oude tab
-    #     return df_pl
 
     def _apply_snapshot_sorting(self, df_pl):
         # Sorteer op de gekozen kolom en richting
@@ -219,27 +200,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             df_pl = df_pl.sort(sort_col, descending=descending)
         return df_pl
 
-
-
     def _init_table(self):
         header = self.tableViewOrders.horizontalHeader()
-        
         header.customContextMenuRequested.connect(self.on_header_menu)
         header.setSectionsClickable(True)
         header.setSortIndicatorShown(True)
-        from PySide6.QtCore import Qt
-        # Forceer sortering op Id DESC bij opstarten
         self._sort_col = "Id"
         self._sort_dir = "DESC"
         header.setSortIndicator(0, Qt.DescendingOrder)
-
-
         header.sortIndicatorChanged.connect(self._on_header_sort_changed)
         self.tableViewOrders.verticalScrollBar().valueChanged.connect(self._on_table_scroll)
-        from PySide6.QtWidgets import QAbstractItemView
+
         self.tableViewOrders.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tableViewOrders.setSelectionMode(QAbstractItemView.SingleSelection)
-
         self.tableViewOrders.setAlternatingRowColors(True)
         self.tableViewOrders.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.tableViewOrders.verticalHeader().setVisible(False)
@@ -346,7 +319,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         except Exception:
             colname = "Id"
         self._sort_col = colname
-        from PySide6.QtCore import Qt
+        
         self._sort_dir = "ASC" if order == Qt.AscendingOrder else "DESC"
         self._load_initial_records()
 
@@ -476,7 +449,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
         # Order 2 validatie indien nodig
         oorspr = self.comboOorsprong1.currentText() if self.comboOorsprong1 else ""
-        tweede_nodig = oorspr in ["DOORROL","ASSIGN","EXPIRE","EXERCISE"]
+        tweede_nodig = oorspr in ["DOORROL","ASSIGN","EXERCISE"]
         if tweede_nodig and self.comboBroker2.isVisible():
             if not validate_combo(self.comboBroker2, "Broker (regel 2)", allow_empty=False):
                 return
@@ -625,8 +598,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
         try:
             # Haal het bijgewerkte record op uit de database
-            from portefeuille_viewer.data.repository import get_connection
-            import polars as pl
 
             with get_connection() as conn:
                 sql = "SELECT * FROM transacties_bron_data_org WHERE Id = ?"
@@ -748,6 +719,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.lineEditOptieExp1.setVisible(zichtbaarheid['exp'])
         self.lineEditOptieStrike1.setVisible(zichtbaarheid['strike'])
         self.comboOptieCP1.setVisible(zichtbaarheid['cp'])
+        self.labelOptieExp.setVisible(zichtbaarheid['labelOptieExp'])
+        self.labelOptieStrike.setVisible(zichtbaarheid['labelOptieStrike'])
+        self.labelOptieCP.setVisible(zichtbaarheid['labelOptieCP'])
+        self.labelDetail.setVisible(zichtbaarheid['labelDetail'])        
         # ...herhaal voor labels indien nodig
 
     def on_asset_type2_changed(self, value):
@@ -756,6 +731,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.lineEditOptieExp2.setVisible(zichtbaarheid['exp'])
         self.lineEditOptieStrike2.setVisible(zichtbaarheid['strike'])
         self.comboOptieCP2.setVisible(zichtbaarheid['cp'])
+        self.labelOptieExp.setVisible(zichtbaarheid['labelOptieExp'])
+        self.labelOptieStrike.setVisible(zichtbaarheid['labelOptieStrike'])
+        self.labelOptieCP.setVisible(zichtbaarheid['labelOptieCP'])
+        self.labelDetail.setVisible(zichtbaarheid['labelDetail'])        
+
         # ...herhaal voor labels indien nodig
 
 # Je kunt de naam wijzigen naar orders_tab_methoden.py als je wilt, maar conventioneel is Widget of View gebruikelijk voor UI-klassen.
@@ -963,7 +943,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def _show_order2(self, visible: bool):
         widgets = [
             "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
-            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+            #"lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
         ]
         for key in widgets:
             if self.order2[key] is not None:  # Skip None values
@@ -1009,11 +989,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         
     def toggle_order2_visibility(self):
         oorspr = self.order1["cb_oorsprong"].currentText() if self.order1["cb_oorsprong"] else ""
-        visible = oorspr in ["DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"]
+        visible = oorspr in ["DOORROL", "ASSIGN", "EXERCISE"]
 
         widgets = [
-            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
-            "lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
+            "broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
+            #"lbl_exp","exp","lbl_strike","strike","lbl_cp","cp","detail",
         ]
         for key in widgets:
             if self.order2[key] is not None:  # Skip None values (like lbl_detail)
@@ -1035,19 +1015,18 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             # Sprinter: toon detail + exp/strike/cp velden
             if at == "sprinter":
                 # lbl_detail zit nu in header, alleen detail widget toggen
-                for w in [self.order1["detail"],
-                        self.order1["lbl_exp"], self.order1["exp"],
-                        self.order1["lbl_strike"], self.order1["strike"],
-                        self.order1["lbl_cp"], self.order1["cp"]]:
+                for w in [self.order1["detail"],self.order1["exp"],self.order1["strike"],self.order1["cp"],
+                        #self.order1["lbl_exp"], self.order1["lbl_strike"], self.order1["lbl_cp"], 
+                        ]:
                     if w is not None:
                         w.setVisible(True)
 
 
             # Optie: toon alleen optievelden
             elif at == "optie":
-                for w in [self.order1["lbl_exp"], self.order1["exp"],
-                        self.order1["lbl_strike"], self.order1["strike"],
-                        self.order1["lbl_cp"], self.order1["cp"]]:
+                for w in [self.order1["exp"],self.order1["strike"],self.order1["cp"],
+                        #self.order1["lbl_exp"], self.order1["lbl_strike"], self.order1["lbl_cp"]
+                        ]:
                     if w is not None:
                         w.setVisible(True)
         except Exception as e:
@@ -1061,25 +1040,26 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         try:
             
         # Eerst alles verbergen
-            for w in [self.order2["detail"],
-                    self.order2["lbl_exp"], self.order2["exp"],
-                    self.order2["lbl_strike"], self.order2["strike"],
-                    self.order2["lbl_cp"], self.order2["cp"]]:
+            for w in [
+                    self.order2["detail"], self.order2["exp"],self.order2["strike"],self.order2["cp"],
+                    #self.order2["lbl_strike"], self.order2["lbl_exp"],self.order2["lbl_cp"]
+                    ]:
                 if w is not None:
                     w.setVisible(False)
 
             # Sprinter: toon detail + exp/strike/cp velden
             if at == "sprinter":
-                for w in [self.order2["detail"],
-                        self.order1["lbl_exp"], self.order2["exp"],
-                        self.order1["lbl_strike"], self.order2["strike"],
-                        self.order1["lbl_cp"], self.order2["cp"]]:
+                for w in [self.order2["detail"], self.order2["exp"],self.order2["strike"], self.order2["cp"],
+                        #self.order1["lbl_exp"], self.order1["lbl_strike"], self.order1["lbl_cp"]
+                        ]:
                     if w is not None:
                         w.setVisible(True)
 
             # Optie: toon alleen optievelden
             elif at == "optie":
-                for w in [self.order1["lbl_exp"], self.order2["exp"], self.order1["lbl_strike"], self.order2["strike"], self.order1["lbl_cp"], self.order2["cp"]]:
+                for w in [ self.order2["exp"], self.order2["strike"], self.order2["cp"],
+                        #self.order1["lbl_exp"],self.order1["lbl_strike"],self.order1["lbl_cp"],
+                        ]:
                     if w is not None:
                         w.setVisible(True)
         except Exception as e:
