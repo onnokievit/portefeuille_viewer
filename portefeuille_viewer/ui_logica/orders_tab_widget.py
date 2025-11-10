@@ -5,9 +5,10 @@ import pandas as pd
 import polars as pl
 import traceback
 from datetime import datetime
+from portefeuille_viewer.signals import signals
 
 from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox,QAbstractItemView, QLineEdit
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
@@ -16,14 +17,16 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 
 from portefeuille_viewer.data.repository import (
-    get_connection,# DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
+    get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
-     get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, # build_uniek_id,is_pairable,
+    get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, # build_uniek_id,is_pairable,
     )
 
 
 
 class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
+    ordersCommitted = Signal()     # Na succesvol opslaan of update
+    dbChanged = Signal()           # DB-switch event
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -131,6 +134,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboAssetType1.currentTextChanged.connect(self.on_asset_type1_changed)
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)
+        
+        self.comboDatabase.addItems(list(DB_MAP.keys()))
+        self.comboDatabase.setCurrentText(DEFAULT_DB_NAME)
+        self.comboDatabase.currentTextChanged.connect(self.apply_database_by_name)
+        self._apply_db_color(DEFAULT_DB_NAME)
+        
         
         self._current_offset = 0
         self._page_size = 200
@@ -1183,3 +1192,85 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         except Exception:
             return None
         return None
+    
+    def apply_database_by_name(self, name):
+        import portefeuille_viewer.data.repository as repo
+        try:
+            repo.switch_database(name)  # ✅ correcte manier
+        except Exception as e:
+            QMessageBox.critical(self, "Database", f"Kan niet verbinden:\n{e}")
+            return
+
+        print(f"🔄 Database gewisseld naar: {name}")
+        
+        # Herlaad repository_snapshot_alle_transacties uit de nieuwe database
+        try:
+            print("📥 Laden van repository_snapshot_alle_transacties uit nieuwe database...")
+            repo.load_alle_transacties()
+            print(f"✅ repository_snapshot_alle_transacties geladen: {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen")
+        except Exception as e:
+            QMessageBox.critical(self, "Database", f"Kon transacties niet laden:\n{e}")
+            print(f"❌ Fout bij laden transacties: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+        
+        # Refresh alle afgeleide snapshots ###################################### DATABASE WISSEL #############
+        # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
+
+        # ververs alle referentielijsten
+        self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
+        # self.brokers, self.asset_rollups, self.sprinter_details = load_reference_lists()
+        # zet in beide order-rijen
+        self.order1["broker"].set_items(self.brokers)
+        self.order1["asset_rollup"].set_items(self.asset_rollups)
+        self.order1["detail"].set_items(self.sprinter_details)
+
+        self.order2["broker"].set_items(self.brokers)
+        self.order2["asset_rollup"].set_items(self.asset_rollups)
+        self.order2["detail"].set_items(self.sprinter_details)
+
+        for part in [self.order1, self.order2]:
+            part["broker"].set_items(self.brokers)
+            part["asset_rollup"].set_items(self.asset_rollups)
+            part["detail"].set_items(self.sprinter_details)
+
+        
+        
+        self._apply_db_color(name)  # wisselt de kleurstijl van de DB-keuze
+        
+        self.reset_form()           # wist velden + toggles
+        
+        self._load_initial_records()
+        self.dbChanged.emit()
+        # Zend centraal signaal uit voor app-brede database-wissel
+        if hasattr(self, 'active_db_name'):
+            signals.databaseChanged.emit(self.active_db_name)
+            
+    def _apply_db_color(self, name: str):
+        style = DB_STYLES.get(name, {"fg": "black", "bg": "white"})
+        fg = style.get("fg", "black")
+        bg = style.get("bg", "white")
+        css = f"""
+        QComboBox {{
+            color: {fg}; background-color: {bg}; font-weight: bold;
+            padding: 2px 24px 2px 6px; border: 1px solid rgba(0,0,0,0.25); border-radius: 6px;
+        }}
+        QComboBox::drop-down {{ width: 22px; border: none; }}
+        QComboBox QAbstractItemView {{
+            color: black; background-color: white;
+            selection-background-color: {bg}; selection-color: white;
+        }}
+        """
+        self.comboDatabase.setStyleSheet(css)
+        
+    def set_items(self, items):
+        items_sorted = sorted([str(x) for x in items], key=str.lower)
+        self.blockSignals(True)
+        self.clear()
+        self.addItems(items_sorted)
+        self.completer.setModel(self.model())
+        self.setCurrentIndex(-1)
+        if self.isEditable():
+            self.setEditText("")
+        self.blockSignals(False)
