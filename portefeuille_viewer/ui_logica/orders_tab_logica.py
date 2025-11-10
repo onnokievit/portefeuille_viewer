@@ -1,7 +1,4 @@
-import re
-from datetime import datetime
 import polars as pl
-
 
 class OrdersTabLogica:
 	@staticmethod
@@ -234,22 +231,7 @@ class OrdersTabLogica:
 		"""
 		return oorsprong in ["DOORROL", "ASSIGN", "EXERCISE"]
 
-	@staticmethod
-	def auto_fill_year(date_str: str):
-		"""
-		Zet een datum als 1/2/23 om naar 1-02-23 (dd-mm-yy). Geeft string terug of None.
-		"""
-		s = (date_str or "").strip()
-		if not s:
-			return None
-		s_norm = s.replace("\\", "/").replace("-", "/")
-		m = re.match(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?\s*$', s_norm)
-		if not m:
-			return None
-		d, mth = int(m.group(1)), int(m.group(2))
-		y = m.group(3)
-		y2 = (datetime.now().year % 100) if y is None else (int(y) if len(y) == 2 else int(y) % 100)
-		return f"{d}-{mth:02d}-{y2:02d}"
+
 
 	@staticmethod
 	def valideer_combo_in_list(waarde: str, lijst: list, veldnaam: str, allow_empty: bool = True):

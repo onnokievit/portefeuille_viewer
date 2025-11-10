@@ -1,11 +1,12 @@
+import re 
 import contextlib
 import pyodbc
 import pandas as pd
 import polars as pl
 import traceback
+from datetime import datetime
 
-
-from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox,QAbstractItemView
+from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox,QAbstractItemView, QLineEdit
 from PySide6.QtCore import Qt
 
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
@@ -96,6 +97,9 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.comboDetail2.set_items(self._sprinter_details)
         self.comboDetail2.setVisible(False)
         # Verberg alle widgets van regel 2 bij opstarten
+        
+        self.lineEditOptieExp1.editingFinished.connect(lambda e=self.lineEditOptieExp1: self.auto_fill_year(e))
+        self.lineEditOptieExp2.editingFinished.connect(lambda e=self.lineEditOptieExp2: self.auto_fill_year(e))
 
         for widget in [
             self.comboDetail1,
@@ -138,6 +142,20 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         # ...koppel overige events indien nodig
         # self.load_table_data()
+
+    def auto_fill_year(self, line_edit: QLineEdit):
+        s = (line_edit.text() or "").strip()
+        if not s:
+            return
+        s_norm = s.replace("\\", "/").replace("-", "/")
+        m = re.match(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?\s*$', s_norm)
+        if not m:
+            return
+        d, mth = int(m.group(1)), int(m.group(2))
+        y = m.group(3)
+        y2 = (datetime.now().year % 100) if y is None else (int(y) if len(y) == 2 else int(y) % 100)
+        line_edit.setText(f"{d}-{mth:02d}-{y2:02d}")
+
 
     def apply_filters(self):
         # print("apply_filters aangeroepen, tekst:", self.lineEditFilter.text())
