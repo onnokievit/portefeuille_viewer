@@ -11,14 +11,14 @@ from PySide6.QtCore import Qt
 
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
-from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
+# from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 
 from portefeuille_viewer.data.repository import (
     get_connection,# DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
-    build_uniek_id, is_pairable, get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field
+     get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, # build_uniek_id,is_pairable,
     )
 
 
@@ -345,11 +345,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
     def on_oorsprong1_changed(self, value):
         # Toon/verberg regel 2 afhankelijk van oorsprong
-        zichtbaar = OrdersTabLogica.bepaal_order2_visibility(value)
+        zichtbaar = self.bepaal_order2_visibility(value)
         for widget in [
-            self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, self.comboDetail2,
+            self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, 
             self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,
-            self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2
+            #self.comboDetail2, self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2
         ]:
             widget.setVisible(zichtbaar)
         # Eventueel ook labels tonen/verbergen als die bestaan
@@ -526,10 +526,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             )
 
         # 2) Linking (oorsprong detail)
-        uniek1 = build_uniek_id(eerste_order)
+        uniek1 = self.build_uniek_id(eerste_order)
         if tweede_order:
-            uniek2 = build_uniek_id(tweede_order)
-            if is_pairable(eerste_order) and is_pairable(tweede_order):
+            uniek2 = self.build_uniek_id(tweede_order)
+            if self.is_pairable(eerste_order) and self.is_pairable(tweede_order):
                 eerste_order["transactie_oorsprong_detail"] = uniek2
                 tweede_order["transactie_oorsprong_detail"] = uniek1
             else:
@@ -563,6 +563,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         QMessageBox.information(self, "Succes", msg)
         self.load_table_data()
         self.reset_form()  # Optioneel: reset velden na insert
+        self.comboOorsprong1.setFocus()
         return
 
     def _update_existing_orders(self, eerste_order, tweede_order):
@@ -643,6 +644,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # Reset formulier naar lege staat
         self.EDIT_ID = None
         self.EDIT_ID2 = None
+        self.comboOorsprong1.setFocus()
         self.reset_form()
 
 
@@ -698,6 +700,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             self.EDIT_ID = None
             self.EDIT_ID2 = None
             self.reset_form()
+            self.comboOorsprong1.setFocus()
             self._load_initial_records()
             # self.ordersCommitted.emit()  # Trigger refresh van andere tabs
 
@@ -732,7 +735,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
     def on_asset_type1_changed(self, value):
         # Gebruik OrdersTabLogica om te bepalen welke velden zichtbaar moeten zijn
-        zichtbaarheid = OrdersTabLogica.bepaal_zichtbaarheid_order_fields(value)
+        zichtbaarheid = self.bepaal_zichtbaarheid_order_fields(value)
         self.comboDetail1.setVisible(zichtbaarheid['detail'])
         self.lineEditOptieExp1.setVisible(zichtbaarheid['exp'])
         self.lineEditOptieStrike1.setVisible(zichtbaarheid['strike'])
@@ -744,7 +747,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # ...herhaal voor labels indien nodig
 
     def on_asset_type2_changed(self, value):
-        zichtbaarheid = OrdersTabLogica.bepaal_zichtbaarheid_order_fields(value)
+        zichtbaarheid = self.bepaal_zichtbaarheid_order_fields(value)
         self.comboDetail2.setVisible(zichtbaarheid['detail'])
         self.lineEditOptieExp2.setVisible(zichtbaarheid['exp'])
         self.lineEditOptieStrike2.setVisible(zichtbaarheid['strike'])
@@ -1083,5 +1086,100 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         except Exception as e:
             QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")
             traceback.print_exc()  # ← print de volledige stacktrace naar de terminal
+            
+    
+    def bepaal_order2_visibility(self, oorsprong: str):
+        """
+        Bepaalt of order2 zichtbaar moet zijn op basis van oorsprong.
+        """
+        return oorsprong in {"DOORROL", "ASSIGN", "EXERCISE"}
 
 
+    def bepaal_zichtbaarheid_order_fields(self, asset_type: str):
+        """
+        Bepaalt welke velden zichtbaar moeten zijn voor een orderrij op basis van asset_type.
+        Geeft een dict terug met veldnamen als key en True/False als waarde.
+        """
+        # Basis: alles uit behalve standaardvelden
+        zichtbaarheid = {
+            'detail': False,
+            'exp': False,
+            'strike': False,
+            'cp': False,
+            # 'lbl_exp': False, 'lbl_strike': False, 'lbl_cp': False, 
+            'labelOptieExp': False, 'optie_exp': False,
+            'labelOptieStrike': False, 'optie_strike': False,
+            'labelOptieCP': False, 'optie_call_put': False,
+            'labelDetail': False
+        }
+        if asset_type == 'sprinter':
+            for k in ['detail','exp','strike','cp','labelDetail','labelOptieExp','labelOptieStrike','labelOptieCP']:
+                zichtbaarheid[k] = True
+        elif asset_type == 'optie':
+            for k in ['exp','strike','cp','labelOptieExp','labelOptieStrike','labelOptieCP']: #,'lbl_exp','lbl_strike','lbl_cp'
+                zichtbaarheid[k] = True
+        return zichtbaarheid
+    
+    def build_uniek_id(self, values: dict) -> str:
+        broker = self._clean(values.get("broker"))
+        at = self._clean(values.get("asset_type")).lower()
+        if at == "optie":
+            rollup = self._clean(values.get("asset_rollup"))
+            exp    = self._date_for_id(values.get("optie_exp_date"))
+            cp     = self._clean(values.get("optie_call_put")).lower()
+            strike = self._norm_dec_for_id(values.get("optie_strike"))
+            return f"{broker}-{rollup}-{at}-{exp}-{cp}-{strike}"
+        if at == "sprinter":
+            detail = self._clean(values.get("asset_detail"))
+            return f"{broker}-{detail}-{at}"
+        if at == "aandeel":
+            rollup = self._clean(values.get("asset_rollup"))
+            return f"{broker}-{rollup}-{at}"
+        rollup = self._clean(values.get("asset_rollup"))
+        return f"{broker}-{rollup}-{at}"
+
+    
+    def is_pairable(self, order: dict) -> bool:
+        oorspr = (order.get("transactie_oorsprong") or "").upper()
+        return oorspr in {"DOORROL", "ASSIGN",  "EXERCISE"}
+    
+    def _clean(self, x):
+        return "" if x is None else str(x).strip()
+    
+    
+    def _date_for_id(self, x):
+        d = self._parse_date(x)
+        return f"{d.day}-{d.month}-{d.year}" if d else ""
+    
+    def _norm_dec_for_id(self, x):
+        if x in (None, ""):
+            return ""
+        s = str(x).strip().replace(",", ".")
+        try:
+            f = float(s)
+            return str(int(f)) if f.is_integer() else f"{f}".rstrip("0").rstrip(".")
+        except ValueError:
+            return s
+        
+    def _parse_date(self, x):
+        from datetime import date, datetime
+        if x in (None, ""):
+            return None
+        if isinstance(x, datetime):
+            return x.date()
+        if isinstance(x, date):
+            return x
+        s = str(x).strip().replace("\\", "/").replace("-", "/")
+        p = s.split("/")
+        try:
+            if len(p) == 3:
+                if len(p[0]) <= 2 and len(p[1]) <= 2:
+                    d, m, y = int(p[0]), int(p[1]), int(p[2])
+                    y = (2000+y) if y < 100 else y
+                    return date(y, m, d)
+                if len(p[0]) == 4:
+                    y, m, d = int(p[0]), int(p[1]), int(p[2])
+                    return date(y, m, d)
+        except Exception:
+            return None
+        return None

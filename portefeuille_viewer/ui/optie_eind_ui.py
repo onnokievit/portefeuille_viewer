@@ -36,18 +36,15 @@ class Ui_OptieEindTab(object):
         self.dateOptieEind = QDateEdit(OptieEindTab)
         self.dateOptieEind.setObjectName(u"dateOptieEind")
         self.dateOptieEind.setCalendarPopup(True)
-
         self.layoutTop.addWidget(self.dateOptieEind)
 
         self.lblTransactieDatum = QLabel(OptieEindTab)
         self.lblTransactieDatum.setObjectName(u"lblTransactieDatum")
-
         self.layoutTop.addWidget(self.lblTransactieDatum)
 
         self.dateTransactie = QDateEdit(OptieEindTab)
         self.dateTransactie.setObjectName(u"dateTransactie")
         self.dateTransactie.setCalendarPopup(True)
-
         self.layoutTop.addWidget(self.dateTransactie)
 
         self.btnSelecteerBrokers = QPushButton(OptieEindTab)
@@ -74,14 +71,10 @@ class Ui_OptieEindTab(object):
         self.btnMoveToProductie.setObjectName(u"btnMoveToProductie")
 
         self.layoutTop.addWidget(self.btnMoveToProductie)
-
         self.spacerTop = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.layoutTop.addItem(self.spacerTop)
-
-
         self.verticalLayout_main.addLayout(self.layoutTop)
-
         self.tblOptieEind = QTableView(OptieEindTab)
         self.tblOptieEind.setObjectName(u"tblOptieEind")
 

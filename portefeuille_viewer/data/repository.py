@@ -712,12 +712,6 @@ def _seek_predicate(col: str, direction: str) -> str: ##########################
     else:
         return f"(({col_db} < ?) OR ({col_db} = ? AND Id < ?))"
 
-
-
-
-
-
-
 def fetch_records_page( ################## dit is de oude versie van fetch_records_page, met build_where_and_params. 
     table: str = "transacties_bron_data_org",
     sort_col: str = "Id",
@@ -760,9 +754,6 @@ def load_reference_lists():
         brokers, rollups, sprinters = [], [], []
     return brokers, rollups, sprinters
 
-
-
-
 def _sanitize_update_dict(d: dict) -> dict:
     d = dict(d or {})
     d.pop("uniek_id", None)
@@ -778,8 +769,7 @@ def _build_set_clause_and_params(d: dict):
     params = [d[c] for c in cols]
     return sets, params
 
-def update_transactions_atomic(record_id1: int, data1: dict,
-                               record_id2: int | None = None, data2: dict | None = None):
+def update_transactions_atomic(record_id1: int, data1: dict, record_id2: int | None = None, data2: dict | None = None):
     """
     Voer een update uit op één of twee records (binnen dezelfde transactie).
     Als beide updates mislukken wordt een rollback gedaan.
