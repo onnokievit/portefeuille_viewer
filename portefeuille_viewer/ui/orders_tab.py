@@ -391,7 +391,8 @@ class OrdersTab(QWidget):
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.table.setMouseTracking(True)
         self.table.viewport().setAttribute(Qt.WA_Hover, True)
-        self.table.setStyleSheet("""
+        self.table.setStyleSheet(
+        """
         QTableView::item:hover { background-color: #E6F2FF; }
         QTableView::item:selected { background-color: #FFF2CC; color: #000000; }
         QTableView::item:selected:hover { background-color: #FFE08A; }
@@ -498,8 +499,8 @@ class OrdersTab(QWidget):
 
         # Eerst alles verbergen
         for w in [ self.order1["detail"],
-                 self.order1["exp"],
-                 self.order1["strike"],
+                self.order1["exp"],
+                self.order1["strike"],
                 self.order1["cp"]]:
             w.setVisible(False)
 
@@ -533,9 +534,9 @@ class OrdersTab(QWidget):
         # Sprinter: toon detail + exp/strike/cp velden
         if at == "sprinter":
             for w in [self.order2["detail"],
-                     self.order1["lbl_exp"], self.order2["exp"],
+                    self.order1["lbl_exp"], self.order2["exp"],
                     self.order1["lbl_strike"], self.order2["strike"],
-                     self.order1["lbl_cp"], self.order2["cp"]]:
+                    self.order1["lbl_cp"], self.order2["cp"]]:
                 w.setVisible(True)
 
         # Optie: toon alleen optievelden
@@ -676,7 +677,6 @@ class OrdersTab(QWidget):
             return
         if not self._validate_combo_in_list(self.order1["trans_type"], "Koop/Verkoop", allow_empty=False):
             return
-
         at1 = self.order1["asset_type"].currentText()
         if at1 == "sprinter":
             # bij sprinter is asset_rollup optioneel in jouw validatie; detail verplicht als jij dat wilt
@@ -684,7 +684,6 @@ class OrdersTab(QWidget):
                 return
         elif not self._validate_combo_in_list(self.order1["asset_rollup"], "Asset Rollup", allow_empty=False):
             return
-
         if at1 == "optie" and not self._validate_combo_in_list(self.order1["cp"], "Call/Put", allow_empty=False):
             return
 
@@ -698,14 +697,12 @@ class OrdersTab(QWidget):
                 return
             if not self._validate_combo_in_list(self.order2["trans_type"], "Koop/Verkoop (regel 2)", allow_empty=False):
                 return
-
             at2 = self.order2["asset_type"].currentText()
             if at2 == "sprinter":
                 if not self._validate_combo_in_list(self.order2["detail"], "Asset Detail (regel 2)", allow_empty=False):
                     return
             elif not self._validate_combo_in_list(self.order2["asset_rollup"], "Asset Rollup (regel 2)", allow_empty=False):
                 return
-
             if at2 == "optie" and not self._validate_combo_in_list(self.order2["cp"], "Call/Put (regel 2)", allow_empty=False):
                 return
 
@@ -774,7 +771,7 @@ class OrdersTab(QWidget):
 
         # 3) UPDATE-pad (→ geen duplicaten)
         if self.EDIT_ID is not None:
-            return self._extracted_from_opslaan_orders_110(eerste_order, tweede_order)
+            return self._update_existing_orders(eerste_order, tweede_order)
         # 4) INSERT-pad
         try:
             new_order_id = get_next_order_id()
@@ -809,8 +806,8 @@ class OrdersTab(QWidget):
         self.load_initial_records()
         self.reset_form()
 
-    # TODO Rename this here and in `opslaan_orders`
-    def _extracted_from_opslaan_orders_110(self, eerste_order, tweede_order):
+    
+    def _update_existing_orders(self, eerste_order, tweede_order):
         try:
 
             data_update_1 = dict(eerste_order)
@@ -841,11 +838,12 @@ class OrdersTab(QWidget):
         # self.ordersCommitted.emit()    # Live-tab verversen
         # from portefeuille_viewer.signals import signals
         # signals.ordersCommitted.emit()
-        return
+        
         #self.ordersCommitted.emit()
         #self.ordersCommitted.emit()
         #from portefeuille_viewer.signals import signals
         #signals.ordersCommitted.emit()
+        return
 
     def _add_transaction_to_snapshot(self, order_dict: dict, record_id: int):
         """
@@ -1156,6 +1154,7 @@ class OrdersTab(QWidget):
 
             r1 = df_sel.iloc[0].to_dict()
             self.EDIT_ID = int(r1["Id"])
+            print(f"🖊️ Bewerken EDIT_ID toegekend. record Id={self.EDIT_ID}")
             self.fill_form_from_row(self.order1, r1, side=1)
 
             # probeer bijbehorende tweede
@@ -1171,6 +1170,7 @@ class OrdersTab(QWidget):
                 if not others.empty:
                     r2 = others.iloc[0].to_dict()
                     self.EDIT_ID2 = int(r2["Id"])
+                    print(f"🖊️ Bewerken EDIT_ID2 toegekend. record Id={self.EDIT_ID2}")
                     self.fill_form_from_row(self.order2, r2, side=2)
                     self._show_order2(True)
                     return

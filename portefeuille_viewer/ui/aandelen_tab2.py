@@ -514,7 +514,7 @@ class AandelenTab2(QWidget):
         df = self.model._df
         if df is None or df.is_empty() or colname not in df.columns:
             return
-        values = sorted(set(df[colname].to_list()))
+        values = sorted(x for x in set(df[colname].to_list()) if x is not None)
         pre = set(self.col_filters[colname]["in"]) if colname in self.col_filters and "in" in self.col_filters[colname] else set(values)
         pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
         if global_pos:
