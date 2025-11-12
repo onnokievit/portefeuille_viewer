@@ -77,7 +77,6 @@ class SnapshotStore:
             self.repository_snapshot_gesloten_sprinters is not None,
             self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None,
             self.snapshot_asset_rollup_data is not None,
-            
             self.repository_snapshot_sprinter_referentie_data is not None,
             self.repository_snapshot_optie_referentie_data is not None,
             self.repository_portfolio_dividend is not None,

@@ -149,6 +149,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._sort_dir = "DESC"
         self._init_table()
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
+        self.comboOorsprong1.setFocus()
         # ...koppel overige events indien nodig
         # self.load_table_data()
 
@@ -389,7 +390,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self._orders_model = self._PandasTableModel(df, self)
         self.tableViewOrders.setModel(self._orders_model)
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
-        print(f"✅ Orders tabel geladen met na updaten van een record (een save) {len(df)} records.")
+        # print(f"✅ Orders tabel geladen met na updaten van een record (een save) {len(df)} records.")
 
     def _format_df_for_table(self, df):
         # Gekopieerd uit oude orders_tab.py, vereenvoudigd
@@ -642,7 +643,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask),
                 updated_df
             ])
-            print(f"✅ Record {record_id} geüpdatet in snapshot")
+            # print(f"✅ Record {record_id} geüpdatet in snapshot")
         except Exception as e:
             self._extracted_from__update_transaction_in_snapshot_37(
                 '❌ Fout bij updaten record ', record_id, ' in snapshot: ', e
@@ -670,7 +671,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             if self.EDIT_ID2 is not None:
                 ids_to_delete.append(self.EDIT_ID2)
             
-            print(f"🔍 Te verwijderen Id(s): {ids_to_delete}")
+            # print(f"🔍 Te verwijderen Id(s): {ids_to_delete}")
             
             # Confirmation dialog
             if len(ids_to_delete) > 1:
@@ -685,12 +686,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             )
             
             if reply != QMessageBox.Yes:
-                print("❌ Verwijderen geannuleerd door gebruiker")
+                # print("❌ Verwijderen geannuleerd door gebruiker")
                 return
             
             # Delete from database
             deleted_count = delete_transactions_by_ids(ids_to_delete)
-            print(f"🗑️ {deleted_count} record(s) verwijderd uit database")
+            # print(f"🗑️ {deleted_count} record(s) verwijderd uit database")
             
             # Delete from snapshot
             self._delete_transactions_from_snapshot_by_ids(ids_to_delete)
@@ -721,12 +722,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def _delete_transactions_from_snapshot_by_ids(self, ids_to_delete: list):
         """Verwijder transacties met specifieke Id's uit snapshot."""
         if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None:
-            print("⚠️ Snapshot niet geladen - kan records niet verwijderen")
+            # print("⚠️ Snapshot niet geladen - kan records niet verwijderen")
             return
         try:
             self._extracted_from__delete_transactions_from_snapshot_by_ids_9(ids_to_delete)
         except Exception as e:
-            print(f"❌ Fout bij verwijderen uit snapshot: {e}")
+            # print(f"❌ Fout bij verwijderen uit snapshot: {e}")
             import traceback
             traceback.print_exc()
             
@@ -740,7 +741,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         after_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
         deleted = before_count - after_count
         id_list_str = ", ".join(map(str, ids_to_delete))
-        print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
+        # print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
 
     def on_asset_type1_changed(self, value):
         # Gebruik OrdersTabLogica om te bepalen welke velden zichtbaar moeten zijn
@@ -770,7 +771,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
 # Je kunt de naam wijzigen naar orders_tab_methoden.py als je wilt, maar conventioneel is Widget of View gebruikelijk voor UI-klassen.
     def on_header_menu(self, pos):
-        print("Header menu op aangeroepen, positie:", pos)
+        # print("Header menu op aangeroepen, positie:", pos)
         header = self.tableViewOrders.horizontalHeader()
         section = header.logicalIndexAt(pos)
         try:
@@ -877,7 +878,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
 
             r1 = df_sel.iloc[0].to_dict()
             self.EDIT_ID = int(r1["Id"])
-            print(f"EDIT1 opgehaald. Loading record Id {self.EDIT_ID} into form")
+            # print(f"EDIT1 opgehaald. Loading record Id {self.EDIT_ID} into form")
             self.fill_form_from_row(self.order1, r1, side=1)
 
             # probeer bijbehorende tweede
@@ -893,7 +894,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 if not others.empty:
                     r2 = others.iloc[0].to_dict()
                     self.EDIT_ID2 = int(r2["Id"])
-                    print(f"EDIT2 opgehaald. Loading linked record Id {self.EDIT_ID2} into form")
+                    # print(f"EDIT2 opgehaald. Loading linked record Id {self.EDIT_ID2} into form")
                     self.fill_form_from_row(self.order2, r2, side=2)
                     self._show_order2(True)
                     return
@@ -1201,16 +1202,16 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             QMessageBox.critical(self, "Database", f"Kan niet verbinden:\n{e}")
             return
 
-        print(f"🔄 Database gewisseld naar: {name}")
+        # print(f"🔄 Database gewisseld naar: {name}")
         
         # Herlaad repository_snapshot_alle_transacties uit de nieuwe database
         try:
-            print("📥 Laden van repository_snapshot_alle_transacties uit nieuwe database...")
+            # print("📥 Laden van repository_snapshot_alle_transacties uit nieuwe database...")
             repo.load_alle_transacties()
             print(f"✅ repository_snapshot_alle_transacties geladen: {len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)} rijen")
         except Exception as e:
             QMessageBox.critical(self, "Database", f"Kon transacties niet laden:\n{e}")
-            print(f"❌ Fout bij laden transacties: {e}")
+            # print(f"❌ Fout bij laden transacties: {e}")
             import traceback
             traceback.print_exc()
             return
@@ -1262,6 +1263,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             selection-background-color: {bg}; selection-color: white;
         }}
         """
+        
         self.comboDatabase.setStyleSheet(css)
         
     def set_items(self, items):

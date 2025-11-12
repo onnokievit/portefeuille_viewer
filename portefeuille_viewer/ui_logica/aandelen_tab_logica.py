@@ -35,7 +35,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 	Kolommen: asset_rollup, koers, aantal_bezit, result_realised, result_non_realised
 	"""
 	def __init__(self, portfolio_engine=None, pricefeed=None, parent=None):
-		print("[DEBUG] AandelenTab __init__ aangeroepen")
+		# print("[DEBUG] AandelenTab __init__ aangeroepen")
 		super().__init__(parent)
 		self.setupUi(self)
 
@@ -89,7 +89,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		# Koppel live update: alleen via PortfolioEngine
 		if hasattr(self.engine, 'dataUpdated'):
 			self.engine.dataUpdated.connect(self.on_engine_data_update)
-		print("[DEBUG] self.pricefeed in tab bij connect:", self.pricefeed, id(self.pricefeed) if self.pricefeed else None)
+		# print("[DEBUG] self.pricefeed in tab bij connect:", self.pricefeed, id(self.pricefeed) if self.pricefeed else None)
 
 
 	def clear_all_filters(self):
@@ -119,7 +119,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			])
 		else:
 			df_aandelen_sum = df
-		SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_aandelen_sum
+		
 
 		df_gesloten_opties = SNAPSHOT_STORE.repository_snapshot_gesloten_opties
 		if self.selected_brokers is not None and "broker" in df.columns:

@@ -28,7 +28,7 @@ class RepositoryTesterTab(QWidget):
         for k, v in vars(SNAPSHOT_STORE).items():
             if k.startswith('_'):
                 continue
-            if v is None or isinstance(v, pl.DataFrame):
+            if v is None or isinstance(v, (pl.DataFrame,dict)):
                 keys.append(k)
         keys.sort()
         for k in keys:
@@ -48,17 +48,39 @@ class RepositoryTesterTab(QWidget):
         self._set_table_model(df)
 
     def _display_snapshot_key(self, key):
-        df = getattr(SNAPSHOT_STORE, key, None)
-        if df is not None and isinstance(df, dict) and df:
-            first_key = next(iter(df.keys()))
-            if isinstance(first_key, tuple):
-                colnames = [f"key_{i+1}" for i in range(len(first_key))]
-                rows = [dict(zip(colnames, k), value=v) for k, v in df.items()]
-                df = pl.DataFrame(rows)
-            else:
-                df = pl.DataFrame([{"key": k, "value": v} for k, v in df.items()])
-        elif df is not None and isinstance(df, dict) or df is None:
+        data = getattr(SNAPSHOT_STORE, key, None)
+
+        # Lege DataFrame als data None is
+        if data is None:
             df = pl.DataFrame({})
+            self._set_table_model(df)
+            return
+
+        # Dict met tuple keys
+        if isinstance(data, dict) and data:
+            first_key = next(iter(data.keys()))
+            # Converteer keys die lijsten zijn naar tuples
+            keys = [tuple(k) if isinstance(k, (list, tuple)) else (k,) for k in data.keys()]
+            # Bepaal kolomnamen
+            max_len = max(len(k) for k in keys)
+            colnames = [f"key_{i+1}" for i in range(max_len)]
+            rows = []
+            for k, v in zip(keys, data.values()):
+                # Vul aan met None als de tuple korter is
+                k_full = k + (None,) * (max_len - len(k))
+                row = dict(zip(colnames, k_full))
+                row["value"] = v
+                rows.append(row)
+            df = pl.DataFrame(rows)
+        # Dict met niet-tuple keys
+        elif isinstance(data, dict):
+            df = pl.DataFrame([{"key": k, "value": v} for k, v in data.items()])
+        # Al een DataFrame
+        elif isinstance(data, pl.DataFrame):
+            df = data
+        else:
+            df = pl.DataFrame({})
+
         self._set_table_model(df)
 
     def _set_table_model(self, df):
