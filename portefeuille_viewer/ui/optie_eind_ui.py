@@ -23,11 +23,22 @@ class Ui_OptieEindTab(object):
     def setupUi(self, OptieEindTab):
         if not OptieEindTab.objectName():
             OptieEindTab.setObjectName(u"OptieEindTab")
-        OptieEindTab.resize(1224, 800)
+        OptieEindTab.resize(1450, 800)
         self.verticalLayout_main = QVBoxLayout(OptieEindTab)
         self.verticalLayout_main.setObjectName(u"verticalLayout_main")
         self.layoutTop = QHBoxLayout()
         self.layoutTop.setObjectName(u"layoutTop")
+        self.lblOptieStartDatum = QLabel(OptieEindTab)
+        self.lblOptieStartDatum.setObjectName(u"lblOptieStartDatum")
+
+        self.layoutTop.addWidget(self.lblOptieStartDatum)
+
+        self.dateOptieStart = QDateEdit(OptieEindTab)
+        self.dateOptieStart.setObjectName(u"dateOptieStart")
+        self.dateOptieStart.setCalendarPopup(True)
+
+        self.layoutTop.addWidget(self.dateOptieStart)
+
         self.lblOptieEindDatum = QLabel(OptieEindTab)
         self.lblOptieEindDatum.setObjectName(u"lblOptieEindDatum")
 
@@ -36,15 +47,18 @@ class Ui_OptieEindTab(object):
         self.dateOptieEind = QDateEdit(OptieEindTab)
         self.dateOptieEind.setObjectName(u"dateOptieEind")
         self.dateOptieEind.setCalendarPopup(True)
+
         self.layoutTop.addWidget(self.dateOptieEind)
 
         self.lblTransactieDatum = QLabel(OptieEindTab)
         self.lblTransactieDatum.setObjectName(u"lblTransactieDatum")
+
         self.layoutTop.addWidget(self.lblTransactieDatum)
 
         self.dateTransactie = QDateEdit(OptieEindTab)
         self.dateTransactie.setObjectName(u"dateTransactie")
         self.dateTransactie.setCalendarPopup(True)
+
         self.layoutTop.addWidget(self.dateTransactie)
 
         self.btnSelecteerBrokers = QPushButton(OptieEindTab)
@@ -71,10 +85,14 @@ class Ui_OptieEindTab(object):
         self.btnMoveToProductie.setObjectName(u"btnMoveToProductie")
 
         self.layoutTop.addWidget(self.btnMoveToProductie)
+
         self.spacerTop = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.layoutTop.addItem(self.spacerTop)
+
+
         self.verticalLayout_main.addLayout(self.layoutTop)
+
         self.tblOptieEind = QTableView(OptieEindTab)
         self.tblOptieEind.setObjectName(u"tblOptieEind")
 
@@ -87,6 +105,7 @@ class Ui_OptieEindTab(object):
     # setupUi
 
     def retranslateUi(self, OptieEindTab):
+        self.lblOptieStartDatum.setText(QCoreApplication.translate("OptieEindTab", u"optie Start Datum:", None))
         self.lblOptieEindDatum.setText(QCoreApplication.translate("OptieEindTab", u"Optie Eind Datum:", None))
         self.lblTransactieDatum.setText(QCoreApplication.translate("OptieEindTab", u"Transactie Datum:", None))
         self.btnSelecteerBrokers.setText(QCoreApplication.translate("OptieEindTab", u"Selecteer brokers", None))
@@ -94,5 +113,6 @@ class Ui_OptieEindTab(object):
         self.btnRecordsToevoegen.setText(QCoreApplication.translate("OptieEindTab", u"Records toevoegen aan transactiedatabase", None))
         self.btnTestAccountLeegmaken.setText(QCoreApplication.translate("OptieEindTab", u"Test account leegmaken", None))
         self.btnMoveToProductie.setText(QCoreApplication.translate("OptieEindTab", u"Move records to productie", None))
+        pass
     # retranslateUi
 

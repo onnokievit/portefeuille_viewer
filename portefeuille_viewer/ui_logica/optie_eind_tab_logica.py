@@ -6,9 +6,12 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.repository import build_uniek_id
 import polars as pl
 import pandas as pd
 import numpy as np
+import datetime
 
 class OptieEindTab(QWidget, Ui_OptieEindTab):
     def __init__(self, broker=None, asset=None, parent=None):
@@ -25,9 +28,28 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         self.btnMoveToProductie.clicked.connect(self.move_records_to_productie)
         self.btnSelecteerBrokers.clicked.connect(self.open_broker_popup)
         # Zet standaarddatums
-        self.dateOptieEind.setDate(QDate(2025, 11, 7))
-        self.dateTransactie.setDate(QDate(2025, 11, 8))
 
+        def next_friday(date=None):
+            if date is None:
+                date = datetime.date.today()
+            days_ahead = (4 - date.weekday() + 7) % 7  # 4 = vrijdag
+            days_ahead = days_ahead if days_ahead != 0 else 7
+            return date + datetime.timedelta(days=days_ahead)
+
+        volgende_vrijdag = next_friday()
+        self.dateOptieStart.setDate(QDate(volgende_vrijdag.year, volgende_vrijdag.month, volgende_vrijdag.day))
+        self.dateOptieEind.setDate(QDate(volgende_vrijdag.year, volgende_vrijdag.month, volgende_vrijdag.day))
+
+        def next_saturday(date=None):
+            if date is None:
+                date = datetime.date.today()
+            days_ahead = (5 - date.weekday() + 7) % 7  # 5 = zaterdag
+            days_ahead = days_ahead if days_ahead != 0 else 7
+            return date + datetime.timedelta(days=days_ahead)
+
+        volgende_zaterdag = next_saturday()
+        self.dateTransactie.setDate(QDate(volgende_zaterdag.year, volgende_zaterdag.month, volgende_zaterdag.day))
+        
     def move_records_to_productie(self):
         QMessageBox.information(self, "Move to productie", "Deze functionaliteit is nog niet geïmplementeerd.")
 
@@ -63,86 +85,133 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         self.load_data()
 
     def load_data(self):
+        start_select = self.dateOptieStart.date().toPython()
+        print("Start selectie datum:", start_select)
         eind_select = self.dateOptieEind.date().toPython()
+        print("Eind selectie datum:", eind_select)
         transactie_datum = self.dateTransactie.date().toPython()
-        opties = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
-        df_opties = opties.filter((pl.col("optie_exp_date") <= eind_select))
+        transactie_optie_input = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+
+        df_transacties = transactie_optie_input.filter(
+            (pl.col("optie_exp_date") >= start_select) & (pl.col("optie_exp_date") <= eind_select)
+        )
         if self.selected_brokers is not None:
-            df_opties = df_opties.filter(pl.col("broker").is_in(list(self.selected_brokers)))
+            df_transacties = df_transacties.filter(pl.col("broker").is_in(list(self.selected_brokers)))
         if self.asset:
-            df_opties = df_opties.filter(pl.col("asset_rollup") == self.asset)
-        if "asset_detail" not in df_opties.columns:
-            df_opties = df_opties.with_columns([pl.lit("").alias("asset_detail")])
-        df_opties = df_opties.select([
-            "broker", "asset_rollup", "asset_detail", "Koers", "optie_exp_date", "optie_strike", "optie_call_put", "SomVantransactie_aantal"
+            df_transacties = df_transacties.filter(pl.col("asset_rollup") == self.asset)
+
+        df_grouped_optie = (
+            df_transacties
+            .filter(pl.col("asset_type").is_in(["optie"]))
+            .group_by([
+                "broker",
+                "asset_rollup",
+                "asset_type",
+                "optie_exp_date",
+                "optie_strike",
+                "optie_call_put"
+            ])
+            .agg([
+                pl.col("transactie_aantal").sum().alias("sum_transactie_aantal"),
+                pl.col("transactie_euro_totaal").sum().alias("sum_transactie_euro_totaal"),
+                pl.col("transactie_fee").sum().alias("sum_transactie_fee"),
+            ])
+            .filter(pl.col("sum_transactie_aantal") != 0))
+
+        if "asset_detail" not in df_grouped_optie.columns:
+            df_grouped_optie = df_grouped_optie.with_columns([pl.lit("").alias("asset_detail")])
+
+
+        df_grouped_sprinter = (
+            df_transacties
+            .filter(pl.col("asset_type").is_in(["sprinter"]))
+            .group_by([
+                "broker",
+                "asset_rollup",
+                "asset_detail",
+                "asset_type",
+                "optie_exp_date",
+                "optie_strike",
+                "optie_call_put"
+            ])
+            .agg([
+                pl.col("transactie_aantal").sum().alias("sum_transactie_aantal"),
+                pl.col("transactie_euro_totaal").sum().alias("sum_transactie_euro_totaal"),
+                pl.col("transactie_fee").sum().alias("sum_transactie_fee"),
+            ])
+            .filter(pl.col("sum_transactie_aantal") != 0))
+
+        kolommen = ["broker", "asset_rollup", "asset_detail", "asset_type", "optie_exp_date", "optie_strike", "optie_call_put", "sum_transactie_aantal", "sum_transactie_euro_totaal", "sum_transactie_fee"]
+        df_grouped_optie = df_grouped_optie.select(kolommen)
+        df_grouped_sprinter = df_grouped_sprinter.select(kolommen)
+        df_total = pl.concat([df_grouped_optie, df_grouped_sprinter], how="vertical")
+
+
+        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        if asset_map.is_empty():
+            return pl.DataFrame()
+        # Selecteer relevante velden uit asset_map
+        asset_map = asset_map.select([
+            "asset_rollup", "ib_symbol", "ib_currency"
         ])
-        sprinters = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
-        df_sprinters = sprinters.filter((pl.col("optie_exp_date") <= eind_select))
-        if self.selected_brokers is not None:
-            df_sprinters = df_sprinters.filter(pl.col("broker").is_in(list(self.selected_brokers)))
-        if self.asset:
-            df_sprinters = df_sprinters.filter(pl.col("asset_rollup") == self.asset)
-        df_sprinters = df_sprinters.select([
-            "broker", "asset_rollup", "asset_detail", "Koers", "optie_exp_date", "optie_strike", "optie_call_put", "SomVantransactie_aantal"
+        
+        df = df_total.join(asset_map, on="asset_rollup", how="left")
+
+        # Voeg Koers kolom toe met live prijzen of 0.0 als fallback
+        df = df.with_columns([
+            pl.col("ib_symbol").map_elements(
+                lambda symbol: (
+                    SNAPSHOT_STORE.live_prices.get(symbol) if symbol and SNAPSHOT_STORE.live_prices and SNAPSHOT_STORE.live_prices.get(symbol) not in (None, 0.0)
+                    else 0.0
+                ),
+                return_dtype=pl.Float64
+            ).alias("Koers")
         ])
-        df_opties = df_opties.with_columns([
-            pl.lit(transactie_datum).alias("transactie_datum"),
-            pl.lit("optie").alias("asset_type")
+            
+        df = df.with_columns([
+            pl.lit("").alias("itm_otm"),
+            pl.lit("").alias("transactie_oorsprong")
         ])
-        df_sprinters = df_sprinters.with_columns([
-            pl.lit(transactie_datum).alias("transactie_datum"),
-            pl.lit("sprinter").alias("asset_type")
+                
+        df_output = df.with_columns(
+            pl.when(
+                (pl.col("optie_call_put") == "call")
+                & (pl.col("Koers") < pl.col("optie_strike"))
+            )
+            .then(pl.lit("OTM"))
+            .when(
+                (pl.col("optie_call_put") == "call")
+                & (pl.col("Koers") >= pl.col("optie_strike"))
+            )
+            .then(pl.lit("ITM"))
+            .when(
+                (pl.col("optie_call_put") == "put")
+                & (pl.col("Koers") > pl.col("optie_strike"))
+            )
+            .then(pl.lit("OTM"))
+            .when(
+                (pl.col("optie_call_put") == "put")
+                & (pl.col("Koers") <= pl.col("optie_strike"))
+            )
+            .then(pl.lit("ITM"))
+            .otherwise(pl.lit("?"))
+            .alias("itm_otm")
+        )
+
+        # 2. Voeg transactie_oorsprong toe
+        df_output = df_output.with_columns([
+            pl.when(pl.col("itm_otm") == "ITM").then(pl.lit("ASSIGN")).otherwise(pl.lit("EXPIRE")).alias("transactie_oorsprong")
         ])
-        kolommen_union = set(df_opties.columns) | set(df_sprinters.columns)
-        def get_dtype(df, col):
-            return df.schema[col] if col in df.columns else None
-        for col in kolommen_union:
-            if col not in df_opties.columns:
-                dtype = get_dtype(df_sprinters, col) or pl.Utf8
-                df_opties = df_opties.with_columns([pl.lit(None).cast(dtype).alias(col)])
-            if col not in df_sprinters.columns:
-                dtype = get_dtype(df_opties, col) or pl.Utf8
-                df_sprinters = df_sprinters.with_columns([pl.lit(None).cast(dtype).alias(col)])
-        df_opties = df_opties.select(sorted(kolommen_union))
-        df_sprinters = df_sprinters.select(sorted(kolommen_union))
-        df_total = pl.concat([df_opties, df_sprinters], how="vertical")
-        pdf = df_total.to_pandas()
-        def transactie_type(row):
-            aantal = row.get("SomVantransactie_aantal", 0)
-            try:
-                aantal = float(aantal)
-            except Exception:
-                aantal = 0
-            return "koop" if aantal < 0 else "verkoop"
-        pdf["transactie_type"] = pdf.apply(transactie_type, axis=1)
-        def abs_aantal(row):
-            aantal = row.get("SomVantransactie_aantal", 0)
-            try:
-                return abs(float(aantal))
-            except Exception:
-                return 0
-        pdf["SomVantransactie_aantal"] = pdf.apply(abs_aantal, axis=1)
-        pdf["transactie_prijs"] = 0
-        def itm_otm(row):
-            if row.get("optie_call_put") == "call":
-                return "ITM" if row.get("Koers", 0) > row.get("optie_strike", 0) else "OTM"
-            elif row.get("optie_call_put") == "put":
-                return "ITM" if row.get("Koers", 0) < row.get("optie_strike", 0) else "OTM"
-            return "?"
-        pdf["itm_otm"] = pdf.apply(itm_otm, axis=1)
-        def transactie_oorsprong(row):
-            val = row.get("itm_otm", "?")
-            if val == "ITM":
-                return "ASSIGN"
-            elif val == "OTM":
-                return "EXPIRE"
-            return "?"
-        pdf["transactie_oorsprong"] = pdf.apply(transactie_oorsprong, axis=1)
-        output_cols = [
-            "transactie_datum", "broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type", "SomVantransactie_aantal", "transactie_prijs", "optie_exp_date", "optie_strike", "optie_call_put", "Koers", "itm_otm", "transactie_oorsprong"
-        ]
-        pdf = pdf.reindex(columns=output_cols)
-        pdf = pdf.copy()
+        df_output = df_output.with_columns([
+            pl.when(pl.col("sum_transactie_aantal") < 0).then(pl.lit("koop")).otherwise(pl.lit("verkoop")).alias("transactie_type")
+        ])
+        df_output = df_output.with_columns([
+            pl.when(pl.col("sum_transactie_aantal") < 0) .then(-pl.col("sum_transactie_aantal")) .otherwise(pl.col("sum_transactie_aantal")) .alias("aantal")
+        ])
+        df_output = df_output.with_columns([pl.lit(0).alias("transactie_prijs")])
+        df_output = df_output.with_columns([pl.lit(transactie_datum).alias("datum")])
+        
+        # Haal hoogste order_id op uit transacties
         repo_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
         if repo_tx is not None and "order_id" in repo_tx.columns:
             try:
@@ -152,43 +221,143 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
                 start_order_id = 1
         else:
             start_order_id = 1
-        pdf["order_id"] = range(start_order_id, start_order_id + len(pdf))
-        pdf["order_id_number"] = 1
-        pdf_aandelen = self.maak_aandelen_records(pdf, transactie_datum)
-        for col in ["transactie_datum", "optie_exp_date"]:
-            pdf[col] = pd.to_datetime(pdf[col]).dt.date
-            pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).dt.date
-            pdf[col] = pd.to_datetime(pdf[col]).astype("datetime64[ms]")
-            pdf_aandelen[col] = pd.to_datetime(pdf_aandelen[col]).astype("datetime64[ms]")
-        num_cols = ["transactie_prijs", "optie_strike", "SomVantransactie_aantal", "order_id"]
-        for col in num_cols:
-            if col in pdf.columns:
-                pdf[col] = pd.to_numeric(pdf[col], errors="coerce").astype("float64")
-            if col in pdf_aandelen.columns:
-                pdf_aandelen[col] = pd.to_numeric(pdf_aandelen[col], errors="coerce").astype("float64")
-        pl_pdf = pl.DataFrame(pdf)
-        pl_pdf_aandelen = pl.DataFrame(pdf_aandelen)
-        if pl_pdf.shape[0] == 0 and pl_pdf_aandelen.shape[0] == 0:
-            pl_merged = pl.DataFrame({col: [] for col in pl_pdf.columns})
-        elif pl_pdf.shape[0] == 0:
-            pl_merged = pl_pdf_aandelen
-        elif pl_pdf_aandelen.shape[0] == 0:
-            pl_merged = pl_pdf
-        else:
-            pl_merged = pl.concat([pl_pdf, pl_pdf_aandelen])
-        self.model = PandasTableModel(pl_merged.to_pandas())
+
+        # Voeg order_id kolom toe aan df_output, oplopend vanaf start_order_id
+        df_output = df_output.with_columns([
+            pl.Series("order_id", list(range(start_order_id, start_order_id + df_output.height)))
+        ])
+        df_output = df_output.with_columns([pl.lit(1).alias("order_id_number")])        
+        
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_output  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+        # aandelen recorden aanmaken voor toegewezen opties
+        assign_df = df_output.filter(pl.col("transactie_oorsprong") == "ASSIGN")
+
+        # Functie om transactie_type te bepalen
+        def bepaal_transactie_type(row):
+            call_put = row["optie_call_put"]
+            aantal = row["sum_transactie_aantal"]
+            # Long = aantal > 0, Short = aantal < 0
+            if call_put == "call":
+                if aantal > 0:
+                    return "koop"      # long call uitoefening
+                else:
+                    return "verkoop"   # short call
+            elif call_put == "put":
+                if aantal > 0:
+                    return "verkoop"   # long put
+                else:
+                    return "koop"      # short put
+            return "?"
+
+        # Maak aandelenrecords aan
+        aandelen_records = []
+        for row in assign_df.to_dicts():
+            aandelen_records.append({
+                "datum": row["datum"],
+                "broker": row["broker"],
+                "asset_rollup": row["asset_rollup"],
+                "asset_type": "aandeel",
+                "aantal": abs(row["sum_transactie_aantal"]),
+                "transactie_prijs": row["optie_strike"],
+                "transactie_oorsprong": "ASSIGN",
+                "transactie_type": bepaal_transactie_type(row),
+                "order_id": row["order_id"],
+                #"order_id_number": 2,
+            })
+
+        # Zet om naar Polars DataFrame
+        aandelen_df = pl.DataFrame(aandelen_records)
+        aandelen_df = aandelen_df.with_columns([pl.lit(2).alias("order_id_number")])
+        
+        kolommen = [
+            "datum","broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type",  "aantal", "transactie_prijs",
+            "optie_exp_date", "optie_strike", "optie_call_put",
+            "transactie_oorsprong", "order_id", "order_id_number"
+        ]
+        # Voeg ontbrekende kolommen toe aan aandelen_df
+        for col in kolommen:
+            if col not in aandelen_df.columns:
+                aandelen_df = aandelen_df.with_columns([pl.lit(None).alias(col)])
+
+        # Voeg ontbrekende kolommen toe aan df_output
+        for col in kolommen:
+            if col not in df_output.columns:
+                df_output = df_output.with_columns([pl.lit(None).alias(col)])
+        # Selecteer en sorteer kolommen in beide DataFrames
+        aandelen_df = aandelen_df.select(kolommen)
+        df_output = df_output.select(kolommen)
+        # Stel: 'aantal' en 'transactie_prijs' moeten Float64 zijn
+        for col in ["aantal", "transactie_prijs"]:
+            if col in aandelen_df.columns:
+                aandelen_df = aandelen_df.with_columns([pl.col(col).cast(pl.Float64).alias(col)])
+            if col in df_output.columns:
+                df_output = df_output.with_columns([pl.col(col).cast(pl.Float64).alias(col)])
+
+        # Nu kun je samenvoegen
+        df_concat = pl.concat([df_output, aandelen_df], how="vertical")
+
+        # Bouw uniek_id mapping     
+        df_concat = df_concat.with_columns([
+            pl.struct(df_concat.columns).map_elements(lambda row: build_uniek_id(row), return_dtype=pl.Utf8).alias("uniek_id")
+        ])
+
+        mapping = { (row["order_id"], row["order_id_number"]): row["uniek_id"] for row in df_concat.to_dicts() }
+        
+        def get_oorsprong_detail(row):
+            oid = row["order_id"]
+            oid_num = row["order_id_number"]
+            other_num = 2 if oid_num == 1 else 1
+            return mapping.get((oid, other_num), None)
+
+        df_concat = df_concat.with_columns([
+            pl.struct(df_concat.columns).map_elements(get_oorsprong_detail, return_dtype=pl.Utf8).alias("transactie_oorsprong_detail")
+        ])
+                
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_concat  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken            
+        self.model = PandasTableModel(df_concat.to_pandas())
         self.tblOptieEind.setModel(self.model)
+        # self.add_records_to_db()        
+        
+
 
     def on_fetch_clicked(self):
+        # self.load_data()
         self.load_data()
 
     def add_records_to_db(self):
         upload_cols = [
-            "datum", "broker", "asset_rollup", "asset_type", "transactie_type", "aantal", "transactie_prijs", "optie_exp_date", "optie_strike", "optie_call_put", "transactie_oorsprong", "order_id", "order_id_number"
+            "datum", "broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type", "aantal", "transactie_prijs",
+            "optie_exp_date", "optie_strike", "optie_call_put", "transactie_oorsprong", "order_id", "order_id_number",
+            "transactie_oorsprong_detail"
         ]
+        
         col_map = {
-            "transactie_datum": "datum", "broker": "broker", "asset_rollup": "asset_rollup", "asset_type": "asset_type", "transactie_type": "transactie_type", "SomVantransactie_aantal": "aantal", "transactie_prijs": "transactie_prijs", "optie_exp_date": "optie_exp_date", "optie_strike": "optie_strike", "optie_call_put": "optie_call_put", "transactie_oorsprong": "transactie_oorsprong", "order_id": "order_id", "order_id_number": "order_id_number"
+            "datum": "datum",
+            "broker": "broker",
+            "asset_rollup": "asset_rollup",
+            "asset_detail": "asset_detail",
+            "asset_type": "asset_type",
+            "transactie_type": "transactie_type",
+            "aantal": "aantal",
+            "transactie_prijs": "transactie_prijs",
+            "optie_exp_date": "optie_exp_date",
+            "optie_strike": "optie_strike",
+            "optie_call_put": "optie_call_put",
+            "transactie_oorsprong": "transactie_oorsprong",
+            "order_id": "order_id",
+            "order_id_number": "order_id_number",
+            "transactie_oorsprong_detail": "transactie_oorsprong_detail"
         }
+        
+
         df = self.model._df if hasattr(self.model, '_df') else self.model._data
         df_db = df[list(col_map.keys())].rename(columns=col_map)
         df_db = self._convert_df_for_access(df_db)

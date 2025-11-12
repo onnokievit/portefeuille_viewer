@@ -21,7 +21,9 @@ def bereken_open_aandelen_payoff(df_aandelen: pl.DataFrame, koers: float) -> flo
 		winst_bezit = waarde_bezit + kostprijs_bezit
 	else:
 		# Short-only: winst = euro_verkoop + aantal_bezit * koers
-		winst_bezit = euro_verkoop + aantal_bezit * koers
+		waarde_bezit = aantal_bezit * koers
+		kostprijs_bezit = aantal_bezit * avg_buy
+		winst_bezit = waarde_bezit + kostprijs_bezit
 	return winst_bezit
 
 def bereken_gesloten_aandelen_payoff(df_aandelen: pl.DataFrame) -> float:
