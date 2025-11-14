@@ -17,6 +17,8 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
     def __init__(self, broker=None, asset=None, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self.live_prices = SNAPSHOT_STORE.live_prices or {}
+        self.last_prices = load_last_prices_dict()
         self.asset = asset
         self.active_db_name = "transacties_bron_data_test_accounts"
         self.selected_brokers = None
@@ -121,7 +123,6 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         if "asset_detail" not in df_grouped_optie.columns:
             df_grouped_optie = df_grouped_optie.with_columns([pl.lit("").alias("asset_detail")])
 
-
         df_grouped_sprinter = (
             df_transacties
             .filter(pl.col("asset_type").is_in(["sprinter"]))
@@ -154,25 +155,25 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         asset_map = asset_map.select([
             "asset_rollup", "ib_symbol", "ib_currency"
         ])
-        
+
         df = df_total.join(asset_map, on="asset_rollup", how="left")
 
-        # Voeg Koers kolom toe met live prijzen of 0.0 als fallback
         df = df.with_columns([
-            pl.col("ib_symbol").map_elements(
-                lambda symbol: (
-                    SNAPSHOT_STORE.live_prices.get(symbol) if symbol and SNAPSHOT_STORE.live_prices and SNAPSHOT_STORE.live_prices.get(symbol) not in (None, 0.0)
-                    else 0.0
+            pl.struct(["ib_symbol", "ib_currency"]).map_elements(
+                lambda row: (
+                    self.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and self.live_prices and self.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
+                    else self.last_prices.get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] and self.last_prices else 0.0
                 ),
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])
-            
+
+
         df = df.with_columns([
             pl.lit("").alias("itm_otm"),
             pl.lit("").alias("transactie_oorsprong")
         ])
-                
+
         df_output = df.with_columns(
             pl.when(
                 (pl.col("optie_call_put") == "call")
@@ -210,7 +211,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         ])
         df_output = df_output.with_columns([pl.lit(0).alias("transactie_prijs")])
         df_output = df_output.with_columns([pl.lit(transactie_datum).alias("datum")])
-        
+
         # Haal hoogste order_id op uit transacties
         repo_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
         if repo_tx is not None and "order_id" in repo_tx.columns:
@@ -227,11 +228,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             pl.Series("order_id", list(range(start_order_id, start_order_id + df_output.height)))
         ])
         df_output = df_output.with_columns([pl.lit(1).alias("order_id_number")])        
-        
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_output  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
 
 
         # aandelen recorden aanmaken voor toegewezen opties
@@ -243,15 +240,9 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             aantal = row["sum_transactie_aantal"]
             # Long = aantal > 0, Short = aantal < 0
             if call_put == "call":
-                if aantal > 0:
-                    return "koop"      # long call uitoefening
-                else:
-                    return "verkoop"   # short call
+                return "koop" if aantal > 0 else "verkoop"
             elif call_put == "put":
-                if aantal > 0:
-                    return "verkoop"   # long put
-                else:
-                    return "koop"      # short put
+                return "verkoop" if aantal > 0 else "koop"
             return "?"
 
         # Maak aandelenrecords aan
@@ -273,7 +264,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         # Zet om naar Polars DataFrame
         aandelen_df = pl.DataFrame(aandelen_records)
         aandelen_df = aandelen_df.with_columns([pl.lit(2).alias("order_id_number")])
-        
+
         kolommen = [
             "datum","broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type",  "aantal", "transactie_prijs",
             "optie_exp_date", "optie_strike", "optie_call_put",
@@ -307,21 +298,18 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         ])
 
         mapping = { (row["order_id"], row["order_id_number"]): row["uniek_id"] for row in df_concat.to_dicts() }
-        
+
         def get_oorsprong_detail(row):
             oid = row["order_id"]
             oid_num = row["order_id_number"]
             other_num = 2 if oid_num == 1 else 1
-            return mapping.get((oid, other_num), None)
+            return mapping.get((oid, other_num))
 
         df_concat = df_concat.with_columns([
             pl.struct(df_concat.columns).map_elements(get_oorsprong_detail, return_dtype=pl.Utf8).alias("transactie_oorsprong_detail")
         ])
-                
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_concat  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken            
+
+
         self.model = PandasTableModel(df_concat.to_pandas())
         self.tblOptieEind.setModel(self.model)
         # self.add_records_to_db()        

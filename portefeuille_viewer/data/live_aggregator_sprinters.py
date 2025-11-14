@@ -51,7 +51,7 @@ class LiveAggregatorSprinters(QObject):
         if sprinter_ref is None or sprinter_ref.is_empty():
             raise ValueError("repository_snapshot_sprinter_referentie_data is niet geladen")
         # Join met asset_map voor ib_symbol (zonder asset_detail)
-        asset_map = asset_map.select(["asset_rollup", "ib_symbol"])
+        asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency"])
         df = SNAPSHOT_STORE.repository_snapshot_open_sprinters.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
         # Join met sprinter_ref altijd op asset_detail (die hoort in df te zitten)
@@ -59,15 +59,27 @@ class LiveAggregatorSprinters(QObject):
         df = df.join(sprinter_ref, on="asset_detail", how="left")
         # Voeg koers toe op basis van ib_symbol
 
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
         df = df.with_columns([
-            pl.col("ib_symbol").map_elements(
-                lambda symbol: (
-                    self.live_prices.get(symbol) if symbol and self.live_prices and self.live_prices.get(symbol) not in (None, 0.0)
-                    else self.last_prices.get(symbol, 0.0) if symbol and self.last_prices else 0.0
+            pl.struct(["ib_symbol", "ib_currency"]).map_elements(
+                lambda row: (
+                    self.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and self.live_prices and self.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
+                    else self.last_prices.get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] and self.last_prices else 0.0
                 ),
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])
+
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+        # SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
 
         return df
 
@@ -115,10 +127,6 @@ class LiveAggregatorSprinters(QObject):
             ((pl.col("sp_bruto_result") + pl.col("SomVantransactie_euro_totaal")) ).alias("sp_result")
         ])
 
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         return df
 
