@@ -66,10 +66,10 @@ class LiveAggregatorAandelen(QObject):
 
         # Voeg Koers kolom toe met live prijzen of 0.0 als fallback
         df = df.with_columns([
-            pl.col("ib_symbol").map_elements(
-                lambda symbol: (
-                    self.live_prices.get(symbol) if symbol and self.live_prices and self.live_prices.get(symbol) not in (None, 0.0)
-                    else self.last_prices.get(symbol, 0.0) if symbol and self.last_prices else 0.0
+            pl.struct(["ib_symbol", "ib_currency"]).map_elements(
+                lambda row: (
+                    self.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and self.live_prices and self.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
+                    else self.last_prices.get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] and self.last_prices else 0.0
                 ),
                 return_dtype=pl.Float64
             ).alias("Koers")

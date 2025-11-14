@@ -72,6 +72,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		if hasattr(SNAPSHOT_STORE, "live_prices") and SNAPSHOT_STORE.live_prices:
 			price = None
 			if ib_symbol and ib_currency:
+				# print("Zoek prijs voor:", (ib_symbol, ib_currency)) # DEBUG chosen asset
 				price = SNAPSHOT_STORE.live_prices.get((ib_symbol, ib_currency))
 			if price is None and ib_symbol:
 				price = SNAPSHOT_STORE.live_prices.get(ib_symbol)
@@ -81,7 +82,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 				live_price = price["last"]
 			elif isinstance(price, (int, float)):
 				live_price = price
-
+		
 		center = float(live_price)
 		steps = [round(center * (i - 10) * 0.02 + center, 2) for i in range(21)]
 		headers = [str(s) for s in steps]

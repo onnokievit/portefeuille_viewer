@@ -211,7 +211,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
             raise ValueError("Transactiedata is niet geladen in SnapshotStore.")
         df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
 
-    df_tx = df_tx.filter(pl.col("transactie_oorsprong") != "HEDGE")
+    # df_tx = df_tx.filter(pl.col("transactie_oorsprong") != "HEDGE")
 
     vandaag = date.today()
 
@@ -219,7 +219,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
     per_uniek = (
         df_tx
         .group_by([
-             
+            
             "uniek_id",
             "broker",
             "asset_rollup",
@@ -778,7 +778,6 @@ def update_transactions_atomic(record_id1: int, data1: dict, record_id2: int | N
     d2 = _sanitize_update_dict(data2) if (record_id2 is not None and data2 is not None) else None
     if not d1 and not d2:
         return
-
     with get_connection() as conn:
         cur = conn.cursor()
         try:
@@ -836,8 +835,6 @@ def parse_int_field(s):
     except Exception:
         return None
 
-
-
 def _date_for_id(x): ########################## niet genoemd door chatgpt om te blijven?
     d = _parse_date(x)
     return f"{d.day}-{d.month}-{d.year}" if d else ""
@@ -877,8 +874,7 @@ def is_pairable(order: dict) -> bool:
     Gebruikt het transactie_oorsprong veld.
     """
     oorspr = (order.get("transactie_oorsprong") or "").upper()
-    return oorspr in {"DOORROL", "ASSIGN", "EXPIRE", "EXERCISE"}
-
+    return oorspr in {"DOORROL", "ASSIGN", "EXERCISE"}
 
 def get_next_order_id() -> int:
     """
@@ -925,10 +921,10 @@ def load_last_prices_dict():
     last_prices = {}
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT ib_symbol, price FROM asset_last_prices")
+        cursor.execute("SELECT ib_symbol, ib_currency, price FROM asset_last_prices")
         for row in cursor.fetchall():
-            symbol, price = row
-            last_prices[symbol] = price
+            symbol, currency, price = row
+            last_prices[(symbol,currency)] = price
     # print(f"[DEBUG load last prices werkt] Loaded last_prices: {len(last_prices)} items, sample: {list(last_prices.items())[:5]}")
     return last_prices
 

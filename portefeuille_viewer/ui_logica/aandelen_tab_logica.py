@@ -120,7 +120,6 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		else:
 			df_aandelen_sum = df
 		
-
 		df_gesloten_opties = SNAPSHOT_STORE.repository_snapshot_gesloten_opties
 		if self.selected_brokers is not None and "broker" in df.columns:
 			df_gesloten_opties = df_gesloten_opties.filter(pl.col("broker").is_in(list(self.selected_brokers)))
@@ -157,15 +156,14 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		df_open_sprinters = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
 		if self.selected_brokers is not None and "broker" in df.columns:
 			df_open_sprinters = df_open_sprinters.filter(pl.col("broker").is_in(list(self.selected_brokers)))
-		if not df_open_sprinters.is_empty():
+		if df_open_sprinters is not None and not df_open_sprinters.is_empty():
 			df_open_sp_sum = df_open_sprinters.group_by("asset_rollup").agg([
 				pl.col("sp_result").sum().alias("open_sp_result"),
 				pl.col("SomVantransactie_fee").sum().alias("open_sp_transactie_fee"),
 				pl.col("SomVantransactie_aantal").sum().alias("open_sp_aantal"),
 			])
 		else:
-			df_open_sp_sum = df_open_sprinters
-		
+			df_open_sp_sum = df_open_sprinters if df_open_sprinters is not None else pl.DataFrame()
 
 		df_dividend = SNAPSHOT_STORE.repository_portfolio_dividend
 		if self.selected_brokers is not None and "broker" in df.columns:

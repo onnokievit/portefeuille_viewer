@@ -25,11 +25,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # Hier kun je later echte tab-klassen toevoegen
         self.orders_tab = OrdersTabWidget() 
         self.tabWidget.addTab(self.orders_tab, "Orders")
-
-        self.single_asset_analyse_tab = SingleAssetAnalyseTab()
-        self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+        self.single_asset_analyse_tab = SingleAssetAnalyseTab()
+        self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)

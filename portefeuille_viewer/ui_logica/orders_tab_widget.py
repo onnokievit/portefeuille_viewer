@@ -19,7 +19,7 @@ from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.data.repository import (
     get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
-    get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, # build_uniek_id,is_pairable,
+    get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, build_uniek_id, is_pairable
     )
 
 
@@ -536,10 +536,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             )
 
         # 2) Linking (oorsprong detail)
-        uniek1 = self.build_uniek_id(eerste_order)
+        uniek1 = build_uniek_id(eerste_order)
         if tweede_order:
-            uniek2 = self.build_uniek_id(tweede_order)
-            if self.is_pairable(eerste_order) and self.is_pairable(tweede_order):
+            uniek2 = build_uniek_id(tweede_order)
+            if is_pairable(eerste_order) and is_pairable(tweede_order):
                 eerste_order["transactie_oorsprong_detail"] = uniek2
                 tweede_order["transactie_oorsprong_detail"] = uniek1
             else:
@@ -1130,69 +1130,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 zichtbaarheid[k] = True
         return zichtbaarheid
     
-    def build_uniek_id(self, values: dict) -> str:
-        broker = self._clean(values.get("broker"))
-        at = self._clean(values.get("asset_type")).lower()
-        if at == "optie":
-            rollup = self._clean(values.get("asset_rollup"))
-            exp    = self._date_for_id(values.get("optie_exp_date"))
-            cp     = self._clean(values.get("optie_call_put")).lower()
-            strike = self._norm_dec_for_id(values.get("optie_strike"))
-            return f"{broker}-{rollup}-{at}-{exp}-{cp}-{strike}"
-        if at == "sprinter":
-            detail = self._clean(values.get("asset_detail"))
-            return f"{broker}-{detail}-{at}"
-        if at == "aandeel":
-            rollup = self._clean(values.get("asset_rollup"))
-            return f"{broker}-{rollup}-{at}"
-        rollup = self._clean(values.get("asset_rollup"))
-        return f"{broker}-{rollup}-{at}"
-
-    
-    def is_pairable(self, order: dict) -> bool:
-        oorspr = (order.get("transactie_oorsprong") or "").upper()
-        return oorspr in {"DOORROL", "ASSIGN",  "EXERCISE"}
-    
-    def _clean(self, x):
-        return "" if x is None else str(x).strip()
-    
-    
-    def _date_for_id(self, x):
-        d = self._parse_date(x)
-        return f"{d.day}-{d.month}-{d.year}" if d else ""
-    
-    def _norm_dec_for_id(self, x):
-        if x in (None, ""):
-            return ""
-        s = str(x).strip().replace(",", ".")
-        try:
-            f = float(s)
-            return str(int(f)) if f.is_integer() else f"{f}".rstrip("0").rstrip(".")
-        except ValueError:
-            return s
-        
-    def _parse_date(self, x):
-        from datetime import date, datetime
-        if x in (None, ""):
-            return None
-        if isinstance(x, datetime):
-            return x.date()
-        if isinstance(x, date):
-            return x
-        s = str(x).strip().replace("\\", "/").replace("-", "/")
-        p = s.split("/")
-        try:
-            if len(p) == 3:
-                if len(p[0]) <= 2 and len(p[1]) <= 2:
-                    d, m, y = int(p[0]), int(p[1]), int(p[2])
-                    y = (2000+y) if y < 100 else y
-                    return date(y, m, d)
-                if len(p[0]) == 4:
-                    y, m, d = int(p[0]), int(p[1]), int(p[2])
-                    return date(y, m, d)
-        except Exception:
-            return None
-        return None
     
     def apply_database_by_name(self, name):
         import portefeuille_viewer.data.repository as repo
@@ -1235,13 +1172,9 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             part["broker"].set_items(self.brokers)
             part["asset_rollup"].set_items(self.asset_rollups)
             part["detail"].set_items(self.sprinter_details)
-
-        
         
         self._apply_db_color(name)  # wisselt de kleurstijl van de DB-keuze
-        
         self.reset_form()           # wist velden + toggles
-        
         self._load_initial_records()
         self.dbChanged.emit()
         # Zend centraal signaal uit voor app-brede database-wissel

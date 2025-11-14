@@ -54,25 +54,31 @@ class LiveAggregatorOpties(QObject):
         
         # Selecteer relevante velden uit asset_map
         asset_map = asset_map.select([
-            "asset_rollup", "ib_symbol"
+            "asset_rollup", "ib_symbol", "ib_currency"
         ])
         
         # Haal opties data op en join met asset_map
         df = SNAPSHOT_STORE.repository_snapshot_load_open_opties.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
 
+        
         # Voeg Koers kolom toe met live prijzen van onderliggende asset (via ib_symbol)
         df = df.with_columns([
-            pl.col("ib_symbol").map_elements(
-                lambda symbol: (
-                    self.live_prices.get(symbol) if symbol and self.live_prices and self.live_prices.get(symbol) not in (None, 0.0)
-                    else self.last_prices.get(symbol, 0.0) if symbol and self.last_prices else 0.0
+            pl.struct(["ib_symbol", "ib_currency"]).map_elements(
+                lambda row: (
+                    SNAPSHOT_STORE.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and SNAPSHOT_STORE.live_prices and SNAPSHOT_STORE.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
+                    else load_last_prices_dict().get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] else 0.0
                 ),
                 return_dtype=pl.Float64
             ).alias("Koers")
         ])
         
         return df
+    
+
+    
+    
+    
     
     def _load_and_calculate(self):
         """
@@ -81,19 +87,13 @@ class LiveAggregatorOpties(QObject):
         # Laad basisdata met Koers kolom
         df = self._load_and_prepare_data()
         
-
-
         # Bereken ITM/OTM waarde
         df = self._calculate_itm_otm(df)
-
-
         
         # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
         df = df.with_columns([
             (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("opt_total_result")
         ])
-        
-
 
         # Selecteer en herorden kolommen volgens screenshot
         df = df.select([
