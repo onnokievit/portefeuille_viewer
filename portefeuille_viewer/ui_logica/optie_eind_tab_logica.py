@@ -229,10 +229,19 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         ])
         df_output = df_output.with_columns([pl.lit(1).alias("order_id_number")])        
 
-
-
         # aandelen recorden aanmaken voor toegewezen opties
         assign_df = df_output.filter(pl.col("transactie_oorsprong") == "ASSIGN")
+        
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = assign_df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        if assign_df.is_empty():
+            print("DataFrame is leeg")
+        else:
+            
+            print("DataFrame bevat rijen")
+
 
         # Functie om transactie_type te bepalen
         def bepaal_transactie_type(row):
@@ -247,19 +256,20 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
 
         # Maak aandelenrecords aan
         aandelen_records = []
-        for row in assign_df.to_dicts():
-            aandelen_records.append({
-                "datum": row["datum"],
-                "broker": row["broker"],
-                "asset_rollup": row["asset_rollup"],
-                "asset_type": "aandeel",
-                "aantal": abs(row["sum_transactie_aantal"]),
-                "transactie_prijs": row["optie_strike"],
-                "transactie_oorsprong": "ASSIGN",
-                "transactie_type": bepaal_transactie_type(row),
-                "order_id": row["order_id"],
-                #"order_id_number": 2,
-            })
+        if not assign_df.is_empty():
+            for row in assign_df.to_dicts():
+                aandelen_records.append({
+                    "datum": row["datum"],
+                    "broker": row["broker"],
+                    "asset_rollup": row["asset_rollup"],
+                    "asset_type": "aandeel",
+                    "aantal": abs(row["sum_transactie_aantal"]),
+                    "transactie_prijs": row["optie_strike"],
+                    "transactie_oorsprong": "ASSIGN",
+                    "transactie_type": bepaal_transactie_type(row),
+                    "order_id": row["order_id"],
+                    # "order_id_number": 2,
+                })
 
         # Zet om naar Polars DataFrame
         aandelen_df = pl.DataFrame(aandelen_records)
@@ -290,24 +300,27 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
                 df_output = df_output.with_columns([pl.col(col).cast(pl.Float64).alias(col)])
 
         # Nu kun je samenvoegen
-        df_concat = pl.concat([df_output, aandelen_df], how="vertical")
+        if not assign_df.is_empty():
+            df_concat = pl.concat([df_output, aandelen_df], how="vertical")
 
-        # Bouw uniek_id mapping     
-        df_concat = df_concat.with_columns([
-            pl.struct(df_concat.columns).map_elements(lambda row: build_uniek_id(row), return_dtype=pl.Utf8).alias("uniek_id")
-        ])
+            # Bouw uniek_id mapping     
+            df_concat = df_concat.with_columns([
+                pl.struct(df_concat.columns).map_elements(lambda row: build_uniek_id(row), return_dtype=pl.Utf8).alias("uniek_id")
+            ])
 
-        mapping = { (row["order_id"], row["order_id_number"]): row["uniek_id"] for row in df_concat.to_dicts() }
+            mapping = { (row["order_id"], row["order_id_number"]): row["uniek_id"] for row in df_concat.to_dicts() }
 
-        def get_oorsprong_detail(row):
-            oid = row["order_id"]
-            oid_num = row["order_id_number"]
-            other_num = 2 if oid_num == 1 else 1
-            return mapping.get((oid, other_num))
+            def get_oorsprong_detail(row):
+                oid = row["order_id"]
+                oid_num = row["order_id_number"]
+                other_num = 2 if oid_num == 1 else 1
+                return mapping.get((oid, other_num))
 
-        df_concat = df_concat.with_columns([
-            pl.struct(df_concat.columns).map_elements(get_oorsprong_detail, return_dtype=pl.Utf8).alias("transactie_oorsprong_detail")
-        ])
+            df_concat = df_concat.with_columns([
+                pl.struct(df_concat.columns).map_elements(get_oorsprong_detail, return_dtype=pl.Utf8).alias("transactie_oorsprong_detail")
+            ])
+        else:
+            df_concat = df_output.with_columns([pl.lit(None).alias("transactie_oorsprong_detail")])
 
 
         self.model = PandasTableModel(df_concat.to_pandas())
@@ -355,6 +368,10 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         if "optie_exp_date" in df_db.columns:
             df_db["optie_exp_date"] = pd.to_datetime(df_db["optie_exp_date"], errors="coerce")
             df_db["optie_exp_date"] = df_db["optie_exp_date"].apply(lambda x: x.date() if pd.notnull(x) else None)
+        
+        df_db = df_db.dropna(how="all")  # verwijder volledig lege rijen
+        df_db = df_db[~(df_db == '').all(axis=1)]  # verwijder rijen die alleen lege strings bevatten
+        
         from portefeuille_viewer.data.repository import conn_str
         import pyodbc
         with pyodbc.connect(conn_str) as conn:

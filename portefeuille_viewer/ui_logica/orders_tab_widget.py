@@ -395,8 +395,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     def _format_df_for_table(self, df):
         # Gekopieerd uit oude orders_tab.py, vereenvoudigd
         TABLE_COLS = [
-            "Id","datum","transactie_oorsprong","broker","asset_rollup","asset_type",
-            "transactie_type","asset_detail","optie_exp_date","optie_strike","optie_call_put",
+            "Id","datum","transactie_oorsprong","broker","asset_rollup","asset_detail","asset_type",
+            "transactie_type","optie_exp_date","optie_strike","optie_call_put",
             "aantal","transactie_prijs","transactie_fee","uniek_id","transactie_oorsprong_detail"
         ]
         if df is None or df.empty:
