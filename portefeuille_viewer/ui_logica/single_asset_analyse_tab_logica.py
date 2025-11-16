@@ -23,7 +23,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		self.setupUi(self)
 
 		self.gridLayout_2.setColumnStretch(0, 10)
-		self.gridLayout_2.setColumnStretch(1, 7)
+		self.gridLayout_2.setColumnStretch(1, 6)
 		
 		self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		
@@ -65,7 +65,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
 
 		# Initialiseer payoff_table
-		self.payoff_table.setColumnCount(21)
+		self.payoff_table.setColumnCount(17)
 		self.payoff_table.setRowCount(10)
 		self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
 		# Je kunt hier headers en andere init doen zoals in je oude code
@@ -104,9 +104,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		center = float(live_price)
 
 		step_size = self.stepSizeBox.value()
-		steps = [round(center * (i - 10) * step_size + center, 2) for i in range(21)]
+		steps = [round(center * (i - 8) * step_size + center, 2) for i in range(17)]
 
-		# steps = [round(center * (i - 10) * 0.02 + center, 2) for i in range(21)]
 		headers = [str(s) for s in steps]
 		self.payoff_table.setHorizontalHeaderLabels(headers)
 
@@ -136,13 +135,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		dividend_val = self.logic.get_dividend(asset_rollup)
 		payoff_matrix.append([dividend_val for _ in steps])
 
-		payoff_totaal_zonder_fees = [sum(payoff_matrix[row][i] for row in range(7)) for i in range(21)]
+		payoff_totaal_zonder_fees = [sum(payoff_matrix[row][i] for row in range(7)) for i in range(17)]
 		payoff_matrix.append(payoff_totaal_zonder_fees)
 
 		payoff_fees = self.logic.get_fees(steps)
 		payoff_matrix.append(payoff_fees)
 
-		payoff_totaal = [payoff_matrix[7][i] + payoff_matrix[8][i] for i in range(21)]
+		payoff_totaal = [payoff_matrix[7][i] + payoff_matrix[8][i] for i in range(17)]
 		payoff_matrix.append(payoff_totaal)
 
 		factor = getattr(self.logic, "currency_factor", 1.0)
@@ -156,13 +155,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		boldfont = QFont()
 		boldfont.setBold(True)
 
-		for col in range(21):
+		for col in range(17):
 			if header_item := self.payoff_table.horizontalHeaderItem(col):
 				header_item.setFont(boldfont)
 				header_item.setBackground(lightgrey)
 
 		for row in range(10):
-			for col in range(21):
+			for col in range(17):
 				val = payoff_matrix[row][col] / factor
 				item = QTableWidgetItem(str(int(round(val, 0))))
 				item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
