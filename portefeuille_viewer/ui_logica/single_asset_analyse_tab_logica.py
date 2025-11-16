@@ -1,47 +1,64 @@
 
 import contextlib
-from PySide6.QtWidgets import QWidget, QTableWidgetItem
+import polars as pl
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
+from PySide6.QtGui import QFont
+from PySide6.QtCore import QLocale
+import pyqtgraph as pg
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
 	bereken_open_opties_payoff,
 	bereken_open_sprinters_payoff,
 	bereken_gesloten_aandelen_payoff,
 	bereken_open_aandelen_payoff,
 )
-import polars as pl
-from portefeuille_viewer.config import get_settings
-import numpy as np
+
 
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
-	
-
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setupUi(self)
-		from PySide6.QtWidgets import QHeaderView
-		self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
+		self.gridLayout_2.setColumnStretch(0, 10)
+		self.gridLayout_2.setColumnStretch(1, 7)
+		
+		self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+		
+		self.stepSizeBox.setLocale(QLocale(QLocale.C))
 		# Maak de rijhoogte compacter
 		for row in range(10):
 			self.payoff_table.setRowHeight(row, 16)  # pas 22 aan voor nog compacter/ruimer
+		
+		font = QFont("Arial", 8)  # Kies je gewenste lettertype en grootte
+		self.payoff_table.setFont(font)        
                 
 		self.logic = SingleAssetAnalyseLogic()
         
 		self.asset_selector.addItems(self.logic.load_assets())
 		self.asset_selector.currentTextChanged.connect(self.on_asset_selected)
 
-		# Voeg matplotlib-canvas toe aan chartWidget
-		from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-		from matplotlib.figure import Figure
-		self.figure = Figure(figsize=(6, 4))
-		self.canvas = FigureCanvas(self.figure)
-		self.layoutChart.addWidget(self.canvas)
+		# Initialiseer pyqtgraph plot_widget
+		self.plot_widget = pg.PlotWidget()
+		self.layoutChart.addWidget(self.plot_widget)
+		# PYQTGRAPH: alle margins uit
+		self.plot_widget.setContentsMargins(0, 0, 0, 0)
+		self.plot_widget.plotItem.setContentsMargins(0, 0, 0, 0)
+		self.plot_widget.plotItem.layout.setContentsMargins(0, 0, 0, 0)
 
+		# Geen assen nodig voor Excel-uiting
+		
+		self.plot_widget.showAxis('right', False)
+		self.plot_widget.showAxis('top', False)
+		self.plot_widget.showAxis('bottom', True)
+
+		# Synchroniseer grafiek als kolom 0 resized wordt
+		self.payoff_table.horizontalHeader().sectionResized.connect(self.sync_plot_with_table)
 		# Tooltip/annotatie voor mouseover
 		self._mpl_annotation = None
-		self._mpl_hover_cid = self.canvas.mpl_connect('motion_notify_event', self._on_mpl_hover)
+		# self._mpl_hover_cid = self.canvas.mpl_connect('motion_notify_event', self._on_mpl_hover)
 		self._mpl_last_lines = []
 		self._mpl_x_mapping = []  # mapping van x_scaled naar koerswaarde
 
@@ -50,6 +67,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		# Initialiseer payoff_table
 		self.payoff_table.setColumnCount(21)
 		self.payoff_table.setRowCount(10)
+		self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
 		# Je kunt hier headers en andere init doen zoals in je oude code
 
 	def on_asset_selected(self, asset_rollup):
@@ -84,7 +102,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 				live_price = price
 		
 		center = float(live_price)
-		steps = [round(center * (i - 10) * 0.02 + center, 2) for i in range(21)]
+
+		step_size = self.stepSizeBox.value()
+		steps = [round(center * (i - 10) * step_size + center, 2) for i in range(21)]
+
+		# steps = [round(center * (i - 10) * 0.02 + center, 2) for i in range(21)]
 		headers = [str(s) for s in steps]
 		self.payoff_table.setHorizontalHeaderLabels(headers)
 
@@ -156,33 +178,20 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		self.payoff_table.viewport().update()
 		self.update_chart()
 
-
 	def update_chart(self):
-		self.figure.clear()
-		# Reset annotatie bij nieuw tekenen
-		if self._mpl_annotation:
-			self._mpl_annotation.set_visible(False)
-			self._mpl_annotation = None
-		ax = self.figure.add_subplot(111)
-
-		# Check of er kolommen zijn, anders geen grafiek tekenen
-		if self.payoff_table.columnCount() == 0:
-			self.canvas.draw()
-			return
-
-		# === Koersen ophalen ===
+		self.plot_widget.clear()
+		# x-as: koerswaarden uit de header
 		x_values = []
 		for i in range(self.payoff_table.columnCount()):
-			if header_item := self.payoff_table.horizontalHeaderItem(i):
-				try:
-					x_values.append(float(header_item.text()))
-				except ValueError:
-					x_values.append(i)
-			else:
+			header_item = self.payoff_table.horizontalHeaderItem(i)
+			try:
+				x_values.append(float(header_item.text()))
+			except Exception:
 				x_values.append(i)
 
-		# === Y-waarden ophalen ===
-		y_totaal, y_open_opties = [], []
+		# y-waarden uit de tabel
+		y_totaal = []
+		y_open_opties = []
 		for i in range(self.payoff_table.columnCount()):
 			item_totaal = self.payoff_table.item(9, i)
 			item_open_opties = self.payoff_table.item(0, i)
@@ -192,117 +201,48 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 			y_open_opties.append(open_opties_val)
 		y_verschil = [t - o for t, o in zip(y_totaal, y_open_opties)]
 
-		# === Y-as limiet bepalen door alle y-waarden van alle lijnen te loopen ===
+		# Y-as limieten bepalen (zoals in je oude code)
 		all_y = y_totaal + y_open_opties + y_verschil
-		if all_y:
-			self._get_from_chart_all_y_values_for_define_min_max(all_y, ax)
-		# === Y-as limiet instellen op basis van alle lijnen ===
-		all_y = y_totaal + y_verschil + y_open_opties
 		if all_y:
 			min_y = min(all_y)
 			max_y = max(all_y)
 			if max_y == min_y:
-				max_y = min_y + 1  # voorkom platte lijn
-			if min_y < 0:
-				lower = min_y * 1.25
-			else:
-				lower = min_y / 1.25
-			if max_y > 0:
-				upper = max_y * 1.25
-			else:
-				upper = max_y / 1.25
-			ax.set_ylim(lower, upper)
+				max_y = min_y + 1
+			lower = min_y * 1.25 if min_y < 0 else min_y / 1.25
+			upper = max_y * 1.25 if max_y > 0 else max_y / 1.25
+			if lower == upper:
+				upper = lower + 1
+			self.plot_widget.setYRange(lower, upper)
 
-		for spine in ax.spines.values():
-			spine.set_linewidth(0.5)
-			spine.set_color("#CCCCCC")
+		# Plotten met pyqtgraph
+		self.plot_widget.plot(x_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")
+		self.plot_widget.plot(x_values, y_verschil, pen=pg.mkPen(color="#BFBFBF", width=2), name="Totaal - Open opties")
+		self.plot_widget.plot(x_values, y_open_opties, pen=pg.mkPen(color="#FF0000", width=2), name="Open opties")
 
-		# lichte as- en achtergrondstijl
-		ax.tick_params(colors="#666666", labelsize=9)
-		ax.set_facecolor("#FAFAFA")
+		label_col_width = self.payoff_table.verticalHeader().width()
+		vb = self.plot_widget.getViewBox()
+		vb.setContentsMargins(label_col_width, 0, 0, 0)
 
-		# === Bereken exacte kolomposities (pixels) ===
-		col_widths = [self.payoff_table.columnWidth(i) for i in range(self.payoff_table.columnCount())]
-		cumulative = np.cumsum([0] + col_widths)
-		col_centers = [cumulative[i] + col_widths[i] / 2 for i in range(len(col_widths))]
-		x_scaled = np.array(col_centers)
-		ax.set_xlim(x_scaled[0] - col_widths[0] / 2, x_scaled[-1] + col_widths[-1] / 2)
-		# Mapping van x_scaled naar koerswaarde
-		self._mpl_x_mapping = list(zip(x_scaled, x_values))
+		label_col_width = self.payoff_table.verticalHeader().width()
+		axis = self.plot_widget.getAxis('left')
+		axis.setWidth(label_col_width)
+  
+		self.plot_widget.setLabel('left', 'Waarde')
+		self.plot_widget.setLabel('bottom', 'Koers')
+		self.plot_widget.setTitle('Payoff per koersstap')
+		self.plot_widget.addLegend()
 
-		# === Plot ===
-		line_totaal, = ax.plot(x_scaled, y_totaal, color="#C6EFCE", label="Totaal", picker=5)
-		line_verschil, = ax.plot(x_scaled, y_verschil, color="#BFBFBF", label="Totaal - Open opties", picker=5)
-		line_open_opties, = ax.plot(x_scaled, y_open_opties, color="#FF0000", label="Open opties", picker=5)
-		# Sla ook koerswaarden op per lijn
-		self._mpl_last_lines = [
-			(line_totaal, x_scaled, y_totaal, x_values, "Totaal"),
-			(line_verschil, x_scaled, y_verschil, x_values, "Totaal - Open opties"),
-			(line_open_opties, x_scaled, y_open_opties, x_values, "Open opties"),
-		]
-		ax.axhline(0, color="black", linewidth=0.5)
+	def sync_plot_with_table(self, *args):
+		# Breedte linker label-kolom ophalen
+		label_col_width = self.payoff_table.verticalHeader().width()
 
-		# === X-ticks exact boven kolommen ===
-		ax.set_xticks(x_scaled)
-		ax.set_xticklabels([str(v) for v in x_values], fontsize=8, rotation=0)
+		# Offset toepassen op de ViewBox
+		vb = self.plot_widget.getViewBox()
+		vb.setContentsMargins(label_col_width, 0, 0, 0)
 
-		# === Dynamische linker marge ===
-		canvas_width = max(self.canvas.width(), 1)  # voorkom deling door nul
-		first_col_width = self.payoff_table.columnWidth(0)
-		# Zet de marge in figuurcoördinaten (0–1)
-		left_margin = first_col_width / canvas_width
 
-		self.figure.subplots_adjust(
-			left=left_margin,   # uitlijnen met eerste kolom
-			right=0.995,        # bijna tot de rand
-			bottom=0.22,
-			top=0.9
-		)
+    
 
-		ax.set_xlabel("Koers")
-		ax.set_ylabel("Waarde")
-		ax.set_title("Payoff per koersstap")
-		ax.legend(loc="upper left")
-
-		ax.margins(x=0)
-		self.canvas.draw()
-
-	def _on_mpl_hover(self, event):
-		# Toon een tooltip met de dichtstbijzijnde waarde bij de muis
-		if not event.inaxes or not self._mpl_last_lines:
-			if self._mpl_annotation:
-				self._mpl_annotation.set_visible(False)
-				self.canvas.draw_idle()
-			return
-		ax = event.inaxes
-		min_dist = float('inf')
-		closest_info = None
-		for line, xdata, ydata, xvals, label in self._mpl_last_lines:
-			for idx, (xi, yi) in enumerate(zip(xdata, ydata)):
-				dist = (event.xdata - xi) ** 2 + (event.ydata - yi) ** 2
-				if dist < min_dist:
-					min_dist = dist
-					# Toon koerswaarde uit xvals
-					koers_val = xvals[idx] if idx < len(xvals) else xi
-					closest_info = (xi, yi, koers_val, label)
-		if closest_info and min_dist < 1000:  # pixelafstand, evt. aanpassen
-			xi, yi, koers_val, label = closest_info
-			if self._mpl_annotation is None:
-				self._mpl_annotation = ax.annotate(
-					f"{label}\nKoers: {koers_val:.2f}\nWaarde: {yi:.0f}",
-					xy=(xi, yi), xycoords='data',
-					xytext=(10, 30), textcoords='offset points',
-					bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.7),
-					arrowprops=dict(arrowstyle="->", color='gray'),
-				)
-			else:
-				self._mpl_annotation.xy = (xi, yi)
-				self._mpl_annotation.set_text(f"{label}\nKoers: {koers_val:.2f}\nWaarde: {yi:.0f}")
-				self._mpl_annotation.set_visible(True)
-			self.canvas.draw_idle()
-		elif self._mpl_annotation:
-			self._mpl_annotation.set_visible(False)
-			self.canvas.draw_idle()
 
 	# TODO Rename this here and in `update_chart`
 	def _get_from_chart_all_y_values_for_define_min_max(self, all_y, ax):
