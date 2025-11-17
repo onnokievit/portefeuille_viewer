@@ -17,16 +17,16 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QGridLayout, QGroupBox,
     QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QPushButton, QSizePolicy, QTableView, QVBoxLayout,
-    QWidget)
+    QPushButton, QSizePolicy, QSpacerItem, QTableView,
+    QVBoxLayout, QWidget)
 
-from portefeuille_viewer.ui_logica.smartcombo import SmartCombo
+from .smartcombo import SmartCombo
 
 class Ui_OrdersTabUI(object):
     def setupUi(self, OrdersTabUI):
         if not OrdersTabUI.objectName():
             OrdersTabUI.setObjectName(u"OrdersTabUI")
-        OrdersTabUI.resize(1387, 988)
+        OrdersTabUI.resize(1387, 978)
         self.verticalLayout = QVBoxLayout(OrdersTabUI)
         self.verticalLayout.setObjectName(u"verticalLayout")
         self.groupBoxOrders = QGroupBox(OrdersTabUI)
@@ -230,6 +230,8 @@ class Ui_OrdersTabUI(object):
 
         self.buttonDelete = QPushButton(OrdersTabUI)
         self.buttonDelete.setObjectName(u"buttonDelete")
+        self.buttonDelete.setStyleSheet(u"background-color: rgb(255, 107, 107);\n"
+"color: rgb(255, 255, 255);")
 
         self.horizontalLayoutButtons.addWidget(self.buttonDelete)
 
@@ -242,6 +244,10 @@ class Ui_OrdersTabUI(object):
         self.comboDatabase.setObjectName(u"comboDatabase")
 
         self.horizontalLayoutButtons.addWidget(self.comboDatabase)
+
+        self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayoutButtons.addItem(self.horizontalSpacer)
 
         self.labelFilter = QLabel(OrdersTabUI)
         self.labelFilter.setObjectName(u"labelFilter")

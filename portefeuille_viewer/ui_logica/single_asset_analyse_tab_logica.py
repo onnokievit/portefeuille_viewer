@@ -146,7 +146,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
 		factor = getattr(self.logic, "currency_factor", 1.0)
 
-		middle_col = 10
+		middle_col = 8
 		total_row = 9
 		from PySide6.QtGui import QColor, QBrush, QFont
 		from PySide6.QtCore import Qt

@@ -573,6 +573,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         QMessageBox.information(self, "Succes", msg)
         self.load_table_data()
         self.reset_form()  # Optioneel: reset velden na insert
+        self.toggle_order2_fields()
         self.comboOorsprong1.setFocus()
         return
 
@@ -656,6 +657,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         self.EDIT_ID2 = None
         self.comboOorsprong1.setFocus()
         self.reset_form()
+        self.toggle_order2_fields()
 
 
     def on_delete_clicked(self):
@@ -981,6 +983,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
                 self.order2[key].setVisible(visible)
         if visible:
             self.toggle_order2_fields()
+            
     def reset_form(self):
         for part in [self.order1, self.order2]:
             for k in ["cb_oorsprong", "broker", "asset_rollup", "asset_type",
@@ -1039,7 +1042,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             for w in [ self.order1["detail"],
                     self.order1["exp"],
                     self.order1["strike"],
-                    self.order1["cp"]]:
+                    self.order1["cp"], self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP, self.labelDetail
+                    ]:
                 if w is not None:
                     w.setVisible(False)
 
@@ -1073,6 +1077,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
         # Eerst alles verbergen
             for w in [
                     self.order2["detail"], self.order2["exp"],self.order2["strike"],self.order2["cp"],
+                    self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP, self.labelDetail
                     #self.order2["lbl_strike"], self.order2["lbl_exp"],self.order2["lbl_cp"]
                     ]:
                 if w is not None:
