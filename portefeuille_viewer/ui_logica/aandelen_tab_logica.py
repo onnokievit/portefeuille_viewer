@@ -1,5 +1,5 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
-from PySide6.QtWidgets import QWidget, QTableWidgetItem
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QFileDialog, QMessageBox
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from PySide6.QtWidgets import QTableWidget
 from portefeuille_viewer.ui.aandelen_tab_ui import Ui_AandelenTab
@@ -14,8 +14,6 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 	@Slot()
 	def on_btnExportExcel_clicked(self):
 		"""Exporteer de huidige zichtbare tabel (df_sum) naar Excel."""
-		
-		from PySide6.QtWidgets import QFileDialog, QMessageBox
 		try:
 			# self.model._df is de huidige zichtbare Polars DataFrame (df_sum)
 			df = self.model._df
@@ -35,7 +33,21 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 	Kolommen: asset_rollup, koers, aantal_bezit, result_realised, result_non_realised
 	"""
 	def __init__(self, portfolio_engine=None, pricefeed=None, parent=None):
-		# print("[DEBUG] AandelenTab __init__ aangeroepen")
+		"""
+		This Python function initializes a GUI component for managing stock portfolio data, including
+		setting up UI elements, connecting to a portfolio engine and price feed, handling button actions,
+		setting up tables, and loading initial data.
+		
+		:param portfolio_engine: The `portfolio_engine` parameter in the `__init__` method is used to pass
+		an instance of a `PortfolioEngine` class to the `AandelenTab` class. If `portfolio_engine` is
+		provided, it is stored in the `self.engine` attribute of the `Aand
+		:param pricefeed: The `pricefeed` parameter in the `__init__` method is used to provide a source of
+		price data for the portfolio engine. If `pricefeed` is not provided explicitly, the code will
+		attempt to use the `pricefeed` attribute of the `portfolio_engine` object. If neither
+		:param parent: In the provided code snippet, the `parent` parameter is used in the `__init__`
+		method of a class. In this context, `parent` typically refers to the parent widget or object to
+		which the current widget or object being initialized belongs
+		"""
 		super().__init__(parent)
 		self.setupUi(self)
 
@@ -58,10 +70,6 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		# Alleen ticker/label updaten op priceUpdated, niet de tabel
 		if self.pricefeed and hasattr(self.pricefeed, 'priceUpdated'):
 			self.pricefeed.priceUpdated.connect(self.on_ticker_display)
-
-		
-		
-
 
 		# Koppel knoppen aan logica
 		self.btnSelecteerBrokers.clicked.connect(self.open_broker_popup)
@@ -91,7 +99,6 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			self.engine.dataUpdated.connect(self.on_engine_data_update)
 		# print("[DEBUG] self.pricefeed in tab bij connect:", self.pricefeed, id(self.pricefeed) if self.pricefeed else None)
 
-
 	def clear_all_filters(self):
 		self.col_filters.clear()
 		self.selected_brokers = None
@@ -102,7 +109,6 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.current_sort_order = order
 
 	def reload_data(self):
-		
 		########### import data ##################################
 		df = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
 		if self.selected_brokers is not None and "broker" in df.columns:

@@ -5,17 +5,15 @@ import pandas as pd
 import polars as pl
 import traceback
 from datetime import datetime
-from portefeuille_viewer.signals import signals
 
 from PySide6.QtWidgets import QWidget, QMessageBox,QAbstractItemView, QLineEdit
 from PySide6.QtCore import Qt, Signal
 
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
-# from portefeuille_viewer.ui_logica.orders_tab_logica import OrdersTabLogica
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
-
 from portefeuille_viewer.data.repository import (
     get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
@@ -556,7 +554,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             eerste_order["transactie_oorsprong_detail"] = None
 
         # 3) UPDATE-pad (→ geen duplicaten)
-        print("start van de ceck of EDIT_ID bestaat:", getattr(self, "EDIT_ID", None))
+        print("start van de check of EDIT_ID bestaat:", getattr(self, "EDIT_ID", None))
         if self.EDIT_ID is not None:
             return self._update_existing_orders(eerste_order, tweede_order)
 
@@ -778,89 +776,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
         # ...herhaal voor labels indien nodig
 
-# Je kunt de naam wijzigen naar orders_tab_methoden.py als je wilt, maar conventioneel is Widget of View gebruikelijk voor UI-klassen.
-    # def on_header_menu(self, pos):
-    #     # print("Header menu op aangeroepen, positie:", pos)
-    #     header = self.tableViewOrders.horizontalHeader()
-    #     section = header.logicalIndexAt(pos)
-    #     try:
-    #         colname = self._orders_model._df.columns[section]
-    #     except Exception:
-    #         return
 
-    #     menu = QMenu(self)
-    #     a_asc  = menu.addAction("Sorteren A → Z")
-    #     a_desc = menu.addAction("Sorteren Z → A")
-    #     menu.addSeparator()
-    #     a_clear = menu.addAction(f"Filter van {colname} wissen")
-    #     menu.addSeparator()
-    #     a_contains = menu.addAction("Tekst bevat…")
-    #     a_equals   = menu.addAction("Is precies…")
-    #     menu.addSeparator()
-    #     a_pick = menu.addAction("Waarden kiezen…")
-
-    #     act = menu.exec(header.mapToGlobal(pos))
-    #     if not act: 
-    #         return
-    #     if act in (a_asc, a_desc):
-    #         order = Qt.AscendingOrder if act == a_asc else Qt.DescendingOrder
-    #         header.setSortIndicator(section, order)
-    #         return
-
-    #     if act == a_clear:
-    #         self._col_filters.pop(colname, None)
-    #         self.apply_filters()
-    #         return
-    #     if act == a_contains:
-    #         text, ok = QInputDialog.getText(self, f"{colname} bevat", "Tekst:")
-    #         if ok and text.strip():
-    #             self._col_filters[colname] = {"contains": text.strip()}
-    #             self.apply_filters()
-    #         return
-
-    #     if act == a_equals:
-    #         text, ok = QInputDialog.getText(self, f"{colname} is precies", "Waarde:")
-    #         if ok and text.strip():
-    #             self._col_filters[colname] = {"eq": text.strip()}
-    #             self.apply_filters()
-    #         return
-
-    #     if act == a_pick:
-    #         self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
-    #         return
-
-    # def _open_value_popup_for_column(self, colname: str, global_pos):
-    #     import portefeuille_viewer.data.repository as repo
-    #     # Base filters = alle actieve filters BEHALVE dit kolomfilter zelf
-    #     base = dict(getattr(self, "active_filters", {}) or {})
-    #     for k in list(base.keys()):
-    #         if k.startswith("__"):
-    #             try:
-    #                 _, kcol = k.strip("_").split("__", 1)   # b.v. "__in__broker" -> ("in","broker")
-    #             except ValueError:
-    #                 continue
-    #             if kcol == colname:
-    #                 base.pop(k, None)
-
-    #     try:
-    #         values = repo.get_distinct_values(colname, base_filters=base)
-    #     except Exception as e:
-    #         QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet laden:\n{e}")
-    #         return
-
-    #     pre = set()
-    #     if colname in (self._col_filters or {}) and "in" in self._col_filters[colname]:
-    #         pre = set(self.col_filters[colname]["in"])
-
-    #     pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
-    #     pop.move(global_pos)
-    #     pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
-    #     pop.cleared.connect(lambda: self._clear_col_filter(colname))
-    #     pop.show()
-        
-    # def _clear_col_filter(self, colname: str):
-    #     self._col_filters.pop(colname, None)
-    #     self.apply_filters()
 
 
     def on_table_select(self, selected, deselected):
@@ -1170,8 +1086,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
         # ververs alle referentielijsten
         self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
-        # self.brokers, self.asset_rollups, self.sprinter_details = load_reference_lists()
-        # zet in beide order-rijen
+                
         self.order1["broker"].set_items(self.brokers)
         self.order1["asset_rollup"].set_items(self.asset_rollups)
         self.order1["detail"].set_items(self.sprinter_details)
@@ -1208,9 +1123,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             selection-background-color: {bg}; selection-color: white;
         }}
         """
-        
         self.comboDatabase.setStyleSheet(css)
-        
+
     def set_items(self, items):
         items_sorted = sorted([str(x) for x in items], key=str.lower)
         self.blockSignals(True)
