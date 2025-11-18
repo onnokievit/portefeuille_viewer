@@ -728,7 +728,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
             return
         try:
             self._extracted_from__delete_transactions_from_snapshot_by_ids_9(ids_to_delete)
-        except Exception as e:
+        except Exception:
             # print(f"❌ Fout bij verwijderen uit snapshot: {e}")
             import traceback
             traceback.print_exc()
@@ -736,13 +736,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI):
     # TODO Rename this here and in `_delete_transactions_from_snapshot_by_ids`
     def _extracted_from__delete_transactions_from_snapshot_by_ids_9(self, ids_to_delete):
         # Filter out records with these Id's
-        before_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+        # before_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
         SNAPSHOT_STORE.repository_snapshot_alle_transacties = SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(
             ~pl.col("Id").is_in(ids_to_delete)
         )
-        after_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
-        deleted = before_count - after_count
-        id_list_str = ", ".join(map(str, ids_to_delete))
+        # after_count = len(SNAPSHOT_STORE.repository_snapshot_alle_transacties)
+        # deleted = before_count - after_count
+        # id_list_str = ", ".join(map(str, ids_to_delete))
         # print(f"✅ {deleted} record(s) met Id [{id_list_str}] verwijderd uit snapshot (totaal: {after_count} rijen)")
 
     def on_asset_type1_changed(self, value):
