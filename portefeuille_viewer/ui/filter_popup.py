@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLineEdit, QCheckBox, QListWidget,
-    QListWidgetItem, QDialogButtonBox, QWidget
+    QListWidgetItem, QDialogButtonBox, QWidget, QMenu, QInputDialog, QMessageBox
 )
 # test random comment voor github online test
 class ColumnFilterPopup(QDialog):
@@ -127,3 +127,103 @@ class ColumnFilterPopup(QDialog):
         else:
             self.chk_all.setCheckState(Qt.PartiallyChecked)
         self.chk_all.blockSignals(False)
+
+
+class HeaderFilterMenuMixin:
+    """
+    Vereist in de host-widget:
+    - self.tableView: QTableView
+    - self._table_model: het model met een ._df attribuut (pandas DataFrame)
+    - self._col_filters: dict met actieve kolomfilters
+    - self.apply_filters(): methode die filters toepast en de tabel herlaadt
+    - self._load_initial_records(): (optioneel) methode om data opnieuw te laden
+    """    # Je kunt de naam wijzigen naar orders_tab_methoden.py als je wilt, maar conventioneel is Widget of View gebruikelijk voor UI-klassen.
+    def on_header_menu(self, pos):
+        # print("Header menu op aangeroepen, positie:", pos)
+        header = self.tableView.horizontalHeader()
+        section = header.logicalIndexAt(pos)
+        try:
+            colname = self._table_model._df.columns[section]
+        except Exception:
+            return
+
+        menu = QMenu(self)
+        a_asc  = menu.addAction("Sorteren A → Z")
+        a_desc = menu.addAction("Sorteren Z → A")
+        menu.addSeparator()
+        a_clear = menu.addAction(f"Filter van {colname} wissen")
+        menu.addSeparator()
+        a_contains = menu.addAction("Tekst bevat…")
+        a_equals   = menu.addAction("Is precies…")
+        menu.addSeparator()
+        a_pick = menu.addAction("Waarden kiezen…")
+
+        act = menu.exec(header.mapToGlobal(pos))
+        if not act: 
+            return
+        if act in (a_asc, a_desc):
+            order = Qt.AscendingOrder if act == a_asc else Qt.DescendingOrder
+            header.setSortIndicator(section, order)
+            return
+
+        if act == a_clear:
+            self._col_filters.pop(colname, None)
+            self.apply_filters()
+            return
+        if act == a_contains:
+            text, ok = QInputDialog.getText(self, f"{colname} bevat", "Tekst:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"contains": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_equals:
+            text, ok = QInputDialog.getText(self, f"{colname} is precies", "Waarde:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"eq": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_pick:
+            self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
+            return
+
+    def _open_value_popup_for_column(self, colname: str, global_pos):
+        import portefeuille_viewer.data.repository as repo
+        # Base filters = alle actieve filters BEHALVE dit kolomfilter zelf
+        base = dict(getattr(self, "active_filters", {}) or {})
+        for k in list(base.keys()):
+            if k.startswith("__"):
+                try:
+                    _, kcol = k.strip("_").split("__", 1)   # b.v. "__in__broker" -> ("in","broker")
+                except ValueError:
+                    continue
+                if kcol == colname:
+                    base.pop(k, None)
+
+        try:
+            values = repo.get_distinct_values(colname, base_filters=base)
+        except Exception as e:
+            QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet laden:\n{e}")
+            return
+
+        pre = set()
+        if colname in (self._col_filters or {}) and "in" in self._col_filters[colname]:
+            pre = set(self.col_filters[colname]["in"])
+
+        pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
+        pop.move(global_pos)
+        pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
+        pop.cleared.connect(lambda: self._clear_col_filter(colname))
+        pop.show()
+        
+    def _clear_col_filter(self, colname: str):
+        self._col_filters.pop(colname, None)
+        self.apply_filters()
+    
+    def _apply_in_filter(self, colname, selected):
+        if not selected:
+            self._col_filters.pop(colname, None)
+        else:
+            self._col_filters[colname] = {"in": selected}
+        self._load_initial_records()

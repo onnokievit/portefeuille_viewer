@@ -132,9 +132,9 @@ class LiveAggregatorSprinters(QObject):
 
 
 
-    def update_live_price(self, symbol, price):
+    def update_live_price(self, symbol, currency, price):
         if price is not None and price > 0:
-            self.live_prices[symbol] = float(price)
+            self.live_prices[(symbol, currency)] = float(price)
 
     def process_live_update(self):
         """
