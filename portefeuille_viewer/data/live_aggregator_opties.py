@@ -149,7 +149,7 @@ class LiveAggregatorOpties(QObject):
 
         return df
     
-    def update_live_price(self, symbol, price):
+    def update_live_price(self, symbol, currency, price):
         """
         Update live prijs voor specifiek symbol (asset_rollup).
         
@@ -158,7 +158,7 @@ class LiveAggregatorOpties(QObject):
             price: Nieuwe prijs
         """
         if price is not None and price > 0:
-            self.live_prices[symbol] = float(price)
+            self.live_prices[symbol,currency] = float(price)
             # print(f"LiveAggregatorOpties: Updated {symbol} = {price}") # Debug log
     
     def process_live_update(self):

@@ -1,6 +1,7 @@
 from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.signals import signals
 import polars as pl
+import datetime
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
 
@@ -35,7 +36,7 @@ class LiveAggregatorAandelen(QObject):
         """Laad initiële data uit SnapshotStore en bereid DataFrame voor."""
         try:
             self.df = self._load_and_calculate()
-            print(f"LiveAggregatorAandelen: Initialized with {len(self.df)} rows")
+            print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] LiveAggregatorAandelen: Initialized with {len(self.df)} rows")
             # Save initial data to snapshot store for immediate UI display
             self._save_to_snapshot_store()
         except Exception as e:
@@ -78,7 +79,7 @@ class LiveAggregatorAandelen(QObject):
 
         return df
     
-    def update_live_price(self, symbol, price):
+    def update_live_price(self, symbol, currency, price):
         """
         Update live prijs voor specifiek symbol.
         
@@ -87,7 +88,7 @@ class LiveAggregatorAandelen(QObject):
             price: Nieuwe prijs
         """
         if price is not None and price > 0:
-            self.live_prices[symbol] = float(price)
+            self.live_prices[symbol,currency] = float(price)
             # print(f"LiveAggregatorAandelen: Updated {symbol} = {price}")
     
     def process_live_update(self):

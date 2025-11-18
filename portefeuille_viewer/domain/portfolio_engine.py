@@ -66,10 +66,10 @@ class PortfolioEngine(QObject):
             price: New price value
         """
         # Update live prijs in alle aggregators (just store, don't process yet)
-        self.live_aggregator_aandelen.update_live_price(symbol, price)
-        self.live_aggregator_opties.update_live_price(symbol, price)
+        self.live_aggregator_aandelen.update_live_price(symbol, currency, price)
+        self.live_aggregator_opties.update_live_price(symbol, currency, price)
         if self.live_aggregator_sprinters:
-            self.live_aggregator_sprinters.update_live_price(symbol, price)
+            self.live_aggregator_sprinters.update_live_price(symbol, currency, price)
         
         # Mark that we have pending updates and start/restart timer
         self._pending_updates = True
