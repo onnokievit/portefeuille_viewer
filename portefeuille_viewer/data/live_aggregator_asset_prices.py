@@ -1,6 +1,5 @@
 
 import threading
-import time
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
 

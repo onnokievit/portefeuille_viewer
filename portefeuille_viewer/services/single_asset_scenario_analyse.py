@@ -10,7 +10,6 @@ def bereken_open_aandelen_payoff(df_aandelen: pl.DataFrame, koers: float) -> flo
 	# Sommeer alle aankopen en verkopen
 	euro_koop = float(df_aandelen['euro_koop'].sum()) if 'euro_koop' in df_aandelen.columns else 0.0
 	aantal_koop = float(df_aandelen['aantal_koop'].sum()) if 'aantal_koop' in df_aandelen.columns else 0.0
-	euro_verkoop = float(df_aandelen['euro_verkoop'].sum()) if 'euro_verkoop' in df_aandelen.columns else 0.0
 	aantal_verkoop = float(df_aandelen['aantal_verkoop'].sum()) if 'aantal_verkoop' in df_aandelen.columns else 0.0
 	avg_buy = euro_koop / aantal_koop if aantal_koop != 0 else 0.0
 	aantal_bezit = aantal_koop + aantal_verkoop
@@ -34,7 +33,6 @@ def bereken_gesloten_aandelen_payoff(df_aandelen: pl.DataFrame) -> float:
 	if df_aandelen is None or df_aandelen.height == 0:
 		return 0.0
 	# Sommeer alle aankopen en verkopen
-	asset_rollup = df_aandelen['asset_rollup'][0] if 'asset_rollup' in df_aandelen.columns else 'onbekend'
 	euro_koop = float(df_aandelen['euro_koop'].sum()) if 'euro_koop' in df_aandelen.columns else 0.0
 	aantal_koop = float(df_aandelen['aantal_koop'].sum()) if 'aantal_koop' in df_aandelen.columns else 0.0
 	euro_verkoop = float(df_aandelen['euro_verkoop'].sum()) if 'euro_verkoop' in df_aandelen.columns else 0.0

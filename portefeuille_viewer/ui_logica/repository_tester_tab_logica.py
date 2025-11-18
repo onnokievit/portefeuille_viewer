@@ -58,7 +58,7 @@ class RepositoryTesterTab(QWidget):
 
         # Dict met tuple keys
         if isinstance(data, dict) and data:
-            first_key = next(iter(data.keys()))
+            
             # Converteer keys die lijsten zijn naar tuples
             keys = [tuple(k) if isinstance(k, (list, tuple)) else (k,) for k in data.keys()]
             # Bepaal kolomnamen
