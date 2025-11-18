@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime
 from portefeuille_viewer.signals import signals
 
-from PySide6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox,QAbstractItemView, QLineEdit
+from PySide6.QtWidgets import QWidget, QMessageBox,QAbstractItemView, QLineEdit
 from PySide6.QtCore import Qt, Signal
 
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin  # ← nieuw
