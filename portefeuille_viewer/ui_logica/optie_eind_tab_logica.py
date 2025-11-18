@@ -13,6 +13,9 @@ import pandas as pd
 import numpy as np
 import datetime
 
+# This class defines a widget in a Python application that includes functionality for fetching data,
+# adding records to a database, clearing test accounts, and moving records to production, with default
+# date settings for upcoming Fridays and Saturdays.
 class OptieEindTab(QWidget, Ui_OptieEindTab):
     def __init__(self, broker=None, asset=None, parent=None):
         super().__init__(parent)
