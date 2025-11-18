@@ -1,15 +1,15 @@
-from PySide6.QtWidgets import QWidget
-from portefeuille_viewer.ui.opties_open_ui import Ui_Form
-from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.ui.models import PolarsTableModel
-from PySide6.QtCore import QSortFilterProxyModel, Qt, Slot
 
 import polars as pl
-from PySide6.QtGui import QColor
 
+from PySide6.QtCore import QSortFilterProxyModel, Qt, Slot
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QWidget
+
+
 from portefeuille_viewer.ui.models import PolarsTableModel
-from PySide6.QtCore import Qt
+from portefeuille_viewer.ui.opties_open_ui import Ui_Form
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+
 
 class OptiesOpenTableModel(PolarsTableModel):
     def data(self, index, role=Qt.DisplayRole):
