@@ -1,5 +1,7 @@
 import contextlib
 from PySide6.QtWidgets import QMainWindow
+from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtCore import Qt
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
 from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
 from portefeuille_viewer.ui_logica.settings_tab_logica import SettingsTab
@@ -18,6 +20,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self , portfolio_engine, price_feed, live_price_updater_stop_event=None): #  price_feed,
         super().__init__()
         self.setupUi(self)
+        self.installEventFilter(self)
         self.price_feed = price_feed
         self.portfolio_engine = portfolio_engine
         self.live_price_updater_stop_event = live_price_updater_stop_event
@@ -39,6 +42,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.settings_tab, "Settings")
         self.repository_tester_tab = RepositoryTesterTab()
         self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
+        self.shortcut_focus_tabbar = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
+
+    
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent, Qt
+        if event.type() == QEvent.KeyPress:
+            #print(f"Key ingerukt: {event.key()}, modifiers: {event.modifiers()}")
+            if event.modifiers() == Qt.ControlModifier:
+                if event.key() == Qt.Key_PageDown:
+                    self.tabWidget.setCurrentIndex((self.tabWidget.currentIndex() + 1) % self.tabWidget.count())
+                    return True  # event is handled
+                elif event.key() == Qt.Key_PageUp:
+                    self.tabWidget.setCurrentIndex((self.tabWidget.currentIndex() - 1) % self.tabWidget.count())
+                    return True  # event is handled
+        return super().eventFilter(obj, event)
     
     def closeEvent(self, event):
         # Stop hier je services, threads, timers, etc.
