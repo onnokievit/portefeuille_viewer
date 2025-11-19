@@ -197,13 +197,25 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self._current_offset = 0  # NEW: track offset for snapshot paging
     
     def _apply_snapshot_filters(self, df_pl):
-        if q := self.active_filters.get("q", "").strip().lower():
-            df_pl = df_pl.filter(
-                pl.col("broker").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
-                pl.col("asset_rollup").cast(pl.Utf8).str.to_lowercase().str.contains(q) |
-                pl.col("asset_detail").cast(pl.Utf8).str.to_lowercase().str.contains(q, literal=True) |
-                pl.col("uniek_id").cast(pl.Utf8).str.to_lowercase().str.contains(q)
-            )
+        if q := self.active_filters.get("q", "").strip():
+            # Meerdere zoektermen (AND), gescheiden door komma
+            terms = [t.strip() for t in q.split(",") if t.strip()]
+            for term in terms:
+                mask = None
+                for c in df_pl.columns:
+                    # Zoek altijd op de string zoals getoond in de tabel (dd/mm/yyyy)
+                    if c in ("datum", "optie_exp_date"):
+                        # Zowel met streepje als slash zoeken
+                        m = (
+                            pl.col(c).dt.strftime("%d/%m/%Y").str.contains(term.replace("-", "/")) |
+                            pl.col(c).dt.strftime("%d-%m-%Y").str.contains(term.replace("/", "-")) |
+                            pl.col(c).dt.strftime("%d/%m").str.contains(term.replace("-", "/")) |
+                            pl.col(c).dt.strftime("%d-%m").str.contains(term.replace("/", "-"))
+                        )
+                    else:
+                        m = pl.col(c).cast(pl.Utf8).str.to_lowercase().str.contains(term.lower())
+                    mask = m if mask is None else (mask | m)
+                df_pl = df_pl.filter(mask)
 
         # Kolomfilters toepassen (uit self._col_filters)
         for col, filt_dict in (self._col_filters or {}).items():
@@ -294,8 +306,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             df_pl = self._apply_snapshot_sorting(df_pl)
             df = df_pl.head(self._page_size).to_pandas()
         df_view = self._format_df_for_table(df)
-        
-                
+                        
         self._orders_model = self._PandasTableModel(df_view, self)
         self._table_model = self._orders_model
         self.tableViewOrders.setModel(self._orders_model)

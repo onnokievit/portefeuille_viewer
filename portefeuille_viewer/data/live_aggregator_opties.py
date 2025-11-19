@@ -110,7 +110,8 @@ class LiveAggregatorOpties(QObject):
             
             "ITM_OTM",
             "opt_total_result",
-            "SomVantransactie_fee"
+            "SomVantransactie_fee",
+            #"ITM"
         ])
         
         return df
@@ -143,7 +144,10 @@ class LiveAggregatorOpties(QObject):
                 0.0
             ).alias("ITM_OTM")
         ])
-        
+        # if "ITM_OTM" in df.columns:
+        #     df = df.with_columns(
+        #         (pl.col("ITM_OTM") != 0).cast(pl.Int8).alias("ITM")
+        #     )
         
 
 

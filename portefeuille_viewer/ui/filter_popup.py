@@ -189,27 +189,36 @@ class HeaderFilterMenuMixin:
             return
 
     def _open_value_popup_for_column(self, colname: str, global_pos):
-        import portefeuille_viewer.data.repository as repo
-        # Base filters = alle actieve filters BEHALVE dit kolomfilter zelf
-        base = dict(getattr(self, "active_filters", {}) or {})
-        for k in list(base.keys()):
-            if k.startswith("__"):
-                try:
-                    _, kcol = k.strip("_").split("__", 1)   # b.v. "__in__broker" -> ("in","broker")
-                except ValueError:
-                    continue
-                if kcol == colname:
-                    base.pop(k, None)
-
-        try:
-            values = repo.get_distinct_values(colname, base_filters=base)
-        except Exception as e:
-            QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet laden:\n{e}")
-            return
+        # Probeer eerst uit de DataFrame te halen (voor in-memory tabellen)
+        df = getattr(self._table_model, "_df", None)
+        if df is not None and colname in df.columns:
+            # Polars: .unique().to_list(), Pandas: .unique().tolist()
+            try:
+                values = df[colname].unique().to_list() if hasattr(df[colname], "to_list") else df[colname].unique().tolist()
+            except Exception as e:
+                QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet ophalen uit DataFrame:\n{e}")
+                return
+        else:
+            # Fallback: haal uit database
+            import portefeuille_viewer.data.repository as repo
+            base = dict(getattr(self, "active_filters", {}) or {})
+            for k in list(base.keys()):
+                if k.startswith("__"):
+                    try:
+                        _, kcol = k.strip("_").split("__", 1)
+                    except ValueError:
+                        continue
+                    if kcol == colname:
+                        base.pop(k, None)
+            try:
+                values = repo.get_distinct_values(colname, base_filters=base)
+            except Exception as e:
+                QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet laden uit database:\n{e}")
+                return
 
         pre = set()
         if colname in (self._col_filters or {}) and "in" in self._col_filters[colname]:
-            pre = set(self.col_filters[colname]["in"])
+            pre = set(self._col_filters[colname]["in"])
 
         pop = ColumnFilterPopup(f"Filter: {colname}", values, pre_selected=pre, parent=self)
         pop.move(global_pos)
