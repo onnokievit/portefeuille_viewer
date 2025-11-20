@@ -32,6 +32,7 @@ def initial_load_datasets():
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
+    repository.load_per_dag_asset_result()
     repository.load_optie_referentie_data()
     live_aggregator_aandelen = LiveAggregatorAandelen()
     live_aggregator_opties = LiveAggregatorOpties()

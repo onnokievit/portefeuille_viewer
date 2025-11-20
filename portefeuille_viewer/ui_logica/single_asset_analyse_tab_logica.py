@@ -1,7 +1,7 @@
 
 import contextlib
 import polars as pl
-import numpy as np
+
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
 from PySide6.QtGui import QFont
