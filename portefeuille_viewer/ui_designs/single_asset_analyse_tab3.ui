@@ -96,10 +96,10 @@
           <widget class="QWidget" name="widget" native="true"/>
          </item>
          <item>
-          <widget class="QWidget" name="priceAantalChart" native="true"/>
+          <widget class="PlotWidget" name="priceAantalChart" native="true"/>
          </item>
          <item>
-          <widget class="QWidget" name="resultaatChart" native="true"/>
+          <widget class="PlotWidget" name="resultaatChart" native="true"/>
          </item>
         </layout>
        </item>
@@ -123,6 +123,14 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PlotWidget</class>
+   <extends>QWidget</extends>
+   <header location="global">pyqtgraph</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

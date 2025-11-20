@@ -80,6 +80,20 @@ def load_asset_rollup_data() -> pl.DataFrame:
     return compact_float64(df)
 
 # ------------------------------------------------------------
+# asset_rollup_data referentie tabel ophalen
+# ------------------------------------------------------------
+def load_per_dag_asset_result() -> pl.DataFrame:
+    """
+    Laadt de per_dag_asset_result-tabel uit de database.
+    """
+    sql = "SELECT datum, close_price, totaal_aantal_bezit, totaal FROM per_dag_asset_result"
+    # sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.safe_write("repository_per_dag_asset_result", df)
+    return compact_float64(df)
+
+# ------------------------------------------------------------
 # sprinter_refenctie_data referentie tabel ophalen
 # # ------------------------------------------------------------
 def load_sprinter_referentie_data() -> pl.DataFrame:
@@ -907,6 +921,7 @@ def refresh_all_snapshots():
     load_open_sprinters_from_tx()
     load_gesloten_sprinters_from_tx()
     load_dividend_data()
+    load_per_dag_asset_result()
 
 try:
     from portefeuille_viewer.signals import signals

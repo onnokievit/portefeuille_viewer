@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QDateEdit, QDoubleSpinBo
     QSizePolicy, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget)
 
+from pyqtgraph import PlotWidget
+
 class Ui_SingleAssetAnalyseTab(object):
     def setupUi(self, SingleAssetAnalyseTab):
         if not SingleAssetAnalyseTab.objectName():
@@ -82,12 +84,12 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayout.addWidget(self.widget)
 
-        self.priceAantalChart = QWidget(SingleAssetAnalyseTab)
+        self.priceAantalChart = PlotWidget(SingleAssetAnalyseTab)
         self.priceAantalChart.setObjectName(u"priceAantalChart")
 
         self.verticalLayout.addWidget(self.priceAantalChart)
 
-        self.resultaatChart = QWidget(SingleAssetAnalyseTab)
+        self.resultaatChart = PlotWidget(SingleAssetAnalyseTab)
         self.resultaatChart.setObjectName(u"resultaatChart")
 
         self.verticalLayout.addWidget(self.resultaatChart)

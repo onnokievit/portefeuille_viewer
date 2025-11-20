@@ -26,6 +26,7 @@ class SnapshotStore:
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         self.repository_snapshot_optie_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor opties
         self.repository_portfolio_dividend: pl.DataFrame | None = None
+        self.repository_per_dag_asset_result: pl.DataFrame | None = None
 
         # Centrale store voor live prijzen (aandelen, opties, etc.)
         # Dict: key = asset_id (bijv. ib_symbol, optie_id, etc.), value = prijs of dict met meer info
@@ -59,6 +60,7 @@ class SnapshotStore:
         self.repository_snapshot_sprinter_referentie_data = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
+        self.repository_per_dag_asset_result = None
         self.active_database_name = None
         self.live_prices = None
 
@@ -80,6 +82,7 @@ class SnapshotStore:
             self.repository_snapshot_sprinter_referentie_data is not None,
             self.repository_snapshot_optie_referentie_data is not None,
             self.repository_portfolio_dividend is not None,
+            self.repository_per_dag_asset_result is not None,
             self.live_prices is not None,
         ])
 
@@ -116,6 +119,8 @@ class SnapshotStore:
             parts.append(f"Repository Optie Referentie data: {len(self.repository_snapshot_optie_referentie_data)} rijen")
         if self.repository_portfolio_dividend is not None:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
+        if self.repository_per_dag_asset_result is not None:
+            parts.append(f"Repository Per Dag Asset Result data: {len(self.repository_per_dag_asset_result)} rijen")
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
         if self.live_prices is not None:
