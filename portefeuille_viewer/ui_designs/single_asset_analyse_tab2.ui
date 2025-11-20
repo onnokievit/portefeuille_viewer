@@ -19,10 +19,23 @@
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_3">
        <item>
-        <widget class="QComboBox" name="asset_selector"/>
+        <widget class="QComboBox" name="asset_selector">
+         <property name="maximumSize">
+          <size>
+           <width>200</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QDoubleSpinBox" name="stepSizeBox">
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="decimals">
           <number>3</number>
          </property>
@@ -32,28 +45,15 @@
         </widget>
        </item>
        <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-         <property name="sizeType">
-          <enum>QSizePolicy::Policy::Minimum</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>30</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item>
         <widget class="QDateEdit" name="startDate">
          <property name="maximumSize">
           <size>
            <width>120</width>
            <height>16777215</height>
           </size>
+         </property>
+         <property name="calendarPopup">
+          <bool>true</bool>
          </property>
         </widget>
        </item>
@@ -65,10 +65,19 @@
            <height>16777215</height>
           </size>
          </property>
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
         </widget>
        </item>
-       <item>
+       <item alignment="Qt::AlignmentFlag::AlignRight">
         <widget class="QPushButton" name="pushButton">
+         <property name="maximumSize">
+          <size>
+           <width>75</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="text">
           <string>PushButton</string>
          </property>
@@ -79,10 +88,7 @@
      <item>
       <layout class="QGridLayout" name="gridLayout_2" columnstretch="4,2">
        <item row="2" column="0">
-        <layout class="QVBoxLayout" name="layoutChart"/>
-       </item>
-       <item row="1" column="0">
-        <widget class="QTableWidget" name="payoff_table"/>
+        <layout class="QVBoxLayout" name="layoutChart1"/>
        </item>
        <item row="1" column="1">
         <layout class="QVBoxLayout" name="verticalLayout" stretch="2,2,4">
@@ -94,6 +100,20 @@
          </item>
          <item>
           <widget class="QWidget" name="widget_2" native="true"/>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="0">
+        <layout class="QVBoxLayout" name="verticalLayout_2" stretch="1,1">
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <widget class="QTableWidget" name="payoff_table"/>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="layoutChart"/>
          </item>
         </layout>
        </item>

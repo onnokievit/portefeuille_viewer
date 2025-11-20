@@ -202,16 +202,26 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             terms = [t.strip() for t in q.split(",") if t.strip()]
             for term in terms:
                 mask = None
+                import re
+                def pad_zero(s):
+                    parts = re.split(r'[-/]', s)
+                    return [
+                        s,
+                        '-'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts),
+                        '/'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts)
+                    ]
+                term_variants = set()
+                for t in pad_zero(term):
+                    term_variants.add(t)
                 for c in df_pl.columns:
-                    # Zoek altijd op de string zoals getoond in de tabel (dd/mm/yyyy)
                     if c in ("datum", "optie_exp_date"):
-                        # Zowel met streepje als slash zoeken
-                        m = (
-                            pl.col(c).dt.strftime("%d/%m/%Y").str.contains(term.replace("-", "/")) |
-                            pl.col(c).dt.strftime("%d-%m-%Y").str.contains(term.replace("/", "-")) |
-                            pl.col(c).dt.strftime("%d/%m").str.contains(term.replace("-", "/")) |
-                            pl.col(c).dt.strftime("%d-%m").str.contains(term.replace("/", "-"))
-                        )
+                        m = None
+                        for v in term_variants:
+                            m1 = pl.col(c).dt.strftime("%d/%m/%Y").str.contains(v.replace("-", "/"))
+                            m2 = pl.col(c).dt.strftime("%d-%m-%Y").str.contains(v.replace("/", "-"))
+                            m3 = pl.col(c).dt.strftime("%d/%m").str.contains(v.replace("-", "/"))
+                            m4 = pl.col(c).dt.strftime("%d-%m").str.contains(v.replace("/", "-"))
+                            m = m1 | m2 | m3 | m4 if m is None else (m | m1 | m2 | m3 | m4)
                     else:
                         m = pl.col(c).cast(pl.Utf8).str.to_lowercase().str.contains(term.lower())
                     mask = m if mask is None else (mask | m)
