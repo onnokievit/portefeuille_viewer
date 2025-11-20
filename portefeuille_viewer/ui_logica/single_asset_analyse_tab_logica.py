@@ -1,9 +1,11 @@
 
 import contextlib
 import polars as pl
+import numpy as np
+
 from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
 from PySide6.QtGui import QFont
-from PySide6.QtCore import QLocale
+from PySide6.QtCore import QLocale, QDate, Slot
 import pyqtgraph as pg
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -14,6 +16,8 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
 	bereken_gesloten_aandelen_payoff,
 	bereken_open_aandelen_payoff,
 )
+from portefeuille_viewer.data.repository import get_connection
+
 
 
 # Widget-class die UI en logica koppelt
@@ -21,6 +25,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setupUi(self)
+
+		settings = get_settings()
+		start_date_str = settings.config.get('app', 'single_asset_analyse_start_date', fallback=None)
+		if start_date_str:
+			self.startDate.setDate(QDate.fromString(start_date_str, 'yyyy-MM-dd'))
+		self.endDate.setDate(QDate.currentDate())
 
 		self.gridLayout_2.setColumnStretch(0, 10)
 		self.gridLayout_2.setColumnStretch(1, 6)
@@ -39,6 +49,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         
 		self.asset_selector.addItems(self.logic.load_assets())
 		self.asset_selector.currentTextChanged.connect(self.on_asset_selected)
+		self.endDate.setDate(QDate.currentDate())
+
+		self.startDate.dateChanged.connect(self.update_history_charts)
+		self.startDate.dateChanged.connect(self.save_start_date_to_settings)
+		self.endDate.dateChanged.connect(self.update_history_charts)
 
 		# Initialiseer pyqtgraph plot_widget
 		self.plot_widget = pg.PlotWidget()
@@ -70,9 +85,79 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
 		# Je kunt hier headers en andere init doen zoals in je oude code
 
+	@Slot()
+	def save_start_date_to_settings(self):
+		settings = get_settings()
+		date_str = self.startDate.date().toString('yyyy-MM-dd')
+		if not settings.config.has_section('app'):
+			settings.config.add_section('app')
+		settings.config.set('app', 'single_asset_analyse_start_date', date_str)
+		settings.save()
+
 	def on_asset_selected(self, asset_rollup):
 		self.logic.set_asset(asset_rollup)
 		self.update_payoff_table()
+		self.update_history_charts()
+
+	def update_history_charts(self):
+		df = self.logic.load_asset_history(
+			self.asset_selector.currentText(),
+			self.startDate.date(),
+			self.endDate.date()
+		)
+		if df.height == 0:
+			self.priceAantalChart.clear()
+			self.resultaatChart.clear()
+			return
+
+		import numpy as np
+		x = np.arange(len(df))
+		datums = df["datum"].to_list()
+		close_price = [float(v) if v is not None and v != '' else 0.0 for v in df["close_price"].to_list()]
+		aantal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal_aantal_bezit"].to_list()]
+		totaal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal"].to_list()]
+
+		# --- Chart 1: priceAantalChart (zoals eerder) ---
+		pw = self.priceAantalChart
+		pw.clear()
+		pw.plotItem.clear()
+		price_curve = pw.plot(x, close_price, pen='b', name="Koers")
+		if not hasattr(self, '_rightView'):
+			self._rightView = pg.ViewBox()
+			pw.plotItem.showAxis('right')
+			pw.plotItem.scene().addItem(self._rightView)
+			pw.plotItem.getAxis('right').linkToView(self._rightView)
+			self._rightView.setXLink(pw.plotItem)
+		self._rightView.setGeometry(pw.plotItem.vb.sceneBoundingRect())
+		pw.plotItem.vb.sigResized.connect(lambda: self._rightView.setGeometry(pw.plotItem.vb.sceneBoundingRect()))
+		if hasattr(self, '_rightView'):
+			self._rightView.clear()
+		aantal_curve = pg.PlotCurveItem(x, aantal, pen=pg.mkPen('g', width=2), name="Aantal bezit")
+		self._rightView.addItem(aantal_curve)
+		pw.plotItem.getAxis('right').setLabel('Aantal bezit', color='g')
+		ticks = [(i, str(datums[i])) for i in range(0, len(datums), max(1, len(datums)//10))]
+		ax = pw.getPlotItem().getAxis('bottom')
+		ax.setTicks([ticks])
+		pw.plotItem.setLabel('left', 'Koers')
+		pw.plotItem.setLabel('bottom', 'Datum')
+
+		# --- Chart 2: resultaatChart ---
+		rw = self.resultaatChart
+		rw.clear()
+		rw.plotItem.clear()
+		rw.plot(x, totaal, pen=pg.mkPen('orange', width=2), name="Totaal")
+		rw.plotItem.setLabel('left', 'Totaal', color='orange')
+		rw.plotItem.setLabel('bottom', 'Datum')
+		ticks2 = [(i, str(datums[i])) for i in range(0, len(datums), max(1, len(datums)//10))]
+		ax2 = rw.getPlotItem().getAxis('bottom')
+		ax2.setTicks([ticks2])					
+
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+		SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# ...vervolgens: plot df in je pyqtgraph-widgets
+
 
 	def update_payoff_table(self):
 		# Gebaseerd op oude code, maar nu via self.logic
@@ -239,10 +324,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		vb = self.plot_widget.getViewBox()
 		vb.setContentsMargins(label_col_width, 0, 0, 0)
 
-
-    
-
-
 	# TODO Rename this here and in `update_chart`
 	def _get_from_chart_all_y_values_for_define_min_max(self, all_y, ax):
 		y_min = all_y[0]
@@ -391,3 +472,29 @@ class SingleAssetAnalyseLogic:
 			+ fee_aandelen
 			for i in range(len(steps))
 		]
+
+	def load_asset_history(self, asset_rollup, start_date, end_date):
+		"""
+		Haal historische data op voor een asset uit per_dag_asset_result.
+		:param asset_rollup: str, asset naam
+		:param start_date: QDate of str, bijv. '2023-01-01'
+		:param end_date: QDate of str, bijv. '2025-11-20'
+		:return: Polars DataFrame met kolommen: datum, close_price, totaal_aantal_bezit, totaal
+		"""
+		if hasattr(start_date, 'toString'):
+			start_date = start_date.toString('yyyy-MM-dd')
+		if hasattr(end_date, 'toString'):
+			end_date = end_date.toString('yyyy-MM-dd')
+
+		sql = (
+			"SELECT datum, close_price, totaal_aantal_bezit, totaal "
+			"FROM per_dag_asset_result "
+			"WHERE asset_rollup = ? "
+			"AND datum >= ? "
+			"AND datum <= ? "
+			"ORDER BY datum ASC"
+		)
+
+		with get_connection() as conn:
+			df = pl.read_database(sql, conn, execute_options={"parameters": [asset_rollup, start_date, end_date]})
+		return df

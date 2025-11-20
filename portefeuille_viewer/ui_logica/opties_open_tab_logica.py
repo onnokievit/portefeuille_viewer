@@ -135,15 +135,29 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     terms = [t.strip() for t in value.split(",") if t.strip()]
                     for term in terms:
                         mask = None
+                        # Maak varianten van de zoekterm met en zonder voorloopnullen
+                        import re
+                        def pad_zero(s):
+                            parts = re.split(r'[-/]', s)
+                            return [
+                                s,
+                                '-'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts),
+                                '/'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts)
+                            ]
+                        term_variants = set()
+                        for t in pad_zero(term):
+                            term_variants.add(t)
                         for c in df.columns:
-                            # Detect if column is a date or datetime column by dtype
                             dtype = df[c].dtype
                             if isinstance(dtype, pl.Date) or isinstance(dtype, pl.Datetime):
-                                # Format date as NL (dd-mm-yyyy) and (dd-mm)
-                                m = (
-                                    df[c].dt.strftime("%d-%m-%Y").str.contains(term)
-                                    | df[c].dt.strftime("%d-%m").str.contains(term)
-                                )
+                                m = None
+                                for v in term_variants:
+                                    m1 = df[c].dt.strftime("%d-%m-%Y").str.contains(v.replace("/", "-"))
+                                    m2 = df[c].dt.strftime("%d/%m/%Y").str.contains(v.replace("-", "/"))
+                                    m3 = df[c].dt.strftime("%d-%m").str.contains(v.replace("/", "-"))
+                                    m4 = df[c].dt.strftime("%d/%m").str.contains(v.replace("-", "/"))
+                                    m = m1 | m2 | m3 | m4 if m is None else (m | m1 | m2 | m3 | m4)
+                                # combineer alle varianten
                             else:
                                 m = pl.col(c).cast(str).str.to_lowercase().str.contains(term.lower())
                             mask = m if mask is None else (mask | m)
