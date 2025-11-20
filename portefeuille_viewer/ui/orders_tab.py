@@ -974,7 +974,7 @@ class OrdersTab(QWidget):
         
         
         self._apply_db_color(name)  # wisselt de kleurstijl van de DB-keuze
-               
+        
         self.reset_form()           # wist velden + toggles
         
         self.load_initial_records()
