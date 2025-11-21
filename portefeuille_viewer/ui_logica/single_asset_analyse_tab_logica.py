@@ -17,7 +17,7 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
 	bereken_gesloten_aandelen_payoff,
 	bereken_open_aandelen_payoff,
 )
-from portefeuille_viewer.data.repository import get_connection
+
 
 
 
@@ -111,9 +111,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 			self.resultaatChart.clear()
 			return
 		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-		SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+		# SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+		# # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 		import numpy as np
 		x = np.arange(len(df))
 		datums = df["datum"].to_list()
@@ -125,7 +125,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		pw = self.priceAantalChart
 		pw.clear()
 		pw.plotItem.clear()
-		price_curve = pw.plot(x, close_price, pen='b', name="Koers")
+		pw.plot(x, close_price, pen='b', name="Koers")
 		if not hasattr(self, '_rightView'):
 			self._rightView = pg.ViewBox()
 			pw.plotItem.showAxis('right')
@@ -530,4 +530,4 @@ class SingleAssetAnalyseLogic:
 			(df["datum"] >= start_date) &
 			(df["datum"] <= end_date)
 		)
-		return df.filter(mask)
+		return df.filter(mask).sort("datum")
