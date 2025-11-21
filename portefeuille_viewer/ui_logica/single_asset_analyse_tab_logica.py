@@ -475,6 +475,32 @@ class SingleAssetAnalyseLogic:
 			for i in range(len(steps))
 		]
 
+	# def load_asset_history(self, asset_rollup, start_date, end_date):
+	# 	"""
+	# 	Haal historische data op voor een asset uit per_dag_asset_result.
+	# 	:param asset_rollup: str, asset naam
+	# 	:param start_date: QDate of str, bijv. '2023-01-01'
+	# 	:param end_date: QDate of str, bijv. '2025-11-20'
+	# 	:return: Polars DataFrame met kolommen: datum, close_price, totaal_aantal_bezit, totaal
+	# 	"""
+	# 	if hasattr(start_date, 'toString'):
+	# 		start_date = start_date.toString('yyyy-MM-dd')
+	# 	if hasattr(end_date, 'toString'):
+	# 		end_date = end_date.toString('yyyy-MM-dd')
+
+	# 	sql = (
+	# 		"SELECT datum, close_price, totaal_aantal_bezit, totaal "
+	# 		"FROM per_dag_asset_result "
+	# 		"WHERE asset_rollup = ? "
+	# 		"AND datum >= ? "
+	# 		"AND datum <= ? "
+	# 		"ORDER BY datum ASC"
+	# 	)
+
+	# 	with get_connection() as conn:
+	# 		df = pl.read_database(sql, conn, execute_options={"parameters": [asset_rollup, start_date, end_date]})
+	# 	return df
+
 	import polars as pl
 
 	def load_asset_history(self, asset, start_date, end_date):
