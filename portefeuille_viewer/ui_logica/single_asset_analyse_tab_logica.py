@@ -1,12 +1,13 @@
 
 import contextlib
 import polars as pl
+import pyqtgraph as pg
 
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
 from PySide6.QtGui import QFont
 from PySide6.QtCore import QLocale, QDate, Slot
-import pyqtgraph as pg
+
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_settings
@@ -109,7 +110,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 			self.priceAantalChart.clear()
 			self.resultaatChart.clear()
 			return
-
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+		SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 		import numpy as np
 		x = np.arange(len(df))
 		datums = df["datum"].to_list()
@@ -152,10 +156,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 		ax2 = rw.getPlotItem().getAxis('bottom')
 		ax2.setTicks([ticks2])					
 
-		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-		SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
 		# ...vervolgens: plot df in je pyqtgraph-widgets
 
 
@@ -354,6 +355,7 @@ class SingleAssetAnalyseLogic:
 		self.df_aandelen = None
 		self.df_gesloten_aandelen = None
 		self.currency_factor = 1.0
+		self.snapshot_df = None  # for clarity, but always use repository_per_dag_asset_result
 
 	def load_assets(self):
 		df = SNAPSHOT_STORE.snapshot_asset_rollup_data
@@ -473,28 +475,33 @@ class SingleAssetAnalyseLogic:
 			for i in range(len(steps))
 		]
 
-	def load_asset_history(self, asset_rollup, start_date, end_date):
-		"""
-		Haal historische data op voor een asset uit per_dag_asset_result.
-		:param asset_rollup: str, asset naam
-		:param start_date: QDate of str, bijv. '2023-01-01'
-		:param end_date: QDate of str, bijv. '2025-11-20'
-		:return: Polars DataFrame met kolommen: datum, close_price, totaal_aantal_bezit, totaal
-		"""
-		if hasattr(start_date, 'toString'):
-			start_date = start_date.toString('yyyy-MM-dd')
-		if hasattr(end_date, 'toString'):
-			end_date = end_date.toString('yyyy-MM-dd')
+	import polars as pl
 
-		sql = (
-			"SELECT datum, close_price, totaal_aantal_bezit, totaal "
-			"FROM per_dag_asset_result "
-			"WHERE asset_rollup = ? "
-			"AND datum >= ? "
-			"AND datum <= ? "
-			"ORDER BY datum ASC"
+	def load_asset_history(self, asset, start_date, end_date):
+		# Use the in-memory Polars DataFrame from the repository snapshot
+		df = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
+		if df is None or df.height == 0:
+			return pl.DataFrame({})
+		# Convert QDate to Python datetime.date if needed
+		if hasattr(start_date, 'toPython'):  # QDate
+			start_date = start_date.toPython()
+		elif hasattr(start_date, 'toPyDate'):
+			start_date = start_date.toPyDate()
+		if hasattr(end_date, 'toPython'):
+			end_date = end_date.toPython()
+		elif hasattr(end_date, 'toPyDate'):
+			end_date = end_date.toPyDate()
+		# Convert to Polars datetime
+		start_date = pl.datetime(start_date.year, start_date.month, start_date.day)
+		end_date = pl.datetime(end_date.year, end_date.month, end_date.day)
+		# Ensure 'datum' is a datetime column
+		if df["datum"].dtype != pl.Datetime:
+			df = df.with_columns([
+				pl.col("datum").str.strptime(pl.Datetime, "%d/%m/%Y", strict=False).alias("datum")
+			])
+		mask = (
+			(df["asset_rollup"] == asset) &
+			(df["datum"] >= start_date) &
+			(df["datum"] <= end_date)
 		)
-
-		with get_connection() as conn:
-			df = pl.read_database(sql, conn, execute_options={"parameters": [asset_rollup, start_date, end_date]})
-		return df
+		return df.filter(mask)

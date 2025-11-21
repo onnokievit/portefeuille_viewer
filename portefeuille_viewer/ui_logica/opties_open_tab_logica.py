@@ -107,6 +107,25 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     .otherwise(pl.lit("OTM"))
                     .alias("itm")
             )
+        df = df.select([
+            "broker",
+            "asset_rollup",
+            "Koers",
+            pl.col("optie_call_put").alias("optie_call_put"),
+            pl.col("optie_strike").alias("optie_strike"),
+            pl.col("optie_exp_date").alias("optie_exp_date"),
+            pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
+            pl.col("SomVantransactie_euro_totaal").alias("premie"),
+            pl.col("ITM_OTM").alias("itm_otm"),
+            pl.col("opt_total_result").alias("totaal_resultaat_optie"),
+            pl.col("SomVantransactie_fee").alias("totaal_fees"),
+            pl.col("itm").alias("itm")
+        ])
+        # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
+        if "Koers" in df.columns and "optie_strike" in df.columns:
+            df = df.with_columns(
+                ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
+            )
 
         filters = getattr(self, "active_filters", {})
         if filters:
@@ -123,13 +142,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 elif key.startswith("__date_on__"):
                     col = key.replace("__date_on__", "")
                     df = df.filter(pl.col(col) == value)
-                # elif key == "q":
-                #     # Simpele tekstzoeking over alle kolommen
-                #     mask = None
-                #     for c in df.columns:
-                #         m = pl.col(c).cast(str).str.contains(value)
-                #         mask = m if mask is None else (mask | m)
-                #     df = df.filter(mask)
+
                 elif key == "q":
                     # Meerdere zoektermen (AND), gescheiden door komma
                     terms = [t.strip() for t in value.split(",") if t.strip()]
@@ -162,28 +175,6 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                                 m = pl.col(c).cast(str).str.to_lowercase().str.contains(term.lower())
                             mask = m if mask is None else (mask | m)
                         df = df.filter(mask)
-
-
-        
-        df = df.select([
-            "broker",
-            "asset_rollup",
-            "Koers",
-            pl.col("optie_call_put").alias("optie_call_put"),
-            pl.col("optie_strike").alias("optie_strike"),
-            pl.col("optie_exp_date").alias("optie_exp_date"),
-            pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
-            pl.col("SomVantransactie_euro_totaal").alias("premie"),
-            pl.col("ITM_OTM").alias("itm_otm"),
-            pl.col("opt_total_result").alias("totaal_resultaat_optie"),
-            pl.col("SomVantransactie_fee").alias("totaal_fees"),
-            pl.col("itm").alias("itm")
-        ])
-        # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
-        if "Koers" in df.columns and "optie_strike" in df.columns:
-            df = df.with_columns(
-                ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
-            )
 
         if df is None or df.is_empty():
             df = pl.DataFrame()
