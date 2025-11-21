@@ -86,8 +86,8 @@ def load_per_dag_asset_result() -> pl.DataFrame:
     """
     Laadt de per_dag_asset_result-tabel uit de database.
     """
-    sql = "SELECT datum, close_price, totaal_aantal_bezit, totaal FROM per_dag_asset_result"
-    # sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
+    sql = "SELECT datum, asset_rollup, close_price, totaal_aantal_bezit, totaal FROM per_dag_asset_result"
+    
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.safe_write("repository_per_dag_asset_result", df)
