@@ -257,7 +257,7 @@ def load_open_opties_from_tx(df_tx: pl.DataFrame | None = None) -> pl.DataFrame:
         & (pl.col("SomVantransactie_aantal") != 0)
         
     )
-    # SNAPSHOT_STORE.snapshot_load_open_opties_from_tx = per_uniek_filtered
+    
     SNAPSHOT_STORE.safe_write("repository_snapshot_load_open_opties", per_uniek_filtered)
     #return per_uniek_filtered
 

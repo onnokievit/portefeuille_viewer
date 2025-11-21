@@ -38,9 +38,14 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             if date is None:
                 date = datetime.date.today()
             days_ahead = (4 - date.weekday() + 7) % 7  # 4 = vrijdag
-            days_ahead = days_ahead if days_ahead != 0 else 7
+            #days_ahead = days_ahead if days_ahead != 0 else 7
             return date + datetime.timedelta(days=days_ahead)
-
+        # def next_friday(date=None):
+        #     if date is None:
+        #         date = datetime.date.today()
+        #     days_ahead = (4 - date.weekday() + 7) % 7  # 4 = vrijdag
+        #     return date if days_ahead == 0 else date + datetime.timedelta(days=days_ahead)
+        
         volgende_vrijdag = next_friday()
         self.dateOptieStart.setDate(QDate(volgende_vrijdag.year, volgende_vrijdag.month, volgende_vrijdag.day))
         self.dateOptieEind.setDate(QDate(volgende_vrijdag.year, volgende_vrijdag.month, volgende_vrijdag.day))
@@ -49,7 +54,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             if date is None:
                 date = datetime.date.today()
             days_ahead = (5 - date.weekday() + 7) % 7  # 5 = zaterdag
-            days_ahead = days_ahead if days_ahead != 0 else 7
+            #days_ahead = days_ahead if days_ahead != 0 else 7
             return date + datetime.timedelta(days=days_ahead)
 
         volgende_zaterdag = next_saturday()
