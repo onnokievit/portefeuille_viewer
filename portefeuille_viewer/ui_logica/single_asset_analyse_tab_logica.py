@@ -25,7 +25,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-
+        self._fill_filter_comboboxes()
+        self.comboBoxStatus.setCurrentText("active")
+        self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
+        self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
+        self.comboBoxValueGrow.currentTextChanged.connect(self._on_filter_changed)
+        self.comboBoxSector.currentTextChanged.connect(self._on_filter_changed)
         settings = get_settings()
         start_date_str = settings.config.get('app', 'single_asset_analyse_start_date', fallback=None)
         if start_date_str:
@@ -84,11 +89,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.payoff_table.setRowCount(10)
         self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
                 # Maak de rijhoogte compacter
-        assets = self.logic.load_assets()
-        self.asset_selector.addItems(assets)
-        if assets:
-            self.asset_selector.setCurrentIndex(0)
-            self.on_asset_selected(assets[0])
+        self._on_filter_changed()
         self.payoff_table.verticalHeader().setMinimumSectionSize(22)
         self.payoff_table.verticalHeader().setDefaultSectionSize(22)
         for row in range(10):
@@ -112,6 +113,52 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             settings.config.add_section('app')
         settings.config.set('app', 'single_asset_analyse_start_date', date_str)
         settings.save()
+
+    def _on_filter_changed(self):
+        regio = self.comboBoxRegio.currentText()
+        status = self.comboBoxStatus.currentText()
+        value_grow = self.comboBoxValueGrow.currentText()
+        sector = self.comboBoxSector.currentText()
+        # Lege string betekent 'geen filter'
+        regio = regio if regio else None
+        status = status if status else None
+        value_grow = value_grow if value_grow else None
+        sector = sector if sector else None
+        assets = self.logic.load_assets(regio=regio, status=status, value_grow=value_grow, sector=sector)
+        self.asset_selector.clear()
+        self.asset_selector.addItems(assets)
+        if assets:
+            self.asset_selector.setCurrentIndex(0)
+            self.on_asset_selected(assets[0])
+
+    def _fill_filter_comboboxes(self):
+        df = getattr(SNAPSHOT_STORE, "live_aggregator_asset_rollup_data", None)
+        if df is None or df.height == 0:
+            return
+        df = df.filter(
+            (pl.col("asset_rollup") != "CORRECTIE-BENCHMARK") &
+            (pl.col("asset_rollup").is_not_null()) &
+            (pl.col("asset_rollup").cast(str) != ""))
+        self.comboBoxRegio.clear()
+        self.comboBoxStatus.clear()
+        self.comboBoxValueGrow.clear()
+        self.comboBoxSector.clear()
+        self.comboBoxRegio.addItem("")  # empty for 'all'
+        self.comboBoxStatus.addItem("")
+        self.comboBoxValueGrow.addItem("")
+        self.comboBoxSector.addItem("")
+        for val in sorted(set(df["regio"].to_list())):
+            if val is not None:
+                self.comboBoxRegio.addItem(str(val))
+        for val in sorted(set(df["status"].to_list())):
+            if val is not None:
+                self.comboBoxStatus.addItem(str(val))
+        for val in sorted(set(df["value_grow"].to_list())):
+            if val is not None:
+                self.comboBoxValueGrow.addItem(str(val))
+        for val in sorted(set(df["sector"].to_list())):
+            if val is not None:
+                self.comboBoxSector.addItem(str(val))
 
 
     def _filter_dataframe(self, df, filters):
@@ -743,13 +790,31 @@ class SingleAssetAnalyseLogic:
         self.currency_factor = 1.0
         self.snapshot_df = None  # for clarity, but always use repository_per_dag_asset_result
 
-    def load_assets(self):
-        df = SNAPSHOT_STORE.snapshot_asset_rollup_data
-        if df is not None and df.height > 0:
-            return sorted(
-                [str(a) for a in df["asset_rollup"].unique().to_list() if a is not None]
-            )
-        return []
+    def load_assets(self, regio=None, status=None, value_grow=None, sector=None):
+        df = getattr(SNAPSHOT_STORE, "live_aggregator_asset_rollup_data", None)
+        if df is None or df.height == 0:
+            return []
+
+        df = df.filter(
+            (pl.col("asset_rollup") != "CORRECTIE-BENCHMARK") &
+            (pl.col("asset_rollup").is_not_null()) &
+            (pl.col("asset_rollup").cast(str) != "")
+        )
+
+        mask = pl.Series([True] * df.height)
+        if regio:
+            mask &= df["regio"] == regio
+        if status and status != "all":
+            mask &= df["status"] == status
+        if value_grow:
+            mask &= df["value_grow"] == value_grow
+        if sector:
+            mask &= df["sector"] == sector
+
+        filtered = df.filter(mask)
+        return sorted([
+            str(a) for a in filtered["asset_rollup"].unique().to_list()
+            if a is not None and str(a) != "" and a != "CORRECTIE-BENCHMARK"])
 
     def set_asset(self, asset_rollup):
         store = SNAPSHOT_STORE

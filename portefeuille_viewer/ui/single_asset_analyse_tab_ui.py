@@ -49,7 +49,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_6.setContentsMargins(2, 2, 2, 2)
         self.resultaatChart = PlotWidget(self.widget)
         self.resultaatChart.setObjectName(u"resultaatChart")
-        self.resultaatChart.setGeometry(QRect(410, 680, 401, 121))
+        self.resultaatChart.setGeometry(QRect(410, 680, 411, 121))
         self.verticalLayout_9 = QVBoxLayout(self.resultaatChart)
         self.verticalLayout_9.setSpacing(9)
         self.verticalLayout_9.setObjectName(u"verticalLayout_9")
@@ -112,6 +112,30 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addWidget(self.endDate, 0, Qt.AlignmentFlag.AlignLeft)
 
+        self.comboBoxStatus = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxStatus.setObjectName(u"comboBoxStatus")
+        self.comboBoxStatus.setMaximumSize(QSize(80, 16777215))
+
+        self.horizontalLayout.addWidget(self.comboBoxStatus)
+
+        self.comboBoxValueGrow = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxValueGrow.setObjectName(u"comboBoxValueGrow")
+        self.comboBoxValueGrow.setMaximumSize(QSize(80, 16777215))
+
+        self.horizontalLayout.addWidget(self.comboBoxValueGrow)
+
+        self.comboBoxSector = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxSector.setObjectName(u"comboBoxSector")
+        self.comboBoxSector.setMaximumSize(QSize(140, 16777215))
+
+        self.horizontalLayout.addWidget(self.comboBoxSector)
+
+        self.comboBoxRegio = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxRegio.setObjectName(u"comboBoxRegio")
+        self.comboBoxRegio.setMaximumSize(QSize(60, 16777215))
+
+        self.horizontalLayout.addWidget(self.comboBoxRegio)
+
         self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout.addItem(self.horizontalSpacer)
@@ -124,7 +148,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.lineEditFilterOptiesOpen = QLineEdit(self.horizontalLayoutWidget_2)
         self.lineEditFilterOptiesOpen.setObjectName(u"lineEditFilterOptiesOpen")
-        self.lineEditFilterOptiesOpen.setMinimumSize(QSize(300, 0))
+        self.lineEditFilterOptiesOpen.setMinimumSize(QSize(300, 24))
         self.lineEditFilterOptiesOpen.setMaximumSize(QSize(450, 16777215))
 
         self.horizontalLayout_2.addWidget(self.lineEditFilterOptiesOpen, 0, Qt.AlignmentFlag.AlignLeft)
@@ -173,18 +197,6 @@ class Ui_SingleAssetAnalyseTab(object):
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
         self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
-        self.comboBoxActiefInactief = QComboBox(self.widget)
-        self.comboBoxActiefInactief.setObjectName(u"comboBoxActiefInactief")
-        self.comboBoxActiefInactief.setGeometry(QRect(830, 820, 80, 24))
-        self.comboBoxValueGrow = QComboBox(self.widget)
-        self.comboBoxValueGrow.setObjectName(u"comboBoxValueGrow")
-        self.comboBoxValueGrow.setGeometry(QRect(920, 820, 80, 24))
-        self.comboBoxSector = QComboBox(self.widget)
-        self.comboBoxSector.setObjectName(u"comboBoxSector")
-        self.comboBoxSector.setGeometry(QRect(1020, 820, 80, 24))
-        self.comboBoxRegio = QComboBox(self.widget)
-        self.comboBoxRegio.setObjectName(u"comboBoxRegio")
-        self.comboBoxRegio.setGeometry(QRect(1120, 820, 80, 24))
 
         self.verticalLayout_2.addWidget(self.widget)
 
