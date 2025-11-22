@@ -78,7 +78,7 @@ def main():
     stop_event, thread = start_live_price_updater(price_feed)
     portfolio_engine = PortfolioEngine(price_feed)
     w = MainWindow(portfolio_engine,price_feed, live_price_updater_stop_event=stop_event) 
-    
+    #commnent
     
     w.show()
     if price_feed.is_ready():
