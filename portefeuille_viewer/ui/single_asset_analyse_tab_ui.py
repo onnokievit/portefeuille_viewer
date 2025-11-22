@@ -35,7 +35,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.widget.setObjectName(u"widget")
         self.widget_2 = QWidget(self.widget)
         self.widget_2.setObjectName(u"widget_2")
-        self.widget_2.setGeometry(QRect(0, 40, 900, 701))
+        self.widget_2.setGeometry(QRect(0, 40, 851, 631))
         self.verticalLayout_3 = QVBoxLayout(self.widget_2)
         self.verticalLayout_3.setSpacing(0)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
@@ -57,7 +57,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayout_4.addLayout(self.layoutChart)
 
-        self.verticalLayout_4.setStretch(0, 62)
+        self.verticalLayout_4.setStretch(0, 70)
         self.verticalLayout_4.setStretch(1, 100)
 
         self.verticalLayout.addLayout(self.verticalLayout_4)
@@ -74,7 +74,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_7.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_4 = QWidget(self.widget)
         self.verticalLayoutWidget_4.setObjectName(u"verticalLayoutWidget_4")
-        self.verticalLayoutWidget_4.setGeometry(QRect(910, 40, 751, 271))
+        self.verticalLayoutWidget_4.setGeometry(QRect(860, 40, 751, 271))
         self.verticalLayout_6 = QVBoxLayout(self.verticalLayoutWidget_4)
         self.verticalLayout_6.setSpacing(2)
         self.verticalLayout_6.setObjectName(u"verticalLayout_6")
@@ -93,7 +93,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_5 = QWidget(self.widget)
         self.verticalLayoutWidget_5.setObjectName(u"verticalLayoutWidget_5")
-        self.verticalLayoutWidget_5.setGeometry(QRect(910, 660, 751, 121))
+        self.verticalLayoutWidget_5.setGeometry(QRect(880, 530, 751, 121))
         self.verticalLayout_8 = QVBoxLayout(self.verticalLayoutWidget_5)
         self.verticalLayout_8.setSpacing(2)
         self.verticalLayout_8.setObjectName(u"verticalLayout_8")
@@ -105,7 +105,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayoutWidget_6 = QWidget(self.widget)
         self.verticalLayoutWidget_6.setObjectName(u"verticalLayoutWidget_6")
-        self.verticalLayoutWidget_6.setGeometry(QRect(910, 790, 751, 121))
+        self.verticalLayoutWidget_6.setGeometry(QRect(880, 660, 751, 121))
         self.verticalLayout_10 = QVBoxLayout(self.verticalLayoutWidget_6)
         self.verticalLayout_10.setSpacing(2)
         self.verticalLayout_10.setObjectName(u"verticalLayout_10")
