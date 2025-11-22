@@ -35,7 +35,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.widget.setObjectName(u"widget")
         self.widget_2 = QWidget(self.widget)
         self.widget_2.setObjectName(u"widget_2")
-        self.widget_2.setGeometry(QRect(0, 40, 851, 631))
+        self.widget_2.setGeometry(QRect(0, 40, 821, 631))
         self.verticalLayout_3 = QVBoxLayout(self.widget_2)
         self.verticalLayout_3.setSpacing(0)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
@@ -57,7 +57,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayout_4.addLayout(self.layoutChart)
 
-        self.verticalLayout_4.setStretch(0, 70)
+        self.verticalLayout_4.setStretch(0, 80)
         self.verticalLayout_4.setStretch(1, 100)
 
         self.verticalLayout.addLayout(self.verticalLayout_4)
@@ -67,14 +67,14 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.priceAantalChart = PlotWidget(self.widget)
         self.priceAantalChart.setObjectName(u"priceAantalChart")
-        self.priceAantalChart.setGeometry(QRect(0, 750, 445, 161))
+        self.priceAantalChart.setGeometry(QRect(0, 680, 405, 121))
         self.verticalLayout_7 = QVBoxLayout(self.priceAantalChart)
         self.verticalLayout_7.setSpacing(9)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.verticalLayout_7.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_4 = QWidget(self.widget)
         self.verticalLayoutWidget_4.setObjectName(u"verticalLayoutWidget_4")
-        self.verticalLayoutWidget_4.setGeometry(QRect(860, 40, 751, 271))
+        self.verticalLayoutWidget_4.setGeometry(QRect(830, 40, 711, 271))
         self.verticalLayout_6 = QVBoxLayout(self.verticalLayoutWidget_4)
         self.verticalLayout_6.setSpacing(2)
         self.verticalLayout_6.setObjectName(u"verticalLayout_6")
@@ -86,14 +86,14 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.resultaatChart = PlotWidget(self.widget)
         self.resultaatChart.setObjectName(u"resultaatChart")
-        self.resultaatChart.setGeometry(QRect(450, 750, 451, 161))
+        self.resultaatChart.setGeometry(QRect(410, 680, 411, 121))
         self.verticalLayout_9 = QVBoxLayout(self.resultaatChart)
         self.verticalLayout_9.setSpacing(9)
         self.verticalLayout_9.setObjectName(u"verticalLayout_9")
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_5 = QWidget(self.widget)
         self.verticalLayoutWidget_5.setObjectName(u"verticalLayoutWidget_5")
-        self.verticalLayoutWidget_5.setGeometry(QRect(880, 530, 751, 121))
+        self.verticalLayoutWidget_5.setGeometry(QRect(830, 540, 711, 121))
         self.verticalLayout_8 = QVBoxLayout(self.verticalLayoutWidget_5)
         self.verticalLayout_8.setSpacing(2)
         self.verticalLayout_8.setObjectName(u"verticalLayout_8")
@@ -105,7 +105,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayoutWidget_6 = QWidget(self.widget)
         self.verticalLayoutWidget_6.setObjectName(u"verticalLayoutWidget_6")
-        self.verticalLayoutWidget_6.setGeometry(QRect(880, 660, 751, 121))
+        self.verticalLayoutWidget_6.setGeometry(QRect(830, 670, 711, 121))
         self.verticalLayout_10 = QVBoxLayout(self.verticalLayoutWidget_6)
         self.verticalLayout_10.setSpacing(2)
         self.verticalLayout_10.setObjectName(u"verticalLayout_10")
@@ -117,7 +117,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(0, 0, 901, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(0, 0, 821, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -155,7 +155,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(910, 0, 751, 31))
+        self.horizontalLayoutWidget_2.setGeometry(QRect(830, 0, 711, 31))
         self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
