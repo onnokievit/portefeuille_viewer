@@ -54,7 +54,8 @@ def initial_load_datasets():
 
 def main():
     initial_load_datasets()
-    import faulthandler; faulthandler.enable()
+    import faulthandler
+    faulthandler.enable()
     app = QApplication(sys.argv)
     font = QFont()
     font.setPointSize(9)

@@ -2,7 +2,7 @@
 import contextlib
 import polars as pl
 import pyqtgraph as pg
-from streamlit import header
+
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
 from PySide6.QtGui import QFont, QColor
@@ -90,7 +90,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             self.asset_selector.setCurrentIndex(0)
             self.on_asset_selected(assets[0])
         for row in range(10):
-            self.payoff_table.setRowHeight(row, 11)  # pas 22 aan voor nog compacter/ruimer
+            self.payoff_table.setRowHeight(row, 12)  # pas 22 aan voor nog compacter/ruimer
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
@@ -197,10 +197,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
         font = QFont("Arial", 8)
         kolombreedtes = {
-            "broker": 65,
+            "broker": 60,
             "asset_rollup": 75,
             "Koers": 50,
-            "optie_call_put": 40,
+            "optie_call_put": 30,
             "optie_strike": 50,
             "optie_exp_date": 80,
             "aantal_bezit": 60,
@@ -491,13 +491,19 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
                 val = payoff_matrix[row][col] / factor
                 item = QTableWidgetItem(str(int(round(val, 0))))
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                # Alleen de laatste rij (total_row) bold maken
+                if row == total_row:
+                    item.setFont(boldfont)
+                    item.setBackground(lightblue)
+                else:
+                    # Normale font voor alle andere cellen
+                    normalfont = QFont()
+                    normalfont.setBold(False)
+                    item.setFont(normalfont)
                 if val < 0:
                     item.setForeground(QColor(220, 0, 0))
                 if col == middle_col:
                     item.setBackground(lightgrey)
-                if row == total_row:
-                    item.setFont(boldfont)
-                    item.setBackground(lightblue)
                 self.payoff_table.setItem(row, col, item)
 
         self.payoff_table.viewport().update()
@@ -582,9 +588,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         axis = self.plot_widget.getAxis('left')
         axis.setWidth(label_col_width)
   
-        self.plot_widget.setLabel('left', 'Waarde')
-        self.plot_widget.setLabel('bottom', 'Koers')
-        self.plot_widget.setTitle('Payoff per koersstap')
+        self.plot_widget.setLabel('left', '')
+        self.plot_widget.setLabel('bottom', '')
+        # self.plot_widget.setTitle('Payoff per koersstap')
         self.plot_widget.addLegend()
 
     def sync_plot_with_table(self, *args):
