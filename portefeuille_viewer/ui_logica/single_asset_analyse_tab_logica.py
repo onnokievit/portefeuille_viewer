@@ -114,8 +114,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         settings.save()
 
 
-
-
     def _filter_dataframe(self, df, filters):
         import re
         import polars as pl
@@ -600,8 +598,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         for row in range(10):
             for col in range(17):
                 val = payoff_matrix[row][col] / factor
-                display_val = abs(val) if val < 0 else val
-                item = QTableWidgetItem(str(int(round(display_val, 0))))
+                item = QTableWidgetItem(str(int(round(val, 0))))
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 # Alleen de laatste rij (total_row) bold maken
                 if row == total_row:
