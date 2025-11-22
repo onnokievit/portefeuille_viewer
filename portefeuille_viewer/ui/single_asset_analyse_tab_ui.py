@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'single_asset_analyse_tab3_B.ui'
+## Form generated from reading UI file 'single_asset_analyse_tab3_C.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.3
 ##
@@ -33,67 +33,30 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.widget = QWidget(SingleAssetAnalyseTab)
         self.widget.setObjectName(u"widget")
-        self.widget_2 = QWidget(self.widget)
-        self.widget_2.setObjectName(u"widget_2")
-        self.widget_2.setGeometry(QRect(0, 40, 821, 631))
-        self.verticalLayout_3 = QVBoxLayout(self.widget_2)
-        self.verticalLayout_3.setSpacing(0)
-        self.verticalLayout_3.setObjectName(u"verticalLayout_3")
-        self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout = QVBoxLayout()
-        self.verticalLayout.setSpacing(0)
-        self.verticalLayout.setObjectName(u"verticalLayout")
-        self.verticalLayout_4 = QVBoxLayout()
-        self.verticalLayout_4.setSpacing(0)
-        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
-        self.payoff_table = QTableWidget(self.widget_2)
-        self.payoff_table.setObjectName(u"payoff_table")
-
-        self.verticalLayout_4.addWidget(self.payoff_table)
-
-        self.layoutChart = QVBoxLayout()
-        self.layoutChart.setSpacing(10)
-        self.layoutChart.setObjectName(u"layoutChart")
-
-        self.verticalLayout_4.addLayout(self.layoutChart)
-
-        self.verticalLayout_4.setStretch(0, 80)
-        self.verticalLayout_4.setStretch(1, 100)
-
-        self.verticalLayout.addLayout(self.verticalLayout_4)
-
-
-        self.verticalLayout_3.addLayout(self.verticalLayout)
-
         self.priceAantalChart = PlotWidget(self.widget)
         self.priceAantalChart.setObjectName(u"priceAantalChart")
-        self.priceAantalChart.setGeometry(QRect(0, 680, 405, 121))
+        self.priceAantalChart.setGeometry(QRect(4, 680, 401, 121))
         self.verticalLayout_7 = QVBoxLayout(self.priceAantalChart)
         self.verticalLayout_7.setSpacing(9)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.verticalLayout_7.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_4 = QWidget(self.widget)
         self.verticalLayoutWidget_4.setObjectName(u"verticalLayoutWidget_4")
-        self.verticalLayoutWidget_4.setGeometry(QRect(830, 40, 711, 271))
+        self.verticalLayoutWidget_4.setGeometry(QRect(60, 820, 711, 261))
         self.verticalLayout_6 = QVBoxLayout(self.verticalLayoutWidget_4)
         self.verticalLayout_6.setSpacing(2)
         self.verticalLayout_6.setObjectName(u"verticalLayout_6")
         self.verticalLayout_6.setContentsMargins(2, 2, 2, 2)
-        self.tableViewOptiesOpen = QTableView(self.verticalLayoutWidget_4)
-        self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
-
-        self.verticalLayout_6.addWidget(self.tableViewOptiesOpen)
-
         self.resultaatChart = PlotWidget(self.widget)
         self.resultaatChart.setObjectName(u"resultaatChart")
-        self.resultaatChart.setGeometry(QRect(410, 680, 411, 121))
+        self.resultaatChart.setGeometry(QRect(410, 680, 401, 121))
         self.verticalLayout_9 = QVBoxLayout(self.resultaatChart)
         self.verticalLayout_9.setSpacing(9)
         self.verticalLayout_9.setObjectName(u"verticalLayout_9")
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_5 = QWidget(self.widget)
         self.verticalLayoutWidget_5.setObjectName(u"verticalLayoutWidget_5")
-        self.verticalLayoutWidget_5.setGeometry(QRect(830, 540, 711, 121))
+        self.verticalLayoutWidget_5.setGeometry(QRect(830, 550, 711, 121))
         self.verticalLayout_8 = QVBoxLayout(self.verticalLayoutWidget_5)
         self.verticalLayout_8.setSpacing(2)
         self.verticalLayout_8.setObjectName(u"verticalLayout_8")
@@ -105,7 +68,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayoutWidget_6 = QWidget(self.widget)
         self.verticalLayoutWidget_6.setObjectName(u"verticalLayoutWidget_6")
-        self.verticalLayoutWidget_6.setGeometry(QRect(830, 670, 711, 121))
+        self.verticalLayoutWidget_6.setGeometry(QRect(830, 680, 711, 121))
         self.verticalLayout_10 = QVBoxLayout(self.verticalLayoutWidget_6)
         self.verticalLayout_10.setSpacing(2)
         self.verticalLayout_10.setObjectName(u"verticalLayout_10")
@@ -117,7 +80,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(0, 0, 821, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 0, 801, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -172,6 +135,44 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout_2.addWidget(self.buttonClearFiltersOptiesOpen, 0, Qt.AlignmentFlag.AlignRight)
 
+        self.verticalLayoutWidget_7 = QWidget(self.widget)
+        self.verticalLayoutWidget_7.setObjectName(u"verticalLayoutWidget_7")
+        self.verticalLayoutWidget_7.setGeometry(QRect(830, 310, 711, 121))
+        self.verticalLayout_11 = QVBoxLayout(self.verticalLayoutWidget_7)
+        self.verticalLayout_11.setSpacing(2)
+        self.verticalLayout_11.setObjectName(u"verticalLayout_11")
+        self.verticalLayout_11.setContentsMargins(2, 2, 2, 2)
+        self.tableViewAandelen = QTableView(self.verticalLayoutWidget_7)
+        self.tableViewAandelen.setObjectName(u"tableViewAandelen")
+
+        self.verticalLayout_11.addWidget(self.tableViewAandelen)
+
+        self.verticalLayoutWidget_8 = QWidget(self.widget)
+        self.verticalLayoutWidget_8.setObjectName(u"verticalLayoutWidget_8")
+        self.verticalLayoutWidget_8.setGeometry(QRect(830, 440, 711, 101))
+        self.verticalLayout_12 = QVBoxLayout(self.verticalLayoutWidget_8)
+        self.verticalLayout_12.setSpacing(2)
+        self.verticalLayout_12.setObjectName(u"verticalLayout_12")
+        self.verticalLayout_12.setContentsMargins(2, 2, 2, 2)
+        self.tableViewSprinters = QTableView(self.verticalLayoutWidget_8)
+        self.tableViewSprinters.setObjectName(u"tableViewSprinters")
+
+        self.verticalLayout_12.addWidget(self.tableViewSprinters)
+
+        self.verticalLayoutWidget_3 = QWidget(self.widget)
+        self.verticalLayoutWidget_3.setObjectName(u"verticalLayoutWidget_3")
+        self.verticalLayoutWidget_3.setGeometry(QRect(6, 310, 811, 361))
+        self.layoutChart = QVBoxLayout(self.verticalLayoutWidget_3)
+        self.layoutChart.setSpacing(10)
+        self.layoutChart.setObjectName(u"layoutChart")
+        self.layoutChart.setContentsMargins(0, 0, 0, 0)
+        self.payoff_table = QTableWidget(self.widget)
+        self.payoff_table.setObjectName(u"payoff_table")
+        self.payoff_table.setGeometry(QRect(6, 40, 811, 257))
+        self.payoff_table.verticalHeader().setMinimumSectionSize(30)
+        self.tableViewOptiesOpen = QTableView(self.widget)
+        self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
+        self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
 
         self.verticalLayout_2.addWidget(self.widget)
 

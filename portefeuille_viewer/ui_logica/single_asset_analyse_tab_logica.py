@@ -89,8 +89,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         if assets:
             self.asset_selector.setCurrentIndex(0)
             self.on_asset_selected(assets[0])
+        self.payoff_table.verticalHeader().setMinimumSectionSize(22)
+        self.payoff_table.verticalHeader().setDefaultSectionSize(22)
         for row in range(10):
-            self.payoff_table.setRowHeight(row, 12)  # pas 22 aan voor nog compacter/ruimer
+            self.payoff_table.setRowHeight(row, 22)  # pas 22 aan voor nog compacter/ruimer
+            # Zet rowHeight ook voor de andere tabellen
+            for table in [self.tableViewOptiesOpen, self.tableViewOptiesOpenPut, self.tableViewOptiesOpenCall, self.tableViewAandelen, self.tableViewSprinters]:
+                table.verticalHeader().setMinimumSectionSize(22)
+                table.verticalHeader().setDefaultSectionSize(22)
+                # rowCount kan per tabel verschillen, dus dynamisch ophalen
+                for row in range(table.model().rowCount() if table.model() else 0):
+                    table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
@@ -175,6 +184,106 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         except Exception:
             # Onderdruk Qt warning
             pass
+        
+    def update_sprinters_table(self):
+        import polars as pl
+        df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_open_sprinters_live", None)
+        if df is None or df.is_empty():
+            df = pl.DataFrame()
+        asset = self.asset_selector.currentText()
+        # Filter op asset_rollup
+        df = df.filter(pl.col("asset_rollup") == asset)
+        # Selecteer relevante kolommen (pas aan indien gewenst)
+        df = df.select([
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "optie_exp_date",
+            "optie_strike", 
+            "optie_call_put",
+            "Koers",
+            "SomVantransactie_aantal",
+            "sp_result"
+        ])
+        kleur_kolommen = ["broker", "asset_rollup", "SomVantransctie_aantal"]
+        def kleur_func(row, colname, kleur_kolommen):
+            return None
+        model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
+        self.tableViewSprinters.setModel(model)
+        # Kolombreedtes instellen per kolom
+        kolombreedtes = {
+            "broker": 60,
+            "asset_rollup": 75,
+            "asset_detail": 90,
+            "optie_exp_date": 60,
+            "optie_strike": 40,
+            "optie_call_put": 40,
+            "Koers": 40,
+            "SomVantransactie_aantal": 60,
+            "sp_result": 60,
+        }
+        header = self.tableViewSprinters.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        for i, col in enumerate(df.columns):
+            if col in kolombreedtes:
+                header.resizeSection(i, kolombreedtes[col])
+        font = QFont("Arial", 8)
+        font.setBold(False)
+        self.tableViewSprinters.setFont(font)
+        self.tableViewSprinters.verticalHeader().setVisible(False)
+
+
+
+    def update_aandelen_table(self):
+        import polars as pl
+        df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_aandelen_live", None)
+        if df is None or df.is_empty():
+            df = pl.DataFrame()
+        asset = self.asset_selector.currentText()
+        # Filter op asset_rollup en aantal_bezit
+        df = df.filter(pl.col("asset_rollup") == asset)
+        df = df.filter(pl.col("aantal_bezit") != 0)
+        # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
+        if "koers" in df.columns and "aantal_bezit" in df.columns:
+            df = df.with_columns([
+                pl.col("aantal_bezit").cast(pl.Int64),
+                (pl.col("koers") * pl.col("aantal_bezit")).round(0).cast(pl.Int64).alias("waarde_bezit")
+            ])
+        # Selecteer de gewenste kolommen
+        df = df.select([
+            "broker",
+            "asset_rollup",
+            "koers",
+            "aantal_bezit",
+            "waarde_bezit"
+        ])
+        kleur_kolommen = ["broker", "asset_rollup", "aantal_bezit"]
+        columns = df.columns
+        def kleur_func(row, colname, kleur_kolommen):
+            # Optioneel: eigen kleurfunctie
+            return None
+        model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
+        self.tableViewAandelen.setModel(model)
+        # Kolombreedtes instellen per kolom
+        kolombreedtes = {
+            "broker": 60,
+            "asset_rollup": 90,
+            "koers": 60,
+            "aantal_bezit": 90,
+            "waarde_bezit": 90,
+        }
+        header = self.tableViewAandelen.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        for i, col in enumerate(df.columns):
+            if col in kolombreedtes:
+                header.resizeSection(i, kolombreedtes[col])
+        # Optioneel: font instellen
+        font = QFont("Arial", 8)
+        font.setBold(False)
+        self.tableViewAandelen.setFont(font)
+        self.tableViewAandelen.verticalHeader().setVisible(False)
+
+
 
     def update_opties_open_table(self):
         df = self.logic.load_option_open_data()
@@ -196,6 +305,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             return self.opties_kleur_func(row, colname, kleur_kolommen, columns)
 
         font = QFont("Arial", 8)
+        font.setBold(False)
         kolombreedtes = {
             "broker": 60,
             "asset_rollup": 75,
@@ -218,10 +328,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         proxy_model.setSourceModel(model_all)
         proxy_model.setSortRole(Qt.UserRole)
         #print("Disconnecting click handler, replacing model")
-        self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
+        # self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
         self.tableViewOptiesOpen.setModel(proxy_model)
         self.tableViewOptiesOpen.setSortingEnabled(True)
-        self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
+        # self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
         # print("Model replaced, click handler reconnected")
 
         self.tableViewOptiesOpen.setFont(font)
@@ -298,6 +408,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.update_payoff_table()
         self.update_history_charts()
         self.update_opties_open_table()
+        self.update_aandelen_table()
+        self.update_sprinters_table()
 
     def update_history_charts(self):
         df = self.logic.load_asset_history(
@@ -309,10 +421,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             self.priceAantalChart.clear()
             self.resultaatChart.clear()
             return
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        # SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
         import numpy as np
         x = np.arange(len(df))
         datums = df["datum"].to_list()
@@ -509,7 +618,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.payoff_table.viewport().update()
         self.update_chart()
         for row in range(10):
-            self.payoff_table.setRowHeight(row, 11)  # pas 22 aan voor nog compacter/ruimer
+            self.payoff_table.setRowHeight(row, 22)  # pas 22 aan voor nog compacter/ruimer
+            #print(f"DEBUG: payoff_table row {row} height =", self.payoff_table.rowHeight(row))
 
     @Slot()
     def apply_filters_opties_open(self):
@@ -811,16 +921,8 @@ class SingleAssetAnalyseLogic:
             df = df.with_columns(
                 ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
-        
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         if df is None or df.is_empty():
             df = pl.DataFrame()
-
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         return df
