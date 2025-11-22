@@ -2,6 +2,7 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
+from PySide6.QtCore import qInstallMessageHandler
 
 # Importeer hoofdvenster en benodigde modules
 from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
@@ -14,6 +15,14 @@ from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAand
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
 import time
+
+# Qt warning filter: onderdruk specifieke QSortFilterProxyModel warning
+def qt_message_handler(mode, context, message):
+    if "QSortFilterProxyModel: index from wrong model passed to mapToSource" in message:
+        return
+    print(message)
+
+qInstallMessageHandler(qt_message_handler)
 
 # Forceer Python om deze map als eerste te gebruiken
 sys.path.insert(0, os.path.dirname(__file__))
@@ -45,6 +54,7 @@ def initial_load_datasets():
 
 def main():
     initial_load_datasets()
+    import faulthandler; faulthandler.enable()
     app = QApplication(sys.argv)
     font = QFont()
     font.setPointSize(9)
