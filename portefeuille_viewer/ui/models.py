@@ -135,7 +135,29 @@ class PolarsTableModel(QAbstractTableModel):
 
         return None
 
+class ColoredPolarsTableModel(PolarsTableModel):
+    def __init__(self, df, kleur_kolommen=None, kleur_func=None, *args, **kwargs):
+        super().__init__(df, *args, **kwargs)
+        self.kleur_kolommen = kleur_kolommen or []
+        self.kleur_func = kleur_func
 
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            return super().data(index, role)
+        if role == Qt.BackgroundRole and self.kleur_func:
+            row = self._df.row(index.row())
+            colname = self._df.columns[index.column()]
+            kleur = self.kleur_func(row, colname, self.kleur_kolommen)
+            if kleur:
+                return kleur
+        return super().data(index, role)
+    
+    def sort(self, column, order):
+        self.layoutAboutToBeChanged.emit()
+        colname = self._df.columns[column]
+        ascending = order == Qt.AscendingOrder
+        self._df = self._df.sort(colname, reverse=not ascending)
+        self.layoutChanged.emit()
 
 
 class MultiColFilterProxy(QSortFilterProxyModel):

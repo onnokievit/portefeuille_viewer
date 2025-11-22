@@ -2,13 +2,13 @@
 import contextlib
 import polars as pl
 import pyqtgraph as pg
-
-
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
-from PySide6.QtGui import QFont
-from PySide6.QtCore import QLocale, QDate, Slot
 from streamlit import header
 
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt
+
+from portefeuille_viewer.ui.models import ColoredPolarsTableModel  
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_settings
@@ -18,13 +18,10 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_gesloten_aandelen_payoff,
     bereken_open_aandelen_payoff,
 )
-from portefeuille_viewer.ui.models import PolarsTableModel  # of PandasTableModel als je pandas gebruikt
-
-
-
 
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -37,7 +34,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
         # self.gridLayout_2.setColumnStretch(0, 10)
         # self.gridLayout_2.setColumnStretch(1, 6)
-        
+        self.active_filters_opties_open = {}
         self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
         self.stepSizeBox.setLocale(QLocale(QLocale.C))
@@ -50,6 +47,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.update_opties_open_table()
         
         self.asset_selector.addItems(self.logic.load_assets())
+        
         self.asset_selector.currentTextChanged.connect(self.on_asset_selected)
         self.endDate.setDate(QDate.currentDate())
 
@@ -86,10 +84,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.payoff_table.setRowCount(10)
         self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
                 # Maak de rijhoogte compacter
-        
+        assets = self.logic.load_assets()
+        self.asset_selector.addItems(assets)
+        if assets:
+            self.asset_selector.setCurrentIndex(0)
+            self.on_asset_selected(assets[0])
         for row in range(10):
             self.payoff_table.setRowHeight(row, 11)  # pas 22 aan voor nog compacter/ruimer
         # Je kunt hier headers en andere init doen zoals in je oude code
+        self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
 
     @Slot()
     def save_start_date_to_settings(self):
@@ -100,21 +104,100 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         settings.config.set('app', 'single_asset_analyse_start_date', date_str)
         settings.save()
 
+
+    def _filter_dataframe(self, df, filters):
+        import re
+        import polars as pl
+        for key, value in filters.items():
+            if key.startswith("__in__"):
+                col = key.replace("__in__", "")
+                df = df.filter(pl.col(col).is_in(value))
+            elif key.startswith("__contains__"):
+                col = key.replace("__contains__","")
+                df = df.filter(pl.col(col).cast(str).str.contains(value))
+            elif key.startswith("__eq__"):
+                col = key.replace("__eq__","")
+                df = df.filter(pl.col(col) == value)
+            elif key.startswith("__date_on__"):
+                col = key.replace("__date_on__","")
+                df = df.filter(pl.col(col) == value)
+            elif key == "q":
+                terms = [t.strip() for t in value.split(",") if t.strip()]
+                for term in terms:
+                    mask = None
+                    def pad_zero(s):
+                        parts = re.split(r'[-/]', s)
+                        return [
+                            s,
+                            '-'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts),
+                            '/'.join(f"{int(p):02d}" if p.isdigit() else p for p in parts)
+                        ]
+                    term_variants = set(pad_zero(term))
+                    for c in df.columns:
+                        dtype = df[c].dtype
+                        if isinstance(dtype, pl.Date) or isinstance(dtype, pl.Datetime):
+                            m = None
+                            for v in term_variants:
+                                m1 = df[c].dt.strftime("%d-%m-%Y").str.contains(v.replace("/", "-"))
+                                m2 = df[c].dt.strftime("%d/%m/%Y").str.contains(v.replace("-", "/"))
+                                m3 = df[c].dt.strftime("%d-%m").str.contains(v.replace("/", "-"))
+                                m4 = df[c].dt.strftime("%d/%m").str.contains(v.replace("-", "/"))
+                                m = m1 | m2 | m3 | m4 if m is None else (m | m1 | m2 | m3 | m4)
+                        else:
+                            m = pl.col(c).cast(str).str.to_lowercase().str.contains(term.lower())
+                        mask = m if mask is None else (mask | m)
+                    df = df.filter(mask)
+        return df
     
+    def _on_table_cell_clicked(self, index):
+        #print("Clicked index:", index, "Model:", index.model(), "Current model:", self.tableViewOptiesOpen.model())
+        try:
+            model = self.tableViewOptiesOpen.model()
+            if not index.isValid():
+                return
+            # Check of index.model() gelijk is aan het huidige model
+            if index.model() is not model:
+                return
+            if isinstance(model, QSortFilterProxyModel):
+                source_index = model.mapToSource(index)
+                if not source_index.isValid():
+                    return
+                source_model = model.sourceModel()
+                colname = source_model.headerData(source_index.column(), Qt.Horizontal)
+                value = source_model.data(source_index, Qt.DisplayRole)
+            else:
+                colname = model.headerData(index.column(), Qt.Horizontal)
+                value = model.data(index, Qt.DisplayRole)
+            if colname == "asset_rollup":
+                idx = self.asset_selector.findText(value)
+                if idx >= 0:
+                    self.asset_selector.setCurrentIndex(idx)
+        except Exception:
+            # Onderdruk Qt warning
+            pass
 
     def update_opties_open_table(self):
         df = self.logic.load_option_open_data()
         asset = self.asset_selector.currentText()
-        if asset:
-            df = df.filter(pl.col("asset_rollup") == asset)
-        df = df.drop("totaal_fees")
-        model = PolarsTableModel(df, self)  # of PandasTableModel(df, self)
-        font = QFont("Arial", 8)  # Kies je gewenste lettertype en grootte
-        # print(df.columns)
-        # print(len(df.columns))
+        # Voor de eerste tabel géén asset-filtering, volledige tabel tonen
+        df_all = df.drop("totaal_fees")
+        df_all = df_all.sort(["optie_exp_date", "asset_rollup"])
+        if hasattr(self, "active_filters_opties_open") and self.active_filters_opties_open:
+            df_all = self._filter_dataframe(df_all, self.active_filters_opties_open)
+        # Voor put/call tabellen wél filteren
+        df_put = df.filter(pl.col("asset_rollup") == asset).filter(pl.col("optie_call_put") == "put").drop("totaal_fees")
+        df_put = df_put.sort("optie_exp_date")
+        df_call = df.filter(pl.col("asset_rollup") == asset).filter(pl.col("optie_call_put") == "call").drop("totaal_fees")
+        df_call = df_call.sort("optie_exp_date")
 
+        kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
+        columns = df.columns
+        def kleur_func(row, colname, kleur_kolommen):
+            return self.opties_kleur_func(row, colname, kleur_kolommen, columns)
+
+        font = QFont("Arial", 8)
         kolombreedtes = {
-            "broker": 75,
+            "broker": 65,
             "asset_rollup": 75,
             "Koers": 50,
             "optie_call_put": 40,
@@ -128,26 +211,83 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             "afwijking_pct": 45,
         }
 
+        # Alle opties (volledige tabel, geen asset-filter)
+        model_all = ColoredPolarsTableModel(df_all, kleur_kolommen, kleur_func, self)
 
-        self.tableViewOptiesOpen.setModel(model)
+        proxy_model = QSortFilterProxyModel(self)
+        proxy_model.setSourceModel(model_all)
+        proxy_model.setSortRole(Qt.UserRole)
+        #print("Disconnecting click handler, replacing model")
+        self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
+        self.tableViewOptiesOpen.setModel(proxy_model)
+        self.tableViewOptiesOpen.setSortingEnabled(True)
+        self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
+        # print("Model replaced, click handler reconnected")
+
         self.tableViewOptiesOpen.setFont(font)
-        header = self.tableViewOptiesOpen.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Interactive)
-
-        def apply_widths():
-            header = self.tableViewOptiesOpen.horizontalHeader()
-            for i, col in enumerate(df.columns):
+        self.tableViewOptiesOpen.setStyleSheet("""
+        QScrollBar:vertical {
+            width: 25px;
+        }
+        QScrollBar::handle:vertical {
+            background: #e0e0e0;
+            min-height: 20px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #b0b0b0;
+        }
+        QScrollBar:vertical {
+            width: 18px;
+        }
+        QScrollBar::groove:vertical {
+            background: #f0f0f0;
+            width: 18px;
+            border-radius: 18px;
+        }
+        """)
+        #self.tableViewOptiesOpen.setStyleSheet("QScrollBar:vertical { width: 18px; }")
+        header_all = self.tableViewOptiesOpen.horizontalHeader()
+        header_all.setSectionResizeMode(QHeaderView.Interactive)
+        def apply_widths_all():
+            for i, col in enumerate(df_all.columns):
                 if col in kolombreedtes:
-                    header.resizeSection(i, kolombreedtes[col])
-
-        model.modelReset.connect(apply_widths)
-        model.layoutChanged.connect(apply_widths)
-        apply_widths()   # <-- doe dit erachter
+                    header_all.resizeSection(i, kolombreedtes[col])
+        model_all.modelReset.connect(apply_widths_all)
+        model_all.layoutChanged.connect(apply_widths_all)
+        apply_widths_all()
         self.tableViewOptiesOpen.verticalHeader().setDefaultSectionSize(10)
-        # for idx, col in enumerate(df.columns):
-        #     w = kolombreedtes.get(col)
-        #     if w:
-        #         header.resizeSection(idx, w)        
+
+        # Put opties (wel asset-filter)
+        model_put = ColoredPolarsTableModel(df_put, kleur_kolommen, kleur_func, self)
+        self.tableViewOptiesOpenPut.setModel(model_put)
+        self.tableViewOptiesOpenPut.setFont(font)
+        self.tableViewOptiesOpenPut.setStyleSheet("QScrollBar:vertical { width: 14px; }")
+        header_put = self.tableViewOptiesOpenPut.horizontalHeader()
+        header_put.setSectionResizeMode(QHeaderView.Interactive)
+        def apply_widths_put():
+            for i, col in enumerate(df_put.columns):
+                if col in kolombreedtes:
+                    header_put.resizeSection(i, kolombreedtes[col])
+        model_put.modelReset.connect(apply_widths_put)
+        model_put.layoutChanged.connect(apply_widths_put)
+        apply_widths_put()
+        self.tableViewOptiesOpenPut.verticalHeader().setDefaultSectionSize(10)
+
+        # Call opties (wel asset-filter)
+        model_call = ColoredPolarsTableModel(df_call, kleur_kolommen, kleur_func, self)
+        self.tableViewOptiesOpenCall.setModel(model_call)
+        self.tableViewOptiesOpenCall.setFont(font)
+        self.tableViewOptiesOpenCall.setStyleSheet("QScrollBar:vertical { width: 18px; }")
+        header_call = self.tableViewOptiesOpenCall.horizontalHeader()
+        header_call.setSectionResizeMode(QHeaderView.Interactive)
+        def apply_widths_call():
+            for i, col in enumerate(df_call.columns):
+                if col in kolombreedtes:
+                    header_call.resizeSection(i, kolombreedtes[col])
+        model_call.modelReset.connect(apply_widths_call)
+        model_call.layoutChanged.connect(apply_widths_call)
+        apply_widths_call()
+        self.tableViewOptiesOpenCall.verticalHeader().setDefaultSectionSize(10)
         
 
     def on_asset_selected(self, asset_rollup):
@@ -231,7 +371,29 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         pw.getPlotItem().getAxis('bottom').setTicks([ticks])
         rw.getPlotItem().getAxis('bottom').setTicks([ticks])
 
+        # Filter functionaliteit voor tableViewOptiesOpen
+        self._col_filters_opties_open = {}
+        #self.active_filters_opties_open = {}
+        self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
         # ...vervolgens: plot df in je pyqtgraph-widgets
+    @staticmethod
+    def opties_kleur_func(row, colname, kleur_kolommen, columns):
+        try:
+            optie_call_put = row[columns.index("optie_call_put")]
+            itm_otm = row[columns.index("itm_otm")]
+            # print(f"DEBUG: {colname=}, {optie_call_put=}, {itm_otm=}")
+            if colname in kleur_kolommen and itm_otm != 0:
+                if optie_call_put == "put":
+                    return QColor(255, 200, 200)
+                elif optie_call_put == "call":
+                    return QColor(200, 255, 200)
+        except Exception as e:
+            print(f"DEBUG Exception: {e}")
+        return None
+
+
+
 
 
     def update_payoff_table(self):
@@ -267,6 +429,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         steps = [round(center * (i - 8) * step_size + center, 2) for i in range(17)]
 
         headers = [str(s) for s in steps]
+
         self.payoff_table.setHorizontalHeaderLabels(headers)
 
         row_labels = [
@@ -338,6 +501,34 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.update_chart()
         for row in range(10):
             self.payoff_table.setRowHeight(row, 11)  # pas 22 aan voor nog compacter/ruimer
+
+    @Slot()
+    def apply_filters_opties_open(self):
+        q = self.lineEditFilterOptiesOpen.text().strip()
+        filters = {"q": q} if q else {}
+
+        # ...en kolomfilters toevoegen...
+        for col, spec in (self._col_filters_opties_open or {}).items():
+            if "in" in spec:
+                filters[f"__in__{col}"] = list(spec["in"])
+            if "contains" in spec:
+                filters[f"__contains__{col}"] = spec["contains"]
+            if "eq" in spec:
+                filters[f"__eq__{col}"] = spec["eq"]
+            if "date_on" in spec and spec["date_on"]:
+                filters[f"__date_on__{col}"] = spec["date_on"]
+
+        # print(f"Applying filters opties open: {filters}")
+        self.active_filters_opties_open = filters
+        self.update_opties_open_table()
+
+    def _on_clear_filters_opties_open(self):
+        self._col_filters_opties_open.clear()
+        self.lineEditFilterOptiesOpen.clear()
+        self.apply_filters_opties_open()
+
+
+
 
     def update_chart(self):
         self.plot_widget.clear()
