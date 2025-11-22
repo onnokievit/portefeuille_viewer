@@ -23,13 +23,11 @@ class SnapshotStore:
         self.repository_snapshot_gesloten_sprinters: pl.DataFrame | None = None
         self.repository_snapshot_gesloten_sprinters_no_asset_detail: pl.DataFrame | None = None
         self.snapshot_asset_rollup_data: pl.DataFrame | None = None
+        self.live_aggregator_asset_rollup_data: pl.DataFrame | None = None  # NIEUW: live asset rollup data met koersen
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         self.repository_snapshot_optie_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor opties
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_per_dag_asset_result: pl.DataFrame | None = None
-
-        # Centrale store voor live prijzen (aandelen, opties, etc.)
-        # Dict: key = asset_id (bijv. ib_symbol, optie_id, etc.), value = prijs of dict met meer info
         self.live_prices: dict | None = None
 
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
@@ -57,6 +55,7 @@ class SnapshotStore:
         self.repository_snapshot_gesloten_sprinters_no_asset_detail = None
         self.snapshot_aggregated_portfolio = None
         self.snapshot_asset_rollup_data = None
+        self.live_aggregator_asset_rollup_data = None
         self.repository_snapshot_sprinter_referentie_data = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
@@ -79,6 +78,7 @@ class SnapshotStore:
             self.repository_snapshot_gesloten_sprinters is not None,
             self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None,
             self.snapshot_asset_rollup_data is not None,
+            self.live_aggregator_asset_rollup_data is not None,
             self.repository_snapshot_sprinter_referentie_data is not None,
             self.repository_snapshot_optie_referentie_data is not None,
             self.repository_portfolio_dividend is not None,
@@ -113,6 +113,8 @@ class SnapshotStore:
             parts.append(f"Repository Gesloten Sprinters (zonder asset_detail): {len(self.repository_snapshot_gesloten_sprinters_no_asset_detail)} rijen")
         if self.snapshot_asset_rollup_data is not None:
             parts.append(f"Repository Asset Rollup data: {len(self.snapshot_asset_rollup_data)} rijen")
+        if self.live_aggregator_asset_rollup_data is not None:
+            parts.append(f"Live Aggregator Asset Rollup data: {len(self.live_aggregator_asset_rollup_data)} rijen")
         if self.repository_snapshot_sprinter_referentie_data is not None:
             parts.append(f"Repository Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
         if self.repository_snapshot_optie_referentie_data is not None:

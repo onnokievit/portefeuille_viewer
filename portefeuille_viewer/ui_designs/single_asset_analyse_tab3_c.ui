@@ -388,6 +388,46 @@
        </rect>
       </property>
      </widget>
+     <widget class="QComboBox" name="comboBoxActiefInactief">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>820</y>
+        <width>80</width>
+        <height>24</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QComboBox" name="comboBoxValueGrow">
+      <property name="geometry">
+       <rect>
+        <x>920</x>
+        <y>820</y>
+        <width>80</width>
+        <height>24</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QComboBox" name="comboBoxSector">
+      <property name="geometry">
+       <rect>
+        <x>1020</x>
+        <y>820</y>
+        <width>80</width>
+        <height>24</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QComboBox" name="comboBoxRegio">
+      <property name="geometry">
+       <rect>
+        <x>1120</x>
+        <y>820</y>
+        <width>80</width>
+        <height>24</height>
+       </rect>
+      </property>
+     </widget>
     </widget>
    </item>
   </layout>
