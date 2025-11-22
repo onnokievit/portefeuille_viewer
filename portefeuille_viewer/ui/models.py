@@ -66,10 +66,6 @@ class PandasTableModel(QAbstractTableModel):
 # ------------------------------------------------------------
 # Polars model voor portefeuille (
 # ------------------------------------------------------------
-
-
-
-
 class PolarsTableModel(QAbstractTableModel):
     """
     Qt-model dat data rechtstreeks uit een Polars DataFrame toont.
@@ -82,7 +78,8 @@ class PolarsTableModel(QAbstractTableModel):
         self._cols = list(self._df.columns)
 
     def set_df(self, df: pl.DataFrame):
-        self.beginResetModel()
+        self.layoutAboutToBeChanged.emit()
+        #self.beginResetModel()
         self._df = df if df is not None else pl.DataFrame()
         self._cols = list(self._df.columns)
         self.endResetModel()
