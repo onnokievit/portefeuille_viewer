@@ -256,6 +256,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         model_all.layoutChanged.connect(apply_widths_all)
         apply_widths_all()
         self.tableViewOptiesOpen.verticalHeader().setDefaultSectionSize(10)
+        self.tableViewOptiesOpen.verticalHeader().setVisible(False)
 
         # Put opties (wel asset-filter)
         model_put = ColoredPolarsTableModel(df_put, kleur_kolommen, kleur_func, self)
@@ -272,6 +273,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         model_put.layoutChanged.connect(apply_widths_put)
         apply_widths_put()
         self.tableViewOptiesOpenPut.verticalHeader().setDefaultSectionSize(10)
+        self.tableViewOptiesOpenPut.verticalHeader().setVisible(False)
 
         # Call opties (wel asset-filter)
         model_call = ColoredPolarsTableModel(df_call, kleur_kolommen, kleur_func, self)
@@ -288,6 +290,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         model_call.layoutChanged.connect(apply_widths_call)
         apply_widths_call()
         self.tableViewOptiesOpenCall.verticalHeader().setDefaultSectionSize(10)
+        self.tableViewOptiesOpenCall.verticalHeader().setVisible(False)
         
 
     def on_asset_selected(self, asset_rollup):

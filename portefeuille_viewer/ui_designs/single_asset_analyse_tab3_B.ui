@@ -36,8 +36,8 @@
        <rect>
         <x>0</x>
         <y>40</y>
-        <width>900</width>
-        <height>701</height>
+        <width>851</width>
+        <height>631</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_3">
@@ -62,7 +62,7 @@
           <number>0</number>
          </property>
          <item>
-          <layout class="QVBoxLayout" name="verticalLayout_4" stretch="62,100">
+          <layout class="QVBoxLayout" name="verticalLayout_4" stretch="70,100">
            <property name="spacing">
             <number>0</number>
            </property>
@@ -112,7 +112,7 @@
      <widget class="QWidget" name="verticalLayoutWidget_4">
       <property name="geometry">
        <rect>
-        <x>910</x>
+        <x>860</x>
         <y>40</y>
         <width>751</width>
         <height>271</height>
@@ -169,8 +169,8 @@
      <widget class="QWidget" name="verticalLayoutWidget_5">
       <property name="geometry">
        <rect>
-        <x>910</x>
-        <y>660</y>
+        <x>880</x>
+        <y>530</y>
         <width>751</width>
         <height>121</height>
        </rect>
@@ -199,8 +199,8 @@
      <widget class="QWidget" name="verticalLayoutWidget_6">
       <property name="geometry">
        <rect>
-        <x>910</x>
-        <y>790</y>
+        <x>880</x>
+        <y>660</y>
         <width>751</width>
         <height>121</height>
        </rect>
