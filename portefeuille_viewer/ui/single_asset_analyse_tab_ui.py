@@ -173,6 +173,18 @@ class Ui_SingleAssetAnalyseTab(object):
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
         self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
+        self.comboBoxActiefInactief = QComboBox(self.widget)
+        self.comboBoxActiefInactief.setObjectName(u"comboBoxActiefInactief")
+        self.comboBoxActiefInactief.setGeometry(QRect(830, 820, 80, 24))
+        self.comboBoxValueGrow = QComboBox(self.widget)
+        self.comboBoxValueGrow.setObjectName(u"comboBoxValueGrow")
+        self.comboBoxValueGrow.setGeometry(QRect(920, 820, 80, 24))
+        self.comboBoxSector = QComboBox(self.widget)
+        self.comboBoxSector.setObjectName(u"comboBoxSector")
+        self.comboBoxSector.setGeometry(QRect(1020, 820, 80, 24))
+        self.comboBoxRegio = QComboBox(self.widget)
+        self.comboBoxRegio.setObjectName(u"comboBoxRegio")
+        self.comboBoxRegio.setGeometry(QRect(1120, 820, 80, 24))
 
         self.verticalLayout_2.addWidget(self.widget)
 
