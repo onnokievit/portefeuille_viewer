@@ -1,5 +1,5 @@
-
 import contextlib
+from portefeuille_viewer.signals import signals
 import polars as pl
 import pyqtgraph as pg
 
@@ -26,6 +26,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         super().__init__(parent)
         self.setupUi(self)
         self._fill_filter_comboboxes()
+        signals.databaseChanged.connect(self.on_database_changed)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
@@ -104,6 +105,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
+    
+    def on_database_changed(self, db_name):
+        # Hier vul je asset_selector, regio, value_grow etc opnieuw
+        print("Database changed:", db_name)
+        self._fill_filter_comboboxes()
+        self._on_filter_changed()
+        self.comboBoxStatus.setCurrentText("active")
+        
 
     @Slot()
     def save_start_date_to_settings(self):
@@ -234,12 +243,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         
     def update_sprinters_table(self):
         import polars as pl
+
         df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_open_sprinters_live", None)
-        if df is None or df.is_empty():
-            df = pl.DataFrame()
-        asset = self.asset_selector.currentText()
+        if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+            self.tableViewSprinters.setModel(None)  # Tabel leegmaken!
+            return
+        else:
+            asset = self.asset_selector.currentText()
+            df = df.filter(pl.col("asset_rollup") == asset)
+        
         # Filter op asset_rollup
-        df = df.filter(pl.col("asset_rollup") == asset)
+        
         # Selecteer relevante kolommen (pas aan indien gewenst)
         df = df.select([
             "broker",
