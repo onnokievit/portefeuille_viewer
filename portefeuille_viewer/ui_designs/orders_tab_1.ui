@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>OrdersTabUI</class>
+ <widget class="QWidget" name="OrdersTabUI">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1387</width>
+    <height>978</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBoxOrders">
+     <property name="title">
+      <string>Orders</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayoutOrders">
+      <item row="0" column="11">
+       <widget class="QLabel" name="labelOptieExp">
+        <property name="text">
+         <string>Optie Exp.</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QLabel" name="labelAssetType">
+        <property name="text">
+         <string>Type</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLabel" name="labelBroker">
+        <property name="text">
+         <string>Broker</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="7">
+       <widget class="SmartCombo" name="comboTransType1"/>
+      </item>
+      <item row="2" column="10">
+       <widget class="QLineEdit" name="lineEditFee2"/>
+      </item>
+      <item row="1" column="3">
+       <widget class="SmartCombo" name="comboBroker1"/>
+      </item>
+      <item row="1" column="9">
+       <widget class="QLineEdit" name="lineEditPrijs1"/>
+      </item>
+      <item row="1" column="12">
+       <widget class="QLineEdit" name="lineEditOptieStrike1"/>
+      </item>
+      <item row="2" column="11">
+       <widget class="QLineEdit" name="lineEditOptieExp2"/>
+      </item>
+      <item row="2" column="5">
+       <widget class="SmartCombo" name="comboAssetType2"/>
+      </item>
+      <item row="2" column="4">
+       <widget class="SmartCombo" name="comboAssetRollup2"/>
+      </item>
+      <item row="0" column="10">
+       <widget class="QLabel" name="labelFee">
+        <property name="text">
+         <string>Fee</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="6">
+       <widget class="SmartCombo" name="comboDetail2"/>
+      </item>
+      <item row="2" column="8">
+       <widget class="QLineEdit" name="lineEditAantal2"/>
+      </item>
+      <item row="0" column="7">
+       <widget class="QLabel" name="labelTransType">
+        <property name="text">
+         <string>Koop/Verkoop</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="12">
+       <widget class="QLineEdit" name="lineEditOptieStrike2"/>
+      </item>
+      <item row="2" column="3">
+       <widget class="SmartCombo" name="comboBroker2"/>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="labelOorsprong2">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="labelOorsprong">
+        <property name="text">
+         <string>Oorsprong</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="11">
+       <widget class="QLineEdit" name="lineEditOptieExp1"/>
+      </item>
+      <item row="1" column="10">
+       <widget class="QLineEdit" name="lineEditFee1"/>
+      </item>
+      <item row="0" column="8">
+       <widget class="QLabel" name="labelAantal">
+        <property name="text">
+         <string>Aantal</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="SmartCombo" name="comboOorsprong1"/>
+      </item>
+      <item row="2" column="9">
+       <widget class="QLineEdit" name="lineEditPrijs2"/>
+      </item>
+      <item row="0" column="9">
+       <widget class="QLabel" name="labelPrijs">
+        <property name="text">
+         <string>Prijs</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="13">
+       <widget class="QLabel" name="labelOptieCP">
+        <property name="text">
+         <string>Call/Put</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="6">
+       <widget class="QLabel" name="labelDetail">
+        <property name="text">
+         <string>Asset Detail</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="4">
+       <widget class="SmartCombo" name="comboAssetRollup1"/>
+      </item>
+      <item row="1" column="5">
+       <widget class="SmartCombo" name="comboAssetType1"/>
+      </item>
+      <item row="1" column="8">
+       <widget class="QLineEdit" name="lineEditAantal1"/>
+      </item>
+      <item row="1" column="13">
+       <widget class="SmartCombo" name="comboOptieCP1"/>
+      </item>
+      <item row="1" column="6">
+       <widget class="SmartCombo" name="comboDetail1"/>
+      </item>
+      <item row="2" column="13">
+       <widget class="SmartCombo" name="comboOptieCP2"/>
+      </item>
+      <item row="2" column="7">
+       <widget class="SmartCombo" name="comboTransType2"/>
+      </item>
+      <item row="0" column="4">
+       <widget class="QLabel" name="labelAssetRollup">
+        <property name="text">
+         <string>Asset Rollup</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="12">
+       <widget class="QLabel" name="labelOptieStrike">
+        <property name="text">
+         <string>Optie Strike</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QDateEdit" name="dateEditOrder1"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QDateEdit" name="dateEditOrder2"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutButtons">
+     <item>
+      <widget class="QPushButton" name="buttonSave">
+       <property name="text">
+        <string>Opslaan</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonReset">
+       <property name="text">
+        <string>Reset</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonDelete">
+       <property name="styleSheet">
+        <string notr="true">background-color: rgb(255, 107, 107);
+color: rgb(255, 255, 255);</string>
+       </property>
+       <property name="text">
+        <string>Verwijderen</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="labelDatabase">
+       <property name="text">
+        <string>Database:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="comboDatabase"/>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="labelFilter">
+       <property name="text">
+        <string>Filter:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="lineEditFilter"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonClearFilters">
+       <property name="text">
+        <string>Filters wissen</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTableView" name="tableViewOrders"/>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SmartCombo</class>
+   <extends>QComboBox</extends>
+   <header>.smartcombo.h</header>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>comboOorsprong1</tabstop>
+  <tabstop>comboBroker1</tabstop>
+  <tabstop>comboAssetRollup1</tabstop>
+  <tabstop>comboAssetType1</tabstop>
+  <tabstop>comboDetail1</tabstop>
+  <tabstop>comboTransType1</tabstop>
+  <tabstop>lineEditAantal1</tabstop>
+  <tabstop>lineEditPrijs1</tabstop>
+  <tabstop>lineEditFee1</tabstop>
+  <tabstop>lineEditOptieExp1</tabstop>
+  <tabstop>lineEditOptieStrike1</tabstop>
+  <tabstop>comboOptieCP1</tabstop>
+  <tabstop>comboBroker2</tabstop>
+  <tabstop>comboAssetRollup2</tabstop>
+  <tabstop>comboAssetType2</tabstop>
+  <tabstop>comboDetail2</tabstop>
+  <tabstop>comboTransType2</tabstop>
+  <tabstop>lineEditAantal2</tabstop>
+  <tabstop>lineEditPrijs2</tabstop>
+  <tabstop>lineEditFee2</tabstop>
+  <tabstop>lineEditOptieExp2</tabstop>
+  <tabstop>lineEditOptieStrike2</tabstop>
+  <tabstop>comboOptieCP2</tabstop>
+  <tabstop>buttonSave</tabstop>
+  <tabstop>buttonReset</tabstop>
+  <tabstop>buttonDelete</tabstop>
+  <tabstop>comboDatabase</tabstop>
+  <tabstop>lineEditFilter</tabstop>
+  <tabstop>buttonClearFilters</tabstop>
+  <tabstop>dateEditOrder1</tabstop>
+  <tabstop>dateEditOrder2</tabstop>
+  <tabstop>tableViewOrders</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

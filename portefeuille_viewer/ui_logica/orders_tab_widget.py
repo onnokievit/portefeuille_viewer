@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime
 
 from PySide6.QtWidgets import QWidget, QMessageBox,QAbstractItemView, QLineEdit
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QDate
 
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin  # ← nieuw
@@ -44,6 +44,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         
         self.order1 = {
             "cb_oorsprong": self.comboOorsprong1,
+            "datum": self.dateEditOrder1,
             "broker": self.comboBroker1,
             "asset_rollup": self.comboAssetRollup1,
             "asset_type": self.comboAssetType1,
@@ -58,6 +59,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         }
         self.order2 = {
             "cb_oorsprong": None,
+            "datum": self.dateEditOrder2,
             "broker": self.comboBroker2,
             "asset_rollup": self.comboAssetRollup2,
             "asset_type": self.comboAssetType2,
@@ -111,7 +113,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, self.comboDetail2,
             self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,
             self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2, self.labelDetail, 
-            self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP
+            self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP, self.dateEditOrder2  # <-- deze toevoegen!
         ]:
             widget.setVisible(False)
         for lbl in [
@@ -151,6 +153,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self._init_table()
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         self.comboOorsprong1.setFocus()
+        self.dateEditOrder1.setDate(QDate.currentDate())
+        self.dateEditOrder2.setDate(QDate.currentDate())
         # ...koppel overige events indien nodig
         # self.load_table_data()
 
@@ -384,7 +388,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         zichtbaar = self.bepaal_order2_visibility(value)
         for widget in [
             self.comboBroker2, self.comboAssetRollup2, self.comboAssetType2, 
-            self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,
+            self.comboTransType2, self.lineEditAantal2, self.lineEditPrijs2, self.lineEditFee2,self.dateEditOrder2,
             #self.comboDetail2, self.lineEditOptieExp2, self.lineEditOptieStrike2, self.comboOptieCP2
         ]:
             widget.setVisible(zichtbaar)
@@ -530,6 +534,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
         eerste_order = dict(
             transactie_oorsprong=self.comboOorsprong1.currentText() or None,
+            datum=self.order1["datum"].date().toString("yyyy-MM-dd"),
             broker=self.comboBroker1.currentText() or None,
             asset_rollup=self.comboAssetRollup1.currentText() or None,
             asset_type=at1 or None,
@@ -548,6 +553,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             at2 = self.comboAssetType2.currentText()
             tweede_order = dict(
                 transactie_oorsprong=self.comboOorsprong1.currentText(),
+                datum=self.order2["datum"].date().toString("yyyy-MM-dd"),
                 broker=self.comboBroker2.currentText() or None,
                 asset_rollup=self.comboAssetRollup2.currentText() or None,
                 asset_type=at2 or None,
@@ -882,7 +888,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         part["asset_rollup"].setCurrentText(str(row.get("asset_rollup") or ""))
         part["asset_type"].setCurrentText(str(row.get("asset_type") or ""))
         part["trans_type"].setCurrentText(str(row.get("transactie_type") or ""))
-
+        # Datumveld vullen
+        datum_str = str(row.get("datum") or "")
+        if datum_str:
+            try:
+                # Probeer verschillende formaten
+                dt = pd.to_datetime(datum_str, errors="coerce")
+                if pd.notna(dt):
+                    qdate = QDate(dt.year, dt.month, dt.day)
+                    part["datum"].setDate(qdate)
+            except Exception:
+                part["datum"].setDate(QDate.currentDate())
+        else:
+            part["datum"].setDate(QDate.currentDate())
         # Numerieke/tekstvelden
         def to_str_or_empty(v): return "" if v in (None, "") else str(v)
 
@@ -919,7 +937,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             
     def _show_order2(self, visible: bool):
         widgets = [
-            "broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee",
+            "datum","broker","asset_rollup","asset_type","detail","trans_type","aantal","prijs","fee","exp","strike","cp" #test van het verbergen van order 2 
             #"lbl_exp","exp","lbl_strike","strike","lbl_cp","cp"
         ]
         for key in widgets:
@@ -952,6 +970,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             for k in ["aantal", "prijs", "fee", "exp", "strike"]:
                 if part.get(k) is not None:
                     part[k].clear()
+            if part.get("datum") is not None:
+                part["datum"].setDate(QDate.currentDate())
         self.toggle_order1_fields()
         # Ensure order2 reference lists are reattached before toggling visibility
         # so that when the row is shown again its combos have fresh models.
@@ -970,7 +990,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         visible = oorspr in ["DOORROL", "ASSIGN", "EXERCISE"]
 
         widgets = [
-            "broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
+            "datum","broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
             #"lbl_exp","exp","lbl_strike","strike","lbl_cp","cp","detail",
         ]
         for key in widgets:
