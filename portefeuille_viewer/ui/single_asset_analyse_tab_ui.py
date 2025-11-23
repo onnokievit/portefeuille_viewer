@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'single_asset_analyse_tab3_C.ui'
+## Form generated from reading UI file 'single_asset_analyse_tab3_D.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.3
 ##
@@ -35,18 +35,18 @@ class Ui_SingleAssetAnalyseTab(object):
         self.widget.setObjectName(u"widget")
         self.priceAantalChart = PlotWidget(self.widget)
         self.priceAantalChart.setObjectName(u"priceAantalChart")
-        self.priceAantalChart.setGeometry(QRect(4, 680, 401, 121))
+        self.priceAantalChart.setGeometry(QRect(14, 680, 391, 121))
         self.verticalLayout_7 = QVBoxLayout(self.priceAantalChart)
         self.verticalLayout_7.setSpacing(9)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.verticalLayout_7.setContentsMargins(9, 9, 9, 9)
         self.verticalLayoutWidget_4 = QWidget(self.widget)
         self.verticalLayoutWidget_4.setObjectName(u"verticalLayoutWidget_4")
-        self.verticalLayoutWidget_4.setGeometry(QRect(60, 820, 711, 261))
-        self.verticalLayout_6 = QVBoxLayout(self.verticalLayoutWidget_4)
-        self.verticalLayout_6.setSpacing(2)
-        self.verticalLayout_6.setObjectName(u"verticalLayout_6")
-        self.verticalLayout_6.setContentsMargins(2, 2, 2, 2)
+        self.verticalLayoutWidget_4.setGeometry(QRect(10, 310, 811, 361))
+        self.layoutChart = QVBoxLayout(self.verticalLayoutWidget_4)
+        self.layoutChart.setSpacing(2)
+        self.layoutChart.setObjectName(u"layoutChart")
+        self.layoutChart.setContentsMargins(2, 2, 2, 2)
         self.resultaatChart = PlotWidget(self.widget)
         self.resultaatChart.setObjectName(u"resultaatChart")
         self.resultaatChart.setGeometry(QRect(410, 680, 411, 121))
@@ -87,12 +87,14 @@ class Ui_SingleAssetAnalyseTab(object):
         self.asset_selector = QComboBox(self.horizontalLayoutWidget)
         self.asset_selector.setObjectName(u"asset_selector")
         self.asset_selector.setMaximumSize(QSize(150, 16777215))
+        self.asset_selector.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.asset_selector, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.stepSizeBox = QDoubleSpinBox(self.horizontalLayoutWidget)
         self.stepSizeBox.setObjectName(u"stepSizeBox")
         self.stepSizeBox.setMaximumSize(QSize(80, 16777215))
+        self.stepSizeBox.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.stepSizeBox.setDecimals(6)
         self.stepSizeBox.setValue(0.020000000000000)
 
@@ -101,6 +103,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.startDate = QDateEdit(self.horizontalLayoutWidget)
         self.startDate.setObjectName(u"startDate")
         self.startDate.setMaximumSize(QSize(120, 16777215))
+        self.startDate.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.startDate.setCalendarPopup(True)
 
         self.horizontalLayout.addWidget(self.startDate, 0, Qt.AlignmentFlag.AlignLeft)
@@ -108,6 +111,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.endDate = QDateEdit(self.horizontalLayoutWidget)
         self.endDate.setObjectName(u"endDate")
         self.endDate.setMaximumSize(QSize(120, 16777215))
+        self.endDate.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.endDate.setCalendarPopup(True)
 
         self.horizontalLayout.addWidget(self.endDate, 0, Qt.AlignmentFlag.AlignLeft)
@@ -115,24 +119,28 @@ class Ui_SingleAssetAnalyseTab(object):
         self.comboBoxStatus = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxStatus.setObjectName(u"comboBoxStatus")
         self.comboBoxStatus.setMaximumSize(QSize(80, 16777215))
+        self.comboBoxStatus.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.comboBoxStatus)
 
         self.comboBoxValueGrow = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxValueGrow.setObjectName(u"comboBoxValueGrow")
         self.comboBoxValueGrow.setMaximumSize(QSize(80, 16777215))
+        self.comboBoxValueGrow.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.comboBoxValueGrow)
 
         self.comboBoxSector = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxSector.setObjectName(u"comboBoxSector")
         self.comboBoxSector.setMaximumSize(QSize(140, 16777215))
+        self.comboBoxSector.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.comboBoxSector)
 
         self.comboBoxRegio = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxRegio.setObjectName(u"comboBoxRegio")
         self.comboBoxRegio.setMaximumSize(QSize(60, 16777215))
+        self.comboBoxRegio.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.comboBoxRegio)
 
@@ -146,16 +154,22 @@ class Ui_SingleAssetAnalyseTab(object):
         self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.horizontalSpacer_2 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
+
         self.lineEditFilterOptiesOpen = QLineEdit(self.horizontalLayoutWidget_2)
         self.lineEditFilterOptiesOpen.setObjectName(u"lineEditFilterOptiesOpen")
         self.lineEditFilterOptiesOpen.setMinimumSize(QSize(300, 24))
         self.lineEditFilterOptiesOpen.setMaximumSize(QSize(450, 16777215))
+        self.lineEditFilterOptiesOpen.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
-        self.horizontalLayout_2.addWidget(self.lineEditFilterOptiesOpen, 0, Qt.AlignmentFlag.AlignLeft)
+        self.horizontalLayout_2.addWidget(self.lineEditFilterOptiesOpen, 0, Qt.AlignmentFlag.AlignRight)
 
         self.buttonClearFiltersOptiesOpen = QPushButton(self.horizontalLayoutWidget_2)
         self.buttonClearFiltersOptiesOpen.setObjectName(u"buttonClearFiltersOptiesOpen")
         self.buttonClearFiltersOptiesOpen.setMaximumSize(QSize(150, 16777215))
+        self.buttonClearFiltersOptiesOpen.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout_2.addWidget(self.buttonClearFiltersOptiesOpen, 0, Qt.AlignmentFlag.AlignRight)
 
@@ -183,13 +197,6 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.verticalLayout_12.addWidget(self.tableViewSprinters)
 
-        self.verticalLayoutWidget_3 = QWidget(self.widget)
-        self.verticalLayoutWidget_3.setObjectName(u"verticalLayoutWidget_3")
-        self.verticalLayoutWidget_3.setGeometry(QRect(6, 310, 811, 361))
-        self.layoutChart = QVBoxLayout(self.verticalLayoutWidget_3)
-        self.layoutChart.setSpacing(10)
-        self.layoutChart.setObjectName(u"layoutChart")
-        self.layoutChart.setContentsMargins(0, 0, 0, 0)
         self.payoff_table = QTableWidget(self.widget)
         self.payoff_table.setObjectName(u"payoff_table")
         self.payoff_table.setGeometry(QRect(6, 40, 811, 257))
