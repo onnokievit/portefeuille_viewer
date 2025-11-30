@@ -1,5 +1,5 @@
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QHeaderView, QMessageBox, QFileDialog
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from portefeuille_viewer.ui.repository_tester_ui import Ui_Form
 from portefeuille_viewer.ui.models import PolarsTableModel
@@ -15,11 +15,40 @@ class RepositoryTesterTab(QWidget):
         super().__init__(parent)
         self.ui = Ui_Form()
         self.ui.setupUi(self)
+        self.ui.btnExportExcel.clicked.connect(self.on_btnExportExcel_clicked)
+        self.ui.tableView.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
         # Populate combobox
         self._populate_selector()
         self.ui.comboBox.currentIndexChanged.connect(self._on_selection_changed)
         self._show_placeholder()
+
+    @Slot()
+    def on_btnExportExcel_clicked(self):
+        """Exporteer de huidige zichtbare tabel naar Excel, met snapshotnaam in bestandsnaam."""
+        try:
+            df = self.model._df
+            if df is None or df.is_empty():
+                QMessageBox.warning(self, "Exporteren mislukt", "Geen data om te exporteren.")
+                return
+            pdf = df.to_pandas()
+            # Gebruik de huidige snapshotnaam voor het bestand
+            snapshot_name = getattr(self, "current_snapshot_key", "snapshot")
+            fname, _ = QFileDialog.getSaveFileName(
+                self,
+                "Opslaan als Excel",
+                f"{snapshot_name}.xlsx",
+                "Excel Files (*.xlsx)"
+            )
+            if fname:
+                pdf.to_excel(fname, index=False)
+                QMessageBox.information(self, "Export geslaagd", f"Snapshot succesvol opgeslagen als:\n{fname}")
+        except Exception as e:
+            QMessageBox.critical(self, "Exporteren mislukt", f"Fout bij exporteren:\n{e}")
+
+
+
 
     def _populate_selector(self):
         self.ui.comboBox.clear()
@@ -49,7 +78,7 @@ class RepositoryTesterTab(QWidget):
 
     def _display_snapshot_key(self, key):
         data = getattr(SNAPSHOT_STORE, key, None)
-
+        self.current_snapshot_key = key
         # Lege DataFrame als data None is
         if data is None:
             df = pl.DataFrame({})
