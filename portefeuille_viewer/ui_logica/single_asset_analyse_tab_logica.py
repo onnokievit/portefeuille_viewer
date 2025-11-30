@@ -574,7 +574,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         live_price = 100
 
         ib_symbol = ib_currency = None
-        df_rollup = getattr(SNAPSHOT_STORE, "snapshot_asset_rollup_data", None)
+        df_rollup = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
         if df_rollup is not None and hasattr(df_rollup, "filter"):
             with contextlib.suppress(Exception):
                 row = df_rollup.filter(pl.col("asset_rollup") == asset_rollup)
@@ -867,7 +867,7 @@ class SingleAssetAnalyseLogic:
         )
         self.df_gesloten_aandelen = self.df_aandelen
 
-        df = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        df = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         factor = 1.0
         if df is not None and df.height > 0:
             row = df.filter(pl.col("asset_rollup") == asset_rollup)

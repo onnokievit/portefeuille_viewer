@@ -156,7 +156,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         df_total = pl.concat([df_grouped_optie, df_grouped_sprinter], how="vertical")
 
 
-        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map.is_empty():
             return pl.DataFrame()
         # Selecteer relevante velden uit asset_map

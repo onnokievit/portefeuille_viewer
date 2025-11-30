@@ -115,7 +115,7 @@ class PortfolioEngine(QObject):
         try:
             # Converteer naar format (ib_symbol, ib_currency, prim_exchange)
             from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-            asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+            asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
 
             if asset_map is None or asset_map.is_empty():
                 print("PortfolioEngine: asset_rollup_data snapshot empty, nothing to subscribe")
@@ -151,14 +151,14 @@ class PortfolioEngine(QObject):
     def get_symbols_to_subscribe(self):
         """
         Collect all symbols that need live price subscriptions.
-        Haalt IB symbolen uit snapshot_asset_rollup_data.
+        Haalt IB symbolen uit repository_snapshot_asset_rollup_data.
         
         Returns:
             list: All unique IB symbols that should be subscribed
         """
         from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
-        if SNAPSHOT_STORE.snapshot_asset_rollup_data is None or SNAPSHOT_STORE.snapshot_asset_rollup_data.is_empty():
+        if SNAPSHOT_STORE.repository_snapshot_asset_rollup_data is None or SNAPSHOT_STORE.repository_snapshot_asset_rollup_data.is_empty():
             print("PortfolioEngine: No asset rollup data available for subscriptions")
             return []
 
@@ -170,8 +170,8 @@ class PortfolioEngine(QObject):
 
     # TODO Rename this here and in `get_symbols_to_subscribe`
     def _extracted_from_get_symbols_to_subscribe_17(self, SNAPSHOT_STORE):
-        # Haal alle ib_symbol waarden uit snapshot_asset_rollup_data
-        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        # Haal alle ib_symbol waarden uit repository_snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map is None or asset_map.is_empty():
             return []
 

@@ -44,9 +44,9 @@ class LiveAggregatorSprinters(QObject):
     def _load_and_prepare_data(self):
         if SNAPSHOT_STORE.repository_snapshot_open_sprinters is None:
             raise ValueError("repository_snapshot_open_sprinters is niet geladen in SnapshotStore")
-        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map is None or asset_map.is_empty():
-            raise ValueError("snapshot_asset_rollup_data is niet geladen")
+            raise ValueError("repository_snapshot_asset_rollup_data is niet geladen")
         sprinter_ref = getattr(SNAPSHOT_STORE, "repository_snapshot_sprinter_referentie_data", None)
         if sprinter_ref is None or sprinter_ref.is_empty():
             raise ValueError("repository_snapshot_sprinter_referentie_data is niet geladen")
