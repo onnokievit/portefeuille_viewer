@@ -1,5 +1,5 @@
 import contextlib
-from portefeuille_viewer.signals import signals
+
 import polars as pl
 import pyqtgraph as pg
 
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt
 
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.models import ColoredPolarsTableModel  
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
