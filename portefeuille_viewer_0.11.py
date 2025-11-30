@@ -14,7 +14,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
-from portefeuille_viewer.data import live_aggregator_asset_rollup_data
+# from portefeuille_viewer.data import live_aggregator_asset_rollup_data
 import time
 
 # Qt warning filter: onderdruk specifieke QSortFilterProxyModel warning
@@ -44,12 +44,13 @@ def initial_load_datasets():
     repository.load_dividend_data()
     repository.load_per_dag_asset_result()
     repository.load_optie_referentie_data()
+    repository.build_live_aggregator_asset_rollup()
     
     live_aggregator_aandelen = LiveAggregatorAandelen()
     live_aggregator_opties = LiveAggregatorOpties()
     live_aggregator_aandelen.process_live_update
     live_aggregator_opties.process_live_update
-    live_aggregator_asset_rollup_data.build_live_aggregator_asset_rollup()   
+       
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Datasets geladen in {elapsed_time:.2f} seconden.")

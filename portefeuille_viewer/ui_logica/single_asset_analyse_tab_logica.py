@@ -143,7 +143,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             self.on_asset_selected(assets[0])
 
     def _fill_filter_comboboxes(self):
-        df = getattr(SNAPSHOT_STORE, "live_aggregator_asset_rollup_data", None)
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
         if df is None or df.height == 0:
             return
         df = df.filter(
@@ -813,7 +813,7 @@ class SingleAssetAnalyseLogic:
         self.snapshot_df = None  # for clarity, but always use repository_per_dag_asset_result
 
     def load_assets(self, regio=None, status=None, value_grow=None, sector=None):
-        df = getattr(SNAPSHOT_STORE, "live_aggregator_asset_rollup_data", None)
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
         if df is None or df.height == 0:
             return []
 
