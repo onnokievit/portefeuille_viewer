@@ -77,7 +77,7 @@ def load_asset_rollup_data() -> pl.DataFrame:
     # sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.safe_write("snapshot_asset_rollup_data", df)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_asset_rollup_data", df)
     return compact_float64(df)
 
 # ------------------------------------------------------------
@@ -956,7 +956,7 @@ def load_live_prices():
 
 def build_live_aggregator_asset_rollup():
     # Haal basis asset info op
-    df_assets = SNAPSHOT_STORE.snapshot_asset_rollup_data
+    df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
     if df_assets is None or df_assets.height == 0:
         return pl.DataFrame({})
 

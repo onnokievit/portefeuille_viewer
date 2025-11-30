@@ -49,7 +49,7 @@ class LiveAggregatorAandelen(QObject):
             raise ValueError("repository_snapshot_aandelen is niet geladen in SnapshotStore")
         
         # Laad asset_map voor IB symbolen
-        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map.is_empty():
             return pl.DataFrame()
         

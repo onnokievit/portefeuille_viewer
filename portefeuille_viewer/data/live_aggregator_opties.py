@@ -48,9 +48,9 @@ class LiveAggregatorOpties(QObject):
             raise ValueError("snapshot_load_open_opties_from_tx is niet geladen in SnapshotStore")
         
         # Laad asset_map voor IB symbolen
-        asset_map = SNAPSHOT_STORE.snapshot_asset_rollup_data
+        asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map is None or asset_map.is_empty():
-            raise ValueError("snapshot_asset_rollup_data is niet geladen")
+            raise ValueError("repository_snapshot_asset_rollup_data is niet geladen")
         
         # Selecteer relevante velden uit asset_map
         asset_map = asset_map.select([
