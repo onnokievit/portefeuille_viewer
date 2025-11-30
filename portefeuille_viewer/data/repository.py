@@ -923,7 +923,7 @@ def refresh_all_snapshots():
     load_gesloten_sprinters_from_tx()
     load_dividend_data()
     load_per_dag_asset_result()
-    build_live_aggregator_asset_rollup()
+    build_repository_active_asset_rollup_data()
 
 try:
     from portefeuille_viewer.signals import signals
@@ -954,7 +954,7 @@ def load_live_prices():
     last_prices = load_last_prices_dict()
     SNAPSHOT_STORE.live_prices = last_prices
 
-def build_live_aggregator_asset_rollup():
+def build_repository_active_asset_rollup_data():
     # Haal basis asset info op
     df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
     if df_assets is None or df_assets.height == 0:
@@ -962,6 +962,8 @@ def build_live_aggregator_asset_rollup():
 
     # Haal posities op
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_aandelen
+    df_aandelen = df_aandelen.group_by("asset_rollup").agg(pl.col("aantal_bezit").sum())
+    
     df_sprinters = SNAPSHOT_STORE.repository_snapshot_open_sprinters
     df_opties = SNAPSHOT_STORE.repository_snapshot_load_open_opties
 
@@ -993,3 +995,173 @@ def build_live_aggregator_asset_rollup():
     # Bijvoorbeeld: df_assets.select(['asset_rollup', 'regio', 'sector', 'waarde_groei', 'status'])
     SNAPSHOT_STORE.repository_snapshot_active_asset_rollup_data = df_assets
     return df_assets
+
+def portfolio_value_asset_rollup_opties():
+    # Haal basis asset info op
+    df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+    if df_assets is None or df_assets.height == 0:
+        return pl.DataFrame({})
+
+    # Haal posities op
+    
+    
+    df_opties = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
+        
+    if df_opties is None:
+        raise ValueError("aggregator_snapshot_aandelen_live is niet gevuld!")
+    else:
+        df_opties_waarde = df_opties.with_columns([
+            (pl.col("SomVantransactie_aantal") * pl.col("optie_strike")*-1).alias("waarde_bezit"),
+        ])
+    df_opties_waarde_2 = df_opties_waarde.with_columns([
+        pl.when(pl.col("ITM_OTM") != 0).then(pl.col("waarde_bezit") ).otherwise(None).alias("waarde_ITM"),
+        pl.when(pl.col("ITM_OTM") != 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_ITM"),
+        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_OTM")
+    ])
+
+    df_opties_waarde_2 = df_opties_waarde_2.with_columns([
+        (pl.col("waarde_ITM") ).alias("waarde_ITM"),
+    ])
+
+    df_opties_waarde_2 = df_opties_waarde_2.with_columns(
+        pl.struct(["optie_call_put", "Koers", "optie_strike"])
+        .map_elements(
+            lambda row: estimate_delta(
+                row["optie_call_put"],
+                row["Koers"],
+                row["optie_strike"]
+            ),
+            return_dtype=pl.Float64  # <-- specify the return type here
+        )
+        .alias("delta")
+    )
+    if df_opties_waarde_2 is None:
+        raise ValueError("aggregator_snapshot_aandelen_live is niet gevuld!")
+    else:
+        df_opties_waarde_2 = df_opties_waarde_2.with_columns([
+            
+            (pl.col("SomVantransactie_aantal") * pl.col("Koers") * pl.col("delta")).alias("waarde_bezit_delta"),
+            
+        ])
+    df_opties_waarde_2 = df_opties_waarde_2.drop(["ib_symbol", "SomVantransactie_euro_totaal", "opt_total_result", "SomVantransactie_fee"])
+
+    # JOIN df_assets op df_opties_waarde_3 op asset_rollup, voeg regio, sector, value_grow toe
+    df_opties_waarde_2 = df_opties_waarde_2.join(
+        df_assets.select(["asset_rollup", "regio", "sector", "value_grow"]),
+        on="asset_rollup",
+        how="left"
+    )
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+    df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
+    
+    df_opties_waarde_2 = df_opties_waarde_2.group_by("asset_rollup", "broker", "regio", "sector", "value_grow").agg([
+        pl.sum("waarde_bezit").alias("waarde_bezit"),
+        pl.sum("waarde_ITM").alias("waarde_ITM"),
+        pl.sum("waarde_bezit_delta").alias("waarde_bezit_delta"),
+        pl.sum("aantal_ITM").alias("aantal_ITM"),
+        pl.sum("aantal_OTM").alias("aantal_OTM"),   
+
+        ])
+
+    
+
+
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    
+    
+    return df_opties_waarde_2
+
+
+def estimate_delta(option_type: str, spot: float, strike: float) -> float:
+    """
+    Schat delta op basis van moneyness.
+
+    - Ondersteunt option_type in varianten: "call", "put", "C", "P", hoofd-/kleine letters.
+    - Retourneert None (null) bij ongeldige of ontbrekende invoer i.p.v. exceptie te gooien,
+    - zodat UDF-evaluatie in Polars niet faalt.
+    """
+
+    # Normaliseer option_type en sta C/P toe
+    t = (option_type or "").strip().lower()
+    if t in ("c", "call"):
+        t = "call"
+    elif t in ("p", "put"):
+        t = "put"
+    else:
+        return None  # onbekende type -> null
+
+    # Valideer en converteer inputs
+    try:
+        spot_f = float(spot) if spot is not None else None
+        strike_f = float(strike) if strike is not None else None
+    except (TypeError, ValueError):
+        return None
+
+    if spot_f is None or strike_f is None or spot_f == 0.0:
+        return None
+
+    # Moneyness als % verschil
+    m = (strike_f - spot_f) / spot_f
+
+    # ----------- PUT DELTA -----------
+    if t == "put":
+        if m > 0.10:
+            return -1.00      # deep ITM
+        elif m > 0.05:
+            return -0.75      # ITM
+        elif abs(m) <= 0.05:
+            return -0.50      # ATM
+        elif m > -0.15:
+            return -0.25      # OTM
+        else:
+            return -0.10      # deep OTM
+
+    # ----------- CALL DELTA -----------
+    if t == "call":
+        if m < -0.10:
+            return 1.00       # deep ITM
+        elif m < -0.05:
+            return 0.75       # ITM
+        elif abs(m) <= 0.05:
+            return 0.50       # ATM
+        elif m < 0.15:
+            return 0.25       # OTM
+        else:
+            return 0.10       # deep OTM
+
+    # Fallback (zou niet bereikt moeten worden)
+    return None
+
+
+
+
+def portfolio_value_asset_rollup_aandelen():
+
+    # Haal posities op
+    df_aandelen = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
+
+    if df_aandelen is None:
+        raise ValueError("aggregator_snapshot_aandelen_live is niet gevuld!")
+    else:
+        df_aandelen_waarde = df_aandelen.with_columns([
+            pl.col("broker").fill_null("onbekend").alias("broker"),
+            (pl.col("asset_rollup") ).alias("asset_rollup"),
+            (pl.col("regio") ).alias("regio"),
+            (pl.col("sector") ).alias("sector"),
+            (pl.col("value_grow") ).alias("value_grow"),
+            
+            (pl.col("aantal_bezit") ).alias("aantal_bezit"),
+            (pl.col("aantal_bezit") * pl.col("koers")).alias("waarde_bezit"),
+            
+        ])
+    df_aandelen_waarde = df_aandelen_waarde.drop(["aantal_koop", "aantal_verkoop", "euro_koop", "euro_verkoop", "eq_total_fee", "total_result"])
+    
+    
+    return df_aandelen_waarde

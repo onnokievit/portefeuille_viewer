@@ -15,7 +15,7 @@ class RepositoryTesterTab(QWidget):
         super().__init__(parent)
         self.ui = Ui_Form()
         self.ui.setupUi(self)
-        self.ui.btnExportExcel.clicked.connect(self.on_btnExportExcel_clicked)
+        # self.ui.btnExportExcel.clicked.connect(self.on_btnExportExcel_clicked)
         self.ui.tableView.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
