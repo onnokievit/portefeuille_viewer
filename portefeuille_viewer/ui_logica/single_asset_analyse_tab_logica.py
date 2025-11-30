@@ -26,6 +26,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         super().__init__(parent)
         self.setupUi(self)
         self._fill_filter_comboboxes()
+        self.payoff_matrix = None
         signals.databaseChanged.connect(self.on_database_changed)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
@@ -108,7 +109,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
     
     def on_database_changed(self, db_name):
         # Hier vul je asset_selector, regio, value_grow etc opnieuw
-        print("Database changed:", db_name)
+        #print("Database changed:", db_name)
         self._fill_filter_comboboxes()
         self._on_filter_changed()
         self.comboBoxStatus.setCurrentText("active")
@@ -319,7 +320,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             "waarde_bezit"
         ])
         kleur_kolommen = ["broker", "asset_rollup", "aantal_bezit"]
-        columns = df.columns
+        columns = df.columns #noqa
         def kleur_func(row, colname, kleur_kolommen):
             # Optioneel: eigen kleurfunctie
             return None
@@ -370,12 +371,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         kolombreedtes = {
             "broker": 60,
             "asset_rollup": 75,
-            "Koers": 50,
             "optie_call_put": 30,
             "optie_strike": 50,
             "optie_exp_date": 80,
             "aantal_bezit": 60,
             "premie": 60,
+            "Koers": 50,
             "itm_otm": 60,
             "totaal_resultaat_optie": 60,
             "itm": 35,
@@ -565,11 +566,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             print(f"DEBUG Exception: {e}")
         return None
 
-
-
-
-
     def update_payoff_table(self):
+        #print("Updating payoff table...")
         # Gebaseerd op oude code, maar nu via self.logic
         asset_rollup = self.asset_selector.currentText()
         live_price = 100
@@ -621,24 +619,24 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             self.payoff_table.setVerticalHeaderItem(row, QTableWidgetItem(label))
 
         # Bereken payoff-matrix via self.logic
-        payoff_matrix = [[self.logic.payoff_open_opties(s) for s in steps]]
-        payoff_matrix.append([self.logic.payoff_gesloten_opties(s) for s in steps])
-        payoff_matrix.append([self.logic.payoff_open_sprinters(s) for s in steps])
-        payoff_matrix.append([self.logic.payoff_gesloten_sprinters(s) for s in steps])
-        payoff_matrix.append([self.logic.payoff_open_aandelen(s) for s in steps])
-        payoff_matrix.append([self.logic.payoff_gesloten_aandelen() for _ in steps])
+        self.payoff_matrix = [[self.logic.payoff_open_opties(s) for s in steps]]
+        self.payoff_matrix.append([self.logic.payoff_gesloten_opties(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_open_sprinters(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_gesloten_sprinters(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_open_aandelen(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_gesloten_aandelen() for _ in steps])
 
         dividend_val = self.logic.get_dividend(asset_rollup)
-        payoff_matrix.append([dividend_val for _ in steps])
+        self.payoff_matrix.append([dividend_val for _ in steps])
 
-        payoff_totaal_zonder_fees = [sum(payoff_matrix[row][i] for row in range(7)) for i in range(17)]
-        payoff_matrix.append(payoff_totaal_zonder_fees)
+        payoff_totaal_zonder_fees = [sum(self.payoff_matrix[row][i] for row in range(7)) for i in range(17)]
+        self.payoff_matrix.append(payoff_totaal_zonder_fees)
 
         payoff_fees = self.logic.get_fees(steps)
-        payoff_matrix.append(payoff_fees)
+        self.payoff_matrix.append(payoff_fees)
 
-        payoff_totaal = [payoff_matrix[7][i] + payoff_matrix[8][i] for i in range(17)]
-        payoff_matrix.append(payoff_totaal)
+        payoff_totaal = [self.payoff_matrix[7][i] + self.payoff_matrix[8][i] for i in range(17)]
+        self.payoff_matrix.append(payoff_totaal)
 
         factor = getattr(self.logic, "currency_factor", 1.0)
 
@@ -658,9 +656,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
         for row in range(10):
             for col in range(17):
-                val = payoff_matrix[row][col] / factor
-                item = QTableWidgetItem(str(int(round(val, 0))))
+                val = self.payoff_matrix[row][col] / factor
+                display_val = abs(int(round(val, 0))) if val < 0 else int(round(val, 0))
+                item = QTableWidgetItem(str(display_val))
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                #item = QTableWidgetItem(str(int(round(val, 0))))
+                
                 # Alleen de laatste rij (total_row) bold maken
                 if row == total_row:
                     item.setFont(boldfont)
@@ -711,6 +712,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
 
 
     def update_chart(self):
+        #print("Updating payoff chart...")
+        factor = getattr(self.logic, "currency_factor", 1.0)
         self.plot_widget.clear()
         # x-as: koerswaarden uit de header
         x_values = []
@@ -725,10 +728,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         y_totaal = []
         y_open_opties = []
         for i in range(self.payoff_table.columnCount()):
-            item_totaal = self.payoff_table.item(9, i)
-            item_open_opties = self.payoff_table.item(0, i)
-            totaal_val = float(item_totaal.text()) if item_totaal and item_totaal.text() else 0
-            open_opties_val = float(item_open_opties.text()) if item_open_opties and item_open_opties.text() else 0
+            #item_totaal = self.payoff_table.item(9, i)
+            #totaal_val = float(item_totaal.text()) if item_totaal and item_totaal.text() else 0
+            # item_open_opties = self.payoff_table.item(0, i)
+            # open_opties_val = float(item_open_opties.text()) if item_open_opties and item_open_opties.text() else 0
+            
+            totaal_val = self.payoff_matrix[9][i] / factor
+            open_opties_val = self.payoff_matrix[0][i] / factor
+            
             y_totaal.append(totaal_val)
             y_open_opties.append(open_opties_val)
         y_verschil = [t - o for t, o in zip(y_totaal, y_open_opties)]
@@ -758,7 +765,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         label_col_width = self.payoff_table.verticalHeader().width()
         axis = self.plot_widget.getAxis('left')
         axis.setWidth(label_col_width)
-  
+
         self.plot_widget.setLabel('left', '')
         self.plot_widget.setLabel('bottom', '')
         # self.plot_widget.setTitle('Payoff per koersstap')
@@ -984,12 +991,13 @@ class SingleAssetAnalyseLogic:
         df = df.select([
             "broker",
             "asset_rollup",
-            "Koers",
+            
             pl.col("optie_call_put").alias("optie_call_put"),
             pl.col("optie_strike").alias("optie_strike"),
             pl.col("optie_exp_date").alias("optie_exp_date"),
             pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
             pl.col("SomVantransactie_euro_totaal").alias("premie"),
+            "Koers",
             pl.col("ITM_OTM").alias("itm_otm"),
             pl.col("opt_total_result").alias("totaal_resultaat_optie"),
             pl.col("SomVantransactie_fee").alias("totaal_fees"),
