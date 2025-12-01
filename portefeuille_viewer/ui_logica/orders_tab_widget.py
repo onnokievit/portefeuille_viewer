@@ -291,21 +291,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         global_pos = self.tableViewOrders.horizontalHeader().mapToGlobal(pos)
         self._open_value_popup_for_column(colname, unique_values, global_pos)
     
-    # def _open_value_popup_for_column(self, colname, unique_values, global_pos):
-    #     # Maak een nieuwe popup per kolom
-    #     pop = ColumnFilterPopup(f"Filter: {colname}", unique_values, pre_selected=set(self._col_filters.get(colname, {}).get("in", [])), parent=self)
-    #     pop.move(global_pos)
-    #     pop.acceptedSelection.connect(lambda selected: self._apply_in_filter(colname, selected))
-    #     pop.cleared.connect(lambda: self._apply_in_filter(colname, set()))
-    #     pop.show()
-
-    # def _apply_in_filter(self, colname, selected):
-    #     if not selected:
-    #         self._col_filters.pop(colname, None)
-    #     else:
-    #         self._col_filters[colname] = {"in": selected}
-    #     self._load_initial_records()
-
     def _load_initial_records(self):
 
         self._current_offset = 0
@@ -637,14 +622,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.EDIT_ID2 = None
         self._load_initial_records()
         self.reset_form()
-        # self.ordersCommitted.emit()    # Live-tab verversen
-        # from portefeuille_viewer.signals import signals
-        # signals.ordersCommitted.emit()
-        
-        #self.ordersCommitted.emit()
-        #self.ordersCommitted.emit()
-        #from portefeuille_viewer.signals import signals
-        #signals.ordersCommitted.emit()
+
         return
 
     def _update_transaction_in_snapshot(self, record_id: int, data_dict: dict):
