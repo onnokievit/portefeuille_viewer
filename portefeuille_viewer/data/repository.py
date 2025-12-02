@@ -1033,11 +1033,6 @@ def portfolio_value_asset_rollup_opties_put():
         on="asset_rollup",
         how="left"
     )
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-    SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
     df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
     
     df_opties_waarde_2 = df_opties_waarde_2.group_by("asset_rollup", "broker", "regio", "sector", "value_grow").agg([
@@ -1048,16 +1043,7 @@ def portfolio_value_asset_rollup_opties_put():
         pl.sum("aantal_OTM").alias("aantal_OTM"),   
 
         ])
-
-    
-
-
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
     SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put = df_opties_waarde_2
-    
     #return df_opties_waarde_2
 
 
@@ -1098,7 +1084,7 @@ def estimate_delta(option_type: str, spot: float, strike: float) -> float:
             return -1.00      # deep ITM
         elif m > 0.05:
             return -0.75      # ITM
-        elif abs(m) <= 0.05:
+        elif abs(m) <= 0.025:
             return -0.50      # ATM
         elif m > -0.15:
             return -0.25      # OTM
@@ -1111,7 +1097,7 @@ def estimate_delta(option_type: str, spot: float, strike: float) -> float:
             return 1.00       # deep ITM
         elif m < -0.05:
             return 0.75       # ITM
-        elif abs(m) <= 0.05:
+        elif abs(m) <= 0.025:
             return 0.50       # ATM
         elif m < 0.15:
             return 0.25       # OTM
@@ -1170,3 +1156,83 @@ try:
     # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
 except Exception as e:
     print(f"Waarschuwing: kon signaal niet koppelen: {e}")
+    
+def portfolio_value_asset_rollup_combined():
+    from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+    df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
+    df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put
+
+    if df_aandelen is None or df_opties_put is None:
+        raise ValueError("Een van de benodigde dataframes is niet gevuld!")
+
+    df_opties_put = df_opties_put.group_by("asset_rollup",  "regio", "sector", "value_grow").agg([
+        pl.sum("waarde_bezit").alias("opt_waarde_bezit"),
+        pl.sum("waarde_ITM").alias("opt_waarde_ITM"),
+        pl.sum("waarde_bezit_delta").alias("opt_waarde_bezit_delta"),
+        pl.sum("aantal_ITM").alias("opt_aantal_ITM"),
+        pl.sum("aantal_OTM").alias("opt_aantal_OTM"),   
+        ])
+    df_opties_put = df_opties_put.drop(["regio", "sector", "value_grow"])
+
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_put  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+    
+    df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow").agg([
+        pl.sum("aantal_bezit").alias("aand_aantal_bezit"),
+        pl.sum("waarde_bezit").alias("aand_waarde_bezit"),
+        ])
+        
+    
+    
+    # Join op asset_rollup en broker
+    df_combined = df_aandelen.join(
+        df_opties_put,
+        on=["asset_rollup"],
+        how="outer",
+        # suffix="opt_"
+    )
+
+    df_combined = df_combined.drop(["asset_rollup_right"])
+
+    # Vervang nullen door 0 voor sommaties
+    df_combined = df_combined.with_columns([
+        pl.col("opt_waarde_bezit").fill_null(0).alias("opt_waarde_bezit"),
+        pl.col("opt_waarde_ITM").fill_null(0).alias("opt_waarde_ITM"),
+        pl.col("opt_waarde_bezit_delta").fill_null(0).alias("opt_waarde_bezit_delta"),
+        pl.col("opt_aantal_ITM").fill_null(0).alias("opt_aantal_ITM"),
+        pl.col("opt_aantal_OTM").fill_null(0).alias("opt_aantal_OTM"),
+    ])
+    
+
+    # Bereken totale waarde per asset_rollup en broker
+    df_combined = df_combined.with_columns([
+        (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM"))).alias("total_aantal_lineair"),
+        
+        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit") ).alias("total_waarde_lineair"),
+        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit_delta") ).alias("total_waarde_delta"),
+    ])
+
+    total_portfolio_value_lineair = df_combined['total_waarde_lineair'].sum()
+    total_portfolio_value_delta = df_combined['total_waarde_delta'].sum()
+
+
+    df_combined = df_combined.with_columns([
+        (pl.col("total_waarde_lineair")/total_portfolio_value_lineair).alias("portfolio_total_waarde_lineair_pct"),
+        (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
+    ])
+
+
+
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_combined  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+
+
+    #SNAPSHOT_STORE.repository_snapshot_portfolio_value_combined = df_combined
+    #return df_combined
