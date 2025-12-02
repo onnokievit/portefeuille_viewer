@@ -51,6 +51,7 @@ def initial_load_datasets():
     live_aggregator_opties.process_live_update
     repository.portfolio_value_asset_rollup_opties_put()
     repository.portfolio_value_asset_rollup_aandelen()
+    repository.portfolio_value_asset_rollup_combined()
     
     end_time = time.time()
     elapsed_time = end_time - start_time
