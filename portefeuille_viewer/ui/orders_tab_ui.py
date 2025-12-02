@@ -279,6 +279,7 @@ class Ui_OrdersTabUI(object):
 
         self.tableViewOrders = QTableView(OrdersTabUI)
         self.tableViewOrders.setObjectName(u"tableViewOrders")
+        self.tableViewOrders.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout.addWidget(self.tableViewOrders)
 

@@ -26,6 +26,8 @@ class SnapshotStore:
         self.repository_snapshot_active_asset_rollup_data: pl.DataFrame | None = None  # NIEUW: live asset rollup data met koersen
         self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
         self.repository_snapshot_optie_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor opties
+        self.repository_snapshot_portfolio_value_aandelen: pl.DataFrame | None = None
+        self.repository_snapshot_portfolio_value_optie_put: pl.DataFrame | None = None
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_per_dag_asset_result: pl.DataFrame | None = None
         self.live_prices: dict | None = None
@@ -57,6 +59,8 @@ class SnapshotStore:
         self.repository_snapshot_asset_rollup_data = None
         self.repository_snapshot_active_asset_rollup_data = None
         self.repository_snapshot_sprinter_referentie_data = None
+        self.repository_snapshot_portfolio_value_aandelen = None
+        self.repository_snapshot_portfolio_value_optie_put = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
         self.repository_per_dag_asset_result = None
@@ -81,6 +85,8 @@ class SnapshotStore:
             self.repository_snapshot_active_asset_rollup_data is not None,
             self.repository_snapshot_sprinter_referentie_data is not None,
             self.repository_snapshot_optie_referentie_data is not None,
+            self.repository_snapshot_portfolio_value_aandelen is not None,
+            self.repository_snapshot_portfolio_value_optie_put is not None,
             self.repository_portfolio_dividend is not None,
             self.repository_per_dag_asset_result is not None,
             self.live_prices is not None,
@@ -119,6 +125,10 @@ class SnapshotStore:
             parts.append(f"Repository Sprinter Referentie data: {len(self.repository_snapshot_sprinter_referentie_data)} rijen")
         if self.repository_snapshot_optie_referentie_data is not None:
             parts.append(f"Repository Optie Referentie data: {len(self.repository_snapshot_optie_referentie_data)} rijen")
+        if self.repository_snapshot_portfolio_value_aandelen is not None:
+            parts.append(f"Repository Portfolio Value Aandelen data: {len(self.repository_snapshot_portfolio_value_aandelen)} rijen")
+        if self.repository_snapshot_portfolio_value_optie_put is not None:
+            parts.append(f"Repository Portfolio Value Optie Put data: {len(self.repository_snapshot_portfolio_value_optie_put)} rijen") 
         if self.repository_portfolio_dividend is not None:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.repository_per_dag_asset_result is not None:

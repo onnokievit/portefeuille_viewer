@@ -26,7 +26,7 @@ class Ui_SingleAssetAnalyseTab(object):
     def setupUi(self, SingleAssetAnalyseTab):
         if not SingleAssetAnalyseTab.objectName():
             SingleAssetAnalyseTab.setObjectName(u"SingleAssetAnalyseTab")
-        SingleAssetAnalyseTab.resize(1686, 1089)
+        SingleAssetAnalyseTab.resize(1596, 1043)
         self.verticalLayout_2 = QVBoxLayout(SingleAssetAnalyseTab)
         self.verticalLayout_2.setSpacing(0)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
@@ -63,6 +63,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_8.setContentsMargins(2, 2, 2, 2)
         self.tableViewOptiesOpenCall = QTableView(self.verticalLayoutWidget_5)
         self.tableViewOptiesOpenCall.setObjectName(u"tableViewOptiesOpenCall")
+        self.tableViewOptiesOpenCall.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_8.addWidget(self.tableViewOptiesOpenCall)
 
@@ -75,6 +76,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_10.setContentsMargins(2, 2, 2, 2)
         self.tableViewOptiesOpenPut = QTableView(self.verticalLayoutWidget_6)
         self.tableViewOptiesOpenPut.setObjectName(u"tableViewOptiesOpenPut")
+        self.tableViewOptiesOpenPut.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_10.addWidget(self.tableViewOptiesOpenPut)
 
@@ -182,6 +184,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_11.setContentsMargins(2, 2, 2, 2)
         self.tableViewAandelen = QTableView(self.verticalLayoutWidget_7)
         self.tableViewAandelen.setObjectName(u"tableViewAandelen")
+        self.tableViewAandelen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_11.addWidget(self.tableViewAandelen)
 
@@ -194,19 +197,37 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_12.setContentsMargins(2, 2, 2, 2)
         self.tableViewSprinters = QTableView(self.verticalLayoutWidget_8)
         self.tableViewSprinters.setObjectName(u"tableViewSprinters")
+        self.tableViewSprinters.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_12.addWidget(self.tableViewSprinters)
 
         self.payoff_table = QTableWidget(self.widget)
         self.payoff_table.setObjectName(u"payoff_table")
         self.payoff_table.setGeometry(QRect(6, 40, 811, 257))
+        self.payoff_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.payoff_table.verticalHeader().setMinimumSectionSize(30)
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
         self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
+        self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_2.addWidget(self.widget)
 
+        QWidget.setTabOrder(self.asset_selector, self.stepSizeBox)
+        QWidget.setTabOrder(self.stepSizeBox, self.startDate)
+        QWidget.setTabOrder(self.startDate, self.endDate)
+        QWidget.setTabOrder(self.endDate, self.comboBoxStatus)
+        QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)
+        QWidget.setTabOrder(self.comboBoxValueGrow, self.comboBoxSector)
+        QWidget.setTabOrder(self.comboBoxSector, self.comboBoxRegio)
+        QWidget.setTabOrder(self.comboBoxRegio, self.lineEditFilterOptiesOpen)
+        QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
+        QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.payoff_table)
+        QWidget.setTabOrder(self.payoff_table, self.tableViewOptiesOpen)
+        QWidget.setTabOrder(self.tableViewOptiesOpen, self.tableViewAandelen)
+        QWidget.setTabOrder(self.tableViewAandelen, self.tableViewSprinters)
+        QWidget.setTabOrder(self.tableViewSprinters, self.tableViewOptiesOpenCall)
+        QWidget.setTabOrder(self.tableViewOptiesOpenCall, self.tableViewOptiesOpenPut)
 
         self.retranslateUi(SingleAssetAnalyseTab)
 

@@ -28,6 +28,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.setupUi(self)
         self._fill_filter_comboboxes()
         self.payoff_matrix = None
+        
+        self.priceAantalChart.setFocusPolicy(Qt.NoFocus)
+        self.resultaatChart.setFocusPolicy(Qt.NoFocus)
         signals.databaseChanged.connect(self.on_database_changed)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)

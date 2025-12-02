@@ -913,25 +913,7 @@ def get_next_order_item_no(order_id: int) -> int:
         row = cur.fetchone()
         return (row[0] or 0) + 1
 
-def refresh_all_snapshots():
-    load_alle_transacties()
-    load_aandelen_from_tx()
-    load_open_opties_from_tx()
-    load_gesloten_opties_from_tx()
-    load_gesloten_opties_no_broker()
-    load_open_sprinters_from_tx()
-    load_gesloten_sprinters_from_tx()
-    load_dividend_data()
-    load_per_dag_asset_result()
-    build_repository_active_asset_rollup_data()
 
-try:
-    from portefeuille_viewer.signals import signals
-    signals.ordersCommitted.connect(refresh_all_snapshots)
-    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
-    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
-except Exception as e:
-    print(f"Waarschuwing: kon signaal niet koppelen: {e}")
 
 def load_last_prices_dict():
     from portefeuille_viewer.data.repository import get_connection
@@ -996,7 +978,7 @@ def build_repository_active_asset_rollup_data():
     SNAPSHOT_STORE.repository_snapshot_active_asset_rollup_data = df_assets
     return df_assets
 
-def portfolio_value_asset_rollup_opties():
+def portfolio_value_asset_rollup_opties_put():
     # Haal basis asset info op
     df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
     if df_assets is None or df_assets.height == 0:
@@ -1074,9 +1056,9 @@ def portfolio_value_asset_rollup_opties():
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
     SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put = df_opties_waarde_2
     
-    
-    return df_opties_waarde_2
+    #return df_opties_waarde_2
 
 
 def estimate_delta(option_type: str, spot: float, strike: float) -> float:
@@ -1163,5 +1145,28 @@ def portfolio_value_asset_rollup_aandelen():
         ])
     df_aandelen_waarde = df_aandelen_waarde.drop(["aantal_koop", "aantal_verkoop", "euro_koop", "euro_verkoop", "eq_total_fee", "total_result"])
     
-    
-    return df_aandelen_waarde
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen = df_aandelen_waarde
+    #return df_aandelen_waarde
+
+
+def refresh_all_snapshots():
+    load_alle_transacties()
+    load_aandelen_from_tx()
+    load_open_opties_from_tx()
+    load_gesloten_opties_from_tx()
+    load_gesloten_opties_no_broker()
+    load_open_sprinters_from_tx()
+    load_gesloten_sprinters_from_tx()
+    load_dividend_data()
+    load_per_dag_asset_result()
+    build_repository_active_asset_rollup_data()
+    portfolio_value_asset_rollup_opties_put()
+    portfolio_value_asset_rollup_aandelen()
+
+try:
+    from portefeuille_viewer.signals import signals
+    signals.ordersCommitted.connect(refresh_all_snapshots)
+    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
+    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
+except Exception as e:
+    print(f"Waarschuwing: kon signaal niet koppelen: {e}")

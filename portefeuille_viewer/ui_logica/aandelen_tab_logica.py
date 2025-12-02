@@ -30,7 +30,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			QMessageBox.critical(self, "Exporteren mislukt", f"Fout bij exporteren:\n{e}")
 	"""
 	Tab voor het tonen van de geaggregeerde aandelen-posities uit PortfolioEngine.
-	Kolommen: asset_rollup, koers, aantal_bezit, result_realised, result_non_realised
+	Kolommen: asset_rollup, koers, aantal_bezit, result_realized, result_non_realized
 	"""
 	def __init__(self, portfolio_engine=None, pricefeed=None, parent=None):
 		"""
@@ -40,7 +40,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		
 		:param portfolio_engine: The `portfolio_engine` parameter in the `__init__` method is used to pass
 		an instance of a `PortfolioEngine` class to the `AandelenTab` class. If `portfolio_engine` is
-		provided, it is stored in the `self.engine` attribute of the `Aand
+		provided, it is stored in the `self.engine` attribute of the `Aandelen
 		:param pricefeed: The `pricefeed` parameter in the `__init__` method is used to provide a source of
 		price data for the portfolio engine. If `pricefeed` is not provided explicitly, the code will
 		attempt to use the `pricefeed` attribute of the `portfolio_engine` object. If neither
