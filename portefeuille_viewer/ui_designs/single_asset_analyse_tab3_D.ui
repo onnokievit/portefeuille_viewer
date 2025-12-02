@@ -138,7 +138,11 @@
         <number>2</number>
        </property>
        <item>
-        <widget class="QTableView" name="tableViewOptiesOpenCall"/>
+        <widget class="QTableView" name="tableViewOptiesOpenCall">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -168,7 +172,11 @@
         <number>2</number>
        </property>
        <item>
-        <widget class="QTableView" name="tableViewOptiesOpenPut"/>
+        <widget class="QTableView" name="tableViewOptiesOpenPut">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -399,7 +407,11 @@
         <number>2</number>
        </property>
        <item>
-        <widget class="QTableView" name="tableViewAandelen"/>
+        <widget class="QTableView" name="tableViewAandelen">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -429,7 +441,11 @@
         <number>2</number>
        </property>
        <item>
-        <widget class="QTableView" name="tableViewSprinters"/>
+        <widget class="QTableView" name="tableViewSprinters">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -441,6 +457,9 @@
         <width>811</width>
         <height>257</height>
        </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
       </property>
       <attribute name="verticalHeaderMinimumSectionSize">
        <number>30</number>
@@ -455,6 +474,9 @@
         <height>257</height>
        </rect>
       </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
      </widget>
     </widget>
    </item>
@@ -468,6 +490,24 @@
    <container>1</container>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>asset_selector</tabstop>
+  <tabstop>stepSizeBox</tabstop>
+  <tabstop>startDate</tabstop>
+  <tabstop>endDate</tabstop>
+  <tabstop>comboBoxStatus</tabstop>
+  <tabstop>comboBoxValueGrow</tabstop>
+  <tabstop>comboBoxSector</tabstop>
+  <tabstop>comboBoxRegio</tabstop>
+  <tabstop>lineEditFilterOptiesOpen</tabstop>
+  <tabstop>buttonClearFiltersOptiesOpen</tabstop>
+  <tabstop>payoff_table</tabstop>
+  <tabstop>tableViewOptiesOpen</tabstop>
+  <tabstop>tableViewAandelen</tabstop>
+  <tabstop>tableViewSprinters</tabstop>
+  <tabstop>tableViewOptiesOpenCall</tabstop>
+  <tabstop>tableViewOptiesOpenPut</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

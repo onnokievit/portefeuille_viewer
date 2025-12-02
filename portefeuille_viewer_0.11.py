@@ -45,13 +45,11 @@ def initial_load_datasets():
     repository.load_per_dag_asset_result()
     repository.load_optie_referentie_data()
     repository.build_repository_active_asset_rollup_data()
-    
-    
     live_aggregator_aandelen = LiveAggregatorAandelen()
     live_aggregator_opties = LiveAggregatorOpties()
     live_aggregator_aandelen.process_live_update
     live_aggregator_opties.process_live_update
-    repository.portfolio_value_asset_rollup_opties()
+    repository.portfolio_value_asset_rollup_opties_put()
     repository.portfolio_value_asset_rollup_aandelen()
     
     end_time = time.time()

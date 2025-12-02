@@ -256,7 +256,11 @@ color: rgb(255, 255, 255);</string>
     </layout>
    </item>
    <item>
-    <widget class="QTableView" name="tableViewOrders"/>
+    <widget class="QTableView" name="tableViewOrders">
+     <property name="focusPolicy">
+      <enum>Qt::FocusPolicy::NoFocus</enum>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>
