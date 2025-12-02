@@ -13,7 +13,7 @@ from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.ui.models import PandasTableModel
+from portefeuille_viewer.ui.models import HighlightingPandasTableModel
 from portefeuille_viewer.data.repository import (
     get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
@@ -82,7 +82,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.seek_id = None
         self._snapshot_store = SNAPSHOT_STORE
         self._pandas = pd
-        self._PandasTableModel = PandasTableModel
+        self._PandasTableModel = HighlightingPandasTableModel
 
         # Laad referentielijsten
         self._brokers, self._asset_rollups, self._sprinter_details = load_reference_lists()
@@ -827,6 +827,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                     # print(f"EDIT2 opgehaald. Loading linked record Id {self.EDIT_ID2} into form")
                     self.fill_form_from_row(self.order2, r2, side=2)
                     self._show_order2(True)
+                    # Highlight both linked rows by Id
+                    try:
+                        ids_to_color = [self.EDIT_ID] + ([self.EDIT_ID2] if self.EDIT_ID2 is not None else [])
+                        if hasattr(self._orders_model, "set_highlight_ids"):
+                            self._orders_model.set_highlight_ids(ids_to_color)
+                    except Exception:
+                        pass
                     return
 
             # geen tweede record → forceer weg
@@ -848,6 +855,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 if hasattr(w, "clear"): 
                     w.clear()
             self._show_order2(False)
+            # Clear highlights when only one or none selected
+            try:
+                if hasattr(self._orders_model, "set_highlight_ids"):
+                    ids_to_color = [self.EDIT_ID] if self.EDIT_ID is not None else []
+                    self._orders_model.set_highlight_ids(ids_to_color)
+            except Exception:
+                pass
 
         except Exception as e:
             QMessageBox.critical(self, "Selectie", f"Kon record niet laden:\n{e}")

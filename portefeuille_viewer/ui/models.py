@@ -62,6 +62,45 @@ class PandasTableModel(QAbstractTableModel):
         self.endInsertRows()
 
 
+class HighlightingPandasTableModel(PandasTableModel):
+    """Pandas model that can highlight specific rows by Id via BackgroundRole."""
+    def __init__(self, df: pd.DataFrame, parent=None, highlight_ids=None):
+        super().__init__(df, parent)
+        self._highlight_ids = set(int(i) for i in (highlight_ids or []) if i is not None)
+
+    def set_highlight_ids(self, ids):
+        self._highlight_ids = set(int(i) for i in (ids or []) if i is not None)
+        if self.rowCount() and self.columnCount():
+            tl = self.index(0, 0)
+            br = self.index(self.rowCount() - 1, self.columnCount() - 1)
+            self.dataChanged.emit(tl, br, [Qt.BackgroundRole])
+
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.BackgroundRole and self._highlight_ids and self._df is not None:
+            try:
+                # PandasTableModel ensures column order; find Id column index
+                id_col = self._df.columns.get_loc("Id")
+                row_id = self._df.iat[index.row(), id_col]
+                if pd.notna(row_id):
+                    try:
+                        rid = int(row_id)
+                    except Exception:
+                        rid = None
+                    if rid is not None and rid in self._highlight_ids:
+                        return QBrush(QColor("#FFF2CC"))
+            except Exception:
+                pass
+        return super().data(index, role)
+
+    def set_df(self, df: pd.DataFrame):
+        super().set_df(df)
+        # repaint after dataset change
+        if self.rowCount() and self.columnCount():
+            tl = self.index(0, 0)
+            br = self.index(self.rowCount() - 1, self.columnCount() - 1)
+            self.dataChanged.emit(tl, br, [Qt.BackgroundRole])
+
+
 
 # ------------------------------------------------------------
 # Polars model voor portefeuille (
