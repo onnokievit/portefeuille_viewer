@@ -16,8 +16,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QHeaderView,
-    QPushButton, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget)
+    QPushButton, QSizePolicy, QTableView, QVBoxLayout,
+    QWidget)
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -65,17 +65,16 @@ class Ui_Form(object):
 
         self.verticalLayout.addWidget(self.widget)
 
-        self.tableWidget = QTableWidget(Form)
-        self.tableWidget.setObjectName(u"tableWidget")
-        self.tableWidget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tableView = QTableView(Form)
+        self.tableView.setObjectName(u"tableView")
+        self.tableView.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-        self.verticalLayout.addWidget(self.tableWidget)
+        self.verticalLayout.addWidget(self.tableView)
 
         QWidget.setTabOrder(self.comboBox, self.comboBox_2)
         QWidget.setTabOrder(self.comboBox_2, self.comboBox_3)
         QWidget.setTabOrder(self.comboBox_3, self.comboBox_4)
         QWidget.setTabOrder(self.comboBox_4, self.pushButton_2)
-        QWidget.setTabOrder(self.pushButton_2, self.tableWidget)
 
         self.retranslateUi(Form)
 

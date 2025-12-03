@@ -9,6 +9,7 @@ from portefeuille_viewer.ui_logica.sprinters_open_tab_logica import SprintersOpe
 from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
+from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
@@ -42,6 +43,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.settings_tab, "Settings")
         self.repository_tester_tab = RepositoryTesterTab()
         self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
+        self.portfolio_value_tab = PortfolioValueTab()
+        self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
+
         self.shortcut_focus_tabbar = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
 

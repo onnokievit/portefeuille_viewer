@@ -62,7 +62,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QTableWidget" name="tableWidget">
+    <widget class="QTableView" name="tableView">
      <property name="focusPolicy">
       <enum>Qt::FocusPolicy::NoFocus</enum>
      </property>
@@ -76,7 +76,6 @@
   <tabstop>comboBox_3</tabstop>
   <tabstop>comboBox_4</tabstop>
   <tabstop>pushButton_2</tabstop>
-  <tabstop>tableWidget</tabstop>
  </tabstops>
  <resources/>
  <connections/>

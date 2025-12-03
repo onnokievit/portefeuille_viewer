@@ -9,6 +9,8 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.domain.engine import compact_float64
+
+
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
 
 import warnings # importeer warnings module om waarschuwingen te beheren
@@ -1134,29 +1136,6 @@ def portfolio_value_asset_rollup_aandelen():
     SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen = df_aandelen_waarde
     #return df_aandelen_waarde
 
-
-def refresh_all_snapshots():
-    load_alle_transacties()
-    load_aandelen_from_tx()
-    load_open_opties_from_tx()
-    load_gesloten_opties_from_tx()
-    load_gesloten_opties_no_broker()
-    load_open_sprinters_from_tx()
-    load_gesloten_sprinters_from_tx()
-    load_dividend_data()
-    load_per_dag_asset_result()
-    build_repository_active_asset_rollup_data()
-    portfolio_value_asset_rollup_opties_put()
-    portfolio_value_asset_rollup_aandelen()
-
-try:
-    from portefeuille_viewer.signals import signals
-    signals.ordersCommitted.connect(refresh_all_snapshots)
-    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
-    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
-except Exception as e:
-    print(f"Waarschuwing: kon signaal niet koppelen: {e}")
-    
 def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
@@ -1178,14 +1157,11 @@ def portfolio_value_asset_rollup_combined():
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
     SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_put  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
     
     df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow").agg([
         pl.sum("aantal_bezit").alias("aand_aantal_bezit"),
         pl.sum("waarde_bezit").alias("aand_waarde_bezit"),
         ])
-        
-    
     
     # Join op asset_rollup en broker
     df_combined = df_aandelen.join(
@@ -1205,7 +1181,6 @@ def portfolio_value_asset_rollup_combined():
         pl.col("opt_aantal_ITM").fill_null(0).alias("opt_aantal_ITM"),
         pl.col("opt_aantal_OTM").fill_null(0).alias("opt_aantal_OTM"),
     ])
-    
 
     # Bereken totale waarde per asset_rollup en broker
     df_combined = df_combined.with_columns([
@@ -1218,21 +1193,45 @@ def portfolio_value_asset_rollup_combined():
     total_portfolio_value_lineair = df_combined['total_waarde_lineair'].sum()
     total_portfolio_value_delta = df_combined['total_waarde_delta'].sum()
 
-
     df_combined = df_combined.with_columns([
         (pl.col("total_waarde_lineair")/total_portfolio_value_lineair).alias("portfolio_total_waarde_lineair_pct"),
         (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
     ])
-
-
 
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
     SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_combined  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
-
-
-
-    #SNAPSHOT_STORE.repository_snapshot_portfolio_value_combined = df_combined
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined = df_combined
     #return df_combined
+
+
+def refresh_all_snapshots():
+    load_alle_transacties()
+    load_aandelen_from_tx()
+    load_open_opties_from_tx()
+    load_gesloten_opties_from_tx()
+    load_gesloten_opties_no_broker()
+    load_open_sprinters_from_tx()
+    load_gesloten_sprinters_from_tx()
+    load_asset_rollup_data()
+    load_sprinter_referentie_data()
+    load_dividend_data()
+    load_per_dag_asset_result()
+    load_optie_referentie_data()
+        
+    build_repository_active_asset_rollup_data()
+    portfolio_value_asset_rollup_opties_put()
+    portfolio_value_asset_rollup_aandelen()
+    portfolio_value_asset_rollup_combined()
+
+try:
+    from portefeuille_viewer.signals import signals
+    signals.ordersCommitted.connect(refresh_all_snapshots)
+    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
+    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
+except Exception as e:
+    print(f"Waarschuwing: kon signaal niet koppelen: {e}")
+    
+
