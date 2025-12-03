@@ -1226,12 +1226,12 @@ def refresh_all_snapshots():
     portfolio_value_asset_rollup_aandelen()
     portfolio_value_asset_rollup_combined()
 
-try:
-    from portefeuille_viewer.signals import signals
-    signals.ordersCommitted.connect(refresh_all_snapshots)
-    signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
-    # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
-except Exception as e:
-    print(f"Waarschuwing: kon signaal niet koppelen: {e}")
+# try:
+#     from portefeuille_viewer.signals import signals
+#     signals.ordersCommitted.connect(refresh_all_snapshots)
+#     signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
+#     # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
+# except Exception as e:
+#     print(f"Waarschuwing: kon signaal niet koppelen: {e}")
     
 

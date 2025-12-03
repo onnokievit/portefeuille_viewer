@@ -33,6 +33,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+        self.portfolio_value_tab = PortfolioValueTab()
+        self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
@@ -43,8 +45,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.settings_tab, "Settings")
         self.repository_tester_tab = RepositoryTesterTab()
         self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
-        self.portfolio_value_tab = PortfolioValueTab()
-        self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
+
 
         self.shortcut_focus_tabbar = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
