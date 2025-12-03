@@ -32,6 +32,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.priceAantalChart.setFocusPolicy(Qt.NoFocus)
         self.resultaatChart.setFocusPolicy(Qt.NoFocus)
         signals.databaseChanged.connect(self.on_database_changed)
+        signals.ordersCommitted.connect(self.on_orders_committed)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
@@ -117,6 +118,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self._fill_filter_comboboxes()
         self._on_filter_changed()
         self.comboBoxStatus.setCurrentText("active")
+        
+    def on_orders_committed(self):
+        self.update_opties_open_table()
         
 
     @Slot()

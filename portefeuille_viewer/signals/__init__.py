@@ -21,6 +21,9 @@ class Signals(QObject):
 
     # Optional debug signal
     debugSignal = Signal(str)
+    
+    # In signals.py
+    #liveDataShouldUpdate = Signal()
 
     def queued_emit_databaseChanged(self, db_name: str):
         # Ensure the emit happens on the Qt event loop / main thread
