@@ -84,6 +84,22 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                     return f"{f*100:.1f}%"
                 except Exception:
                     return str(val)
+            # Custom formatting for total_waarde_lineair and total_waarde_delta
+            if colname in ("total_waarde_lineair", "total_waarde_delta"):
+                try:
+                    f = float(val)
+                    # Format: 0 decimals, thousands separator (.), right aligned
+                    s = f"{int(round(f)):,}".replace(",", ".")
+                    return s
+                except Exception:
+                    return str(val)
+            # Custom formatting for koers column
+            if colname == "koers":
+                try:
+                    f = float(val)
+                    return f"{f:,.2f}".replace(",", ".")
+                except Exception:
+                    return str(val)
             # default string
             return str(val)
 
@@ -103,41 +119,50 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                     return "" if val is None else str(val)
 
         if role == Qt.TextAlignmentRole:
-            if colname in self._pct_cols:
+            if colname in self._pct_cols or colname in ("total_waarde_lineair", "total_waarde_delta", "koers"):
                 return Qt.AlignRight | Qt.AlignVCenter
             return Qt.AlignLeft | Qt.AlignVCenter
 
-        if role == Qt.BackgroundRole and colname in self._pct_cols:
-            # Gradient: min = groen, max = rood, ertussen geel
-            try:
-                f = float(val)
-            except Exception:
-                f = 0.0
-            minv, maxv = self._col_minmax.get(colname, (0.0, 1.0))
-            # Avoid div by zero
-            if maxv - minv == 0:
-                t = 0.0
-            else:
-                t = (f - minv) / (maxv - minv)
-                t = max(0.0, min(1.0, t))
-            # Groen (0,180,90) → Geel (255,255,160) → Rood (255,90,90)
-            # t=0: groen, t=0.5: geel, t=1: rood
-            if t < 0.5:
-                # Groen naar geel
-                t2 = t / 0.5
-                r = int(0 + (255 - 0) * t2)
-                g = int(180 + (255 - 180) * t2)
-                b = int(90 + (160 - 90) * t2)
-            else:
-                # Geel naar rood
-                t2 = (t - 0.5) / 0.5
-                r = int(255)
-                g = int(255 - (255 - 90) * t2)
-                b = int(160 - (160 - 90) * t2)
-            color = QColor(r, g, b)
-            return QBrush(color)
-
+        # Red background for negative values in total_waarde_lineair and total_waarde_delta
+        if role == Qt.BackgroundRole:
+            if colname in self._pct_cols:
+                # ...existing code for gradient...
+                try:
+                    f = float(val)
+                except Exception:
+                    f = 0.0
+                minv, maxv = self._col_minmax.get(colname, (0.0, 1.0))
+                # Avoid div by zero
+                if maxv - minv == 0:
+                    t = 0.0
+                else:
+                    t = (f - minv) / (maxv - minv)
+                    t = max(0.0, min(1.0, t))
+                # Groen (0,180,90) → Geel (255,255,160) → Rood (255,90,90)
+                # t=0: groen, t=0.5: geel, t=1: rood
+                if t < 0.5:
+                    # Groen naar geel
+                    t2 = t / 0.5
+                    r = int(0 + (255 - 0) * t2)
+                    g = int(180 + (255 - 180) * t2)
+                    b = int(90 + (160 - 90) * t2)
+                else:
+                    # Geel naar rood
+                    t2 = (t - 0.5) / 0.5
+                    r = int(255)
+                    g = int(255 - (255 - 90) * t2)
+                    b = int(160 - (160 - 90) * t2)
+                color = QColor(r, g, b)
+                return QBrush(color)
+            if colname in ("total_waarde_lineair", "total_waarde_delta"):
+                try:
+                    f = float(val)
+                    if f < 0:
+                        return QBrush(QColor(255, 90, 90))  # Red for negative
+                except Exception:
+                    pass
         return None
+        
 
 class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     """Logic for the portfolio value tab: load snapshot and display colored table."""
@@ -229,11 +254,14 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         # Ensure percent cols exist; if missing, derive safely
         # df = df.drop("aand_aantal_bezit")
 
+
+
         cols_to_keep = [
             "asset_rollup",
             "regio",
             "sector",
             "value_grow",
+            "koers",
             "total_waarde_lineair",
             "total_waarde_delta",
             "portfolio_total_waarde_lineair_pct",
@@ -294,6 +322,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             #"aand_waarde_bezit": 110,
             #"opt_waarde_bezit": 110,
             #"opt_waarde_bezit_delta": 130,
+            "koers": 80,
             "total_waarde_lineair": 130,
             "total_waarde_delta": 130,
             "portfolio_total_waarde_lineair_pct": 160,
