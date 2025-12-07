@@ -171,7 +171,8 @@ class PolarsTableModel(QAbstractTableModel):
         #         return QBrush(QColor("darkgreen") if val >= 0 else QColor("red"))
         if role == Qt.BackgroundRole and col_name.lower().startswith("totaal") and isinstance(val, (int, float)):
             return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
-
+        if role == Qt.BackgroundRole and col_name.lower().startswith("net_change") and isinstance(val, (int, float)):
+            return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
         return None
 
 class ColoredPolarsTableModel(PolarsTableModel):

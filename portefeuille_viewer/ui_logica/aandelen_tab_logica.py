@@ -1,7 +1,9 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QFileDialog, QMessageBox
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QFileDialog, QMessageBox, QStyledItemDelegate, QStyle
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from PySide6.QtWidgets import QTableWidget
+from PySide6.QtGui import QColor
+
 from portefeuille_viewer.ui.aandelen_tab_ui import Ui_AandelenTab
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.ui.models import PolarsTableModel
@@ -9,6 +11,53 @@ from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 import polars as pl
+from datetime import date
+
+class CustomSelectionDelegate(QStyledItemDelegate):
+	def paint(self, painter, option, index):
+		if option.state & QStyle.State_Selected:
+			painter.save()
+			painter.fillRect(option.rect, QColor(255, 230, 153))  # selectie-kleur
+			painter.setPen(QColor(0, 0, 0))
+			text = index.data(Qt.DisplayRole)
+			if index.data(Qt.TextAlignmentRole) is not None:
+				alignment = index.data(Qt.TextAlignmentRole)
+			else:
+				alignment = option.displayAlignment if hasattr(option, 'displayAlignment') else Qt.AlignVCenter | Qt.AlignLeft
+			painter.drawText(option.rect, alignment, str(text))
+			painter.restore()
+		elif option.state & QStyle.State_MouseOver:
+			painter.save()
+			painter.fillRect(option.rect, QColor("#E6F2FF"))  # hover-kleur
+			painter.setPen(QColor(0, 0, 0))
+			text = index.data(Qt.DisplayRole)
+			if index.data(Qt.TextAlignmentRole) is not None:
+				alignment = index.data(Qt.TextAlignmentRole)
+			else:
+				alignment = option.displayAlignment if hasattr(option, 'displayAlignment') else Qt.AlignVCenter | Qt.AlignLeft
+			painter.drawText(option.rect, alignment, str(text))
+			painter.restore()
+		else:
+			super().paint(painter, option, index)
+
+
+# class CustomSelectionDelegate(QStyledItemDelegate):
+# 	def paint(self, painter, option, index):
+# 		if option.state & QStyle.State_MouseOver or option.state & QStyle.State_Selected:
+# 			painter.save()
+# 			painter.fillRect(option.rect, QColor(255, 230, 153))
+# 			painter.setPen(QColor(0, 0, 0))
+# 			text = index.data(Qt.DisplayRole)
+# 			if index.data(Qt.TextAlignmentRole) is not None:
+# 				alignment = index.data(Qt.TextAlignmentRole)
+# 			else:
+# 				alignment = option.displayAlignment if hasattr(option, 'displayAlignment') else Qt.AlignVCenter | Qt.AlignLeft
+# 			painter.drawText(option.rect, alignment, str(text))
+# 			painter.restore()
+# 		else:
+# 			super().paint(painter, option, index)
+
+
 
 class AandelenTab(QWidget, Ui_AandelenTab):
 	@Slot()
@@ -186,10 +235,17 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		df_portfolio_value_combined = SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined
 
 		df_asset_result = SNAPSHOT_STORE.repository_per_dag_asset_result
+		
+		today = date.today()
+		df_asset_result = df_asset_result.filter(pl.col("datum") < today)
+
+
 		if df_asset_result["datum"].dtype == pl.String:
 			df_asset_result = df_asset_result.with_columns(
 				pl.col("datum").str.strptime(pl.Date, "%d/%m/%Y")
 			)
+
+
 		df_aset_result_latest = (
 			df_asset_result
 			.sort(["asset_rollup", "datum"])
@@ -283,7 +339,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			(pl.col("open_sp_transactie_fee") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("open_sp_transactie_fee"),
 			(pl.col("div_en_bel") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("div_en_bel"),
 			(pl.col("totaal") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("totaal"),
-				pl.when(
+			pl.when(
 				(pl.col("close_price").is_not_null()) & (pl.col("close_price") != 0)
 			).then(
 				(pl.col("koers") / pl.col("close_price")) - 1
@@ -365,6 +421,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"totaal_ex_fee",
 			"totaal_inc_fee",
 			"net_change",
+			pl.col("totaal").alias("totaal_prev"),
 			"totaal_fee",
 			"regio", "sector","value_grow","status","portfolio_total_waarde_lineair_pct","portfolio_total_waarde_delta_pct",
 		])
@@ -390,6 +447,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"totaal_ex_fee",
 			"totaal_inc_fee",
 			"net_change",
+			"totaal_prev",
 			"totaal_fee",
 			"regio",
 			"sector",
@@ -434,8 +492,32 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.model = PolarsTableModel(df_sum, self)
 		# Patch the data method to format percentage columns
 		orig_data_method = self.model.data
+		from PySide6.QtGui import QColor
+		def interpolate_color(val, min_val, mid_val, max_val, color_min, color_mid, color_max):
+			if val <= min_val:
+				return QColor(*color_min)
+			elif val >= max_val:
+				return QColor(*color_max)
+			elif val < mid_val:
+				ratio = (val - min_val) / (mid_val - min_val)
+				r = color_min[0] + ratio * (color_mid[0] - color_min[0])
+				g = color_min[1] + ratio * (color_mid[1] - color_min[1])
+				b = color_min[2] + ratio * (color_mid[2] - color_min[2])
+				return QColor(int(r), int(g), int(b))
+			else:
+				ratio = (val - mid_val) / (max_val - mid_val)
+				r = color_mid[0] + ratio * (color_max[0] - color_mid[0])
+				g = color_mid[1] + ratio * (color_max[1] - color_mid[1])
+				b = color_mid[2] + ratio * (color_max[2] - color_mid[2])
+				return QColor(int(r), int(g), int(b))
+
 		def patched_data(index, role):
 			colname = self.model._df.columns[index.column()]
+			# Geselecteerde rij krijgt oranje/geel
+			if role == Qt.BackgroundRole and index.isValid():
+				selection_model = self.parent().tblAandelen.selectionModel() if hasattr(self.parent(), 'tblAandelen') else None
+				if selection_model and selection_model.isSelected(index):
+					return QColor(255, 230, 153)
 			if role == Qt.DisplayRole:
 				if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
 					val = self.model._df[colname][index.row()]
@@ -451,6 +533,18 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 						return str(val)
 			if role == Qt.TextAlignmentRole and colname == "koers_prev":
 				return Qt.AlignRight | Qt.AlignVCenter
+			if role == Qt.BackgroundRole and colname == "pct_change":
+				val = self.model._df[colname][index.row()]
+				try:
+					val = float(val)
+				except Exception:
+					return None
+				return interpolate_color(
+					val, -0.02, 0, 0.02,
+					(255, 102, 102),  # rood
+					(255, 255, 255),  # wit
+					(153, 255, 153)   # groen
+				)
 			return orig_data_method(index, role)
 		self.model.data = patched_data
 
@@ -458,6 +552,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.proxy_model.setSourceModel(self.model)
 		self.proxy_model.setSortRole(Qt.UserRole)
 		self.tblAandelen.setModel(self.proxy_model)
+		# Custom selectie-kleur voor geselecteerde rijen
+		self.tblAandelen.setItemDelegate(CustomSelectionDelegate(self.tblAandelen))
 		if self.current_sort_column >= 0:
 			self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
 
