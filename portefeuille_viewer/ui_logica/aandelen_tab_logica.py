@@ -17,7 +17,7 @@ class CustomSelectionDelegate(QStyledItemDelegate):
 	def paint(self, painter, option, index):
 		if option.state & QStyle.State_Selected:
 			painter.save()
-			painter.fillRect(option.rect, QColor(255, 230, 153))  # selectie-kleur
+			painter.fillRect(option.rect, QColor("#FFF2CC"))  # selectie-kleur
 			painter.setPen(QColor(0, 0, 0))
 			text = index.data(Qt.DisplayRole)
 			if index.data(Qt.TextAlignmentRole) is not None:
