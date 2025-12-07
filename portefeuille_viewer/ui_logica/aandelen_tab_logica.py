@@ -180,6 +180,24 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			])
 		else:
 			df_div_bel = df_dividend
+		
+		df_active_rollup = SNAPSHOT_STORE.repository_snapshot_active_asset_rollup_data
+
+		df_portfolio_value_combined = SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined
+
+		df_asset_result = SNAPSHOT_STORE.repository_per_dag_asset_result
+		if df_asset_result["datum"].dtype == pl.String:
+			df_asset_result = df_asset_result.with_columns(
+				pl.col("datum").str.strptime(pl.Date, "%d/%m/%Y")
+			)
+		df_aset_result_latest = (
+			df_asset_result
+			.sort(["asset_rollup", "datum"])
+			.group_by("asset_rollup")
+			.agg([pl.all().last()])
+		)
+
+
 		########### einde import data ##################################
 		
 		########### Joins ##################################
@@ -208,6 +226,24 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			df_final = df_final.with_columns([
 				pl.coalesce([pl.col("asset_rollup"), pl.col("asset_rollup_div_bel")]).alias("asset_rollup")
 		])
+		df_final = df_final.join(df_active_rollup.select(["asset_rollup","status"]), on=["asset_rollup"], how="left")
+
+		df_final = df_final.join(df_portfolio_value_combined.select(["asset_rollup","portfolio_total_waarde_lineair_pct","portfolio_total_waarde_delta_pct"]), on=["asset_rollup"], how="left")
+
+		df_final = df_final.join(df_aset_result_latest.select(["asset_rollup","close_price","totaal"]), on=["asset_rollup"], how="left")
+
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+		SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_aset_result_latest  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+		# from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+		#SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_final1  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+		# # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
 
 		required_columns = {
 			"open_sp_aantal": 0,
@@ -225,6 +261,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"totaal_resultaat": 0,
 			"totaal_fee": 0,
 			"koers": 0,
+			"status": "",
 			"asset_rollup": "",
 		}
 		for col, default in required_columns.items():
@@ -244,11 +281,17 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			(pl.col("clos_sp_transactie_fee") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("clos_sp_transactie_fee"),
 			(pl.col("open_opt_transactie_fee") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("open_opt_transactie_fee"),
 			(pl.col("open_sp_transactie_fee") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("open_sp_transactie_fee"),
-			(pl.col("div_en_bel") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("div_en_bel")
+			(pl.col("div_en_bel") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("div_en_bel"),
+			(pl.col("totaal") / pl.when(pl.col("regio") == "US").then(EURUSD).otherwise(1)).alias("totaal"),
+				pl.when(
+				(pl.col("close_price").is_not_null()) & (pl.col("close_price") != 0)
+			).then(
+				(pl.col("koers") / pl.col("close_price")) - 1
+			).otherwise(0).alias("pct_change")
 		)
 		########### Sum en berekende kolommen ###############
 		if not df_final.is_empty():
-			df_sum = df_final.group_by("asset_rollup", "koers","regio", "sector","value_grow").agg([
+			df_sum = df_final.group_by("asset_rollup", "koers","regio", "sector","value_grow","status","portfolio_total_waarde_lineair_pct","portfolio_total_waarde_delta_pct","close_price","pct_change").agg([
 				pl.col("eq_aantal_bezit").sum().alias("eq_aantal_bezit"),
 				pl.col("open_sp_aantal").sum().alias("open_sp_aantal"),
 				pl.col("eq_total_result").sum().alias("eq_total_result"),
@@ -262,6 +305,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 				pl.col("open_opt_transactie_fee").sum().alias("open_opt_transactie_fee"),
 				pl.col("open_sp_transactie_fee").sum().alias("open_sp_transactie_fee"),
 				pl.col("div_en_bel").sum().alias("div_en_bel"),
+				pl.col("totaal").sum().alias("totaal"),
 			]).with_columns([
 				(
 					pl.col("eq_total_result")
@@ -290,16 +334,26 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 					+ pl.col("clos_sp_transactie_fee")
 					+ pl.col("open_opt_transactie_fee")
 					+ pl.col("open_sp_transactie_fee")
-				).alias("totaal_fee")
+				).alias("totaal_fee"),
+				# (
+				# 	pl.col("totaal_inc_fee") 
+				# 	- pl.col("totaal")
+				# ).alias("net_change")
 			])
 		else:
 			df_sum = df
+		
+		df_sum = df_sum.with_columns((pl.col("totaal_inc_fee")-pl.col("totaal")).alias("net_change"))
+
+
 		########### einde Sum en berekende kolommen ##################################
 		
 		########### Kolom indeling ##################################
 		df_sum = df_sum.select([
 			"asset_rollup",
+			pl.col("close_price").alias("koers_prev"),
 			"koers",
+			"pct_change",
 			"eq_aantal_bezit",
 			"open_sp_aantal",
 			"eq_total_result",
@@ -310,8 +364,9 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"div_en_bel",
 			"totaal_ex_fee",
 			"totaal_inc_fee",
+			"net_change",
 			"totaal_fee",
-			"regio", "sector","value_grow"
+			"regio", "sector","value_grow","status","portfolio_total_waarde_lineair_pct","portfolio_total_waarde_delta_pct",
 		])
 		for col, filt_dict in (self.col_filters or {}).items():
 			if col not in df_sum.columns:
@@ -321,7 +376,9 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 
 		kolommen = [
 			"asset_rollup",
+			"koers_prev",
 			"koers",
+			"pct_change",
 			"eq_aantal_bezit",
 			"open_sp_aantal",
 			"eq_total_result",
@@ -332,15 +389,19 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"div_en_bel",
 			"totaal_ex_fee",
 			"totaal_inc_fee",
+			"net_change",
 			"totaal_fee",
 			"regio",
 			"sector",
-			"value_grow"
+			"value_grow",
+			"status",
+			"portfolio_total_waarde_lineair_pct",
+			"portfolio_total_waarde_delta_pct"
 		]
 		totalen = {}
 		if not df_sum.is_empty():
 			for col in kolommen:
-				if col in ["asset_rollup", "regio", "sector", "value_grow"]:
+				if col in ["asset_rollup", "regio", "sector", "value_grow", "status","koers_prev", "koers","pct_change","eq_aantal_bezit","open_sp_aantal"]:
 					totalen[col] = "TOTAAL" if col == "asset_rollup" else ""
 				elif col in df_sum.columns:
 					totalen[col] = df_sum[col].sum()
@@ -352,7 +413,13 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.tblTotalen.setColumnCount(len(kolommen))
 		for i, col in enumerate(kolommen):
 			val = totalen[col]
-			if isinstance(val, float):
+			if col in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
+				# Format as percentage with 2 decimals, right aligned
+				try:
+					val_str = f"{float(val) * 100:.2f}%"
+				except Exception:
+					val_str = str(val)
+			elif isinstance(val, float):
 				if "fee" in col or "totaal" in col or "result" in col or "euro" in col:
 					val_str = f"{val:,.2f}"
 				else:
@@ -363,7 +430,30 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 			self.tblTotalen.setItem(0, i, item)
 
+		# Format percentage columns in the main table as well
 		self.model = PolarsTableModel(df_sum, self)
+		# Patch the data method to format percentage columns
+		orig_data_method = self.model.data
+		def patched_data(index, role):
+			colname = self.model._df.columns[index.column()]
+			if role == Qt.DisplayRole:
+				if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
+					val = self.model._df[colname][index.row()]
+					try:
+						return f"{float(val) * 100:.2f}%"
+					except Exception:
+						return str(val)
+				if colname == "koers_prev":
+					val = self.model._df[colname][index.row()]
+					try:
+						return f"{float(val):.2f}"
+					except Exception:
+						return str(val)
+			if role == Qt.TextAlignmentRole and colname == "koers_prev":
+				return Qt.AlignRight | Qt.AlignVCenter
+			return orig_data_method(index, role)
+		self.model.data = patched_data
+
 		self.proxy_model = QSortFilterProxyModel(self)
 		self.proxy_model.setSourceModel(self.model)
 		self.proxy_model.setSortRole(Qt.UserRole)

@@ -64,10 +64,10 @@ def switch_database(name: str):
         with contextlib.suppress(Exception):
             signals.queued_emit_databaseChanged(name)
 
-
 # ------------------------------------------------------------
 # ################ Snapshot store loaders ####################
 # ------------------------------------------------------------
+
 # ------------------------------------------------------------
 # asset_rollup_data referentie tabel ophalen
 # ------------------------------------------------------------
@@ -939,6 +939,10 @@ def load_live_prices():
     SNAPSHOT_STORE.live_prices = last_prices
 
 def build_repository_active_asset_rollup_data():
+    """
+    bouwt de tabel op, die aangeeft of een asset actief is / niet actief is 
+    waarde beschikbaar in veld "status": 'active' of 'inactive'
+    """
     # Haal basis asset info op
     df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
     if df_assets is None or df_assets.height == 0:
@@ -1153,15 +1157,13 @@ def portfolio_value_asset_rollup_combined():
         ])
     df_opties_put = df_opties_put.drop(["regio", "sector", "value_grow"])
 
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-    SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_put  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    
-    df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow").agg([
+
+    df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow","koers").agg([
         pl.sum("aantal_bezit").alias("aand_aantal_bezit"),
         pl.sum("waarde_bezit").alias("aand_waarde_bezit"),
         ])
+
+
     
     # Join op asset_rollup en broker
     df_combined = df_aandelen.join(
@@ -1182,6 +1184,8 @@ def portfolio_value_asset_rollup_combined():
         pl.col("opt_aantal_OTM").fill_null(0).alias("opt_aantal_OTM"),
     ])
 
+
+
     # Bereken totale waarde per asset_rollup en broker
     df_combined = df_combined.with_columns([
         (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM"))).alias("total_aantal_lineair"),
@@ -1198,14 +1202,8 @@ def portfolio_value_asset_rollup_combined():
         (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
     ])
 
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_combined  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
     SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined = df_combined
     #return df_combined
-
 
 def refresh_all_snapshots():
     load_alle_transacties()
@@ -1226,12 +1224,6 @@ def refresh_all_snapshots():
     portfolio_value_asset_rollup_aandelen()
     portfolio_value_asset_rollup_combined()
 
-# try:
-#     from portefeuille_viewer.signals import signals
-#     signals.ordersCommitted.connect(refresh_all_snapshots)
-#     signals.databaseChanged.connect(lambda db_name: refresh_all_snapshots())
-#     # signals.snapshotUpdated.connect(lambda key: refresh_all_snapshots())
-# except Exception as e:
-#     print(f"Waarschuwing: kon signaal niet koppelen: {e}")
+
     
 

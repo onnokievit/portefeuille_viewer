@@ -59,11 +59,12 @@ def refresh_everything():
     live_aggregator_opties.process_live_update()
     repository.portfolio_value_asset_rollup_opties_put()
     repository.portfolio_value_asset_rollup_aandelen()
-    repository.portfolio_value_asset_rollup_combined()
+    repository.portfolio_value_asset_rollup_combined()  
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
     print(SNAPSHOT_STORE.snapshot_store_summary())
+    print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
+    
 
 
 def main():

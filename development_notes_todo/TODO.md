@@ -2,7 +2,7 @@
 aantallen aandelen / aantallen sprinters / aantallen opties put overzicht maken, 
 om exposure te berekenen (portefeuille waarde)
 
-1.1 obv van delta 1 voor put opties
+1.1 obv van synthetische delta 1 voor put opties
 1.2 later, delta's ophalen uit IBKR, en een delta overzicht maken
 
 

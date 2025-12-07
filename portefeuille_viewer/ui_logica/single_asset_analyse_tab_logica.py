@@ -649,6 +649,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         factor = getattr(self.logic, "currency_factor", 1.0)
 
         middle_col = 8
+        sub_total_row = 7
         total_row = 9
         from PySide6.QtGui import QColor, QBrush, QFont
         from PySide6.QtCore import Qt
@@ -671,9 +672,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
                 #item = QTableWidgetItem(str(int(round(val, 0))))
                 
                 # Alleen de laatste rij (total_row) bold maken
+                if row == sub_total_row:
+                #     #item.setFont(boldfont) 
+                    item.setBackground(lightgrey)
                 if row == total_row:
                     item.setFont(boldfont)
                     item.setBackground(lightblue)
+
                 else:
                     # Normale font voor alle andere cellen
                     normalfont = QFont()
