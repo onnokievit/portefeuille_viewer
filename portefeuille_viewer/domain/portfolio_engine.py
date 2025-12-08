@@ -39,7 +39,7 @@ class PortfolioEngine(QObject):
         # Throttling: batch updates instead of processing each price immediately
         self._pending_updates = False
         self._update_timer = QTimer()
-        self._update_timer.setInterval(5000)  # Process updates max every 1500ms
+        self._update_timer.setInterval(10000)  # Process updates max every 1500ms
         self._update_timer.setSingleShot(True)
         self._update_timer.timeout.connect(self._process_batched_updates)
         
@@ -50,13 +50,14 @@ class PortfolioEngine(QObject):
             # Nieuw: timer en flag voor dataUpdated batching
             self._pending_data_update = False
             self._data_update_timer = QTimer()
-            self._data_update_timer.setInterval(5000)
+            self._data_update_timer.setInterval(10000)
             self._data_update_timer.setSingleShot(True)
             self._data_update_timer.timeout.connect(self._emit_data_updated)
 
             # Connect aggregator signals to single slot voor batching
             self.live_aggregator_aandelen.aandelenUpdated.connect(self._on_aggregator_updated)
-            self.live_aggregator_opties.optiesUpdated.connect(self._on_aggregator_updated)
+            if self.live_aggregator_opties:
+                self.live_aggregator_opties.optiesUpdated.connect(self._on_aggregator_updated)
             if self.live_aggregator_sprinters:
                 self.live_aggregator_sprinters.sprintersUpdated.connect(self._on_aggregator_updated)
     def _on_aggregator_updated(self):
@@ -68,7 +69,8 @@ class PortfolioEngine(QObject):
         if self._pending_data_update:
             self.dataUpdated.emit()
             self._pending_data_update = False
-            print("PortfolioEngine: dataUpdated signal emitted after batching")    
+            from datetime import datetime
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: PortfolioEngine - dataUpdated signal emitted after batching")
     print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
     
     def _on_live_price(self, symbol, currency, price):
