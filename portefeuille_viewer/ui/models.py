@@ -115,6 +115,8 @@ class PolarsTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._df = df if df is not None else pl.DataFrame()
         self._cols = list(self._df.columns)
+        # Cache voor achtergrondkleuren
+        self._bg_color_cache = {}
 
     def set_df(self, df: pl.DataFrame):
         self.layoutAboutToBeChanged.emit()
@@ -166,13 +168,21 @@ class PolarsTableModel(QAbstractTableModel):
                 return Qt.AlignCenter | Qt.AlignVCenter
             return Qt.AlignLeft | Qt.AlignVCenter
 
-        # if role == Qt.ForegroundRole and col_name.lower().startswith("totaal"):
-        #     if isinstance(val, (int, float)):
-        #         return QBrush(QColor("darkgreen") if val >= 0 else QColor("red"))
+        # --- Achtergrondkleuren --- met caching
         if role == Qt.BackgroundRole and col_name.lower().startswith("totaal") and isinstance(val, (int, float)):
-            return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
+            cache_key = (col_name, val)
+            if cache_key in self._bg_color_cache:
+                return self._bg_color_cache[cache_key]
+            brush = QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
+            self._bg_color_cache[cache_key] = brush
+            return brush
         if role == Qt.BackgroundRole and col_name.lower().startswith("net_change") and isinstance(val, (int, float)):
-            return QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
+            cache_key = (col_name, val)
+            if cache_key in self._bg_color_cache:
+                return self._bg_color_cache[cache_key]
+            brush = QBrush(QColor("#c6f7c6") if val >= 0 else QColor("#f7c6c6"))
+            self._bg_color_cache[cache_key] = brush
+            return brush
         return None
 
 class ColoredPolarsTableModel(PolarsTableModel):

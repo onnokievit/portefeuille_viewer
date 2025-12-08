@@ -41,23 +41,6 @@ class CustomSelectionDelegate(QStyledItemDelegate):
 			super().paint(painter, option, index)
 
 
-# class CustomSelectionDelegate(QStyledItemDelegate):
-# 	def paint(self, painter, option, index):
-# 		if option.state & QStyle.State_MouseOver or option.state & QStyle.State_Selected:
-# 			painter.save()
-# 			painter.fillRect(option.rect, QColor(255, 230, 153))
-# 			painter.setPen(QColor(0, 0, 0))
-# 			text = index.data(Qt.DisplayRole)
-# 			if index.data(Qt.TextAlignmentRole) is not None:
-# 				alignment = index.data(Qt.TextAlignmentRole)
-# 			else:
-# 				alignment = option.displayAlignment if hasattr(option, 'displayAlignment') else Qt.AlignVCenter | Qt.AlignLeft
-# 			painter.drawText(option.rect, alignment, str(text))
-# 			painter.restore()
-# 		else:
-# 			super().paint(painter, option, index)
-
-
 
 class AandelenTab(QWidget, Ui_AandelenTab):
 	@Slot()
@@ -493,6 +476,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		# Patch the data method to format percentage columns
 		orig_data_method = self.model.data
 		from PySide6.QtGui import QColor
+		# Cache voor kleuren op basis van pct_change waarde
+		self._pct_change_color_cache = {}
 		def interpolate_color(val, min_val, mid_val, max_val, color_min, color_mid, color_max):
 			if val <= min_val:
 				return QColor(*color_min)
@@ -539,12 +524,17 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 					val = float(val)
 				except Exception:
 					return None
-				return interpolate_color(
+				# Cache lookup
+				if val in self._pct_change_color_cache:
+					return self._pct_change_color_cache[val]
+				color = interpolate_color(
 					val, -0.02, 0, 0.02,
 					(255, 102, 102),  # rood
 					(255, 255, 255),  # wit
 					(153, 255, 153)   # groen
 				)
+				self._pct_change_color_cache[val] = color
+				return color
 			return orig_data_method(index, role)
 		self.model.data = patched_data
 
