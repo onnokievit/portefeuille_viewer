@@ -3,6 +3,7 @@ from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.price_utils import build_prices_df
 
 class LiveAggregatorSprinters(QObject):
     """
@@ -65,15 +66,12 @@ class LiveAggregatorSprinters(QObject):
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
 
-        df = df.with_columns([
-            pl.struct(["ib_symbol", "ib_currency"]).map_elements(
-                lambda row: (
-                    self.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and self.live_prices and self.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
-                    else self.last_prices.get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] and self.last_prices else 0.0
-                ),
-                return_dtype=pl.Float64
-            ).alias("Koers")
-        ])
+        prices_df = build_prices_df(self.live_prices, self.last_prices)
+        if not prices_df.is_empty():
+            df = df.join(prices_df, on=["ib_symbol", "ib_currency"], how="left")
+            df = df.with_columns(pl.col("price").fill_null(0.0).alias("Koers")).drop("price")
+        else:
+            df = df.with_columns(pl.lit(0.0).alias("Koers"))
 
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
