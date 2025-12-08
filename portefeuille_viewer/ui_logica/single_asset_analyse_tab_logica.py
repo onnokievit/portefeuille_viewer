@@ -13,6 +13,7 @@ from portefeuille_viewer.ui.models import ColoredPolarsTableModel
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
     bereken_open_sprinters_payoff,
@@ -21,7 +22,7 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
 )
 
 # Widget-class die UI en logica koppelt
-class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
+class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuMixin):
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,6 +111,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
                     table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        # self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        # self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
+
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
     
     def on_database_changed(self, db_name):
@@ -497,7 +501,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         datums = df["datum"].to_list()
         close_price = [float(v) if v is not None and v != '' else 0.0 for v in df["close_price"].to_list()]
         aantal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal_aantal_bezit"].to_list()]
-        totaal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal"].to_list()]
+        factor = getattr(self.logic, "currency_factor", 1.0)
+        totaal = [float(v) / factor if v is not None and v != '' else 0.0 for v in df["totaal"].to_list()]
 
         # --- Chart 1: priceAantalChart (zoals eerder) ---
         pw = self.priceAantalChart
@@ -612,12 +617,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
         self.payoff_table.setHorizontalHeaderLabels(headers)
 
         row_labels = [
-            "Open opties",
-            "Gesloten opties",
-            "Open sprinters",
-            "Gesloten sprinters",
             "Open aandelen",
+            "Open sprinters",
+            "Open opties",
             "Gesloten aandelen",
+            "Gesloten sprinters",
+            "Gesloten opties",
+                        
             "Dividend",
             "Totaal zonder fees",
             "Fees",
@@ -627,13 +633,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab):
             self.payoff_table.setVerticalHeaderItem(row, QTableWidgetItem(label))
 
         # Bereken payoff-matrix via self.logic
-        self.payoff_matrix = [[self.logic.payoff_open_opties(s) for s in steps]]
-        self.payoff_matrix.append([self.logic.payoff_gesloten_opties(s) for s in steps])
+        
+        self.payoff_matrix = [[self.logic.payoff_open_aandelen(s) for s in steps]]
         self.payoff_matrix.append([self.logic.payoff_open_sprinters(s) for s in steps])
-        self.payoff_matrix.append([self.logic.payoff_gesloten_sprinters(s) for s in steps])
-        self.payoff_matrix.append([self.logic.payoff_open_aandelen(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_open_opties(s) for s in steps])
         self.payoff_matrix.append([self.logic.payoff_gesloten_aandelen() for _ in steps])
-
+        self.payoff_matrix.append([self.logic.payoff_gesloten_sprinters(s) for s in steps])
+        self.payoff_matrix.append([self.logic.payoff_gesloten_opties(s) for s in steps])
+        
         dividend_val = self.logic.get_dividend(asset_rollup)
         self.payoff_matrix.append([dividend_val for _ in steps])
 

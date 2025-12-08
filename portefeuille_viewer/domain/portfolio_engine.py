@@ -69,8 +69,8 @@ class PortfolioEngine(QObject):
         if self._pending_data_update:
             self.dataUpdated.emit()
             self._pending_data_update = False
-            from datetime import datetime
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: PortfolioEngine - dataUpdated signal emitted after batching")
+            #from datetime import datetime
+            #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: PortfolioEngine - dataUpdated signal emitted after batching")
     print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
     
     def _on_live_price(self, symbol, currency, price):
