@@ -60,6 +60,7 @@ class PortfolioEngine(QObject):
                 self.live_aggregator_opties.optiesUpdated.connect(self._on_aggregator_updated)
             if self.live_aggregator_sprinters:
                 self.live_aggregator_sprinters.sprintersUpdated.connect(self._on_aggregator_updated)
+    
     def _on_aggregator_updated(self):
         self._pending_data_update = True
         if not self._data_update_timer.isActive():

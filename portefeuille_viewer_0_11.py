@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from PySide6.QtCore import qInstallMessageHandler
 import inspect
-
+from portefeuille_viewer.signals import signals
 
 # Importeer hoofdvenster en benodigde modules
 from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
@@ -69,7 +69,7 @@ def refresh_everything():
 
 def main():
     refresh_everything()
-    from portefeuille_viewer.signals import signals
+    
     # Koppel signalen aan orchestrator
     signals.ordersCommitted.connect(refresh_everything)
     signals.databaseChanged.connect(lambda db_name: refresh_everything())
