@@ -27,7 +27,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self.tableView = self.tableViewOptiesOpen
         self._fill_filter_comboboxes()
+        self._table_model = None  # voor de mixin
+        self._col_filters = {}    # voor de mixin
         self.payoff_matrix = None
         
         self.priceAantalChart.setFocusPolicy(Qt.NoFocus)
@@ -57,7 +60,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.payoff_table.setFont(font)        
                 
         self.logic = SingleAssetAnalyseLogic()
-        self.update_opties_open_table()
+        #self.update_opties_open_table()
         
         self.asset_selector.addItems(self.logic.load_assets())
         
@@ -111,7 +114,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        self.update_opties_open_table()
+        self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
+    
+    def apply_filters(self):
+        self.apply_filters_opties_open()
+
+    def _load_initial_records(self):
+        self.apply_filters_opties_open()
+    
+    
     
     def on_database_changed(self, db_name):
         # Hier vul je asset_selector, regio, value_grow etc opnieuw
@@ -181,6 +195,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 
     def _filter_dataframe(self, df, filters):
+        # print(f"DEBUG: _filter_dataframe filters = {filters}")
         import re
         import polars as pl
         for key, value in filters.items():
@@ -394,7 +409,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # Alle opties (volledige tabel, geen asset-filter)
         model_all = ColoredPolarsTableModel(df_all, kleur_kolommen, kleur_func, self)
-
+        self._table_model = model_all  # model_all is je hoofdmodel voor de tabel
         proxy_model = QSortFilterProxyModel(self)
         proxy_model.setSourceModel(model_all)
         proxy_model.setSortRole(Qt.UserRole)
@@ -556,7 +571,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         rw.getPlotItem().getAxis('bottom').setTicks([ticks])
 
         # Filter functionaliteit voor tableViewOptiesOpen
-        self._col_filters_opties_open = {}
+        self._col_filters = {}
         #self.active_filters_opties_open = {}
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
@@ -706,7 +721,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         filters = {"q": q} if q else {}
 
         # ...en kolomfilters toevoegen...
-        for col, spec in (self._col_filters_opties_open or {}).items():
+        for col, spec in (self._col_filters or {}).items():
             if "in" in spec:
                 filters[f"__in__{col}"] = list(spec["in"])
             if "contains" in spec:
@@ -715,13 +730,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 filters[f"__eq__{col}"] = spec["eq"]
             if "date_on" in spec and spec["date_on"]:
                 filters[f"__date_on__{col}"] = spec["date_on"]
-
+        # self.active_filters = filters
         # print(f"Applying filters opties open: {filters}")
         self.active_filters_opties_open = filters
         self.update_opties_open_table()
 
+
     def _on_clear_filters_opties_open(self):
-        self._col_filters_opties_open.clear()
+        self._col_filters.clear()
         self.lineEditFilterOptiesOpen.clear()
         self.apply_filters_opties_open()
 

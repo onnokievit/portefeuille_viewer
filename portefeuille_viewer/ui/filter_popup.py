@@ -231,8 +231,10 @@ class HeaderFilterMenuMixin:
         self.apply_filters()
     
     def _apply_in_filter(self, colname, selected):
+        #print(f"DEBUG: _apply_in_filter called for {colname} with {selected}")
         if not selected:
             self._col_filters.pop(colname, None)
         else:
             self._col_filters[colname] = {"in": selected}
+            #print(f"DEBUG: self._col_filters = {self._col_filters}")
         self._load_initial_records()
