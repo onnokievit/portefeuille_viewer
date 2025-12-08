@@ -111,9 +111,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
-        # self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        # self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
-
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
     
     def on_database_changed(self, db_name):
@@ -754,7 +751,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             # open_opties_val = float(item_open_opties.text()) if item_open_opties and item_open_opties.text() else 0
             
             totaal_val = self.payoff_matrix[9][i] / factor
-            open_opties_val = self.payoff_matrix[0][i] / factor
+            open_opties_val = self.payoff_matrix[2][i] / factor
             
             y_totaal.append(totaal_val)
             y_open_opties.append(open_opties_val)
