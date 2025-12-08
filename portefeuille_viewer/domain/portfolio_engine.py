@@ -39,7 +39,7 @@ class PortfolioEngine(QObject):
         # Throttling: batch updates instead of processing each price immediately
         self._pending_updates = False
         self._update_timer = QTimer()
-        self._update_timer.setInterval(1000)  # Process updates max every 1500ms
+        self._update_timer.setInterval(5000)  # Process updates max every 1500ms
         self._update_timer.setSingleShot(True)
         self._update_timer.timeout.connect(self._process_batched_updates)
         
@@ -47,13 +47,29 @@ class PortfolioEngine(QObject):
         if self.pricefeed:
             self.pricefeed.priceUpdated.connect(self._on_live_price)
         
-        # Connect aggregator signals to main signal
-        self.live_aggregator_aandelen.aandelenUpdated.connect(self.dataUpdated.emit)
-        self.live_aggregator_opties.optiesUpdated.connect(self.dataUpdated.emit)
-        if self.live_aggregator_sprinters:
-            self.live_aggregator_sprinters.sprintersUpdated.connect(self.dataUpdated.emit)
-        
-        print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
+            # Nieuw: timer en flag voor dataUpdated batching
+            self._pending_data_update = False
+            self._data_update_timer = QTimer()
+            self._data_update_timer.setInterval(5000)
+            self._data_update_timer.setSingleShot(True)
+            self._data_update_timer.timeout.connect(self._emit_data_updated)
+
+            # Connect aggregator signals to single slot voor batching
+            self.live_aggregator_aandelen.aandelenUpdated.connect(self._on_aggregator_updated)
+            self.live_aggregator_opties.optiesUpdated.connect(self._on_aggregator_updated)
+            if self.live_aggregator_sprinters:
+                self.live_aggregator_sprinters.sprintersUpdated.connect(self._on_aggregator_updated)
+    def _on_aggregator_updated(self):
+        self._pending_data_update = True
+        if not self._data_update_timer.isActive():
+            self._data_update_timer.start()
+
+    def _emit_data_updated(self):
+        if self._pending_data_update:
+            self.dataUpdated.emit()
+            self._pending_data_update = False
+            print("PortfolioEngine: dataUpdated signal emitted after batching")    
+    print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
     
     def _on_live_price(self, symbol, currency, price):
         """

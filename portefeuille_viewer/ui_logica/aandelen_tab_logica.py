@@ -421,7 +421,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"totaal_ex_fee",
 			"totaal_inc_fee",
 			"net_change",
-			pl.col("totaal").alias("totaal_prev"),
+			#pl.col("totaal").alias("totaal_prev"),
 			"totaal_fee",
 			"regio", "sector","value_grow","status","portfolio_total_waarde_lineair_pct","portfolio_total_waarde_delta_pct",
 		])
@@ -447,7 +447,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"totaal_ex_fee",
 			"totaal_inc_fee",
 			"net_change",
-			"totaal_prev",
+			#"totaal_prev",
 			"totaal_fee",
 			"regio",
 			"sector",
