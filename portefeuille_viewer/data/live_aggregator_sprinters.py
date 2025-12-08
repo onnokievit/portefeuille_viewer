@@ -22,7 +22,7 @@ class LiveAggregatorSprinters(QObject):
         self._initialize_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.databaseChanged.connect(self._on_database_changed)
-        signals.ordersCommitted.connect(self.refresh_data)
+        #signals.ordersCommitted.connect(self.refresh_data)
     
     def _on_database_changed(self, db_name):
         # Indien relevant, herlaad data bij database wissel

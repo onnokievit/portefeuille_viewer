@@ -23,7 +23,7 @@ class LiveAggregatorOpties(QObject):
         self._initialize_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.databaseChanged.connect(self._on_database_changed)
-        signals.ordersCommitted.connect(self.refresh_data)
+        #signals.ordersCommitted.connect(self.refresh_data)
 
     def _on_database_changed(self, db_name):
         # Indien relevant, herlaad data bij database wissel
@@ -32,6 +32,7 @@ class LiveAggregatorOpties(QObject):
     def _on_snapshot_updated(self, snapshot_key):
         if snapshot_key == "repository_snapshot_load_open_opties":
             self.refresh_data()
+    
     def _initialize_data(self):
         """Laad initiële data uit SnapshotStore en bereid DataFrame voor."""
         try:
