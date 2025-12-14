@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'single_asset_analyse_tab3_D.ui'
+## Form generated from reading UI file 'single_asset_analyse_tab3_E.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.3
 ##
@@ -15,10 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QDateEdit, QDoubleSpinBox,
-    QHBoxLayout, QHeaderView, QLineEdit, QPushButton,
-    QSizePolicy, QSpacerItem, QTableView, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
+    QDoubleSpinBox, QHBoxLayout, QHeaderView, QLineEdit,
+    QPushButton, QSizePolicy, QSpacerItem, QTableView,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from pyqtgraph import PlotWidget
 
@@ -26,7 +26,7 @@ class Ui_SingleAssetAnalyseTab(object):
     def setupUi(self, SingleAssetAnalyseTab):
         if not SingleAssetAnalyseTab.objectName():
             SingleAssetAnalyseTab.setObjectName(u"SingleAssetAnalyseTab")
-        SingleAssetAnalyseTab.resize(1596, 1043)
+        SingleAssetAnalyseTab.resize(1678, 1269)
         self.verticalLayout_2 = QVBoxLayout(SingleAssetAnalyseTab)
         self.verticalLayout_2.setSpacing(0)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
@@ -210,6 +210,21 @@ class Ui_SingleAssetAnalyseTab(object):
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
         self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
         self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.testOrdersTable = QTableWidget(self.widget)
+        self.testOrdersTable.setObjectName(u"testOrdersTable")
+        self.testOrdersTable.setGeometry(QRect(830, 860, 711, 291))
+        self.buttonAddTestOrder = QPushButton(self.widget)
+        self.buttonAddTestOrder.setObjectName(u"buttonAddTestOrder")
+        self.buttonAddTestOrder.setGeometry(QRect(1130, 820, 121, 31))
+        self.buttonDeleteTestOrder = QPushButton(self.widget)
+        self.buttonDeleteTestOrder.setObjectName(u"buttonDeleteTestOrder")
+        self.buttonDeleteTestOrder.setGeometry(QRect(1260, 820, 121, 31))
+        self.checkBoxAssetOrdersOnly = QCheckBox(self.widget)
+        self.checkBoxAssetOrdersOnly.setObjectName(u"checkBoxAssetOrdersOnly")
+        self.checkBoxAssetOrdersOnly.setGeometry(QRect(972, 826, 151, 20))
+        self.checkBoxEnableTestOrders = QCheckBox(self.widget)
+        self.checkBoxEnableTestOrders.setObjectName(u"checkBoxEnableTestOrders")
+        self.checkBoxEnableTestOrders.setGeometry(QRect(832, 826, 121, 20))
 
         self.verticalLayout_2.addWidget(self.widget)
 
@@ -237,5 +252,9 @@ class Ui_SingleAssetAnalyseTab(object):
     def retranslateUi(self, SingleAssetAnalyseTab):
         SingleAssetAnalyseTab.setWindowTitle(QCoreApplication.translate("SingleAssetAnalyseTab", u"Form", None))
         self.buttonClearFiltersOptiesOpen.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Clear Filter", None))
+        self.buttonAddTestOrder.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Add test order", None))
+        self.buttonDeleteTestOrder.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Delete test order", None))
+        self.checkBoxAssetOrdersOnly.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Show asset orders only", None))
+        self.checkBoxEnableTestOrders.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Enable Test Orders", None))
     # retranslateUi
 

@@ -16,6 +16,8 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
+from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db, load_test_orders_cache_from_db
+
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
 import time
 
@@ -42,6 +44,8 @@ live_aggregator_opties = LiveAggregatorOpties()
 
 def refresh_everything():
     start_time = time.time()
+    flush_dirty_test_orders_to_db()
+    load_test_orders_cache_from_db()
     repository.load_alle_transacties()
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()

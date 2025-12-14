@@ -1,12 +1,14 @@
 import contextlib
-
+import re
+from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate
+from PySide6.QtGui import QFont, QColor, QDoubleValidator
+from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView
-from PySide6.QtGui import QFont, QColor
-from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt
+from streamlit import columns
 
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.models import ColoredPolarsTableModel  
@@ -20,6 +22,85 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_gesloten_aandelen_payoff,
     bereken_open_aandelen_payoff,
 )
+from portefeuille_viewer.data.test_order_repository import get_test_orders, insert_test_order, update_test_order, delete_test_order
+from portefeuille_viewer.data.test_order_repository import (
+    get_cached_orders,
+    set_cached_orders_for_asset,
+    flush_dirty_test_orders_to_db,  # voor later timer/exit
+)
+
+
+...
+def auto_fill_year(line_edit: QLineEdit):
+    #print("auto_fill_year called")
+    s = (line_edit.text() or "").strip()
+    if not s:
+        return
+    s_norm = s.replace("\\", "/").replace("-", "/")
+    m = re.match(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?\s*$', s_norm)
+    if not m:
+        return
+    d, mth = int(m.group(1)), int(m.group(2))
+    y = m.group(3)
+    y2 = (datetime.now().year % 100) if y is None else (int(y) if len(y) == 2 else int(y) % 100)
+    #print(f"Auto-filling date: d={d}, mth={mth}, y2={y2}")
+    line_edit.setText(f"{d}-{mth:02d}-{y2:02d}")
+
+
+class ComboDelegate(QStyledItemDelegate):
+    def __init__(self, options, parent=None):
+        super().__init__(parent); self.options = options
+    def createEditor(self, parent, option, index):
+        cb = QComboBox(parent)
+        cb.addItems(self.options)
+        cb.setEditable(True)
+        cb.setInsertPolicy(QComboBox.NoInsert)
+        return cb
+    def setEditorData(self, editor, index):
+        val = index.data(Qt.EditRole) or ""
+        i = editor.findText(val)
+        if i >= 0: editor.setCurrentIndex(i)
+        else: editor.setCurrentText(val)
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.EditRole)
+
+class DoubleDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        le = QLineEdit(parent)
+        le.setValidator(QDoubleValidator(0, 1e12, 2, le))
+        return le
+
+class DateDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        le = QLineEdit(parent)
+        le.editingFinished.connect(lambda le=le: auto_fill_year(le))
+        return le
+
+    def setModelData(self, editor, model, index):
+        auto_fill_year(editor)  # d-mm-yy → dd-mm-yy
+        model.setData(index, editor.text(), Qt.EditRole)
+
+class NumberDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        le = QLineEdit(parent)
+        v = QDoubleValidator(0, 1e12, 2, le)
+        v.setLocale(QLocale(QLocale.C))  # punt als decimaal
+        le.setValidator(v)
+        return le
+
+    def setModelData(self, editor, model, index):
+        txt = editor.text().replace(",", ".").strip()
+        try:
+            val = float(txt)
+            model.setData(index, f"{val:.2f}", Qt.EditRole)
+        except Exception:
+            model.setData(index, txt, Qt.EditRole)
+
+
+
+
+
+
 
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuMixin):
@@ -27,12 +108,75 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+
+        # init logic
+        self.logic = SingleAssetAnalyseLogic()
+
+        # init flags op basis van de checkboxen
+        self.show_all_test_orders = not self.checkBoxAssetOrdersOnly.isChecked()
+        self.enable_test_orders = self.checkBoxEnableTestOrders.isChecked()
+        self.logic.enable_test_orders = self.enable_test_orders
+
+        # pas hier de connecties
+        self.checkBoxAssetOrdersOnly.toggled.connect(self.on_toggle_show_all_test_orders)
+        self.checkBoxEnableTestOrders.toggled.connect(self.on_toggle_enable_test_orders)
+
         self.tableView = self.tableViewOptiesOpen
         self._fill_filter_comboboxes()
         self._table_model = None  # voor de mixin
         self._col_filters = {}    # voor de mixin
         self.payoff_matrix = None
+        asset_rollups = []
+        df_rollups = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
+        if df_rollups is not None and df_rollups.height > 0:
+            asset_rollups = [str(x) for x in df_rollups["asset_rollup"].unique().to_list() if x]
+
+        self.test_order_columns = [
+            "Id", "broker", "asset_rollup", "asset_type","transactie_type","transactie_aantal","transactie_prijs","optie_exp_date",
+            "optie_strike", "optie_call_put", "include"
+            ]
+        display_labels = [
+            "Id", "Broker", "Asset", "Asset Type", "Transactie",
+            "Aantal", "Prijs", "Exp datum",
+            "Strike", "Call/Put", "Include",
+            ]
         
+        
+        self.testOrdersTable.setColumnCount(len(self.test_order_columns))
+        self.testOrdersTable.setHorizontalHeaderLabels(display_labels)
+        self.testOrdersTable.setColumnHidden(0, True)
+        self.testOrdersTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.testOrdersTable.setSortingEnabled(True)
+        # try:
+        #     asset_col = self.test_order_columns.index("asset_rollup")
+        #     self.testOrdersTable.sortItems(asset_col, Qt.AscendingOrder)
+        # except ValueError:
+        #     pass
+        
+        
+        self.df_test_orders = {}
+        self.testOrdersTable.cellChanged.connect(self.on_test_orders_changed)
+        self.buttonAddTestOrder.clicked.connect(self.add_empty_row)  # als je een knop hebt
+        self.buttonDeleteTestOrder.clicked.connect(self.on_delete_test_order_clicked)
+
+        self.testOrdersTable.setItemDelegateForColumn(1, ComboDelegate(["degiro","lynx","interactive"], self))
+        self.testOrdersTable.setItemDelegateForColumn(2, ComboDelegate(asset_rollups, self))
+        self.testOrdersTable.setItemDelegateForColumn(3, ComboDelegate(["aandeel", "optie"], self))
+        self.testOrdersTable.setItemDelegateForColumn(4, ComboDelegate(["koop", "verkoop"], self))
+        # self.testOrdersTable.setItemDelegateForColumn(5, DoubleDelegate(self)) # aantal
+        # self.testOrdersTable.setItemDelegateForColumn(6, DoubleDelegate(self)) # prijs
+        self.testOrdersTable.setItemDelegateForColumn(7, DateDelegate(self)) # exp_date
+        # self.testOrdersTable.setItemDelegateForColumn(8, DoubleDelegate(self)) # strike
+        self.testOrdersTable.setItemDelegateForColumn(9, ComboDelegate(["call", "put"], self))
+
+        num_delegate = NumberDelegate(self)
+        self.testOrdersTable.setItemDelegateForColumn(5, num_delegate) #aantal
+        self.testOrdersTable.setItemDelegateForColumn(6, num_delegate) #prijs
+        self.testOrdersTable.setItemDelegateForColumn(8, num_delegate) #strike
+        
+
+
+
         self.priceAantalChart.setFocusPolicy(Qt.NoFocus)
         self.resultaatChart.setFocusPolicy(Qt.NoFocus)
         signals.databaseChanged.connect(self.on_database_changed)
@@ -115,9 +259,41 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.update_opties_open_table()
+        self.testOrderFlushTimer = QTimer(self)
+        self.testOrderFlushTimer.setInterval(5_000)  # 5s
+        self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
+
         self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
+
+    @Slot(bool)
+    def on_toggle_show_all_test_orders(self, checked):
+        self.show_all_test_orders = not checked  # checked = alleen huidig asset
+        asset = self.asset_selector.currentText()
+        if self.show_all_test_orders:
+            cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
+            df = pl.concat(cache.values(), how="diagonal_relaxed") if cache else None
+        else:
+            df = get_cached_orders(asset)
+        self.fill_test_orders_table(df)
+
+    @Slot(bool)
+    def on_toggle_enable_test_orders(self, checked):
+        self.enable_test_orders = checked
+        self.logic.enable_test_orders = checked
+        asset = self.asset_selector.currentText()
+        self.logic.set_asset(asset)
+        self.update_payoff_table()
+        self.update_chart()
+    
+    def _flush_test_orders_if_dirty(self):
+        flush_dirty_test_orders_to_db()
+        # stop timer als er niets meer dirty is
+        dirty = getattr(SNAPSHOT_STORE, "repository_dirty_test_orders_assets", set()) or set()
+        if not dirty and self.testOrderFlushTimer.isActive():
+            self.testOrderFlushTimer.stop()
+    
     
     def apply_filters(self):
         self.apply_filters_opties_open()
@@ -125,7 +301,196 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _load_initial_records(self):
         self.apply_filters_opties_open()
     
+    @Slot()
+    def on_test_orders_changed(self, row, col):
+        if self.testOrdersTable.signalsBlocked():
+            return
+
+        # Forceer asset_rollup alleen in per-asset modus
+        if "asset_rollup" in self.test_order_columns and not getattr(self, "show_all_test_orders", False):
+            try:
+                idx = self.test_order_columns.index("asset_rollup")
+                asset_val = self.asset_selector.currentText()
+                self.testOrdersTable.blockSignals(True)
+                item = self.testOrdersTable.item(row, idx)
+                if item is None:
+                    item = QTableWidgetItem("")
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    self.testOrdersTable.setItem(row, idx, item)
+                item.setText(asset_val)
+            finally:
+                self.testOrdersTable.blockSignals(False)
+
+        # lees tabel en schrijf naar cache
+        df_asset = self.read_test_orders()
+        if getattr(self, "show_all_test_orders", False):
+            for asset_val in df_asset["asset_rollup"].unique().to_list():
+                df_sub = df_asset.filter(pl.col("asset_rollup") == asset_val)
+                set_cached_orders_for_asset(asset_val, df_sub)
+        else:
+            asset_rollup = self.asset_selector.currentText()
+            set_cached_orders_for_asset(asset_rollup, df_asset)
+
+        # herbereken payoff/chart op huidige asset
+        current_asset = self.asset_selector.currentText()
+        self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
+        self.logic.set_asset(current_asset)
+        self.update_payoff_table()
+        self.update_chart()
+
+        if not self.testOrderFlushTimer.isActive():
+            self.testOrderFlushTimer.start()
+
+
+
+
+
+    def fill_test_orders_table(self, df=None):
+        def fmt_date(val): ...
+        num_cols = {...}
+
+        sorting = self.testOrdersTable.isSortingEnabled()
+        self.testOrdersTable.setSortingEnabled(False)
+        self.testOrdersTable.blockSignals(True)
+        self.testOrdersTable.setRowCount(0)
+
+        if df is None or getattr(df, "is_empty", lambda: True)():
+            self.add_empty_row()
+        else:
+            cols = self.test_order_columns
+            for row_data in df.to_dicts():
+                row = self.testOrdersTable.rowCount()
+                self.testOrdersTable.insertRow(row)
+                for c, name in enumerate(cols):
+                    val = row_data.get(name, "")
+                    if name == "optie_exp_date":
+                        val = fmt_date(val)
+                    if name in num_cols and val not in ("", None):
+                        try:
+                            val = f"{float(val):.2f}"
+                        except Exception:
+                            pass
+                    if name == "include":
+                        item = QTableWidgetItem()
+                        item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                        item.setCheckState(Qt.Checked if val in (None, "", 1, "1", "True", "true") else Qt.Unchecked)
+                    else:
+                        item = QTableWidgetItem(str(val))
+                        item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    self.testOrdersTable.setItem(row, c, item)
+
+        self.testOrdersTable.blockSignals(False)
+        if sorting:
+            try:
+                asset_col = self.test_order_columns.index("asset_rollup")
+                self.testOrdersTable.setSortingEnabled(True)
+                self.testOrdersTable.sortItems(asset_col, Qt.AscendingOrder)
+            except ValueError:
+                self.testOrdersTable.setSortingEnabled(True)
+
+
+
+
+    def add_empty_row(self):
+        sorting = self.testOrdersTable.isSortingEnabled()
+        if sorting:
+            self.testOrdersTable.setSortingEnabled(False)
+        self.testOrdersTable.blockSignals(True)
+
+        row = self.testOrdersTable.rowCount()
+        self.testOrdersTable.insertRow(row)
+        cols = self.test_order_columns
+        for c, name in enumerate(cols):
+            if name == "include":
+                item = QTableWidgetItem()
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                item.setCheckState(Qt.Checked)
+            else:
+                item = QTableWidgetItem("")
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
+                if name == "asset_rollup" and not getattr(self, "show_all_test_orders", False):
+                    item.setText(self.asset_selector.currentText())
+            self.testOrdersTable.setItem(row, c, item)
+
+        self.testOrdersTable.blockSignals(False)
+        if sorting:
+            self.testOrdersTable.setSortingEnabled(True)
+            try:
+                asset_col = self.test_order_columns.index("asset_rollup")
+                self.testOrdersTable.sortItems(asset_col, Qt.AscendingOrder)
+            except ValueError:
+                pass
+
+
+    @Slot()
+    def on_delete_test_order_clicked(self):
+        asset = self.asset_selector.currentText()
+        idx = self.testOrdersTable.currentRow()
+        if idx < 0:
+            return
+        row_data = self.row_to_dict(idx)
+        order_id = row_data.get("Id")
+        # Verwijder uit DB als er een Id is, anders alleen uit UI
+        if order_id:
+            delete_test_order(int(order_id))
+        self.testOrdersTable.blockSignals(True)
+        self.testOrdersTable.removeRow(idx)
+        self.testOrdersTable.blockSignals(False)
+        df = self.read_test_orders()  # leest de huidige (lege) tabel
+        set_cached_orders_for_asset(asset, df)  # cache bijwerken en dirty markeren
+        self.logic.set_asset(asset)
+        self.update_payoff_table(); self.update_chart()
+
+    def _is_valid_test_order(self, data: dict) -> bool:
+        # alles leeg? overslaan
+        if all(not data.get(k) for k in data if k not in ("Id",)):
+            return False
+
+        # verplichte basis
+        if not all(data.get(k) for k in ("asset_rollup", "asset_type", "transactie_type")):
+            return False
+
+        if data["asset_type"] == "aandeel":
+            return all(data.get(k) for k in ("transactie_aantal", "transactie_prijs"))
+        if data["asset_type"] == "optie":
+            return all(data.get(k) for k in (
+                "transactie_aantal", "transactie_prijs",
+                "optie_call_put", "optie_strike", "optie_exp_date"
+            ))
+        return False  # onbekend type
     
+    
+    def read_test_orders(self):
+        cols = self.test_order_columns
+        rows = []
+        for r in range(self.testOrdersTable.rowCount()):
+            row_data = {}
+            for c, name in enumerate(cols):
+                item = self.testOrdersTable.item(r, c)
+                if name == "include":
+                    row_data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
+                else:
+                    row_data[name] = item.text() if item else ""
+            if not self._is_valid_test_order(row_data):
+                continue
+            rows.append(row_data)
+        return pl.DataFrame(rows)
+
+    
+    def row_to_dict(self, row: int) -> dict:
+        cols = self.test_order_columns
+        data = {}
+        for c, name in enumerate(cols):
+            item = self.testOrdersTable.item(row, c)
+            if name == "include":
+                data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
+            else:
+                data[name] = item.text() if item else ""
+        return data
+    
+
+
+
     
     def on_database_changed(self, db_name):
         # Hier vul je asset_selector, regio, value_grow etc opnieuw
@@ -490,7 +855,23 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         
 
     def on_asset_selected(self, asset_rollup):
+        self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
         self.logic.set_asset(asset_rollup)
+        # Laad testorders uit DB voor dit asset en vul de tabel
+        try:
+            if getattr(self, "show_all_test_orders", False):
+                cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
+                if cache:
+                    df_orders = pl.concat(cache.values(), how="diagonal_relaxed")
+                else:
+                    df_orders = None
+            else:
+                df_orders = get_cached_orders(asset_rollup)
+        except Exception as e:
+            print(f"Kon testorders niet laden: {e}")
+            df_orders = None
+        self.fill_test_orders_table(df_orders)
+
         self.update_payoff_table()
         self.update_history_charts()
         self.update_opties_open_table()
@@ -576,6 +957,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
         # ...vervolgens: plot df in je pyqtgraph-widgets
+    
     @staticmethod
     def opties_kleur_func(row, colname, kleur_kolommen, columns):
         try:
@@ -835,6 +1217,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 class SingleAssetAnalyseLogic:
     def __init__(self):
+        self.enable_test_orders = True
         self.df_open_opties = None
         self.df_gesloten_opties = None
         self.df_open_sprinters = None
@@ -870,13 +1253,125 @@ class SingleAssetAnalyseLogic:
             str(a) for a in filtered["asset_rollup"].unique().to_list()
             if a is not None and str(a) != "" and a != "CORRECTIE-BENCHMARK"])
 
+    from portefeuille_viewer.data.test_order_repository import get_cached_orders
+
+    def _augment_with_test_orders(self, asset_rollup: str):
+        from portefeuille_viewer.data.test_order_repository import get_cached_orders
+        
+        df_test = get_cached_orders(asset_rollup)
+        if df_test is None or df_test.is_empty():
+            return
+        if "include" in df_test.columns:
+            df_test = df_test.filter(pl.col("include") == 1)
+
+        # Opties
+        df_test_opties = df_test.filter(pl.col("asset_type") == "optie")
+        if df_test_opties.height > 0:
+            df_opt = (
+                df_test_opties
+                .with_columns([
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                    .then(-pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(pl.col("transactie_aantal").cast(pl.Float64))
+                    .alias("SomVantransactie_aantal"),
+                ])
+                
+                .with_columns([
+                    (-1* pl.col("SomVantransactie_aantal") * pl.col("transactie_prijs").cast(pl.Float64) )
+                        .alias("SomVantransactie_euro_totaal"),
+                    pl.lit(0.0).alias("SomVantransactie_fee"),
+                    (pl.col("optie_strike").cast(pl.Float64) * pl.col("SomVantransactie_aantal")).alias("optie_waarde"),
+                    pl.lit(None).alias("uniek_id"),
+                ])
+                .select([
+                    "uniek_id",
+                    "broker",
+                    "asset_rollup",
+                    "asset_type",
+                    "optie_exp_date",
+                    "optie_strike",
+                    "optie_call_put",
+                    "SomVantransactie_fee",
+                    "SomVantransactie_euro_totaal",
+                    "SomVantransactie_aantal",
+                    "optie_waarde",
+                ])
+            )
+            base_opt = self.df_open_opties if self.df_open_opties is not None else pl.DataFrame()
+            self.df_open_opties = pl.concat([base_opt, df_opt], how="diagonal_relaxed")
+
+        # Aandelen
+        # Aandelen – zelfde structuur als df_aandelen, geen koers/waarde_bezit
+        df_test_eq = df_test.filter(pl.col("asset_type") == "aandeel")
+        if df_test_eq.height > 0:
+            df_eq = (
+                df_test_eq
+                .with_columns([
+                    pl.lit("aandeel").alias("asset_type"),
+                    pl.when(pl.col("transactie_type") == "koop")
+                    .then(pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("aantal_koop"),
+                    pl.when(pl.col("transactie_type") == "koop")
+                      .then(-pl.col("transactie_aantal").cast(pl.Float64) * pl.col("transactie_prijs").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("euro_koop"),
+                    pl.lit(0.0).alias("fee_koop"),
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                    .then(-pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("aantal_verkoop"),
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                      .then(pl.col("transactie_aantal").cast(pl.Float64) * pl.col("transactie_prijs").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("euro_verkoop"),
+                    pl.lit(0.0).alias("fee_verkoop"),
+                ])
+                .group_by(["broker", "asset_rollup", "asset_type"])
+                .agg([
+                    pl.sum("aantal_koop"),
+                    pl.sum("euro_koop"),
+                    pl.sum("fee_koop"),
+                    pl.sum("aantal_verkoop"),
+                    pl.sum("euro_verkoop"),
+                    pl.sum("fee_verkoop"),
+                ])
+                .with_columns([
+                    (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
+                    (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("eq_total_fee"),
+                ])
+                .select([
+                    "broker", "asset_rollup", "asset_type",
+                    "aantal_koop", "euro_koop", "fee_koop",
+                    "aantal_verkoop", "euro_verkoop", "fee_verkoop",
+                    "aantal_bezit", "eq_total_fee",
+                ])
+            )
+            base_eq = self.df_aandelen if self.df_aandelen is not None else pl.DataFrame()
+            self.df_aandelen = pl.concat([base_eq, df_eq], how="diagonal_relaxed")
+
+
+
+
+
+
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        #SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_final1  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+
+
     def set_asset(self, asset_rollup):
         store = SNAPSHOT_STORE
+        
         self.df_open_opties = (
             store.repository_snapshot_load_open_opties.filter(pl.col("asset_rollup") == asset_rollup)
             if store.repository_snapshot_load_open_opties is not None
             else None
         )
+
+        
         self.df_gesloten_opties = (
             store.repository_snapshot_gesloten_opties.filter(pl.col("asset_rollup") == asset_rollup)
             if store.repository_snapshot_gesloten_opties is not None
@@ -897,8 +1392,26 @@ class SingleAssetAnalyseLogic:
             if store.repository_snapshot_aandelen is not None
             else None
         )
+
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = self.df_aandelen  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        
+        
+        if getattr(self, "enable_test_orders", True):
+            self._augment_with_test_orders(asset_rollup)
+        # self._augment_with_test_orders(asset_rollup)
         self.df_gesloten_aandelen = self.df_aandelen
 
+        
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = self.df_aandelen  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
+        
+        
         df = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         factor = 1.0
         if df is not None and df.height > 0:

@@ -32,15 +32,12 @@ class SnapshotStore:
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_per_dag_asset_result: pl.DataFrame | None = None
         self.live_prices: dict | None = None
-
+        self.repository_snapshot_test_orders_cache: dict = {}
+        self.repository_dirty_test_orders_assets: set = set()
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
-
-        # PortfolioEngine aggregated results
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
-        # Active database name (set by repository.switch_database)
         self.active_database_name: str | None = None
-        # internal bookkeeping for last update timestamps per snapshot key
         self._last_update_ts = {}
 
     def clear(self):
@@ -68,6 +65,8 @@ class SnapshotStore:
         self.repository_per_dag_asset_result = None
         self.active_database_name = None
         self.live_prices = None
+        self.repository_snapshot_test_orders_cache = {}
+        self.repository_dirty_test_orders_assets = set()
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -93,6 +92,8 @@ class SnapshotStore:
             self.repository_portfolio_dividend is not None,
             self.repository_per_dag_asset_result is not None,
             self.live_prices is not None,
+            self.repository_snapshot_test_orders_cache is not None,
+            self.repository_dirty_test_orders_assets is not None,
         ])
 
     def snapshot_store_summary(self) -> str:
@@ -142,6 +143,11 @@ class SnapshotStore:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")
         if self.live_prices is not None:
             parts.append(f"Live Prices: {len(self.live_prices)} items") 
+        if self.repository_dirty_test_orders_assets:
+            parts.append(f"Dirty Test Orders Assets: {len(self.repository_dirty_test_orders_assets)} items")
+        if self.repository_snapshot_test_orders_cache:
+            parts.append(f"Test Orders Cache: {len(self.repository_snapshot_test_orders_cache)} items")
+
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
 
