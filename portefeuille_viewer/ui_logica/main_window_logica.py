@@ -70,13 +70,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Stop hier je services, threads, timers, etc.
         if hasattr(self, 'price_feed'):
             with contextlib.suppress(Exception):
-                self.price_feed.shutdown()  # Of een eigen stop-methode
+                self.price_feed.shutdown()
         if hasattr(self, 'portfolio_engine'):
             with contextlib.suppress(Exception):
-                self.portfolio_engine.shutdown()  # of stop(), of een andere naam
+                self.portfolio_engine.shutdown()
         if hasattr(self, 'live_price_updater_stop_event'):
             self.live_price_updater_stop_event.set()
-        # Voeg hier eventueel meer cleanup toe
+
+        # Flush test orders cache naar DB
+        with contextlib.suppress(Exception):
+            from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db
+            flush_dirty_test_orders_to_db()
+
         print("closeEvent triggered!")
         super().closeEvent(event)
 

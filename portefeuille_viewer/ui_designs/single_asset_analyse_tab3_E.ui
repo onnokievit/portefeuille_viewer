@@ -484,8 +484,60 @@
         <x>830</x>
         <y>860</y>
         <width>711</width>
-        <height>192</height>
+        <height>291</height>
        </rect>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="buttonAddTestOrder">
+      <property name="geometry">
+       <rect>
+        <x>1130</x>
+        <y>820</y>
+        <width>121</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add test order</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="buttonDeleteTestOrder">
+      <property name="geometry">
+       <rect>
+        <x>1260</x>
+        <y>820</y>
+        <width>121</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Delete test order</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBoxAssetOrdersOnly">
+      <property name="geometry">
+       <rect>
+        <x>972</x>
+        <y>826</y>
+        <width>151</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Show asset orders only</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBoxEnableTestOrders">
+      <property name="geometry">
+       <rect>
+        <x>832</x>
+        <y>826</y>
+        <width>121</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Enable Test Orders</string>
       </property>
      </widget>
     </widget>
