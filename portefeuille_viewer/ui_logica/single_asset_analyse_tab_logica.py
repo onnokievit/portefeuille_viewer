@@ -351,7 +351,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
         self.tableViewOptiesOpen.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tableViewOptiesOpen.customContextMenuRequested.connect(self._on_comment_context_menu)
+        self.tableViewOptiesOpen.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpen, pos))
+        # Ook contextmenu voor de put/call tabellen
+        self.tableViewOptiesOpenPut.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tableViewOptiesOpenPut.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenPut, pos))
+        self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
 
     @Slot(bool)
     def on_toggle_show_all_test_orders(self, checked):
@@ -837,7 +842,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df_all = df_all.sort(["optie_exp_date", "asset_rollup"])
         if "uniek_id" in df_all.columns:
             uniek_ids = df_all["uniek_id"].to_list()
-            print(f"[comments] update_opties_open_table: {len(uniek_ids)} uniek_ids in df_all")
+            # print(f"[comments] update_opties_open_table: {len(uniek_ids)} uniek_ids in df_all")
             df_comments = fetch_open_optie_comments(uniek_ids)
             # Zorg dat join-keys dezelfde dtype hebben, ook bij lege resultaten
             if df_comments is None or df_comments.is_empty():
@@ -856,7 +861,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             df_all = df_all.with_columns(pl.col("uniek_id").cast(pl.Utf8))
             # join met suffix en daarna coalesce zodat we geen _right kolommen houden
             df_all = df_all.join(df_comments, on="uniek_id", how="left", suffix="_comment_db")
-            print(f"[comments] join result rows={df_all.height}, cols={df_all.columns}")
+            # print(f"[comments] join result rows={df_all.height}, cols={df_all.columns}")
             # coalesce met checks zodat ontbrekende suffix kolommen geen fout geven
             exprs = []
             if "optie_comment_comment_db" in df_all.columns:
@@ -1048,7 +1053,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             comment = row_data.get("optie_comment") or ""
             ts = row_data.get("optie_comment_updated_at")
             color = row_data.get("optie_comment_color") or ""
-            print(f"[comments] commit uniek_id={uniek_id}, comment='{comment}', color='{color}', ts={ts}")
+            # print(f"[comments] commit uniek_id={uniek_id}, comment='{comment}', color='{color}', ts={ts}")
             upsert_open_optie_comment(uniek_id, comment, color, ts)
         except Exception as e:
             print(f"Kon optie-comment niet opslaan: {e}")
@@ -1072,7 +1077,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         """Werk comment/timestamp bij in alle optie modellen zonder volledige reload."""
         if not uniek_id:
             return
-        print(f"[comments] patch models voor {uniek_id} -> '{comment}' color='{color}' @ {ts}")
+        # print(f"[comments] patch models voor {uniek_id} -> '{comment}' color='{color}' @ {ts}")
         def _update_model(model: CommentablePolarsTableModel | None):
             if model is None or getattr(model, "_df", None) is None:
                 return
@@ -1090,22 +1095,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         _update_model(getattr(self, "_model_opties_put", None))
         _update_model(getattr(self, "_model_opties_call", None))
 
-    def _on_comment_context_menu(self, pos):
-        view = self.tableViewOptiesOpen
+    def _on_comment_context_menu_for_view(self, view, pos):
         index = view.indexAt(pos)
         if not index.isValid():
             return
-        # Alleen op de comment-kolom
         model = view.model()
         src_index = model.mapToSource(index) if hasattr(model, "mapToSource") else index
-        col_name = self._table_model._df.columns[src_index.column()]
+        source_model = model.sourceModel() if hasattr(model, "sourceModel") else model
+        cols = getattr(source_model, "_df", None).columns if getattr(source_model, "_df", None) is not None else []
+        if not cols:
+            return
+        col_name = cols[src_index.column()]
         if col_name != "optie_comment":
             return
-        uniek_id_idx = self._table_model._df.columns.index("uniek_id")
-        color_idx = self._table_model._df.columns.index("optie_comment_color") if "optie_comment_color" in self._table_model._df.columns else None
-        current_uniek_id = self._table_model._df[src_index.row(), uniek_id_idx]
-        current_comment = self._table_model._df[src_index.row(), src_index.column()] or ""
-        current_color = self._table_model._df[src_index.row(), color_idx] if color_idx is not None else ""
+        try:
+            uniek_id_idx = cols.index("uniek_id")
+        except ValueError:
+            return
+        color_idx = cols.index("optie_comment_color") if "optie_comment_color" in cols else None
+        current_uniek_id = source_model._df[src_index.row(), uniek_id_idx]
+        current_comment = source_model._df[src_index.row(), src_index.column()] or ""
+        current_color = source_model._df[src_index.row(), color_idx] if color_idx is not None else ""
 
         menu = QMenu(self)
         color_actions = {
@@ -1113,6 +1123,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "Rood": "#f8d7da",
             "Oranje": "#ffeeba",
             "Groen": "#d4edda",
+            "Grijs": "#bfbfbf",
         }
         for label, hexval in color_actions.items():
             act = QAction(label, menu)
@@ -1134,7 +1145,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             hexval = chosen.data()
 
-        # Sla nieuwe kleur op als nieuw record met bestaande comment
         try:
             upsert_open_optie_comment(current_uniek_id, current_comment, hexval)
             latest = fetch_open_optie_comments([current_uniek_id])

@@ -924,7 +924,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
                 pl.col("optie_comment_updated_at").first().alias("optie_comment_updated_at"),
             ])
         )
-        print(f"[comments] fetched {pl_df.height} latest comments from cache for {len(uniek_ids)} ids")
+        # print(f"[comments] fetched {pl_df.height} latest comments from cache for {len(uniek_ids)} ids")
         return pl_df
     except Exception as exc:
         print(f"[comments] fetch from cache failed: {exc}")
@@ -971,7 +971,7 @@ def load_open_optie_comments_cache():
         pl.col("optie_comment_color").cast(pl.Utf8),
     ])
     SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl_df
-    print(f"[comments] cache loaded: {pl_df.height} rows")
+    # print(f"[comments] cache loaded: {pl_df.height} rows")
 
 
 def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = None, updated_at=None) -> None:
@@ -1029,7 +1029,7 @@ def flush_dirty_open_optie_comments_to_db():
                 )
             conn.commit()
         SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
-        print(f"[comments] flushed {len(dirty)} comments to DB")
+        # print(f"[comments] flushed {len(dirty)} comments to DB")
     except Exception as exc:
         print(f"[comments] flush failed: {exc}")
 
