@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt, Slot, QTimer
 from PySide6.QtGui import QColor, QAction
-from PySide6.QtWidgets import QWidget, QMenu, QColorDialog, QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem, QStyle
+from PySide6.QtWidgets import QWidget, QMenu, QColorDialog, QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem, QStyle, QInputDialog
 
 
 from portefeuille_viewer.ui.models import PolarsTableModel
@@ -65,6 +65,20 @@ class OptiesOpenTableModel(PolarsTableModel):
                         return QColor(200, 255, 200)  # lichtgroen
             except Exception:
                 pass
+        if role == Qt.UserRole:
+            try:
+                if colname == "optie_comment" and "optie_comment_color" in columns:
+                    cval = row[columns.index("optie_comment_color")] or ""
+                    priority = {
+                        "#f8d7da": 4,  # rood
+                        "#ffeeba": 3,  # oranje
+                        "#d4edda": 2,  # groen
+                        "#bfbfbf": 1,  # grijs
+                        "": 0,
+                    }.get(cval, 0)
+                    return (priority, str(row[index.column()] or ""))
+            except Exception:
+                pass
         return super().data(index, role)
 
     def setData(self, index, value, role=Qt.EditRole):
@@ -93,6 +107,27 @@ class OptiesOpenTableModel(PolarsTableModel):
             return True
         except Exception:
             return False
+
+
+class CommentSortProxy(QSortFilterProxyModel):
+    """Proxy die kleur/tekst sorting ondersteunt via UserRole tuples."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDynamicSortFilter(True)
+
+    def lessThan(self, left, right):
+        role = self.sortRole()
+        l = left.data(role)
+        r = right.data(role)
+        try:
+            return l < r
+        except Exception:
+            l = left.data(Qt.DisplayRole)
+            r = right.data(Qt.DisplayRole)
+            try:
+                return l < r
+            except Exception:
+                return False
 
 
 class CommentNoSelectDelegate(QStyledItemDelegate):
@@ -154,6 +189,70 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             self.current_sort_column = header.sortIndicatorSection()
             self.current_sort_order = header.sortIndicatorOrder()
         self.reload_data()
+
+    def on_header_menu(self, pos):
+        """
+        Eigen header-menu met kleur-sort opties voor de comment-kolom.
+        """
+        header = self.tableView.horizontalHeader()
+        section = header.logicalIndexAt(pos)
+        try:
+            colname = self._table_model._df.columns[section]
+        except Exception:
+            return
+
+        menu = QMenu(self)
+        a_color_desc = a_color_asc = None
+        if colname == "optie_comment":
+            a_color_desc = menu.addAction("Sorteren op kleur (rood→groen)")
+            a_color_asc = menu.addAction("Sorteren op kleur (groen→rood)")
+            menu.addSeparator()
+
+        a_asc  = menu.addAction("Sorteren A → Z")
+        a_desc = menu.addAction("Sorteren Z → A")
+        menu.addSeparator()
+        a_clear = menu.addAction(f"Filter van {colname} wissen")
+        menu.addSeparator()
+        a_contains = menu.addAction("Tekst bevat...")
+        a_equals   = menu.addAction("Is precies...")
+        menu.addSeparator()
+        a_pick = menu.addAction("Waarden kiezen...")
+
+        act = menu.exec(header.mapToGlobal(pos))
+        if not act:
+            return
+        if act == a_color_desc:
+            self.tableView.sortByColumn(section, Qt.DescendingOrder)
+            return
+        if act == a_color_asc:
+            self.tableView.sortByColumn(section, Qt.AscendingOrder)
+            return
+        if act in (a_asc, a_desc):
+            order = Qt.AscendingOrder if act == a_asc else Qt.DescendingOrder
+            self.tableView.sortByColumn(section, order)
+            return
+
+        if act == a_clear:
+            self._col_filters.pop(colname, None)
+            self.apply_filters()
+            return
+        if act == a_contains:
+            text, ok = QInputDialog.getText(self, f"{colname} bevat", "Tekst:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"contains": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_equals:
+            text, ok = QInputDialog.getText(self, f"{colname} is precies", "Waarde:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"eq": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_pick:
+            self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
+            return
 
     def apply_filters(self):
         # print("apply_filters aangeroepen, tekst:", self.lineEditFilter.text())
@@ -433,10 +532,11 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             
         
         self.model = OptiesOpenTableModel(df, self, commit_callback=self._on_comment_commit)
-        self.proxy_model = QSortFilterProxyModel(self)
+        self.proxy_model = CommentSortProxy(self)
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setSortRole(Qt.UserRole)
         self.tableView.setModel(self.proxy_model)
+        self.tableView.setSortingEnabled(True)
         # commentkolom: delegate die selectie overlay negeert
         try:
             comment_col = df.columns.index("optie_comment")

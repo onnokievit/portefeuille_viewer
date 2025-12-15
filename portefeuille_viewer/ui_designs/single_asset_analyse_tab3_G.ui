@@ -1,0 +1,487 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SingleAssetAnalyseTab</class>
+ <widget class="QWidget" name="SingleAssetAnalyseTab">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1947</width>
+    <height>1326</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QWidget" name="widget" native="true">
+     <widget class="PlotWidget" name="priceAantalChart" native="true">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>760</y>
+        <width>811</width>
+        <height>191</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <property name="spacing">
+        <number>9</number>
+       </property>
+       <property name="leftMargin">
+        <number>9</number>
+       </property>
+       <property name="topMargin">
+        <number>9</number>
+       </property>
+       <property name="rightMargin">
+        <number>9</number>
+       </property>
+       <property name="bottomMargin">
+        <number>9</number>
+       </property>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="verticalLayoutWidget_4">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>310</y>
+        <width>811</width>
+        <height>431</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="layoutChart">
+       <property name="spacing">
+        <number>2</number>
+       </property>
+       <property name="leftMargin">
+        <number>2</number>
+       </property>
+       <property name="topMargin">
+        <number>2</number>
+       </property>
+       <property name="rightMargin">
+        <number>2</number>
+       </property>
+       <property name="bottomMargin">
+        <number>2</number>
+       </property>
+      </layout>
+     </widget>
+     <widget class="PlotWidget" name="resultaatChart" native="true">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>960</y>
+        <width>811</width>
+        <height>191</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_9">
+       <property name="spacing">
+        <number>9</number>
+       </property>
+       <property name="leftMargin">
+        <number>9</number>
+       </property>
+       <property name="topMargin">
+        <number>9</number>
+       </property>
+       <property name="rightMargin">
+        <number>9</number>
+       </property>
+       <property name="bottomMargin">
+        <number>9</number>
+       </property>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="horizontalLayoutWidget">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>0</y>
+        <width>801</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item alignment="Qt::AlignmentFlag::AlignLeft">
+        <widget class="QComboBox" name="asset_selector">
+         <property name="maximumSize">
+          <size>
+           <width>150</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignLeft">
+        <widget class="QDoubleSpinBox" name="stepSizeBox">
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="decimals">
+          <number>6</number>
+         </property>
+         <property name="value">
+          <double>0.020000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignLeft">
+        <widget class="QDateEdit" name="startDate">
+         <property name="maximumSize">
+          <size>
+           <width>120</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignLeft">
+        <widget class="QDateEdit" name="endDate">
+         <property name="maximumSize">
+          <size>
+           <width>120</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxStatus">
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxValueGrow">
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxSector">
+         <property name="maximumSize">
+          <size>
+           <width>140</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBoxRegio">
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="horizontalLayoutWidget_2">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>0</y>
+        <width>711</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <item>
+        <spacer name="horizontalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignRight">
+        <widget class="QLineEdit" name="lineEditFilterOptiesOpen">
+         <property name="minimumSize">
+          <size>
+           <width>300</width>
+           <height>24</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>450</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item alignment="Qt::AlignmentFlag::AlignRight">
+        <widget class="QPushButton" name="buttonClearFiltersOptiesOpen">
+         <property name="maximumSize">
+          <size>
+           <width>150</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="text">
+          <string>Clear Filter</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QTableWidget" name="payoff_table">
+      <property name="geometry">
+       <rect>
+        <x>6</x>
+        <y>40</y>
+        <width>811</width>
+        <height>257</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+      <attribute name="verticalHeaderMinimumSectionSize">
+       <number>30</number>
+      </attribute>
+     </widget>
+     <widget class="QTableView" name="tableViewOptiesOpen">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>40</y>
+        <width>1081</width>
+        <height>257</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+     </widget>
+     <widget class="QTableWidget" name="testOrdersTable">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>610</y>
+        <width>711</width>
+        <height>291</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="buttonAddTestOrder">
+      <property name="geometry">
+       <rect>
+        <x>1130</x>
+        <y>570</y>
+        <width>121</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Add test order</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="buttonDeleteTestOrder">
+      <property name="geometry">
+       <rect>
+        <x>1260</x>
+        <y>570</y>
+        <width>121</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Delete test order</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBoxAssetOrdersOnly">
+      <property name="geometry">
+       <rect>
+        <x>972</x>
+        <y>576</y>
+        <width>151</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Show asset orders only</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBoxEnableTestOrders">
+      <property name="geometry">
+       <rect>
+        <x>832</x>
+        <y>576</y>
+        <width>121</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Enable Test Orders</string>
+      </property>
+     </widget>
+     <widget class="QTableView" name="tableViewOptiesOpenPut">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>440</y>
+        <width>1081</width>
+        <height>117</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+     </widget>
+     <widget class="QTableView" name="tableViewOptiesOpenCall">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>310</y>
+        <width>1081</width>
+        <height>117</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+     </widget>
+     <widget class="QTableView" name="tableViewAandelen">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>921</y>
+        <width>707</width>
+        <height>77</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+     </widget>
+     <widget class="QTableView" name="tableViewSprinters">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>1000</y>
+        <width>707</width>
+        <height>78</height>
+       </rect>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PlotWidget</class>
+   <extends>QWidget</extends>
+   <header location="global">pyqtgraph</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>asset_selector</tabstop>
+  <tabstop>stepSizeBox</tabstop>
+  <tabstop>startDate</tabstop>
+  <tabstop>endDate</tabstop>
+  <tabstop>comboBoxStatus</tabstop>
+  <tabstop>comboBoxValueGrow</tabstop>
+  <tabstop>comboBoxSector</tabstop>
+  <tabstop>comboBoxRegio</tabstop>
+  <tabstop>lineEditFilterOptiesOpen</tabstop>
+  <tabstop>buttonClearFiltersOptiesOpen</tabstop>
+  <tabstop>payoff_table</tabstop>
+  <tabstop>tableViewOptiesOpen</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>
