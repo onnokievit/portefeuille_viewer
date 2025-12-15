@@ -897,6 +897,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
     empty_df = pl.DataFrame({
         "uniek_id": pl.Series([], dtype=pl.Utf8),
         "optie_comment": pl.Series([], dtype=pl.Utf8),
+        "optie_comment_color": pl.Series([], dtype=pl.Utf8),
         "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
     })
     if not uniek_ids:
@@ -906,7 +907,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
     def _fetch_chunk(ids_chunk: list[str]) -> list[tuple]:
         placeholders = ", ".join(["?"] * len(ids_chunk))
         query = f"""
-            SELECT uniek_id, comment, updated_at
+            SELECT uniek_id, comment, color, updated_at
             FROM {OPEN_OPTIE_COMMENTS_TABLE}
             WHERE uniek_id IN ({placeholders})
         """
@@ -929,8 +930,12 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
         normalized_rows = []
         for r in all_rows:
             try:
-                if len(r) == 3:
-                    normalized_rows.append((r[0], r[1], r[2]))
+                if len(r) == 4:
+                    # verwacht: uniek_id, comment, color, updated_at
+                    normalized_rows.append((r[0], r[1], r[2], r[3]))
+                elif len(r) == 3:
+                    # geen color kolom; vul leeg
+                    normalized_rows.append((r[0], r[1], None, r[2]))
                 else:
                     print(f"[comments] skip row len={len(r)} value={r}")
             except Exception as exc:
@@ -938,7 +943,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
         if not normalized_rows:
             print("[comments] no usable rows after normalization")
             return empty_df
-        df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_updated_at"])
+        df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_color", "optie_comment_updated_at"])
         # Parse updated_at zo robuust mogelijk
         try:
             df["optie_comment_updated_at"] = pd.to_datetime(
@@ -951,6 +956,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
         pl_df = pl.from_pandas(df).with_columns([
             pl.col("uniek_id").cast(pl.Utf8),
             pl.col("optie_comment").cast(pl.Utf8),
+            pl.col("optie_comment_color").cast(pl.Utf8),
             # Laat datetime eventueel null blijven als parse faalt
         ])
         # Kies per uniek_id de meest recente entry
@@ -960,6 +966,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
             .group_by("uniek_id", maintain_order=True)
             .agg([
                 pl.col("optie_comment").first().alias("optie_comment"),
+                pl.col("optie_comment_color").first().alias("optie_comment_color"),
                 pl.col("optie_comment_updated_at").first().alias("optie_comment_updated_at"),
             ])
         )
@@ -971,7 +978,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
         return empty_df
 
 
-def upsert_open_optie_comment(uniek_id: str, comment: str, updated_at=None) -> None:
+def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = None, updated_at=None) -> None:
     """
     Voeg een comment toe (append) voor een uniek_id in de notitie-tabel.
     """
@@ -981,8 +988,8 @@ def upsert_open_optie_comment(uniek_id: str, comment: str, updated_at=None) -> N
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, updated_at) VALUES (?, ?, ?)",
-            (uniek_id, comment, updated_at),
+            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
+            (uniek_id, comment, color, updated_at),
         )
         conn.commit()
     with contextlib.suppress(Exception):
