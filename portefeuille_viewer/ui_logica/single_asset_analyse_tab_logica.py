@@ -4,7 +4,7 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
@@ -23,6 +23,28 @@ from portefeuille_viewer.data.repository import (
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
 )
+
+
+class CommentSortProxy(QSortFilterProxyModel):
+    """Proxy die op UserRole sorteert en tuples (priority, text) netjes vergelijkt."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDynamicSortFilter(True)
+
+    def lessThan(self, left, right):
+        role = self.sortRole()
+        l = left.data(role)
+        r = right.data(role)
+        try:
+            return l < r
+        except Exception:
+            # fallback op displayrole als tuple/None niet vergelijkbaar zijn
+            l = left.data(Qt.DisplayRole)
+            r = right.data(Qt.DisplayRole)
+            try:
+                return l < r
+            except Exception:
+                return False
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
     bereken_open_sprinters_payoff,
@@ -130,6 +152,23 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                         cval = self._df[index.row(), color_col]
                         if cval:
                             return QColor(cval)
+            except Exception:
+                pass
+        if role == Qt.UserRole:
+            # custom sort: for comment/color columns sort on color priority then text
+            try:
+                colname = self._df.columns[index.column()]
+                if colname == "optie_comment" and "optie_comment_color" in self._df.columns:
+                    cval = self._df[index.row(), self._df.columns.index("optie_comment_color")] or ""
+                    # sort priority: rood > oranje > groen > grijs > geen
+                    priority = {
+                        "#f8d7da": 4,  # rood
+                        "#ffeeba": 3,  # oranje
+                        "#d4edda": 2,  # groen
+                        "#bfbfbf": 1,  # grijs
+                        "": 0,
+                    }.get(cval, 0)
+                    return (priority, str(self._df[index.row(), index.column()] or ""))
             except Exception:
                 pass
         return super().data(index, role)
@@ -348,7 +387,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.commentFlushTimer.timeout.connect(self._flush_comments_if_dirty)
 
         self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
+        self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(lambda pos: self._on_header_menu_for_view(self.tableViewOptiesOpen, pos))
         self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
         self.tableViewOptiesOpen.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpen.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpen, pos))
@@ -933,7 +972,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         )
         self._table_model = model_all  # model_all is je hoofdmodel voor de tabel
         self._model_opties_all = model_all
-        proxy_model = QSortFilterProxyModel(self)
+        proxy_model = CommentSortProxy(self)
         proxy_model.setSourceModel(model_all)
         proxy_model.setSortRole(Qt.UserRole)
         #print("Disconnecting click handler, replacing model")
@@ -992,7 +1031,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
-        self.tableViewOptiesOpenPut.setModel(model_put)
+        proxy_put = CommentSortProxy(self)
+        proxy_put.setSourceModel(model_put)
+        proxy_put.setSortRole(Qt.UserRole)
+        self.tableViewOptiesOpenPut.setModel(proxy_put)
+        self.tableViewOptiesOpenPut.setSortingEnabled(True)
         self.tableViewOptiesOpenPut.setFont(font)
         self.tableViewOptiesOpenPut.setStyleSheet("QScrollBar:vertical { width: 14px; }")
         header_put = self.tableViewOptiesOpenPut.horizontalHeader()
@@ -1023,7 +1066,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
-        self.tableViewOptiesOpenCall.setModel(model_call)
+        proxy_call = CommentSortProxy(self)
+        proxy_call.setSourceModel(model_call)
+        proxy_call.setSortRole(Qt.UserRole)
+        self.tableViewOptiesOpenCall.setModel(proxy_call)
+        self.tableViewOptiesOpenCall.setSortingEnabled(True)
         self.tableViewOptiesOpenCall.setFont(font)
         self.tableViewOptiesOpenCall.setStyleSheet("QScrollBar:vertical { width: 18px; }")
         header_call = self.tableViewOptiesOpenCall.horizontalHeader()
@@ -1155,6 +1202,72 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 self.commentFlushTimer.start()
         except Exception as exc:
             print(f"[comments] kon kleur niet opslaan: {exc}")
+
+    def _on_header_menu_for_view(self, view, pos):
+        """
+        Header-menu met extra sorteeropties op kleur voor de commentkolom.
+        """
+        header = view.horizontalHeader()
+        section = header.logicalIndexAt(pos)
+        model = view.model()
+        source_model = model.sourceModel() if hasattr(model, "sourceModel") else model
+        try:
+            colname = source_model._df.columns[section]
+        except Exception:
+            return
+
+        menu = QMenu(self)
+        a_color_desc = a_color_asc = None
+        if colname == "optie_comment":
+            a_color_desc = menu.addAction("Sorteren op kleur (rood→groen)")
+            a_color_asc = menu.addAction("Sorteren op kleur (groen→rood)")
+            menu.addSeparator()
+
+        a_asc  = menu.addAction("Sorteren A → Z")
+        a_desc = menu.addAction("Sorteren Z → A")
+        menu.addSeparator()
+        a_clear = menu.addAction(f"Filter van {colname} wissen")
+        menu.addSeparator()
+        a_contains = menu.addAction("Tekst bevat...")
+        a_equals   = menu.addAction("Is precies...")
+        menu.addSeparator()
+        a_pick = menu.addAction("Waarden kiezen...")
+
+        act = menu.exec(header.mapToGlobal(pos))
+        if not act:
+            return
+        if act == a_color_desc:
+            view.sortByColumn(section, Qt.DescendingOrder)
+            return
+        if act == a_color_asc:
+            view.sortByColumn(section, Qt.AscendingOrder)
+            return
+        if act in (a_asc, a_desc):
+            order = Qt.AscendingOrder if act == a_asc else Qt.DescendingOrder
+            view.sortByColumn(section, order)
+            return
+
+        if act == a_clear:
+            self._col_filters.pop(colname, None)
+            self.apply_filters()
+            return
+        if act == a_contains:
+            text, ok = QInputDialog.getText(self, f"{colname} bevat", "Tekst:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"contains": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_equals:
+            text, ok = QInputDialog.getText(self, f"{colname} is precies", "Waarde:")
+            if ok and text.strip():
+                self._col_filters[colname] = {"eq": text.strip()}
+                self.apply_filters()
+            return
+
+        if act == a_pick:
+            self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
+            return
 
 
     def on_asset_selected(self, asset_rollup):
