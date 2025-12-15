@@ -4,7 +4,7 @@ import pandas as pd
 import pyodbc
 import polars as pl
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database
 from portefeuille_viewer.signals import signals
@@ -32,6 +32,8 @@ DB_MAP, DB_STYLES = _load_db_config()
 DEFAULT_DB_NAME = get_default_database()
 db_path = DB_MAP.get(DEFAULT_DB_NAME, "") if DEFAULT_DB_NAME else ""
 conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};" if db_path else ""
+# Tabelnaam voor optienotities; verwacht kolommen: uniek_id (TEXT, PK), comment (MEMO/TEXT), updated_at (DATETIME)
+OPEN_OPTIE_COMMENTS_TABLE = "open_optie_comments"
 
 def reload_db_config():
     """Herlaad database configuratie na wijzigingen in settings."""
@@ -885,6 +887,107 @@ def build_uniek_id(values: dict) -> str:
     rollup = _clean(values.get("asset_rollup"))
     return f"{broker}-{rollup}-{at}"
 
+
+def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
+    """
+    Haal commentaar per uniek_id op uit de notitie-tabel.
+    Retourneert per uniek_id alleen de laatste entry (dagboekprincipe).
+    Kolommen: uniek_id, optie_comment, optie_comment_updated_at.
+    """
+    empty_df = pl.DataFrame({
+        "uniek_id": pl.Series([], dtype=pl.Utf8),
+        "optie_comment": pl.Series([], dtype=pl.Utf8),
+        "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
+    })
+    if not uniek_ids:
+        return empty_df
+
+    # Chunked ophalen om Access/pyodbc limieten op parameter count te vermijden
+    def _fetch_chunk(ids_chunk: list[str]) -> list[tuple]:
+        placeholders = ", ".join(["?"] * len(ids_chunk))
+        query = f"""
+            SELECT uniek_id, comment, updated_at
+            FROM {OPEN_OPTIE_COMMENTS_TABLE}
+            WHERE uniek_id IN ({placeholders})
+        """
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(query, ids_chunk)
+            return cur.fetchall()
+
+    all_rows: list[tuple] = []
+    chunk_size = 100
+    try:
+        for i in range(0, len(uniek_ids), chunk_size):
+            chunk = uniek_ids[i:i+chunk_size]
+            rows_chunk = _fetch_chunk(chunk)
+            print(f"[comments] fetch chunk {i//chunk_size+1}: {len(rows_chunk)} rows")
+            all_rows.extend(rows_chunk)
+        if not all_rows:
+            print("[comments] no rows fetched from DB")
+            return empty_df
+        normalized_rows = []
+        for r in all_rows:
+            try:
+                if len(r) == 3:
+                    normalized_rows.append((r[0], r[1], r[2]))
+                else:
+                    print(f"[comments] skip row len={len(r)} value={r}")
+            except Exception as exc:
+                print(f"[comments] skip row err={exc} value={r}")
+        if not normalized_rows:
+            print("[comments] no usable rows after normalization")
+            return empty_df
+        df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_updated_at"])
+        # Parse updated_at zo robuust mogelijk
+        try:
+            df["optie_comment_updated_at"] = pd.to_datetime(
+                df["optie_comment_updated_at"],
+                errors="coerce",
+                dayfirst=True,
+            )
+        except Exception:
+            pass
+        pl_df = pl.from_pandas(df).with_columns([
+            pl.col("uniek_id").cast(pl.Utf8),
+            pl.col("optie_comment").cast(pl.Utf8),
+            # Laat datetime eventueel null blijven als parse faalt
+        ])
+        # Kies per uniek_id de meest recente entry
+        pl_df = (
+            pl_df
+            .sort(["uniek_id", "optie_comment_updated_at"], descending=True, nulls_last=True)
+            .group_by("uniek_id", maintain_order=True)
+            .agg([
+                pl.col("optie_comment").first().alias("optie_comment"),
+                pl.col("optie_comment_updated_at").first().alias("optie_comment_updated_at"),
+            ])
+        )
+        print(f"[comments] fetched {pl_df.height} latest comments for {len(uniek_ids)} ids")
+        return pl_df
+    except Exception as exc:
+        print(f"[comments] fetch failed: {exc}")
+        # Als de tabel nog niet bestaat of query faalt, keer terug met leeg DF
+        return empty_df
+
+
+def upsert_open_optie_comment(uniek_id: str, comment: str, updated_at=None) -> None:
+    """
+    Voeg een comment toe (append) voor een uniek_id in de notitie-tabel.
+    """
+    if not uniek_id:
+        return
+    updated_at = updated_at or datetime.now()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, updated_at) VALUES (?, ?, ?)",
+            (uniek_id, comment, updated_at),
+        )
+        conn.commit()
+    with contextlib.suppress(Exception):
+        signals.databaseChanged.emit()
+
 def is_pairable(order: dict) -> bool:
     """
     Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort).
@@ -1226,4 +1329,3 @@ def refresh_all_snapshots():
 
 
     
-

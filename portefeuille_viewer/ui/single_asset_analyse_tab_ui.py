@@ -26,7 +26,7 @@ class Ui_SingleAssetAnalyseTab(object):
     def setupUi(self, SingleAssetAnalyseTab):
         if not SingleAssetAnalyseTab.objectName():
             SingleAssetAnalyseTab.setObjectName(u"SingleAssetAnalyseTab")
-        SingleAssetAnalyseTab.resize(1678, 1269)
+        SingleAssetAnalyseTab.resize(1902, 1269)
         self.verticalLayout_2 = QVBoxLayout(SingleAssetAnalyseTab)
         self.verticalLayout_2.setSpacing(0)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
@@ -208,7 +208,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.payoff_table.verticalHeader().setMinimumSectionSize(30)
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
-        self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 707, 257))
+        self.tableViewOptiesOpen.setGeometry(QRect(830, 40, 1061, 257))
         self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.testOrdersTable = QTableWidget(self.widget)
         self.testOrdersTable.setObjectName(u"testOrdersTable")

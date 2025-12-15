@@ -16,6 +16,11 @@ from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAna
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin
+from portefeuille_viewer.data.repository import (
+    build_uniek_id,
+    fetch_open_optie_comments,
+    upsert_open_optie_comment,
+)
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
     bereken_open_sprinters_payoff,
@@ -96,6 +101,63 @@ class NumberDelegate(QStyledItemDelegate):
         except Exception:
             model.setData(index, txt, Qt.EditRole)
 
+
+class CommentablePolarsTableModel(ColoredPolarsTableModel):
+    """Voegt bewerkbare kolom(men) toe voor opmerkingen op open opties."""
+
+    def __init__(self, df, kleur_kolommen=None, kleur_func=None, parent=None, editable_cols=None, commit_callback=None, *args, **kwargs):
+        super().__init__(df, kleur_kolommen, kleur_func, parent, *args, **kwargs)
+        self._editable_cols = set(editable_cols or [])
+        self._commit_callback = commit_callback
+
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.EditRole:
+            if not index.isValid() or self._df.is_empty():
+                return ""
+            val = self._df[index.row(), index.column()]
+            return "" if val is None else str(val)
+        return super().data(index, role)
+
+    def flags(self, index):
+        base = super().flags(index)
+        if not index.isValid():
+            return base
+        col_name = self._df.columns[index.column()]
+        if col_name in self._editable_cols:
+            base |= Qt.ItemIsEditable
+        return base
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if role != Qt.EditRole or not index.isValid():
+            return False
+        col_name = self._df.columns[index.column()]
+        if col_name not in self._editable_cols:
+            return False
+
+        row_idx = index.row()
+        new_val = "" if value is None else str(value)
+
+        try:
+            # Update comment kolom
+            col_values = self._df[col_name].to_list()
+            col_values[row_idx] = new_val
+            self._df = self._df.with_columns(pl.Series(col_name, col_values))
+
+            # Timestamp bijwerken als kolom aanwezig is
+            ts_col = "optie_comment_updated_at"
+            if ts_col in self._df.columns:
+                ts_values = self._df[ts_col].to_list()
+                ts_values[row_idx] = datetime.now()
+                self._df = self._df.with_columns(pl.Series(ts_col, ts_values))
+
+            self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
+
+            if self._commit_callback:
+                row_data = self._df.row(row_idx, named=True)
+                self._commit_callback(row_data)
+            return True
+        except Exception:
+            return False
 
 
 
@@ -742,12 +804,50 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Voor de eerste tabel géén asset-filtering, volledige tabel tonen
         df_all = df.drop("totaal_fees")
         df_all = df_all.sort(["optie_exp_date", "asset_rollup"])
+        if "uniek_id" in df_all.columns:
+            uniek_ids = df_all["uniek_id"].to_list()
+            print(f"[comments] update_opties_open_table: {len(uniek_ids)} uniek_ids in df_all")
+            df_comments = fetch_open_optie_comments(uniek_ids)
+            # Zorg dat join-keys dezelfde dtype hebben, ook bij lege resultaten
+            if df_comments is None or df_comments.is_empty():
+                df_comments = pl.DataFrame(
+                    {
+                        "uniek_id": pl.Series([], dtype=pl.Utf8),
+                        "optie_comment": pl.Series([], dtype=pl.Utf8),
+                        "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
+                    }
+                )
+            else:
+                df_comments = df_comments.with_columns([
+                    pl.col("uniek_id").cast(pl.Utf8),
+                    pl.col("optie_comment").cast(pl.Utf8),
+                ])
+            df_all = df_all.with_columns(pl.col("uniek_id").cast(pl.Utf8))
+            # join met suffix en daarna coalesce zodat we geen _right kolommen houden
+            df_all = df_all.join(df_comments, on="uniek_id", how="left", suffix="_comment_db")
+            print(f"[comments] join result rows={df_all.height}, cols={df_all.columns}")
+            df_all = df_all.with_columns([
+                pl.coalesce([pl.col("optie_comment_comment_db"), pl.col("optie_comment")]).fill_null("").alias("optie_comment"),
+                pl.coalesce([pl.col("optie_comment_updated_at_comment_db"), pl.col("optie_comment_updated_at")]).alias("optie_comment_updated_at"),
+            ])
+            # opruimen helperkolommen
+            for col in ("optie_comment_comment_db", "optie_comment_updated_at_comment_db"):
+                if col in df_all.columns:
+                    df_all = df_all.drop(col)
         if hasattr(self, "active_filters_opties_open") and self.active_filters_opties_open:
             df_all = self._filter_dataframe(df_all, self.active_filters_opties_open)
         # Voor put/call tabellen wél filteren
-        df_put = df.filter(pl.col("asset_rollup") == asset).filter(pl.col("optie_call_put") == "put").drop("totaal_fees")
+        df_put = (
+            df_all
+            .filter(pl.col("asset_rollup") == asset)
+            .filter(pl.col("optie_call_put") == "put")
+        )
         df_put = df_put.sort("optie_exp_date")
-        df_call = df.filter(pl.col("asset_rollup") == asset).filter(pl.col("optie_call_put") == "call").drop("totaal_fees")
+        df_call = (
+            df_all
+            .filter(pl.col("asset_rollup") == asset)
+            .filter(pl.col("optie_call_put") == "call")
+        )
         df_call = df_call.sort("optie_exp_date")
 
         kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
@@ -770,11 +870,21 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "totaal_resultaat_optie": 60,
             "itm": 35,
             "afwijking_pct": 45,
+            "optie_comment": 160,
+            "optie_comment_updated_at": 120,
         }
 
         # Alle opties (volledige tabel, geen asset-filter)
-        model_all = ColoredPolarsTableModel(df_all, kleur_kolommen, kleur_func, self)
+        model_all = CommentablePolarsTableModel(
+            df_all,
+            kleur_kolommen,
+            kleur_func,
+            self,
+            editable_cols={"optie_comment"},
+            commit_callback=self._on_comment_commit,
+        )
         self._table_model = model_all  # model_all is je hoofdmodel voor de tabel
+        self._model_opties_all = model_all
         proxy_model = QSortFilterProxyModel(self)
         proxy_model.setSourceModel(model_all)
         proxy_model.setSortRole(Qt.UserRole)
@@ -818,9 +928,19 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         apply_widths_all()
         self.tableViewOptiesOpen.verticalHeader().setDefaultSectionSize(10)
         self.tableViewOptiesOpen.verticalHeader().setVisible(False)
+        if "uniek_id" in df_all.columns:
+            idx_all_uniek = df_all.columns.index("uniek_id")
+            self.tableViewOptiesOpen.setColumnHidden(idx_all_uniek, True)
 
         # Put opties (wel asset-filter)
-        model_put = ColoredPolarsTableModel(df_put, kleur_kolommen, kleur_func, self)
+        model_put = CommentablePolarsTableModel(
+            df_put,
+            kleur_kolommen,
+            kleur_func,
+            self,
+            editable_cols={"optie_comment"},
+            commit_callback=self._on_comment_commit,
+        )
         self.tableViewOptiesOpenPut.setModel(model_put)
         self.tableViewOptiesOpenPut.setFont(font)
         self.tableViewOptiesOpenPut.setStyleSheet("QScrollBar:vertical { width: 14px; }")
@@ -835,9 +955,20 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         apply_widths_put()
         self.tableViewOptiesOpenPut.verticalHeader().setDefaultSectionSize(10)
         self.tableViewOptiesOpenPut.verticalHeader().setVisible(False)
+        if "uniek_id" in df_put.columns:
+            idx_put_uniek = df_put.columns.index("uniek_id")
+            self.tableViewOptiesOpenPut.setColumnHidden(idx_put_uniek, True)
+        self._model_opties_put = model_put
 
         # Call opties (wel asset-filter)
-        model_call = ColoredPolarsTableModel(df_call, kleur_kolommen, kleur_func, self)
+        model_call = CommentablePolarsTableModel(
+            df_call,
+            kleur_kolommen,
+            kleur_func,
+            self,
+            editable_cols={"optie_comment"},
+            commit_callback=self._on_comment_commit,
+        )
         self.tableViewOptiesOpenCall.setModel(model_call)
         self.tableViewOptiesOpenCall.setFont(font)
         self.tableViewOptiesOpenCall.setStyleSheet("QScrollBar:vertical { width: 18px; }")
@@ -852,7 +983,55 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         apply_widths_call()
         self.tableViewOptiesOpenCall.verticalHeader().setDefaultSectionSize(10)
         self.tableViewOptiesOpenCall.verticalHeader().setVisible(False)
+        if "uniek_id" in df_call.columns:
+            idx_call_uniek = df_call.columns.index("uniek_id")
+            self.tableViewOptiesOpenCall.setColumnHidden(idx_call_uniek, True)
+        self._model_opties_call = model_call
         
+
+    def _on_comment_commit(self, row_data: dict):
+        """Sla bewerkte comment op en herlaad de tabellen zodat alle views synchroon blijven."""
+        try:
+            uniek_id = row_data.get("uniek_id")
+            comment = row_data.get("optie_comment") or ""
+            ts = row_data.get("optie_comment_updated_at")
+            print(f"[comments] commit uniek_id={uniek_id}, comment='{comment}', ts={ts}")
+            upsert_open_optie_comment(uniek_id, comment, ts)
+        except Exception as e:
+            print(f"Kon optie-comment niet opslaan: {e}")
+            return
+        # Na opslaan laatste comment ophalen en in bestaande modellen patchen (geen volledige reload)
+        latest = fetch_open_optie_comments([uniek_id])
+        if latest is not None and not latest.is_empty():
+            latest_row = latest.row(0, named=True)
+            comment_new = latest_row.get("optie_comment") or ""
+            ts_new = latest_row.get("optie_comment_updated_at")
+        else:
+            comment_new = comment
+            ts_new = ts
+        self._patch_comment_in_models(uniek_id, comment_new, ts_new)
+
+    def _patch_comment_in_models(self, uniek_id: str, comment: str, ts):
+        """Werk comment/timestamp bij in alle optie modellen zonder volledige reload."""
+        if not uniek_id:
+            return
+        print(f"[comments] patch models voor {uniek_id} -> '{comment}' @ {ts}")
+        def _update_model(model: CommentablePolarsTableModel | None):
+            if model is None or getattr(model, "_df", None) is None:
+                return
+            df = model._df
+            if "uniek_id" not in df.columns:
+                return
+            df = df.with_columns([
+                pl.when(pl.col("uniek_id") == uniek_id).then(comment).otherwise(pl.col("optie_comment")).alias("optie_comment"),
+                pl.when(pl.col("uniek_id") == uniek_id).then(ts).otherwise(pl.col("optie_comment_updated_at")).alias("optie_comment_updated_at"),
+            ])
+            model.set_df(df)
+
+        _update_model(getattr(self, "_model_opties_all", None))
+        _update_model(getattr(self, "_model_opties_put", None))
+        _update_model(getattr(self, "_model_opties_call", None))
+
 
     def on_asset_selected(self, asset_rollup):
         self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
@@ -1393,11 +1572,7 @@ class SingleAssetAnalyseLogic:
             else None
         )
 
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = self.df_aandelen  # sourcery skip # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        
+  
         
         if getattr(self, "enable_test_orders", True):
             self._augment_with_test_orders(asset_rollup)
@@ -1407,7 +1582,7 @@ class SingleAssetAnalyseLogic:
         
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        SNAPSHOT_STORE.test_repository_load_output_test_dataframe = self.df_aandelen  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # SNAPSHOT_STORE.test_repository_load_output_test_dataframe = self.df_aandelen  # sourcery skip # of df_sum als je de gesumde versie wilt zien
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
 
         
@@ -1423,6 +1598,11 @@ class SingleAssetAnalyseLogic:
         self.currency_factor = factor
 
     def payoff_open_opties(self, koers):
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = self.df_open_opties  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+      
         return bereken_open_opties_payoff(self.df_open_opties, koers)
 
     def payoff_gesloten_opties(self, koers):
@@ -1527,6 +1707,8 @@ class SingleAssetAnalyseLogic:
     def load_option_open_data(self):
         # print("Load open opties data for single asset analyse aangeroepen")
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
+        if df is None:
+            return pl.DataFrame()
         if "ITM_OTM" in df.columns:
             df = df.with_columns(
                 pl.when(pl.col("ITM_OTM") != 0)
@@ -1552,10 +1734,30 @@ class SingleAssetAnalyseLogic:
         # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
         if "Koers" in df.columns and "optie_strike" in df.columns:
             df = df.with_columns(
-                ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
+            ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
 
         if df is None or df.is_empty():
             df = pl.DataFrame()
+
+        if not df.is_empty():
+            # Voeg uniek_id toe op basis van optiekenmerken (hidden kolom in de tabel)
+            df = df.with_columns([
+                pl.struct([
+                    "broker",
+                    "asset_rollup",
+                    "optie_exp_date",
+                    "optie_call_put",
+                    "optie_strike",
+                ]).map_elements(
+                    lambda s: build_uniek_id({**s, "asset_type": "optie"}),
+                    return_dtype=pl.Utf8,
+                ).alias("uniek_id"),
+            ])
+            # Standaard lege comment kolommen, worden gevuld vanuit DB in update_opties_open_table
+            df = df.with_columns([
+                pl.lit("").alias("optie_comment"),
+                pl.lit(None).alias("optie_comment_updated_at"),
+            ])
 
         return df
