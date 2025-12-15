@@ -34,6 +34,8 @@ class SnapshotStore:
         self.live_prices: dict | None = None
         self.repository_snapshot_test_orders_cache: dict = {}
         self.repository_dirty_test_orders_assets: set = set()
+        self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
+        self.repository_dirty_open_optie_comments: list = []
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
@@ -67,6 +69,8 @@ class SnapshotStore:
         self.live_prices = None
         self.repository_snapshot_test_orders_cache = {}
         self.repository_dirty_test_orders_assets = set()
+        self.repository_snapshot_open_optie_comments = None
+        self.repository_dirty_open_optie_comments = []
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""

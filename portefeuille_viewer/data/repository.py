@@ -890,9 +890,9 @@ def build_uniek_id(values: dict) -> str:
 
 def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
     """
-    Haal commentaar per uniek_id op uit de notitie-tabel.
+    Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.
     Retourneert per uniek_id alleen de laatste entry (dagboekprincipe).
-    Kolommen: uniek_id, optie_comment, optie_comment_updated_at.
+    Kolommen: uniek_id, optie_comment, optie_comment_color, optie_comment_updated_at.
     """
     empty_df = pl.DataFrame({
         "uniek_id": pl.Series([], dtype=pl.Utf8),
@@ -903,65 +903,19 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
     if not uniek_ids:
         return empty_df
 
-    # Chunked ophalen om Access/pyodbc limieten op parameter count te vermijden
-    def _fetch_chunk(ids_chunk: list[str]) -> list[tuple]:
-        placeholders = ", ".join(["?"] * len(ids_chunk))
-        query = f"""
-            SELECT uniek_id, comment, color, updated_at
-            FROM {OPEN_OPTIE_COMMENTS_TABLE}
-            WHERE uniek_id IN ({placeholders})
-        """
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, ids_chunk)
-            return cur.fetchall()
+    if getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None) is None:
+        load_open_optie_comments_cache()
 
-    all_rows: list[tuple] = []
-    chunk_size = 100
+    cached = getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None)
+    if cached is None or cached.is_empty():
+        print("[comments] cache leeg, geen comments beschikbaar")
+        return empty_df
     try:
-        for i in range(0, len(uniek_ids), chunk_size):
-            chunk = uniek_ids[i:i+chunk_size]
-            rows_chunk = _fetch_chunk(chunk)
-            print(f"[comments] fetch chunk {i//chunk_size+1}: {len(rows_chunk)} rows")
-            all_rows.extend(rows_chunk)
-        if not all_rows:
-            print("[comments] no rows fetched from DB")
+        df_filtered = cached.filter(pl.col("uniek_id").is_in(uniek_ids))
+        if df_filtered.is_empty():
             return empty_df
-        normalized_rows = []
-        for r in all_rows:
-            try:
-                if len(r) == 4:
-                    # verwacht: uniek_id, comment, color, updated_at
-                    normalized_rows.append((r[0], r[1], r[2], r[3]))
-                elif len(r) == 3:
-                    # geen color kolom; vul leeg
-                    normalized_rows.append((r[0], r[1], None, r[2]))
-                else:
-                    print(f"[comments] skip row len={len(r)} value={r}")
-            except Exception as exc:
-                print(f"[comments] skip row err={exc} value={r}")
-        if not normalized_rows:
-            print("[comments] no usable rows after normalization")
-            return empty_df
-        df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_color", "optie_comment_updated_at"])
-        # Parse updated_at zo robuust mogelijk
-        try:
-            df["optie_comment_updated_at"] = pd.to_datetime(
-                df["optie_comment_updated_at"],
-                errors="coerce",
-                dayfirst=True,
-            )
-        except Exception:
-            pass
-        pl_df = pl.from_pandas(df).with_columns([
-            pl.col("uniek_id").cast(pl.Utf8),
-            pl.col("optie_comment").cast(pl.Utf8),
-            pl.col("optie_comment_color").cast(pl.Utf8),
-            # Laat datetime eventueel null blijven als parse faalt
-        ])
-        # Kies per uniek_id de meest recente entry
         pl_df = (
-            pl_df
+            df_filtered
             .sort(["uniek_id", "optie_comment_updated_at"], descending=True, nulls_last=True)
             .group_by("uniek_id", maintain_order=True)
             .agg([
@@ -970,30 +924,114 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
                 pl.col("optie_comment_updated_at").first().alias("optie_comment_updated_at"),
             ])
         )
-        print(f"[comments] fetched {pl_df.height} latest comments for {len(uniek_ids)} ids")
+        print(f"[comments] fetched {pl_df.height} latest comments from cache for {len(uniek_ids)} ids")
         return pl_df
     except Exception as exc:
-        print(f"[comments] fetch failed: {exc}")
-        # Als de tabel nog niet bestaat of query faalt, keer terug met leeg DF
+        print(f"[comments] fetch from cache failed: {exc}")
         return empty_df
+
+
+def load_open_optie_comments_cache():
+    """
+    Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_snapshot_open_optie_comments).
+    """
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT uniek_id, comment, color, updated_at FROM {OPEN_OPTIE_COMMENTS_TABLE}")
+            rows = cur.fetchall()
+    except Exception as exc:
+        print(f"[comments] load cache failed: {exc}")
+        SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl.DataFrame({
+            "uniek_id": pl.Series([], dtype=pl.Utf8),
+            "optie_comment": pl.Series([], dtype=pl.Utf8),
+            "optie_comment_color": pl.Series([], dtype=pl.Utf8),
+            "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
+        })
+        return
+
+    normalized_rows = []
+    for r in rows:
+        try:
+            if len(r) >= 4:
+                normalized_rows.append((r[0], r[1], r[2], r[3]))
+            elif len(r) == 3:
+                normalized_rows.append((r[0], r[1], None, r[2]))
+        except Exception as exc:
+            print(f"[comments] skip row err={exc} value={r}")
+
+    df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_color", "optie_comment_updated_at"])
+    try:
+        df["optie_comment_updated_at"] = pd.to_datetime(df["optie_comment_updated_at"], errors="coerce", dayfirst=True)
+    except Exception:
+        pass
+    pl_df = pl.from_pandas(df).with_columns([
+        pl.col("uniek_id").cast(pl.Utf8),
+        pl.col("optie_comment").cast(pl.Utf8),
+        pl.col("optie_comment_color").cast(pl.Utf8),
+    ])
+    SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl_df
+    print(f"[comments] cache loaded: {pl_df.height} rows")
 
 
 def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = None, updated_at=None) -> None:
     """
-    Voeg een comment toe (append) voor een uniek_id in de notitie-tabel.
+    Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor DB flush.
     """
     if not uniek_id:
         return
     updated_at = updated_at or datetime.now()
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
-            (uniek_id, comment, color, updated_at),
-        )
-        conn.commit()
+    # zorg dat cache geladen is
+    if getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None) is None:
+        load_open_optie_comments_cache()
+
+    new_row = {
+        "uniek_id": uniek_id,
+        "optie_comment": comment,
+        "optie_comment_color": color or "",
+        "optie_comment_updated_at": updated_at,
+    }
+    # append aan cache
+    try:
+        df_cache = getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None)
+        if df_cache is None or df_cache.is_empty():
+            SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl.DataFrame(new_row)
+        else:
+            SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl.concat([df_cache, pl.DataFrame(new_row)], how="diagonal_relaxed")
+    except Exception as exc:
+        print(f"[comments] kon cache niet bijwerken: {exc}")
+
+    # markeer dirty
+    try:
+        dirty_list = getattr(SNAPSHOT_STORE, "repository_dirty_open_optie_comments", None)
+        if dirty_list is None:
+            SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
+            dirty_list = SNAPSHOT_STORE.repository_dirty_open_optie_comments
+        dirty_list.append(new_row)
+    except Exception as exc:
+        print(f"[comments] kon dirty list niet bijwerken: {exc}")
+
     with contextlib.suppress(Exception):
         signals.databaseChanged.emit()
+
+
+def flush_dirty_open_optie_comments_to_db():
+    dirty = getattr(SNAPSHOT_STORE, "repository_dirty_open_optie_comments", None) or []
+    if not dirty:
+        return
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            for row in dirty:
+                cur.execute(
+                    f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
+                    (row.get("uniek_id"), row.get("optie_comment"), row.get("optie_comment_color"), row.get("optie_comment_updated_at")),
+                )
+            conn.commit()
+        SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
+        print(f"[comments] flushed {len(dirty)} comments to DB")
+    except Exception as exc:
+        print(f"[comments] flush failed: {exc}")
 
 def is_pairable(order: dict) -> bool:
     """
