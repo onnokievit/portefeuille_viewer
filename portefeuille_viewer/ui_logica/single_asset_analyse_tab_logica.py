@@ -20,6 +20,8 @@ from portefeuille_viewer.data.repository import (
     build_uniek_id,
     fetch_open_optie_comments,
     upsert_open_optie_comment,
+    load_open_optie_comments_cache,
+    flush_dirty_open_optie_comments_to_db,
 )
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
@@ -27,7 +29,7 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_gesloten_aandelen_payoff,
     bereken_open_aandelen_payoff,
 )
-from portefeuille_viewer.data.test_order_repository import get_test_orders, insert_test_order, update_test_order, delete_test_order
+from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
     get_cached_orders,
     set_cached_orders_for_asset,
@@ -54,7 +56,8 @@ def auto_fill_year(line_edit: QLineEdit):
 
 class ComboDelegate(QStyledItemDelegate):
     def __init__(self, options, parent=None):
-        super().__init__(parent); self.options = options
+        super().__init__(parent)
+        self.options = options
     def createEditor(self, parent, option, index):
         cb = QComboBox(parent)
         cb.addItems(self.options)
@@ -64,8 +67,10 @@ class ComboDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         val = index.data(Qt.EditRole) or ""
         i = editor.findText(val)
-        if i >= 0: editor.setCurrentIndex(i)
-        else: editor.setCurrentText(val)
+        if i >= 0: 
+            editor.setCurrentIndex(i)
+        else: 
+            editor.setCurrentText(val)
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText(), Qt.EditRole)
 
@@ -331,10 +336,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        load_open_optie_comments_cache()
         self.update_opties_open_table()
         self.testOrderFlushTimer = QTimer(self)
         self.testOrderFlushTimer.setInterval(5_000)  # 5s
         self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
+        # Comments cache vooraf laden
+        load_open_optie_comments_cache()
+        self.commentFlushTimer = QTimer(self)
+        self.commentFlushTimer.setInterval(60_000)  # 60s
+        self.commentFlushTimer.timeout.connect(self._flush_comments_if_dirty)
 
         self.tableViewOptiesOpen.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpen.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
@@ -368,6 +379,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         dirty = getattr(SNAPSHOT_STORE, "repository_dirty_test_orders_assets", set()) or set()
         if not dirty and self.testOrderFlushTimer.isActive():
             self.testOrderFlushTimer.stop()
+
+    def _flush_comments_if_dirty(self):
+        flush_dirty_open_optie_comments_to_db()
+        dirty = getattr(SNAPSHOT_STORE, "repository_dirty_open_optie_comments", []) or []
+        if not dirty and self.commentFlushTimer.isActive():
+            self.commentFlushTimer.stop()
     
     
     def apply_filters(self):
@@ -514,7 +531,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df = self.read_test_orders()  # leest de huidige (lege) tabel
         set_cached_orders_for_asset(asset, df)  # cache bijwerken en dirty markeren
         self.logic.set_asset(asset)
-        self.update_payoff_table(); self.update_chart()
+        self.update_payoff_table()
+        self.update_chart()
 
     def _is_valid_test_order(self, data: dict) -> bool:
         # alles leeg? overslaan
@@ -1047,6 +1065,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             color_new = color
             ts_new = ts
         self._patch_comment_in_models(uniek_id, comment_new, color_new, ts_new)
+        if not self.commentFlushTimer.isActive():
+            self.commentFlushTimer.start()
 
     def _patch_comment_in_models(self, uniek_id: str, comment: str, color: str, ts):
         """Werk comment/timestamp bij in alle optie modellen zonder volledige reload."""
@@ -1121,6 +1141,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
                 self._patch_comment_in_models(current_uniek_id, row.get("optie_comment") or "", row.get("optie_comment_color") or "", row.get("optie_comment_updated_at"))
+            if not self.commentFlushTimer.isActive():
+                self.commentFlushTimer.start()
         except Exception as exc:
             print(f"[comments] kon kleur niet opslaan: {exc}")
 

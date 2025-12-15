@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1949</width>
-    <height>1269</height>
+    <width>1947</width>
+    <height>1326</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -34,7 +34,7 @@
      <widget class="PlotWidget" name="priceAantalChart" native="true">
       <property name="geometry">
        <rect>
-        <x>0</x>
+        <x>10</x>
         <y>760</y>
         <width>811</width>
         <height>191</height>
@@ -88,7 +88,7 @@
      <widget class="PlotWidget" name="resultaatChart" native="true">
       <property name="geometry">
        <rect>
-        <x>0</x>
+        <x>10</x>
         <y>960</y>
         <width>811</width>
         <height>191</height>
@@ -372,25 +372,6 @@
            <property name="bottomMargin">
             <number>2</number>
            </property>
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayout_8">
-             <property name="spacing">
-              <number>2</number>
-             </property>
-             <property name="leftMargin">
-              <number>2</number>
-             </property>
-             <property name="topMargin">
-              <number>2</number>
-             </property>
-             <property name="rightMargin">
-              <number>2</number>
-             </property>
-             <property name="bottomMargin">
-              <number>2</number>
-             </property>
-            </layout>
-           </item>
           </layout>
          </item>
         </layout>
@@ -430,7 +411,7 @@
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>860</y>
+        <y>350</y>
         <width>711</width>
         <height>291</height>
        </rect>
@@ -440,7 +421,7 @@
       <property name="geometry">
        <rect>
         <x>1130</x>
-        <y>820</y>
+        <y>310</y>
         <width>121</width>
         <height>31</height>
        </rect>
@@ -453,7 +434,7 @@
       <property name="geometry">
        <rect>
         <x>1260</x>
-        <y>820</y>
+        <y>310</y>
         <width>121</width>
         <height>31</height>
        </rect>
@@ -466,7 +447,7 @@
       <property name="geometry">
        <rect>
         <x>972</x>
-        <y>826</y>
+        <y>316</y>
         <width>151</width>
         <height>20</height>
        </rect>
@@ -479,7 +460,7 @@
       <property name="geometry">
        <rect>
         <x>832</x>
-        <y>826</y>
+        <y>316</y>
         <width>121</width>
         <height>20</height>
        </rect>
@@ -488,37 +469,11 @@
        <string>Enable Test Orders</string>
       </property>
      </widget>
-     <widget class="QTableView" name="tableViewAandelen">
-      <property name="geometry">
-       <rect>
-        <x>830</x>
-        <y>310</y>
-        <width>711</width>
-        <height>91</height>
-       </rect>
-      </property>
-      <property name="focusPolicy">
-       <enum>Qt::FocusPolicy::NoFocus</enum>
-      </property>
-     </widget>
-     <widget class="QTableView" name="tableViewSprinters">
-      <property name="geometry">
-       <rect>
-        <x>830</x>
-        <y>410</y>
-        <width>711</width>
-        <height>81</height>
-       </rect>
-      </property>
-      <property name="focusPolicy">
-       <enum>Qt::FocusPolicy::NoFocus</enum>
-      </property>
-     </widget>
      <widget class="QTableView" name="tableViewOptiesOpenPut">
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>680</y>
+        <y>790</y>
         <width>1081</width>
         <height>117</height>
        </rect>
@@ -531,7 +486,7 @@
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>550</y>
+        <y>660</y>
         <width>1081</width>
         <height>117</height>
        </rect>
@@ -539,6 +494,47 @@
       <property name="focusPolicy">
        <enum>Qt::FocusPolicy::NoFocus</enum>
       </property>
+     </widget>
+     <widget class="QWidget" name="verticalLayoutWidget_5">
+      <property name="geometry">
+       <rect>
+        <x>830</x>
+        <y>930</y>
+        <width>711</width>
+        <height>161</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_8">
+       <property name="spacing">
+        <number>2</number>
+       </property>
+       <property name="leftMargin">
+        <number>2</number>
+       </property>
+       <property name="topMargin">
+        <number>2</number>
+       </property>
+       <property name="rightMargin">
+        <number>2</number>
+       </property>
+       <property name="bottomMargin">
+        <number>2</number>
+       </property>
+       <item>
+        <widget class="QTableView" name="tableViewAandelen">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTableView" name="tableViewSprinters">
+         <property name="focusPolicy">
+          <enum>Qt::FocusPolicy::NoFocus</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </widget>
    </item>
