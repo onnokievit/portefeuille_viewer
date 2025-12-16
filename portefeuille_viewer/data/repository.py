@@ -49,12 +49,30 @@ def switch_database(name: str):
     global db_path, conn_str
     if name not in DB_MAP:
         raise ValueError(f"Onbekende database: {name}")
+    # flush eventuele dirty comments naar huidige DB voordat we overschakelen
+    with contextlib.suppress(Exception):
+        flush_dirty_open_optie_comments_to_db()
+    # flush dirty test orders naar huidige DB
+    with contextlib.suppress(Exception):
+        from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db
+        flush_dirty_test_orders_to_db()
     new_path = DB_MAP[name]
     test_conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={new_path};"
     with pyodbc.connect(test_conn_str):  # test connectie
         pass
     db_path = new_path
     conn_str = test_conn_str
+    # reset comment-cache zodat nieuwe DB geladen wordt
+    try:
+        SNAPSHOT_STORE.repository_snapshot_open_optie_comments = None
+        SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
+    except Exception:
+        pass
+    try:
+        SNAPSHOT_STORE.repository_snapshot_test_orders_cache = {}
+        SNAPSHOT_STORE.repository_dirty_test_orders_assets = set()
+    except Exception:
+        pass
     # Sla ook de actieve database-naam op in de snapshot store voor UI-consumptie
     try:
         SNAPSHOT_STORE.active_database_name = name

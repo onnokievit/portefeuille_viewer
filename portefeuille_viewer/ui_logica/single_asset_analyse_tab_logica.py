@@ -23,7 +23,19 @@ from portefeuille_viewer.data.repository import (
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
 )
-
+from portefeuille_viewer.services.single_asset_scenario_analyse import (
+    bereken_open_opties_payoff,
+    bereken_open_sprinters_payoff,
+    bereken_gesloten_aandelen_payoff,
+    bereken_open_aandelen_payoff,
+)
+from portefeuille_viewer.data.test_order_repository import delete_test_order
+from portefeuille_viewer.data.test_order_repository import (
+    get_cached_orders,
+    set_cached_orders_for_asset,
+    flush_dirty_test_orders_to_db,  # voor later timer/exit
+    load_test_orders_cache_from_db,
+)
 
 class CommentSortProxy(QSortFilterProxyModel):
     """Proxy die op UserRole sorteert en tuples (priority, text) netjes vergelijkt."""
@@ -45,18 +57,7 @@ class CommentSortProxy(QSortFilterProxyModel):
                 return l < r
             except Exception:
                 return False
-from portefeuille_viewer.services.single_asset_scenario_analyse import (
-    bereken_open_opties_payoff,
-    bereken_open_sprinters_payoff,
-    bereken_gesloten_aandelen_payoff,
-    bereken_open_aandelen_payoff,
-)
-from portefeuille_viewer.data.test_order_repository import delete_test_order
-from portefeuille_viewer.data.test_order_repository import (
-    get_cached_orders,
-    set_cached_orders_for_asset,
-    flush_dirty_test_orders_to_db,  # voor later timer/exit
-)
+
 
 
 ...
@@ -378,7 +379,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         load_open_optie_comments_cache()
         self.update_opties_open_table()
         self.testOrderFlushTimer = QTimer(self)
-        self.testOrderFlushTimer.setInterval(5_000)  # 5s
+        self.testOrderFlushTimer.setInterval(60_000)  # 5s
         self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
         # Comments cache vooraf laden
         load_open_optie_comments_cache()
@@ -482,7 +483,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 
     def fill_test_orders_table(self, df=None):
-        def fmt_date(val): ...
+        def fmt_date(val):
+            if val in ("", None):
+                return ""
+            import datetime as dt
+            if isinstance(val, dt.datetime):
+                return val.strftime("%d-%m-%Y")
+            if isinstance(val, dt.date):
+                return val.strftime("%d-%m-%Y")
+            s = str(val).strip()
+            # probeer verschillende scheidingen en volgordes
+            for sep in ("-", "/", "."):
+                parts = s.replace("/", sep).replace(".", sep).split(sep)
+                if len(parts) == 3:
+                    try:
+                        d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                        if y < 100:
+                            y = 2000 + y
+                        return f"{d:02d}-{m:02d}-{y:04d}"
+                    except Exception:
+                        continue
+            return s
         num_cols = {...}
 
         sorting = self.testOrdersTable.isSortingEnabled()
@@ -611,7 +632,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if not self._is_valid_test_order(row_data):
                 continue
             rows.append(row_data)
-        return pl.DataFrame(rows)
+        if rows:
+            return pl.DataFrame(rows)
+        # retourneer lege DF met alle kolomnamen zodat downstream geen ColumnNotFound krijgt
+        return pl.DataFrame({c: [] for c in cols})
 
     
     def row_to_dict(self, row: int) -> dict:
@@ -635,6 +659,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._fill_filter_comboboxes()
         self._on_filter_changed()
         self.comboBoxStatus.setCurrentText("active")
+        # comment-cache opnieuw laden uit nieuwe DB en tabel verversen
+        load_open_optie_comments_cache()
+        self.update_opties_open_table()
+        # test orders cache opnieuw laden en tabel verversen
+        load_test_orders_cache_from_db()
+        self.fill_test_orders_table(get_cached_orders(self.asset_selector.currentText()))
         
     def on_orders_committed(self):
         self.update_opties_open_table()
@@ -755,10 +785,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 if not source_index.isValid():
                     return
                 source_model = model.sourceModel()
-                colname = source_model.headerData(source_index.column(), Qt.Horizontal)
+                cols = getattr(source_model, "_df", None).columns if getattr(source_model, "_df", None) is not None else []
+                colname = cols[source_index.column()] if cols else source_model.headerData(source_index.column(), Qt.Horizontal)
                 value = source_model.data(source_index, Qt.DisplayRole)
             else:
-                colname = model.headerData(index.column(), Qt.Horizontal)
+                cols = getattr(model, "_df", None).columns if getattr(model, "_df", None) is not None else []
+                colname = cols[index.column()] if cols else model.headerData(index.column(), Qt.Horizontal)
                 value = model.data(index, Qt.DisplayRole)
             if colname == "asset_rollup":
                 idx = self.asset_selector.findText(value)
@@ -936,28 +968,31 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         )
         df_call = df_call.sort("optie_exp_date")
 
-        kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
-        columns = df.columns
+        kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date","afwijking_pct"]
+        columns = df_all.columns
         def kleur_func(row, colname, kleur_kolommen):
             return self.opties_kleur_func(row, colname, kleur_kolommen, columns)
 
         font = QFont("Arial", 8)
         font.setBold(False)
         kolombreedtes = {
+            "itm": 35,
             "broker": 60,
             "asset_rollup": 75,
-            "optie_call_put": 30,
+            "optie_call_put": 35,
+            "optie_exp_date": 75,
             "optie_strike": 50,
-            "optie_exp_date": 80,
+            "Koers": 50,
+            "afwijking_pct": 60,
             "aantal_bezit": 60,
             "premie": 60,
-            "Koers": 50,
+            
             "itm_otm": 60,
             "totaal_resultaat_optie": 60,
-            "itm": 35,
-            "afwijking_pct": 45,
-            "optie_comment": 160,
-            "optie_comment_updated_at": 120,
+            
+            
+            "optie_comment": 305,
+            "optie_comment_updated_at": 75,
             "optie_comment_color": 60,
         }
 
@@ -970,6 +1005,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        display_headers = {
+            "asset_rollup": "asset",
+            "optie_call_put": "c/p",
+            "optie_exp_date": "exp date",
+            "optie_strike": "strike",
+            "aantal_bezit": "aantal",
+            "totaal_resultaat_optie": "result",
+            "afwijking_pct": "delta",
+            "optie_comment": "comment",
+            "optie_comment_updated_at": "updated",
+        }
+        model_all.set_display_headers(display_headers)
         self._table_model = model_all  # model_all is je hoofdmodel voor de tabel
         self._model_opties_all = model_all
         proxy_model = CommentSortProxy(self)
@@ -1031,6 +1078,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        model_put.set_display_headers(display_headers)
         proxy_put = CommentSortProxy(self)
         proxy_put.setSourceModel(model_put)
         proxy_put.setSortRole(Qt.UserRole)
@@ -1066,6 +1114,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        model_call.set_display_headers(display_headers)
         proxy_call = CommentSortProxy(self)
         proxy_call.setSourceModel(model_call)
         proxy_call.setSortRole(Qt.UserRole)
@@ -1377,10 +1426,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     @staticmethod
     def opties_kleur_func(row, colname, kleur_kolommen, columns):
         try:
-            optie_call_put = row[columns.index("optie_call_put")]
-            itm_otm = row[columns.index("itm_otm")]
-            # print(f"DEBUG: {colname=}, {optie_call_put=}, {itm_otm=}")
-            if colname in kleur_kolommen and itm_otm != 0:
+            # map kolomnamen -> waarden zodat volgorde geen rol speelt
+            if isinstance(row, dict):
+                val_map = row
+            else:
+                val_map = {columns[i]: row[i] for i in range(min(len(columns), len(row)))}
+            optie_call_put = val_map.get("optie_call_put")
+            itm_otm = val_map.get("itm_otm")
+            # print(f"DEBUG opties_kleur_func: colname={colname}, optie_call_put={optie_call_put}, itm_otm={itm_otm}")
+            if colname in kleur_kolommen and itm_otm is not None and itm_otm != 0:
                 if optie_call_put == "put":
                     return QColor(255, 200, 200)
                 elif optie_call_put == "call":
@@ -1837,7 +1891,7 @@ class SingleAssetAnalyseLogic:
     def payoff_open_opties(self, koers):
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-        SNAPSHOT_STORE.test_repository_load_input_test_dataframe = self.df_open_opties  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = self.df_open_opties  # sourcery skip # of df_sum als je de gesumde versie wilt zien
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
       
         return bereken_open_opties_payoff(self.df_open_opties, koers)
@@ -1953,26 +2007,32 @@ class SingleAssetAnalyseLogic:
                     .otherwise(pl.lit("OTM"))
                     .alias("itm")
             )
-        df = df.select([
-            "broker",
-            "asset_rollup",
-            
-            pl.col("optie_call_put").alias("optie_call_put"),
-            pl.col("optie_strike").alias("optie_strike"),
-            pl.col("optie_exp_date").alias("optie_exp_date"),
-            pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
-            pl.col("SomVantransactie_euro_totaal").alias("premie"),
-            "Koers",
-            pl.col("ITM_OTM").alias("itm_otm"),
-            pl.col("opt_total_result").alias("totaal_resultaat_optie"),
-            pl.col("SomVantransactie_fee").alias("totaal_fees"),
-            pl.col("itm").alias("itm")
-        ])
         # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
         if "Koers" in df.columns and "optie_strike" in df.columns:
             df = df.with_columns(
             ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
+
+        df = df.select([
+            pl.col("itm").alias("itm"),
+            
+            "broker",
+            "asset_rollup",
+            pl.col("optie_call_put").alias("optie_call_put"),
+            pl.col("optie_exp_date").alias("optie_exp_date"),
+            pl.col("optie_strike").alias("optie_strike"),
+            "Koers",
+            "afwijking_pct",
+            pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
+            pl.col("SomVantransactie_euro_totaal").alias("premie"),
+            pl.col("opt_total_result").alias("totaal_resultaat_optie"),
+           
+            pl.col("SomVantransactie_fee").alias("totaal_fees"),
+            pl.col("ITM_OTM").alias("itm_otm"),
+
+
+        ])
+
 
         if df is None or df.is_empty():
             df = pl.DataFrame()

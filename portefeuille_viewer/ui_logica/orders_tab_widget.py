@@ -19,6 +19,7 @@ from portefeuille_viewer.data.repository import (
     load_reference_lists, update_transactions_atomic, insert_transaction,
     get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, build_uniek_id, is_pairable
     )
+from portefeuille_viewer.data.test_order_repository import load_test_orders_cache_from_db
 
 
 
@@ -1136,6 +1137,9 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self._apply_db_color(name)  # wisselt de kleurstijl van de DB-keuze
         self.reset_form()           # wist velden + toggles
         self._load_initial_records()
+        # test orders cache herladen uit nieuwe DB
+        with contextlib.suppress(Exception):
+            load_test_orders_cache_from_db()
         self.dbChanged.emit()
         # Zend centraal signaal uit voor app-brede database-wissel
         if hasattr(self, 'active_db_name'):

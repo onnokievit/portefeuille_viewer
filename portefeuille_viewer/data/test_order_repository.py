@@ -36,7 +36,31 @@ def get_test_orders(asset_rollup: str | None = None) -> pl.DataFrame:
     )
     with get_connection() as conn:
         pdf = pd.read_sql(sql, conn, params=params)
-    return pl.from_pandas(pdf)
+    df = pl.from_pandas(pdf)
+    # zorg voor consistente date/str weergave (UI verwacht strings)
+    if "optie_exp_date" in df.columns:
+        try:
+            df = df.with_columns(
+                pl.col("optie_exp_date")
+                .cast(pl.Date)
+                .dt.strftime("%d-%m-%Y")
+                .fill_null("")
+                .alias("optie_exp_date")
+            )
+        except Exception:
+            df = df.with_columns(pl.col("optie_exp_date").cast(pl.Utf8).fill_null("").alias("optie_exp_date"))
+    if "create_date" in df.columns:
+        try:
+            df = df.with_columns(
+                pl.col("create_date")
+                .cast(pl.Datetime)
+                .dt.strftime("%d-%m-%Y %H:%M:%S")
+                .fill_null("")
+                .alias("create_date")
+            )
+        except Exception:
+            df = df.with_columns(pl.col("create_date").cast(pl.Utf8).fill_null("").alias("create_date"))
+    return df
 
 def load_test_orders_cache_from_db():
     """Laad alle test orders in de snapshot cache (per asset_rollup)."""
