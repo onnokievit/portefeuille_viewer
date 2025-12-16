@@ -137,6 +137,10 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
         super().__init__(df, kleur_kolommen, kleur_func, parent, *args, **kwargs)
         self._editable_cols = set(editable_cols or [])
         self._commit_callback = commit_callback
+        self._color_priority_map = {}
+
+    def set_color_priority_map(self, prio_map: dict):
+        self._color_priority_map = prio_map or {}
 
     def data(self, index, role=Qt.DisplayRole):
         if role == Qt.EditRole:
@@ -161,14 +165,7 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                 colname = self._df.columns[index.column()]
                 if colname == "optie_comment" and "optie_comment_color" in self._df.columns:
                     cval = self._df[index.row(), self._df.columns.index("optie_comment_color")] or ""
-                    # sort priority: rood > oranje > groen > grijs > geen
-                    priority = {
-                        "#f8d7da": 4,  # rood
-                        "#ffeeba": 3,  # oranje
-                        "#d4edda": 2,  # groen
-                        "#bfbfbf": 1,  # grijs
-                        "": 0,
-                    }.get(cval, 0)
+                    priority = self._color_priority_map.get(cval, 0)
                     return (priority, str(self._df[index.row(), index.column()] or ""))
             except Exception:
                 pass
@@ -291,6 +288,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.testOrdersTable.setItemDelegateForColumn(5, num_delegate) #aantal
         self.testOrdersTable.setItemDelegateForColumn(6, num_delegate) #prijs
         self.testOrdersTable.setItemDelegateForColumn(8, num_delegate) #strike
+        # Klik op asset -> selecteer in asset_selector
+        self.testOrdersTable.cellClicked.connect(self._on_test_order_cell_clicked)
         
 
 
@@ -799,7 +798,25 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         except Exception:
             # Onderdruk Qt warning
             pass
-        
+
+    def _on_test_order_cell_clicked(self, row, col):
+        """Klik op asset in test-orders tabel: stel asset_selector in en reload."""
+        try:
+            asset_col = self.test_order_columns.index("asset_rollup")
+        except ValueError:
+            return
+        if col != asset_col:
+            return
+        item = self.testOrdersTable.item(row, col)
+        if not item:
+            return
+        value = (item.text() or "").strip()
+        if not value:
+            return
+        idx = self.asset_selector.findText(value)
+        if idx >= 0:
+            self.asset_selector.setCurrentIndex(idx)
+
     def update_sprinters_table(self):
         import polars as pl
 
@@ -1005,6 +1022,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        color_priority_map = get_settings().get_comment_color_priority_map()
+        model_all.set_color_priority_map(color_priority_map)
         display_headers = {
             "asset_rollup": "asset",
             "optie_call_put": "c/p",
@@ -1078,6 +1097,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        model_put.set_color_priority_map(color_priority_map)
         model_put.set_display_headers(display_headers)
         proxy_put = CommentSortProxy(self)
         proxy_put.setSourceModel(model_put)
@@ -1114,6 +1134,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
         )
+        model_call.set_color_priority_map(color_priority_map)
         model_call.set_display_headers(display_headers)
         proxy_call = CommentSortProxy(self)
         proxy_call.setSourceModel(model_call)
@@ -1214,14 +1235,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         current_color = source_model._df[src_index.row(), color_idx] if color_idx is not None else ""
 
         menu = QMenu(self)
-        color_actions = {
-            "Geen": "",
-            "Rood": "#f8d7da",
-            "Oranje": "#ffeeba",
-            "Groen": "#d4edda",
-            "Grijs": "#bfbfbf",
-        }
-        for label, hexval in color_actions.items():
+        color_defs = get_settings().get_comment_colors()
+        for _prio, label, hexval in color_defs:
             act = QAction(label, menu)
             act.setData(hexval)
             menu.addAction(act)

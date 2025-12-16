@@ -19,6 +19,7 @@ from portefeuille_viewer.data.repository import (
     flush_dirty_open_optie_comments_to_db,
 )
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.config.settings_manager import get_settings
 
 
 class OptiesOpenTableModel(PolarsTableModel):
@@ -26,6 +27,10 @@ class OptiesOpenTableModel(PolarsTableModel):
         super().__init__(df, parent)
         self._editable_cols = {"optie_comment"}
         self._commit_callback = commit_callback
+        self._color_priority_map = {}
+
+    def set_color_priority_map(self, prio_map: dict):
+        self._color_priority_map = prio_map or {}
 
     def flags(self, index):
         f = super().flags(index)
@@ -70,13 +75,7 @@ class OptiesOpenTableModel(PolarsTableModel):
             try:
                 if colname == "optie_comment" and "optie_comment_color" in columns:
                     cval = row[columns.index("optie_comment_color")] or ""
-                    priority = {
-                        "#f8d7da": 4,  # rood
-                        "#ffeeba": 3,  # oranje
-                        "#d4edda": 2,  # groen
-                        "#bfbfbf": 1,  # grijs
-                        "": 0,
-                    }.get(cval, 0)
+                    priority = self._color_priority_map.get(cval, 0)
                     return (priority, str(row[index.column()] or ""))
             except Exception:
                 pass
@@ -316,13 +315,8 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         current_color = self._table_model._df[src_index.row(), color_idx] if color_idx is not None else ""
 
         menu = QMenu(self)
-        color_actions = {
-            "Geen": "",
-            "Rood": "#f8d7da",
-            "Oranje": "#ffeeba",
-            "Groen": "#d4edda",
-        }
-        for label, hexval in color_actions.items():
+        color_defs = get_settings().get_comment_colors()
+        for _prio, label, hexval in color_defs:
             act = QAction(label, menu)
             act.setData(hexval)
             menu.addAction(act)
@@ -535,9 +529,10 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
         if df is None or df.is_empty():
             df = pl.DataFrame()
-            
+        
         
         self.model = OptiesOpenTableModel(df, self, commit_callback=self._on_comment_commit)
+        self.model.set_color_priority_map(get_settings().get_comment_color_priority_map())
         self.proxy_model = CommentSortProxy(self)
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setSortRole(Qt.UserRole)

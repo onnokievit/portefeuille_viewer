@@ -13,6 +13,14 @@ DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
 USER_CONFIG_DIR = Path(__file__).parent / ".user_settings"
 USER_CONFIG_PATH = USER_CONFIG_DIR / "settings.ini"
 
+DEFAULT_COMMENT_COLORS = [
+    (4, "Rood", "#f8d7da"),
+    (3, "Oranje", "#ffeeba"),
+    (2, "Groen", "#d4edda"),
+    (1, "Grijs", "#bfbfbf"),
+    (0, "Geen", ""),
+]
+
 
 class SettingsManager:
     # === EURUSD Setting ===
@@ -176,6 +184,32 @@ class SettingsManager:
             self.config.add_section('app')
         self.config.set('app', 'last_database', name)
         self.save()
+
+    # === Comment colors ===
+    def get_comment_colors(self):
+        """
+        Retourneer lijst van (priority, label, hex) voor comment-kleuren.
+        Priority bepaalt ook sorteer-volgorde; hoogste eerst.
+        """
+        colors = []
+        if self.config.has_section("comment_colors"):
+            for key, value in self.config.items("comment_colors"):
+                try:
+                    prio = int(key.strip())
+                except Exception:
+                    prio = 0
+                parts = [p.strip() for p in value.split(",", 1)]
+                label = parts[0] if parts else ""
+                hexval = parts[1] if len(parts) > 1 else ""
+                colors.append((prio, label, hexval))
+        if not colors:
+            colors = list(DEFAULT_COMMENT_COLORS)
+        # Sorteer op priority, hoog naar laag
+        return sorted(colors, key=lambda x: x[0], reverse=True)
+
+    def get_comment_color_priority_map(self):
+        """Map hex -> priority (int)."""
+        return {hexval: prio for prio, _label, hexval in self.get_comment_colors()}
 
 
 # Singleton instance
