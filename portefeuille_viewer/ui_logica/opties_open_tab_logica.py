@@ -18,6 +18,7 @@ from portefeuille_viewer.data.repository import (
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
 )
+from portefeuille_viewer.signals import signals
 
 
 class OptiesOpenTableModel(PolarsTableModel):
@@ -177,6 +178,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         QTableView::item:selected:active:focus { background: transparent; color: black; }
         QTableView::item:focus { background: transparent; color: black; }
         """)
+        signals.databaseChanged.connect(self._on_db_changed)
         self.reload_data()
 
     @Slot()
@@ -188,6 +190,10 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             header = self.table.horizontalHeader()
             self.current_sort_column = header.sortIndicatorSection()
             self.current_sort_order = header.sortIndicatorOrder()
+        self.reload_data()
+
+    def _on_db_changed(self, db_name: str):
+        load_open_optie_comments_cache()
         self.reload_data()
 
     def on_header_menu(self, pos):

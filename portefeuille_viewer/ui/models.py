@@ -1,6 +1,6 @@
 import pandas as pd
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
-from PySide6.QtGui import QColor, QBrush
+from PySide6.QtGui import QColor, QBrush, QFont
 import polars as pl
 import datetime
 
@@ -117,6 +117,12 @@ class PolarsTableModel(QAbstractTableModel):
         self._cols = list(self._df.columns)
         # Cache voor achtergrondkleuren
         self._bg_color_cache = {}
+        # Optioneel: mapping voor alternatieve kolomnamen in headers
+        self._display_headers = {}
+
+    def set_display_headers(self, mapping: dict | None):
+        """Optioneel alternatieve header labels meegeven per kolomnaam."""
+        self._display_headers = mapping or {}
 
     def set_df(self, df: pl.DataFrame):
         self.layoutAboutToBeChanged.emit()
@@ -135,7 +141,8 @@ class PolarsTableModel(QAbstractTableModel):
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
-            return self._cols[section]
+            col_name = self._cols[section]
+            return self._display_headers.get(col_name, col_name)
         return str(section + 1)
 
     def data(self, index, role=Qt.DisplayRole):
@@ -149,10 +156,20 @@ class PolarsTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if val is None:
                 return ""
+            if col_name == "aantal_bezit" and isinstance(val, (int, float)):
+                s = f"{val:,.0f}"
+                return s.replace(",", "X").replace(".", ",").replace("X", ".")
+            if col_name == "afwijking_pct" and isinstance(val, (int, float)):
+                s = f"{val:,.2f}%"
+                return s.replace(",", "X").replace(".", ",").replace("X", ".")
             if isinstance(val, float):
                 return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             # Format date columns without timestamp
             return val.strftime("%d/%m/%Y") if isinstance(val, datetime.date) else str(val)
+        if role == Qt.FontRole and col_name == "afwijking_pct":
+            f = QFont()
+            f.setItalic(True)
+            return f
         # --- Sorteer data (echte waarden voor QSortFilterProxyModel) ---
         if role == Qt.UserRole:
             # Geef de echte waarde terug voor sorting
@@ -195,9 +212,10 @@ class ColoredPolarsTableModel(PolarsTableModel):
         if role == Qt.DisplayRole:
             return super().data(index, role)
         if role == Qt.BackgroundRole and self.kleur_func:
-            row = self._df.row(index.row())
+            # Geef rij als dict mee zodat kleur-functies niet afhankelijk zijn van kolomvolgorde
+            row_named = self._df.row(index.row(), named=True)
             colname = self._df.columns[index.column()]
-            kleur = self.kleur_func(row, colname, self.kleur_kolommen)
+            kleur = self.kleur_func(row_named, colname, self.kleur_kolommen)
             if kleur:
                 return kleur
         return super().data(index, role)
@@ -278,4 +296,3 @@ class MultiColFilterProxy(QSortFilterProxyModel):
                     return False
 
         return True
-

@@ -345,8 +345,8 @@
      <widget class="QTableWidget" name="testOrdersTable">
       <property name="geometry">
        <rect>
-        <x>830</x>
-        <y>610</y>
+        <x>840</x>
+        <y>800</y>
         <width>711</width>
         <height>291</height>
        </rect>
@@ -355,8 +355,8 @@
      <widget class="QPushButton" name="buttonAddTestOrder">
       <property name="geometry">
        <rect>
-        <x>1130</x>
-        <y>570</y>
+        <x>1140</x>
+        <y>760</y>
         <width>121</width>
         <height>31</height>
        </rect>
@@ -368,8 +368,8 @@
      <widget class="QPushButton" name="buttonDeleteTestOrder">
       <property name="geometry">
        <rect>
-        <x>1260</x>
-        <y>570</y>
+        <x>1270</x>
+        <y>760</y>
         <width>121</width>
         <height>31</height>
        </rect>
@@ -381,8 +381,8 @@
      <widget class="QCheckBox" name="checkBoxAssetOrdersOnly">
       <property name="geometry">
        <rect>
-        <x>972</x>
-        <y>576</y>
+        <x>982</x>
+        <y>766</y>
         <width>151</width>
         <height>20</height>
        </rect>
@@ -394,8 +394,8 @@
      <widget class="QCheckBox" name="checkBoxEnableTestOrders">
       <property name="geometry">
        <rect>
-        <x>832</x>
-        <y>576</y>
+        <x>842</x>
+        <y>766</y>
         <width>121</width>
         <height>20</height>
        </rect>
@@ -408,7 +408,7 @@
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>440</y>
+        <y>590</y>
         <width>1081</width>
         <height>117</height>
        </rect>
@@ -421,7 +421,7 @@
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>310</y>
+        <y>460</y>
         <width>1081</width>
         <height>117</height>
        </rect>
@@ -434,8 +434,8 @@
       <property name="geometry">
        <rect>
         <x>830</x>
-        <y>921</y>
-        <width>707</width>
+        <y>371</y>
+        <width>431</width>
         <height>77</height>
        </rect>
       </property>
@@ -446,9 +446,9 @@
      <widget class="QTableView" name="tableViewSprinters">
       <property name="geometry">
        <rect>
-        <x>830</x>
-        <y>1000</y>
-        <width>707</width>
+        <x>1280</x>
+        <y>370</y>
+        <width>631</width>
         <height>78</height>
        </rect>
       </property>
