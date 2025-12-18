@@ -207,7 +207,8 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
 
             if self._commit_callback:
                 row_data = self._df.row(row_idx, named=True)
-                self._commit_callback(row_data)
+                # Defer commit zodat Qt's editor/commitData flow niet botst met model resets
+                QTimer.singleShot(0, lambda rd=row_data: self._commit_callback(rd))
             return True
         except Exception:
             return False
@@ -358,6 +359,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # Initialiseer payoff_table
         self.payoff_table.setColumnCount(17)
+
+        self._history_charts_right_axis_ready = False
+        self._opties_open_filter_connections_ready = False
         self.payoff_table.setRowCount(10)
         self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
                 # Maak de rijhoogte compacter
@@ -375,10 +379,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     table.setRowHeight(row, 22)
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
+        self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
+        self._opties_open_filter_connections_ready = True
         load_open_optie_comments_cache()
         self.update_opties_open_table()
         self.testOrderFlushTimer = QTimer(self)
-        self.testOrderFlushTimer.setInterval(60_000)  # 5s
+        self.testOrderFlushTimer.setInterval(60_000)  # 60s
         self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
         # Comments cache vooraf laden
         load_open_optie_comments_cache()
@@ -396,6 +402,39 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpenPut.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenPut, pos))
         self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
+
+    def _ensure_history_charts_right_axis(self):
+        pw = self.priceAantalChart
+        if self._history_charts_right_axis_ready:
+            return
+
+        self._rightView = pg.ViewBox()
+        pw.plotItem.showAxis('right')
+        pw.plotItem.scene().addItem(self._rightView)
+        pw.plotItem.getAxis('right').linkToView(self._rightView)
+        self._rightView.setXLink(pw.plotItem)
+
+        def _sync_right_view_geometry():
+            self._rightView.setGeometry(pw.plotItem.vb.sceneBoundingRect())
+
+        _sync_right_view_geometry()
+        pw.plotItem.vb.sigResized.connect(_sync_right_view_geometry)
+        self._history_charts_right_axis_ready = True
+
+    @staticmethod
+    def _set_plot_ranges(widget: pg.PlotWidget, x_values, y_values, *, padding=0.02):
+        if x_values is None or y_values is None or len(x_values) == 0 or len(y_values) == 0:
+            return
+
+        x_min, x_max = float(min(x_values)), float(max(x_values))
+        y_min, y_max = float(min(y_values)), float(max(y_values))
+        if x_min == x_max:
+            x_max = x_min + 1.0
+        if y_min == y_max:
+            y_max = y_min + 1.0
+
+        widget.setXRange(x_min, x_max, padding=padding)
+        widget.setYRange(y_min, y_max, padding=padding)
 
     @Slot(bool)
     def on_toggle_show_all_test_orders(self, checked):
@@ -580,23 +619,63 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     @Slot()
     def on_delete_test_order_clicked(self):
-        asset = self.asset_selector.currentText()
         idx = self.testOrdersTable.currentRow()
         if idx < 0:
             return
         row_data = self.row_to_dict(idx)
         order_id = row_data.get("Id")
+        deleted_asset = (row_data.get("asset_rollup") or "").strip() or self.asset_selector.currentText()
+        self._debug_print_test_orders_cache(f"delete clicked id={order_id} asset={deleted_asset}")
         # Verwijder uit DB als er een Id is, anders alleen uit UI
         if order_id:
             delete_test_order(int(order_id))
         self.testOrdersTable.blockSignals(True)
         self.testOrdersTable.removeRow(idx)
         self.testOrdersTable.blockSignals(False)
-        df = self.read_test_orders()  # leest de huidige (lege) tabel
-        set_cached_orders_for_asset(asset, df)  # cache bijwerken en dirty markeren
-        self.logic.set_asset(asset)
+        df_remaining = self.read_test_orders()  # leest de huidige tabel (single-asset of all-assets)
+        if getattr(self, "show_all_test_orders", False):
+            # In all-assets mode toont de tabel meerdere assets; update alleen het asset van de verwijderde rij.
+            if df_remaining is not None and not df_remaining.is_empty() and "asset_rollup" in df_remaining.columns:
+                df_asset_remaining = df_remaining.filter(pl.col("asset_rollup") == deleted_asset)
+            else:
+                df_asset_remaining = pl.DataFrame({c: [] for c in self.test_order_columns})
+            set_cached_orders_for_asset(deleted_asset, df_asset_remaining)
+        else:
+            # single-asset mode: tabel bevat alleen dit asset
+            set_cached_orders_for_asset(deleted_asset, df_remaining)
+
+        self._debug_print_test_orders_cache(f"after delete id={order_id} asset={deleted_asset}")
+        if not self.testOrderFlushTimer.isActive():
+            self.testOrderFlushTimer.start()
+        self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
         self.update_chart()
+
+    def _debug_print_test_orders_cache(self, msg: str):
+        """Debug helper om cache/dirty status te loggen naar CLI."""
+        try:
+            cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
+            dirty = getattr(SNAPSHOT_STORE, "repository_dirty_test_orders_assets", set()) or set()
+            current_asset = self.asset_selector.currentText()
+            mode = "all" if getattr(self, "show_all_test_orders", False) else "single"
+            n_assets = len(cache)
+            total_rows = 0
+            current_rows = 0
+            with_ids = 0
+            for a, df in cache.items():
+                if df is None or getattr(df, "is_empty", lambda: True)():
+                    continue
+                total_rows += df.height
+                if a == current_asset:
+                    current_rows = df.height
+                if "Id" in df.columns:
+                    try:
+                        with_ids += int((df["Id"].cast(pl.Utf8).str.lengths() > 0).sum())
+                    except Exception:
+                        pass
+            print(f"[test_orders] {msg} mode={mode} current_asset={current_asset} cache_assets={n_assets} cache_rows={total_rows} current_rows={current_rows} dirty={sorted(dirty)}")
+        except Exception as exc:
+            print(f"[test_orders] debug failed: {exc}")
 
     def _is_valid_test_order(self, data: dict) -> bool:
         # alles leeg? overslaan
@@ -969,24 +1048,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             for col in ("optie_comment_comment_db", "optie_comment_updated_at_comment_db", "optie_comment_color_comment_db"):
                 if col in df_all.columns:
                     df_all = df_all.drop(col)
+        # Put/Call tabellen moeten NIET meefilteren met de hoofdtable filters.
+        df_all_for_putcall = df_all
+        df_all_filtered = df_all
         if hasattr(self, "active_filters_opties_open") and self.active_filters_opties_open:
-            df_all = self._filter_dataframe(df_all, self.active_filters_opties_open)
+            df_all_filtered = self._filter_dataframe(df_all_filtered, self.active_filters_opties_open)
         # Voor put/call tabellen wél filteren
         df_put = (
-            df_all
+            df_all_for_putcall
             .filter(pl.col("asset_rollup") == asset)
             .filter(pl.col("optie_call_put") == "put")
         )
         df_put = df_put.sort("optie_exp_date")
         df_call = (
-            df_all
+            df_all_for_putcall
             .filter(pl.col("asset_rollup") == asset)
             .filter(pl.col("optie_call_put") == "call")
         )
         df_call = df_call.sort("optie_exp_date")
 
         kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date","afwijking_pct"]
-        columns = df_all.columns
+        columns = df_all_filtered.columns
         def kleur_func(row, colname, kleur_kolommen):
             return self.opties_kleur_func(row, colname, kleur_kolommen, columns)
 
@@ -1015,7 +1097,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # Alle opties (volledige tabel, geen asset-filter)
         model_all = CommentablePolarsTableModel(
-            df_all,
+            df_all_filtered,
             kleur_kolommen,
             kleur_func,
             self,
@@ -1379,19 +1461,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # --- Chart 1: priceAantalChart (zoals eerder) ---
         pw = self.priceAantalChart
+        self._ensure_history_charts_right_axis()
         pw.clear()
         pw.plotItem.clear()
         pw.plot(x, close_price, pen='b', name="Koers")
-        if not hasattr(self, '_rightView'):
-            self._rightView = pg.ViewBox()
-            pw.plotItem.showAxis('right')
-            pw.plotItem.scene().addItem(self._rightView)
-            pw.plotItem.getAxis('right').linkToView(self._rightView)
-            self._rightView.setXLink(pw.plotItem)
-        self._rightView.setGeometry(pw.plotItem.vb.sceneBoundingRect())
-        pw.plotItem.vb.sigResized.connect(lambda: self._rightView.setGeometry(pw.plotItem.vb.sceneBoundingRect()))
-        if hasattr(self, '_rightView'):
-            self._rightView.clear()
+        self._rightView.clear()
         aantal_curve = pg.PlotCurveItem(x, aantal, pen=pg.mkPen('g', width=2), name="Aantal bezit")
         self._rightView.addItem(aantal_curve)
         pw.plotItem.getAxis('right').setLabel('Aantal bezit', color='g')
@@ -1400,6 +1474,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         ax.setTicks([ticks])
         pw.plotItem.setLabel('left', '')
         pw.plotItem.setLabel('bottom', '')
+        self._set_plot_ranges(pw, x, close_price)
+        if aantal:
+            y_min, y_max = float(min(aantal)), float(max(aantal))
+            if y_min == y_max:
+                y_max = y_min + 1.0
+            self._rightView.setYRange(y_min, y_max, padding=0.02)
 
         # --- Chart 2: resultaatChart ---
         rw = self.resultaatChart
@@ -1408,6 +1488,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         rw.plot(x, totaal, pen=pg.mkPen('orange', width=2), name="Totaal")
         rw.plotItem.setLabel('left', '')
         rw.plotItem.setLabel('bottom', '')
+        self._set_plot_ranges(rw, x, totaal)
         font = QFont("Arial", 7)
         pw.getAxis('bottom').setStyle(tickFont=font)
         pw.getAxis('left').setStyle(tickFont=font)
@@ -1433,9 +1514,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # Filter functionaliteit voor tableViewOptiesOpen
         self._col_filters = {}
-        #self.active_filters_opties_open = {}
-        self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
-        self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
         # ...vervolgens: plot df in je pyqtgraph-widgets
     
     @staticmethod
@@ -1652,6 +1730,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if lower == upper:
                 upper = lower + 1
             self.plot_widget.setYRange(lower, upper)
+        if x_values:
+            x_min, x_max = min(x_values), max(x_values)
+            if x_min == x_max:
+                x_max = x_min + 1.0
+            self.plot_widget.setXRange(x_min, x_max, padding=0.02)
 
         # Plotten met pyqtgraph
         self.plot_widget.plot(x_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")

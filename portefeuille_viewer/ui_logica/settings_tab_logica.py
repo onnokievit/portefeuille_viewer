@@ -1,15 +1,16 @@
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 
-from portefeuille_viewer.config.settings_manager import SettingsManager
+from portefeuille_viewer.config import get_settings
 
 class SettingsTab(QWidget, Ui_SettingsTab):
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        self.settings_manager = SettingsManager()
+        self.settings_manager = get_settings()
         # Laad EUR/USD waarde uit settings.ini
         eurusd = self.settings_manager.get_eurusd()
         self.txtEURUSD.setText(str(eurusd))
@@ -18,6 +19,96 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         # Database config table setup
         self.btnNewDatabase.clicked.connect(self.add_database)
         self.load_databases()
+
+        # Comment kleur-config (open opties)
+        self._loading_comment_colors = False
+        if hasattr(self, "tableColorOptiesConfig"):
+            self.tableColorOptiesConfig.setColumnCount(2)
+            self.tableColorOptiesConfig.setHorizontalHeaderLabels(["Naam", "Kleur"])
+            self.tableColorOptiesConfig.cellClicked.connect(self._on_comment_color_cell_clicked)
+            self.tableColorOptiesConfig.cellChanged.connect(self._on_comment_color_cell_changed)
+            self.load_comment_colors()
+
+    def load_comment_colors(self):
+        if not hasattr(self, "tableColorOptiesConfig"):
+            return
+        self._loading_comment_colors = True
+        try:
+            colors = self.settings_manager.get_comment_colors()  # (prio,label,hex)
+            self.tableColorOptiesConfig.setRowCount(len(colors))
+            for row, (_prio, label, hexval) in enumerate(colors):
+                name_item = self._make_editable_item(label)
+                self.tableColorOptiesConfig.setItem(row, 0, name_item)
+
+                color_item = self._make_color_item(hexval)
+                self.tableColorOptiesConfig.setItem(row, 1, color_item)
+        finally:
+            self._loading_comment_colors = False
+
+    def _make_editable_item(self, text):
+        from PySide6.QtWidgets import QTableWidgetItem
+        item = QTableWidgetItem(text or "")
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        return item
+
+    def _make_color_item(self, hexval):
+        from PySide6.QtWidgets import QTableWidgetItem
+        item = QTableWidgetItem("")
+        item.setData(Qt.UserRole, hexval or "")
+        if hexval:
+            item.setToolTip(hexval)
+        item.setFlags((item.flags() & ~Qt.ItemIsEditable) | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        if hexval:
+            item.setBackground(QColor(hexval))
+        return item
+
+    def _save_comment_colors_from_table(self):
+        if not hasattr(self, "tableColorOptiesConfig"):
+            return
+        table = self.tableColorOptiesConfig
+        rows = table.rowCount()
+        colors = []
+        for r in range(rows):
+            name_item = table.item(r, 0)
+            color_item = table.item(r, 1)
+            label = (name_item.text() if name_item else "").strip()
+            hexval = ""
+            if color_item:
+                hexval = (color_item.data(Qt.UserRole) or color_item.text() or "").strip()
+            if not label:
+                continue
+            colors.append((label, hexval))
+        if colors:
+            self.settings_manager.set_comment_colors(colors)
+
+    def _on_comment_color_cell_clicked(self, row, col):
+        if not hasattr(self, "tableColorOptiesConfig"):
+            return
+        if col != 1:
+            return
+        from PySide6.QtWidgets import QColorDialog
+        item = self.tableColorOptiesConfig.item(row, col)
+        current = (item.data(Qt.UserRole) if item else "") or ""
+        color = QColorDialog.getColor(QColor(current) if current else QColor("#ffffff"), self, "Kies kleur")
+        if not color.isValid():
+            return
+        hexval = color.name()
+        if item is None:
+            item = self._make_color_item(hexval)
+            self.tableColorOptiesConfig.setItem(row, col, item)
+        else:
+            item.setData(Qt.UserRole, hexval)
+            item.setBackground(QColor(hexval))
+            item.setToolTip(hexval)
+        self._save_comment_colors_from_table()
+
+    def _on_comment_color_cell_changed(self, row, col):
+        if self._loading_comment_colors:
+            return
+        # Alleen naamkolom edits wegschrijven
+        if col != 0:
+            return
+        self._save_comment_colors_from_table()
 
     def load_databases(self):
         databases = self.settings_manager.get_databases()
