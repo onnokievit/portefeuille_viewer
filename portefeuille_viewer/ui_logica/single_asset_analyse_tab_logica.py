@@ -247,21 +247,26 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if df_rollups is not None and df_rollups.height > 0:
             asset_rollups = [str(x) for x in df_rollups["asset_rollup"].unique().to_list() if x]
 
-        self.test_order_columns = [
-            "Id", "broker", "asset_rollup", "asset_type","transactie_type","transactie_aantal","transactie_prijs","optie_exp_date",
-            "optie_strike", "optie_call_put", "include"
+        self.test_order_columns_db = [
+            "Id", "broker", "asset_rollup", "asset_type","transactie_type","transactie_aantal","transactie_prijs","optie_call_put","optie_exp_date",
+            "optie_strike",  "include"
             ]
+        self.test_order_columns = self.test_order_columns_db + ["optie_comment"]
         display_labels = [
             "Id", "Broker", "Asset", "Asset Type", "Transactie",
-            "Aantal", "Prijs", "Exp datum",
-            "Strike", "Call/Put", "Include",
+            "Aantal", "Prijs", "c/p", "Exp datum",
+            "Strike",  "Incl", "Comment",
             ]
         
         
         self.testOrdersTable.setColumnCount(len(self.test_order_columns))
         self.testOrdersTable.setHorizontalHeaderLabels(display_labels)
         self.testOrdersTable.setColumnHidden(0, True)
-        self.testOrdersTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        header_test_orders = self.testOrdersTable.horizontalHeader()
+        header_test_orders.setSectionResizeMode(QHeaderView.Interactive)
+        header_test_orders.setStretchLastSection(False)
+        self._apply_test_orders_column_widths()
+        self._apply_test_orders_styling()
         self.testOrdersTable.setSortingEnabled(True)
         # try:
         #     asset_col = self.test_order_columns.index("asset_rollup")
@@ -275,22 +280,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.buttonAddTestOrder.clicked.connect(self.add_empty_row)  # als je een knop hebt
         self.buttonDeleteTestOrder.clicked.connect(self.on_delete_test_order_clicked)
 
-        self.testOrdersTable.setItemDelegateForColumn(1, ComboDelegate(["degiro","lynx","interactive"], self))
-        self.testOrdersTable.setItemDelegateForColumn(2, ComboDelegate(asset_rollups, self))
-        self.testOrdersTable.setItemDelegateForColumn(3, ComboDelegate(["aandeel", "optie"], self))
-        self.testOrdersTable.setItemDelegateForColumn(4, ComboDelegate(["koop", "verkoop"], self))
-        # self.testOrdersTable.setItemDelegateForColumn(5, DoubleDelegate(self)) # aantal
-        # self.testOrdersTable.setItemDelegateForColumn(6, DoubleDelegate(self)) # prijs
-        self.testOrdersTable.setItemDelegateForColumn(7, DateDelegate(self)) # exp_date
-        # self.testOrdersTable.setItemDelegateForColumn(8, DoubleDelegate(self)) # strike
-        self.testOrdersTable.setItemDelegateForColumn(9, ComboDelegate(["call", "put"], self))
+        # Delegates koppelen op kolomnaam (niet op index), zodat kolomvolgorde vrij kan wijzigen.
+        def _set_delegate(colname: str, delegate) -> None:
+            if colname not in self.test_order_columns:
+                return
+            self.testOrdersTable.setItemDelegateForColumn(self.test_order_columns.index(colname), delegate)
+
+        _set_delegate("broker", ComboDelegate(["degiro", "lynx", "interactive"], self))
+        _set_delegate("asset_rollup", ComboDelegate(asset_rollups, self))
+        _set_delegate("asset_type", ComboDelegate(["aandeel", "optie"], self))
+        _set_delegate("transactie_type", ComboDelegate(["koop", "verkoop"], self))
+        _set_delegate("optie_call_put", ComboDelegate(["call", "put"], self))
+        _set_delegate("optie_exp_date", DateDelegate(self))
 
         num_delegate = NumberDelegate(self)
-        self.testOrdersTable.setItemDelegateForColumn(5, num_delegate) #aantal
-        self.testOrdersTable.setItemDelegateForColumn(6, num_delegate) #prijs
-        self.testOrdersTable.setItemDelegateForColumn(8, num_delegate) #strike
+        _set_delegate("transactie_aantal", num_delegate)
+        _set_delegate("transactie_prijs", num_delegate)
+        _set_delegate("optie_strike", num_delegate)
         # Klik op asset -> selecteer in asset_selector
         self.testOrdersTable.cellClicked.connect(self._on_test_order_cell_clicked)
+        self.testOrdersTable.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.testOrdersTable.customContextMenuRequested.connect(self._on_test_orders_context_menu)
         
 
 
@@ -403,6 +413,43 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
 
+    def _apply_test_orders_column_widths(self) -> None:
+        """
+        Handmatige kolombreedtes voor `testOrdersTable`.
+        Pas de dict hieronder aan naar smaak.
+        """
+        col_widths = {
+            "broker": 60,
+            "asset_rollup": 75,
+            "asset_type": 70,
+            "transactie_type": 75,
+            "transactie_aantal": 80,
+            "transactie_prijs": 80,
+            "optie_exp_date": 75,
+            "optie_strike": 50,
+            "optie_call_put": 35,
+            "include": 50,
+            "optie_comment": 305,
+        }
+
+        header = self.testOrdersTable.horizontalHeader()
+        for name, width in col_widths.items():
+            if name not in self.test_order_columns:
+                continue
+            idx = self.test_order_columns.index(name)
+            header.resizeSection(idx, width)
+
+    def _apply_test_orders_styling(self) -> None:
+        # match "opties open" look: Arial 8, non-bold, compact rows
+        font = QFont("Arial", 8)
+        font.setBold(False)
+        self.testOrdersTable.setFont(font)
+        self.testOrdersTable.verticalHeader().setMinimumSectionSize(22)
+        self.testOrdersTable.verticalHeader().setDefaultSectionSize(22)
+        self.testOrdersTable.verticalHeader().setVisible(False)
+        for r in range(self.testOrdersTable.rowCount()):
+            self.testOrdersTable.setRowHeight(r, 22)
+
     def _ensure_history_charts_right_axis(self):
         pw = self.priceAantalChart
         if self._history_charts_right_axis_ready:
@@ -481,8 +528,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if self.testOrdersTable.signalsBlocked():
             return
 
+        # Comment hoort niet bij test-order DB; schrijf naar optie-comments via uniek_id.
+        try:
+            idx_comment = self.test_order_columns.index("optie_comment")
+        except ValueError:
+            idx_comment = -1
+        if idx_comment >= 0 and col == idx_comment:
+            self._on_test_order_comment_changed(row)
+            return
+
         # Forceer asset_rollup alleen in per-asset modus
-        if "asset_rollup" in self.test_order_columns and not getattr(self, "show_all_test_orders", False):
+        if "asset_rollup" in self.test_order_columns_db and not getattr(self, "show_all_test_orders", False):
             try:
                 idx = self.test_order_columns.index("asset_rollup")
                 asset_val = self.asset_selector.currentText()
@@ -515,6 +571,138 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         if not self.testOrderFlushTimer.isActive():
             self.testOrderFlushTimer.start()
+
+    def _on_test_order_comment_changed(self, row: int) -> None:
+        try:
+            item = self.testOrdersTable.item(row, self.test_order_columns.index("optie_comment"))
+            comment = item.text() if item else ""
+            current_color = item.data(Qt.UserRole) if item is not None else ""
+            current_color = current_color or ""
+        except Exception:
+            return
+
+        values = self.row_to_dict_db(row)
+        if (values.get("asset_type") or "").strip().lower() != "optie":
+            return
+        uniek_id = build_uniek_id(values)
+        if not uniek_id:
+            return
+
+        try:
+            upsert_open_optie_comment(uniek_id, comment, current_color)
+            latest = fetch_open_optie_comments([uniek_id])
+            if latest is not None and not latest.is_empty():
+                row_latest = latest.row(0, named=True)
+                self._patch_comment_in_models(
+                    uniek_id,
+                    row_latest.get("optie_comment") or "",
+                    row_latest.get("optie_comment_color") or "",
+                    row_latest.get("optie_comment_updated_at"),
+                )
+                self._apply_comment_style_to_test_order_row(
+                    row,
+                    row_latest.get("optie_comment_color") or "",
+                )
+        except Exception as exc:
+            print(f"[comments] kon test-order comment niet opslaan: {exc}")
+            return
+
+        if not self.commentFlushTimer.isActive():
+            self.commentFlushTimer.start()
+
+    def _apply_comment_style_to_test_order_row(self, row: int, color_hex: str) -> None:
+        try:
+            idx_comment = self.test_order_columns.index("optie_comment")
+        except ValueError:
+            return
+        item = self.testOrdersTable.item(row, idx_comment)
+        if item is None:
+            return
+        self.testOrdersTable.blockSignals(True)
+        try:
+            item.setData(Qt.UserRole, color_hex or "")
+            if color_hex:
+                item.setBackground(QColor(color_hex))
+            else:
+                item.setBackground(QColor())
+        finally:
+            self.testOrdersTable.blockSignals(False)
+
+    def _on_test_orders_context_menu(self, pos) -> None:
+        row = self.testOrdersTable.rowAt(pos.y())
+        col = self.testOrdersTable.columnAt(pos.x())
+        if row < 0 or col < 0:
+            return
+
+        try:
+            idx_comment = self.test_order_columns.index("optie_comment")
+        except ValueError:
+            return
+        if col != idx_comment:
+            return
+
+        values = self.row_to_dict_db(row)
+        if (values.get("asset_type") or "").strip().lower() != "optie":
+            return
+        uniek_id = build_uniek_id(values)
+        if not uniek_id:
+            return
+
+        item = self.testOrdersTable.item(row, col)
+        current_comment = item.text() if item else ""
+        current_color = item.data(Qt.UserRole) if item is not None else ""
+        current_color = current_color or ""
+
+        menu = QMenu(self)
+
+        act_clear = QAction("Geen kleur", menu)
+        menu.addAction(act_clear)
+        menu.addSeparator()
+
+        color_defs = get_settings().get_comment_colors()
+        for _prio, label, hexval in color_defs:
+            act = QAction(label, menu)
+            act.setData(hexval)
+            menu.addAction(act)
+
+        menu.addSeparator()
+        act_custom = QAction("Kies kleur...", menu)
+        menu.addAction(act_custom)
+
+        chosen = menu.exec(self.testOrdersTable.viewport().mapToGlobal(pos))
+        if not chosen:
+            return
+
+        if chosen == act_clear:
+            hexval = ""
+        elif chosen == act_custom:
+            color = QColorDialog.getColor(QColor(current_color) if current_color else QColor("#ffffff"), self, "Kies kleur")
+            if not color.isValid():
+                return
+            hexval = color.name()
+        else:
+            hexval = chosen.data() or ""
+
+        try:
+            upsert_open_optie_comment(uniek_id, current_comment, hexval)
+            latest = fetch_open_optie_comments([uniek_id])
+            if latest is not None and not latest.is_empty():
+                row_latest = latest.row(0, named=True)
+                self._patch_comment_in_models(
+                    uniek_id,
+                    row_latest.get("optie_comment") or "",
+                    row_latest.get("optie_comment_color") or "",
+                    row_latest.get("optie_comment_updated_at"),
+                )
+                self._apply_comment_style_to_test_order_row(row, row_latest.get("optie_comment_color") or "")
+            else:
+                self._apply_comment_style_to_test_order_row(row, hexval)
+        except Exception as exc:
+            print(f"[comments] kon test-order kleur niet opslaan: {exc}")
+            return
+
+        if not self.commentFlushTimer.isActive():
+            self.commentFlushTimer.start()
 
 
 
@@ -553,11 +741,35 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.add_empty_row()
         else:
             cols = self.test_order_columns
-            for row_data in df.to_dicts():
+            rows = df.to_dicts()
+            # comments ophalen op basis van uniek_id (alleen voor optie-rijen)
+            comment_by_id = {}
+            color_by_id = {}
+            try:
+                uniek_ids = []
+                for rd in rows:
+                    if (rd.get("asset_type") or "").strip().lower() != "optie":
+                        continue
+                    uid = build_uniek_id(rd)
+                    if uid:
+                        rd["_uniek_id"] = uid
+                        uniek_ids.append(uid)
+                if uniek_ids:
+                    df_comments = fetch_open_optie_comments(uniek_ids)
+                    if df_comments is not None and not df_comments.is_empty():
+                        comment_by_id = {r["uniek_id"]: (r.get("optie_comment") or "") for r in df_comments.to_dicts()}
+                        color_by_id = {r["uniek_id"]: (r.get("optie_comment_color") or "") for r in df_comments.to_dicts()}
+            except Exception as exc:
+                print(f"[comments] ophalen comments voor test-orders faalde: {exc}")
+
+            for row_data in rows:
                 row = self.testOrdersTable.rowCount()
                 self.testOrdersTable.insertRow(row)
                 for c, name in enumerate(cols):
-                    val = row_data.get(name, "")
+                    if name == "optie_comment":
+                        val = comment_by_id.get(row_data.get("_uniek_id", ""), "")
+                    else:
+                        val = row_data.get(name, "")
                     if name == "optie_exp_date":
                         val = fmt_date(val)
                     if name in num_cols and val not in ("", None):
@@ -572,9 +784,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     else:
                         item = QTableWidgetItem(str(val))
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        if name == "optie_comment":
+                            color_hex = color_by_id.get(row_data.get("_uniek_id", ""), "")
+                            if color_hex:
+                                item.setData(Qt.UserRole, color_hex)
+                                item.setBackground(QColor(color_hex))
                     self.testOrdersTable.setItem(row, c, item)
 
         self.testOrdersTable.blockSignals(False)
+        self._apply_test_orders_styling()
         if sorting:
             try:
                 asset_col = self.test_order_columns.index("asset_rollup")
@@ -608,6 +826,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.testOrdersTable.setItem(row, c, item)
 
         self.testOrdersTable.blockSignals(False)
+        self._apply_test_orders_styling()
         if sorting:
             self.testOrdersTable.setSortingEnabled(True)
             try:
@@ -697,7 +916,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     
     
     def read_test_orders(self):
-        cols = self.test_order_columns
+        cols = self.test_order_columns_db
         rows = []
         for r in range(self.testOrdersTable.rowCount()):
             row_data = {}
@@ -718,6 +937,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     
     def row_to_dict(self, row: int) -> dict:
         cols = self.test_order_columns
+        data = {}
+        for c, name in enumerate(cols):
+            item = self.testOrdersTable.item(row, c)
+            if name == "include":
+                data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
+            else:
+                data[name] = item.text() if item else ""
+        return data
+
+    def row_to_dict_db(self, row: int) -> dict:
+        cols = self.test_order_columns_db
         data = {}
         for c, name in enumerate(cols):
             item = self.testOrdersTable.item(row, c)

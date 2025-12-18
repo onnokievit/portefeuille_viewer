@@ -160,7 +160,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.testOrdersTable = QTableWidget(self.widget)
         self.testOrdersTable.setObjectName(u"testOrdersTable")
-        self.testOrdersTable.setGeometry(QRect(840, 800, 711, 291))
+        self.testOrdersTable.setGeometry(QRect(840, 800, 1051, 291))
         self.buttonAddTestOrder = QPushButton(self.widget)
         self.buttonAddTestOrder.setObjectName(u"buttonAddTestOrder")
         self.buttonAddTestOrder.setGeometry(QRect(1140, 760, 121, 31))
