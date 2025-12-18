@@ -125,10 +125,10 @@ class PolarsTableModel(QAbstractTableModel):
         self._display_headers = mapping or {}
 
     def set_df(self, df: pl.DataFrame):
-        self.layoutAboutToBeChanged.emit()
-        #self.beginResetModel()
+        self.beginResetModel()
         self._df = df if df is not None else pl.DataFrame()
         self._cols = list(self._df.columns)
+        self._bg_color_cache = {}
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()):

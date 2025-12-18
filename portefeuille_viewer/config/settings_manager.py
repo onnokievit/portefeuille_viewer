@@ -43,19 +43,19 @@ class SettingsManager:
         # Laad default config uit package
         if DEFAULT_CONFIG_PATH.exists():
             self.config.read(DEFAULT_CONFIG_PATH, encoding='utf-8')
-            print(f"✅ Default config geladen: {DEFAULT_CONFIG_PATH}")
+            print(f"Default config geladen: {DEFAULT_CONFIG_PATH}")
         
         # User config overschrijft defaults (als deze bestaat)
         if USER_CONFIG_PATH.exists():
             self.config.read(USER_CONFIG_PATH, encoding='utf-8')
-            print(f"✅ User config geladen: {USER_CONFIG_PATH}")
+            print(f"User config geladen: {USER_CONFIG_PATH}")
     
     def save(self):
         """Sla huidige config op naar user directory."""
         USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         with open(USER_CONFIG_PATH, 'w', encoding='utf-8') as f:
             self.config.write(f)
-        print(f"💾 Config opgeslagen: {USER_CONFIG_PATH}")
+        print(f"Config opgeslagen: {USER_CONFIG_PATH}")
     
     # === Interactive Brokers ===
     def get_ib_host(self) -> str:
@@ -210,6 +210,49 @@ class SettingsManager:
     def get_comment_color_priority_map(self):
         """Map hex -> priority (int)."""
         return {hexval: prio for prio, _label, hexval in self.get_comment_colors()}
+
+    def set_comment_colors(self, colors):
+        """
+        Sla comment-kleuren op naar user settings.
+
+        `colors` mag zijn:
+        - list[(label, hex)]
+        - list[(priority, label, hex)]
+
+        Keys in ini zijn numeric priority's.
+        """
+        if not self.config.has_section("comment_colors"):
+            self.config.add_section("comment_colors")
+        else:
+            # wis bestaande opties
+            for k, _v in list(self.config.items("comment_colors")):
+                self.config.remove_option("comment_colors", k)
+
+        normalized = []
+        for item in (colors or []):
+            if not item:
+                continue
+            if len(item) == 2:
+                label, hexval = item
+                normalized.append((None, str(label), str(hexval)))
+            elif len(item) >= 3:
+                prio, label, hexval = item[0], item[1], item[2]
+                try:
+                    prio = int(prio)
+                except Exception:
+                    prio = None
+                normalized.append((prio, str(label), str(hexval)))
+
+        # Als prio ontbreekt: toekennen op basis van volgorde (hoog->laag)
+        if any(p is None for p, _l, _h in normalized):
+            n = len(normalized)
+            normalized = [(n - 1 - i, l, h) for i, (_p, l, h) in enumerate(normalized)]
+
+        # schrijf weg (hoog->laag)
+        for prio, label, hexval in sorted(normalized, key=lambda x: x[0], reverse=True):
+            self.config.set("comment_colors", str(prio), f"{label},{hexval}")
+
+        self.save()
 
 
 # Singleton instance

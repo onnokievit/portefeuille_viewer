@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsTab</class>
+ <widget class="QWidget" name="SettingsTab">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1440</width>
+    <height>928</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_main" stretch="1,1,3,3,5">
+   <item>
+    <widget class="QGroupBox" name="grpEURUSD">
+     <property name="title">
+      <string>EUR/USD Instelling</string>
+     </property>
+     <layout class="QHBoxLayout" name="layoutEURUSD">
+      <item>
+       <widget class="QLabel" name="lblEURUSD">
+        <property name="text">
+         <string>EUR/USD:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="txtEURUSD"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnSaveEURUSD">
+        <property name="text">
+         <string>EUR/USD Opslaan</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="grpIB">
+     <property name="title">
+      <string>Interactive Brokers Instellingen</string>
+     </property>
+     <layout class="QGridLayout" name="layoutIB">
+      <item row="0" column="0">
+       <widget class="QLabel" name="lblIBHost">
+        <property name="text">
+         <string>IB Host:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="txtIBHost">
+        <property name="text">
+         <string>127.0.0.1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="lblIBPort">
+        <property name="text">
+         <string>IB Port:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="txtIBPort">
+        <property name="text">
+         <string>7496</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2" rowspan="2">
+       <widget class="QPushButton" name="btnSaveIB">
+        <property name="text">
+         <string>IB Instellingen Opslaan</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="grpDatabase">
+     <property name="title">
+      <string>Database Configuratie</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QTableWidget" name="tblDatabaseConfig">
+        <column>
+         <property name="text">
+          <string>Database</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Pad</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Tekst</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Achtergrond</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Acties</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="layoutButtons">
+        <item>
+         <widget class="QPushButton" name="btnNewDatabase">
+          <property name="text">
+           <string>+ Nieuwe Database</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>GroupBox</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QTableWidget" name="tableColorOptiesConfig"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButtonNewColor">
+        <property name="minimumSize">
+         <size>
+          <width>116</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>PushButton</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_2">
+     <property name="title">
+      <string>GroupBox</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

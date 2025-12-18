@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'settings.ui'
+## Form generated from reading UI file 'settings.2.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.9.3
 ##
@@ -17,14 +17,14 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QGridLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QPushButton,
-    QSizePolicy, QSpacerItem, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget)
+    QSizePolicy, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QWidget)
 
 class Ui_SettingsTab(object):
     def setupUi(self, SettingsTab):
         if not SettingsTab.objectName():
             SettingsTab.setObjectName(u"SettingsTab")
-        SettingsTab.resize(1279, 600)
+        SettingsTab.resize(1440, 928)
         self.verticalLayout_main = QVBoxLayout(SettingsTab)
         self.verticalLayout_main.setObjectName(u"verticalLayout_main")
         self.grpEURUSD = QGroupBox(SettingsTab)
@@ -83,8 +83,8 @@ class Ui_SettingsTab(object):
 
         self.grpDatabase = QGroupBox(SettingsTab)
         self.grpDatabase.setObjectName(u"grpDatabase")
-        self.layoutDatabase = QVBoxLayout(self.grpDatabase)
-        self.layoutDatabase.setObjectName(u"layoutDatabase")
+        self.horizontalLayout = QHBoxLayout(self.grpDatabase)
+        self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.tblDatabaseConfig = QTableWidget(self.grpDatabase)
         if (self.tblDatabaseConfig.columnCount() < 5):
             self.tblDatabaseConfig.setColumnCount(5)
@@ -100,25 +100,49 @@ class Ui_SettingsTab(object):
         self.tblDatabaseConfig.setHorizontalHeaderItem(4, __qtablewidgetitem4)
         self.tblDatabaseConfig.setObjectName(u"tblDatabaseConfig")
 
-        self.layoutDatabase.addWidget(self.tblDatabaseConfig)
+        self.horizontalLayout.addWidget(self.tblDatabaseConfig)
 
         self.layoutButtons = QHBoxLayout()
         self.layoutButtons.setObjectName(u"layoutButtons")
-        self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.layoutButtons.addItem(self.horizontalSpacer)
-
         self.btnNewDatabase = QPushButton(self.grpDatabase)
         self.btnNewDatabase.setObjectName(u"btnNewDatabase")
 
         self.layoutButtons.addWidget(self.btnNewDatabase)
 
 
-        self.layoutDatabase.addLayout(self.layoutButtons)
+        self.horizontalLayout.addLayout(self.layoutButtons)
 
 
         self.verticalLayout_main.addWidget(self.grpDatabase)
 
+        self.groupBox = QGroupBox(SettingsTab)
+        self.groupBox.setObjectName(u"groupBox")
+        self.horizontalLayout_2 = QHBoxLayout(self.groupBox)
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.tableColorOptiesConfig = QTableWidget(self.groupBox)
+        self.tableColorOptiesConfig.setObjectName(u"tableColorOptiesConfig")
+
+        self.horizontalLayout_2.addWidget(self.tableColorOptiesConfig)
+
+        self.pushButtonNewColor = QPushButton(self.groupBox)
+        self.pushButtonNewColor.setObjectName(u"pushButtonNewColor")
+        self.pushButtonNewColor.setMinimumSize(QSize(116, 0))
+
+        self.horizontalLayout_2.addWidget(self.pushButtonNewColor)
+
+
+        self.verticalLayout_main.addWidget(self.groupBox)
+
+        self.groupBox_2 = QGroupBox(SettingsTab)
+        self.groupBox_2.setObjectName(u"groupBox_2")
+
+        self.verticalLayout_main.addWidget(self.groupBox_2)
+
+        self.verticalLayout_main.setStretch(0, 1)
+        self.verticalLayout_main.setStretch(1, 1)
+        self.verticalLayout_main.setStretch(2, 3)
+        self.verticalLayout_main.setStretch(3, 3)
+        self.verticalLayout_main.setStretch(4, 5)
 
         self.retranslateUi(SettingsTab)
 
@@ -147,6 +171,9 @@ class Ui_SettingsTab(object):
         ___qtablewidgetitem4 = self.tblDatabaseConfig.horizontalHeaderItem(4)
         ___qtablewidgetitem4.setText(QCoreApplication.translate("SettingsTab", u"Acties", None));
         self.btnNewDatabase.setText(QCoreApplication.translate("SettingsTab", u"+ Nieuwe Database", None))
+        self.groupBox.setTitle(QCoreApplication.translate("SettingsTab", u"GroupBox", None))
+        self.pushButtonNewColor.setText(QCoreApplication.translate("SettingsTab", u"PushButton", None))
+        self.groupBox_2.setTitle(QCoreApplication.translate("SettingsTab", u"GroupBox", None))
         pass
     # retranslateUi
 
