@@ -1,10 +1,11 @@
 
+import contextlib
 import polars as pl
-from datetime import datetime
+from datetime import datetime, date
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt, Slot, QTimer
 from PySide6.QtGui import QColor, QAction
-from PySide6.QtWidgets import QWidget, QMenu, QColorDialog, QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem, QStyle, QInputDialog
+from PySide6.QtWidgets import QWidget, QMenu, QColorDialog, QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem, QStyle, QInputDialog, QHeaderView
 
 
 from portefeuille_viewer.ui.models import PolarsTableModel
@@ -41,8 +42,29 @@ class OptiesOpenTableModel(PolarsTableModel):
         return f
 
     def data(self, index, role=Qt.DisplayRole):
-        # Gebruik originele formattering voor DisplayRole
+        # Gebruik originele formattering voor DisplayRole, behalve voor percentage kolom
         if role == Qt.DisplayRole:
+            if not index.isValid() or self._df.is_empty():
+                return None
+            col_name = self._df.columns[index.column()]
+            if col_name == "pct_change_prev":
+                val = self._df[index.row(), index.column()]
+                if val is None or val == "":
+                    return ""
+                try:
+                    return f"{float(val) * 100:.2f}%"
+                except Exception:
+                    return str(val)
+            if col_name == "koers_prev":
+                val = self._df[index.row(), index.column()]
+                if val is None or val == "":
+                    return ""
+                try:
+                    f = float(val)
+                    # 2 decimalen, decimaal separator komma
+                    return f"{f:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
             return super().data(index, role)
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
@@ -50,33 +72,78 @@ class OptiesOpenTableModel(PolarsTableModel):
             val = self._df[index.row(), index.column()]
             return "" if val is None else str(val)
 
-        row = self._df.row(index.row())
+        row_named = self._df.row(index.row(), named=True)
         columns = self._df.columns
         colname = columns[index.column()]
 
-        kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
+        # Kolommen die rood/groen moeten krijgen voor ITM posities
+        kleur_kolommen = ["itm", "broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
 
         if role == Qt.BackgroundRole:
             try:
+                if colname == "pct_change_prev":
+                    v = row_named.get("pct_change_prev")
+                    if v is None:
+                        return None
+                    try:
+                        v = float(v)
+                    except Exception:
+                        return None
+                    if v > 0:
+                        return QColor("#c6f7c6")
+                    if v < 0:
+                        return QColor("#f7c6c6")
+
                 if colname == "optie_comment" and "optie_comment_color" in columns:
-                    color_val = row[columns.index("optie_comment_color")]
+                    color_val = row_named.get("optie_comment_color") or ""
                     if color_val:
                         return QColor(color_val)
-                optie_call_put = row[columns.index("optie_call_put")]
-                itm_otm = row[columns.index("itm_otm")]
-                if colname in kleur_kolommen and itm_otm != 0:
+                optie_call_put = (row_named.get("optie_call_put") or "").lower()
+
+                itm_otm_val = row_named.get("itm_otm")
+                itm_text = (row_named.get("itm") or "").upper()
+                # Prefer the visible 'itm' column when present; it's robust against dtype issues in itm_otm.
+                if itm_text in {"ITM", "OTM"}:
+                    is_itm = (itm_text == "ITM")
+                elif itm_otm_val is None:
+                    is_itm = False
+                else:
+                    try:
+                        is_itm = int(itm_otm_val) != 0
+                    except Exception:
+                        is_itm = False
+
+                if colname in kleur_kolommen and is_itm:
                     if optie_call_put == "put":
                         return QColor(255, 200, 200)  # lichtrood
-                    elif optie_call_put == "call":
+                    if optie_call_put == "call":
                         return QColor(200, 255, 200)  # lichtgroen
             except Exception:
                 pass
+        if role == Qt.ForegroundRole:
+            try:
+                if colname == "pct_change_prev":
+                    v = row_named.get("pct_change_prev")
+                    if v is None:
+                        return None
+                    try:
+                        v = float(v)
+                    except Exception:
+                        return None
+                    if v > 0:
+                        return QColor(0, 120, 0)
+                    if v < 0:
+                        return QColor(220, 0, 0)
+            except Exception:
+                pass
+        if role == Qt.TextAlignmentRole and colname == "koers_prev":
+            return Qt.AlignRight | Qt.AlignVCenter
         if role == Qt.UserRole:
             try:
                 if colname == "optie_comment" and "optie_comment_color" in columns:
-                    cval = row[columns.index("optie_comment_color")] or ""
+                    cval = row_named.get("optie_comment_color") or ""
                     priority = self._color_priority_map.get(cval, 0)
-                    return (priority, str(row[index.column()] or ""))
+                    return (priority, str(row_named.get("optie_comment") or ""))
             except Exception:
                 pass
         return super().data(index, role)
@@ -152,6 +219,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._col_filters = {}
         self.tableView.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableView.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
+        self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.tableView.verticalHeader().setDefaultSectionSize(18) 
         self.portfolio_engine = portfolio_engine
         self.current_sort_column = -1
@@ -179,6 +247,75 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         """)
         signals.databaseChanged.connect(self._on_db_changed)
         self.reload_data()
+
+    def _apply_column_widths(self, df: pl.DataFrame) -> None:
+        """
+        Handmatige kolombreedtes voor de opties-open tabel.
+        Pas de dict hieronder aan naar smaak.
+        """
+        if df is None or df.is_empty():
+            return
+        header = self.tableView.horizontalHeader()
+        col_widths = {
+            "itm": 80,
+            "broker": 100,
+            "asset_rollup": 110,
+            "optie_call_put": 45,
+            "optie_exp_date": 100,
+            "optie_strike": 80,
+            "Koers": 80,
+            "koers_prev": 80,
+            "pct_change_prev": 90,
+            "afwijking_pct": 80,
+            "aantal_bezit": 80,
+            "premie": 100,
+            "totaal_resultaat_optie": 100,
+            "optie_comment": 600,
+            "optie_comment_updated_at": 100,
+        }
+        for col, width in col_widths.items():
+            if col not in df.columns:
+                continue
+            header.resizeSection(df.columns.index(col), width)
+
+    def _reorder_opties_open_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Pas hier de gewenste kolomvolgorde aan.
+        Onbekende kolommen worden genegeerd; overige kolommen blijven achteraan staan.
+        """
+        if df is None or df.is_empty():
+            return df
+
+        desired_order = [
+            "itm",
+            "broker",
+            "asset_rollup",
+            "optie_call_put",
+            "optie_exp_date",
+            "optie_strike",
+            "Koers",
+            "afwijking_pct",
+            "koers_prev",
+            "pct_change_prev",
+            
+            "aantal_bezit",
+            "premie",
+            
+            "totaal_resultaat_optie",
+            "itm_otm",
+            "totaal_fees",
+            "optie_comment",
+            "optie_comment_updated_at",
+            # helper/hidden columns last
+            "optie_comment_color",
+            "uniek_id",
+            
+        ]
+
+        cols = df.columns
+        ordered = [c for c in desired_order if c in cols]
+        rest = [c for c in cols if c not in ordered]
+        return df.select(ordered + rest)
 
     @Slot()
     def on_opties_update(self):
@@ -478,6 +615,44 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     if col in df.columns:
                         df = df.drop(col)
 
+            # Voeg koers_prev toe vanuit per_dag_asset_result + pct_change_prev (Koers vs koers_prev)
+            try:
+                df_asset_result = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
+                if df_asset_result is not None and not df_asset_result.is_empty():
+                    today = date.today()
+                    df_asset_result = df_asset_result.filter(pl.col("datum") < today)
+                    if "datum" in df_asset_result.columns and df_asset_result["datum"].dtype == pl.String:
+                        df_asset_result = df_asset_result.with_columns(
+                            pl.col("datum").str.strptime(pl.Date, "%d/%m/%Y", strict=False)
+                        )
+                    df_latest = (
+                        df_asset_result
+                        .sort(["asset_rollup", "datum"])
+                        .group_by("asset_rollup")
+                        .agg([pl.col("close_price").last().alias("koers_prev")])
+                    )
+                    df = df.join(df_latest, on="asset_rollup", how="left")
+                else:
+                    df = df.with_columns(pl.lit(None).alias("koers_prev"))
+            except Exception:
+                if "koers_prev" not in df.columns:
+                    df = df.with_columns(pl.lit(None).alias("koers_prev"))
+
+            # Zorg dat koers_prev numeriek is (voor consistente formatting/alignment)
+            if "koers_prev" in df.columns:
+                with contextlib.suppress(Exception):
+                    df = df.with_columns(pl.col("koers_prev").cast(pl.Float64, strict=False).alias("koers_prev"))
+
+            if "Koers" in df.columns and "koers_prev" in df.columns:
+                df = df.with_columns(
+                    pl.when((pl.col("koers_prev").is_not_null()) & (pl.col("koers_prev") != 0))
+                    .then((pl.col("Koers") / pl.col("koers_prev")) - 1)
+                    .otherwise(None)
+                    .alias("pct_change_prev")
+                )
+            elif "pct_change_prev" not in df.columns:
+                df = df.with_columns(pl.lit(None).alias("pct_change_prev"))
+
         filters = getattr(self, "active_filters", {})
         if filters:
             for key, value in filters.items():
@@ -527,8 +702,19 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                             mask = m if mask is None else (mask | m)
                         df = df.filter(mask)
 
+        df = self._reorder_opties_open_columns(df)
+
         if df is None or df.is_empty():
             df = pl.DataFrame()
+        
+        # DEBUG: print kolommen (1x per unieke set) om te zien of itm/itm_otm nog aanwezig is
+        try:
+            cols_now = tuple(df.columns) if df is not None else ()
+            if getattr(self, "_debug_last_df_columns", None) != cols_now:
+                self._debug_last_df_columns = cols_now
+                # print(f"[opties_open] df.columns={list(cols_now)} rows={0 if df is None else df.height}")
+        except Exception:
+            pass
         
         
         self.model = OptiesOpenTableModel(df, self, commit_callback=self._on_comment_commit)
@@ -547,10 +733,11 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._table_model = self.model  # update voor de mixin
         self.table.setModel(self.proxy_model)
         # verberg helperkolommen
-        for hide_col in ("uniek_id", "optie_comment_color"):
+        for hide_col in ("uniek_id", "optie_comment_color", "totaal_fees"):
             if hide_col in df.columns:
                 idx = df.columns.index(hide_col)
                 self.tableView.setColumnHidden(idx, True)
+        self._apply_column_widths(df)
         if self.current_sort_column >= 0:
             self.tableView.sortByColumn(self.current_sort_column, self.current_sort_order)
         # selectie herstellen
