@@ -15,7 +15,7 @@ from portefeuille_viewer.ui.models import ColoredPolarsTableModel
 from portefeuille_viewer.ui.single_asset_analyse_tab_ui import Ui_SingleAssetAnalyseTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_settings
-from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin
+from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin, ColumnFilterPopup
 from portefeuille_viewer.data.repository import (
     build_uniek_id,
     fetch_open_optie_comments,
@@ -1647,6 +1647,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         a_contains = menu.addAction("Tekst bevat...")
         a_equals   = menu.addAction("Is precies...")
         menu.addSeparator()
+        a_color_filter = None
+        if colname == "optie_comment":
+            a_color_filter = menu.addAction("Filter op kleur...")
+            menu.addSeparator()
         a_pick = menu.addAction("Waarden kiezen...")
 
         act = menu.exec(header.mapToGlobal(pos))
@@ -1681,9 +1685,33 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 self.apply_filters()
             return
 
+        if act == a_color_filter:
+            self._open_comment_color_popup(header.mapToGlobal(pos))
+            return
+
         if act == a_pick:
             self._open_value_popup_for_column(colname, header.mapToGlobal(pos))
             return
+
+    def _open_comment_color_popup(self, global_pos):
+        color_defs = get_settings().get_comment_colors() or []
+        values = [hexval for _prio, _label, hexval in color_defs if hexval]
+        if "" not in values:
+            values.insert(0, "")
+        label_map = {"": "Geen kleur"}
+        for _prio, label, hexval in color_defs:
+            if hexval:
+                label_map[hexval] = label
+
+        pre = set()
+        if "optie_comment_color" in (self._col_filters or {}) and "in" in self._col_filters["optie_comment_color"]:
+            pre = set(self._col_filters["optie_comment_color"]["in"])
+
+        pop = ColumnFilterPopup("Filter: comment kleur", values, pre_selected=pre, parent=self, label_map=label_map)
+        pop.move(global_pos)
+        pop.acceptedSelection.connect(lambda selected: self._apply_in_filter("optie_comment_color", selected))
+        pop.cleared.connect(lambda: self._clear_col_filter("optie_comment_color"))
+        pop.show()
 
 
     def on_asset_selected(self, asset_rollup):
