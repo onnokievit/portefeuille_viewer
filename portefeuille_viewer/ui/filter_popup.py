@@ -8,7 +8,7 @@ class ColumnFilterPopup(QDialog):
     acceptedSelection = Signal(set)  # set met gekozen waarden (kan None bevatten)
     cleared = Signal()
 
-    def __init__(self, title: str, values: list, pre_selected: set | None = None, parent: QWidget | None = None):
+    def __init__(self, title: str, values: list, pre_selected: set | None = None, parent: QWidget | None = None, label_map: dict | None = None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -17,6 +17,7 @@ class ColumnFilterPopup(QDialog):
 
         self._all_values = values[:] if values else []
         self._pre = set(pre_selected or set())
+        self._label_map = label_map or {}
 
         lay = QVBoxLayout(self)
         self.search = QLineEdit(self)
@@ -49,7 +50,10 @@ class ColumnFilterPopup(QDialog):
         btns.rejected.connect(self.reject)
         self.btn_clear.clicked.connect(self._on_clear)
 
-    def _label_for(self, v): return "(Lege regels)" if v in (None, "") else str(v)
+    def _label_for(self, v):
+        if v in self._label_map:
+            return str(self._label_map[v])
+        return "(Lege regels)" if v in (None, "") else str(v)
 
     def _rebuild_items(self):
         self.list.clear()
