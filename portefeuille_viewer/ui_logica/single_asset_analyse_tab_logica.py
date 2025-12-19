@@ -4,11 +4,11 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog
+from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
-from streamlit import columns
+# from streamlit import columns
 
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.models import ColoredPolarsTableModel  
@@ -45,16 +45,16 @@ class CommentSortProxy(QSortFilterProxyModel):
 
     def lessThan(self, left, right):
         role = self.sortRole()
-        l = left.data(role)
-        r = right.data(role)
+        links = left.data(role)
+        rechts = right.data(role)
         try:
-            return l < r
+            return links < rechts
         except Exception:
             # fallback op displayrole als tuple/None niet vergelijkbaar zijn
-            l = left.data(Qt.DisplayRole)
-            r = right.data(Qt.DisplayRole)
+            links = left.data(Qt.DisplayRole)
+            rechts = right.data(Qt.DisplayRole)
             try:
-                return l < r
+                return links < rechts
             except Exception:
                 return False
 
@@ -224,6 +224,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self._wrap_in_scroll_area()
 
         # init logic
         self.logic = SingleAssetAnalyseLogic()
@@ -449,6 +450,45 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.testOrdersTable.verticalHeader().setVisible(False)
         for r in range(self.testOrdersTable.rowCount()):
             self.testOrdersTable.setRowHeight(r, 22)
+
+    def _wrap_in_scroll_area(self) -> None:
+        """
+        Maak alleen deze tab scrollbaar (handig op laptop-schermen).
+
+        De UI van deze tab gebruikt absolute positioning op `self.widget`.
+        Door `self.widget` in een QScrollArea te plaatsen wordt de hele tab scrollbaar.
+        """
+        try:
+            layout = getattr(self, "verticalLayout_2", None)
+            content = getattr(self, "widget", None)
+            if layout is None or content is None:
+                return
+
+            if getattr(self, "_single_asset_scroll_area", None) is not None:
+                return
+
+            # Bepaal content size op basis van grootste child geometry (absolute UI)
+            max_w = 0
+            max_h = 0
+            for child in content.findChildren(QWidget):
+                g = child.geometry()
+                max_w = max(max_w, g.x() + g.width())
+                max_h = max(max_h, g.y() + g.height())
+            if max_w > 0 and max_h > 0:
+                content.setMinimumSize(max_w + 10, max_h + 10)
+
+            scroll = QScrollArea(self)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+            layout.removeWidget(content)
+            scroll.setWidget(content)
+            layout.addWidget(scroll)
+
+            self._single_asset_scroll_area = scroll
+        except Exception as exc:
+            print(f"[ui] kon SingleAssetAnalyseTab niet scrollbaar maken: {exc}")
 
     def _ensure_history_charts_right_axis(self):
         pw = self.priceAantalChart
@@ -1298,9 +1338,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df_call = df_call.sort("optie_exp_date")
 
         kleur_kolommen = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date","afwijking_pct"]
-        columns = df_all_filtered.columns
+        df_columns = df_all_filtered.columns
         def kleur_func(row, colname, kleur_kolommen):
-            return self.opties_kleur_func(row, colname, kleur_kolommen, columns)
+            return self.opties_kleur_func(row, colname, kleur_kolommen, df_columns)
 
         font = QFont("Arial", 8)
         font.setBold(False)

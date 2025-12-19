@@ -184,15 +184,15 @@ class CommentSortProxy(QSortFilterProxyModel):
 
     def lessThan(self, left, right):
         role = self.sortRole()
-        l = left.data(role)
-        r = right.data(role)
+        links = left.data(role)
+        rechts = right.data(role)
         try:
-            return l < r
+            return links < rechts
         except Exception:
-            l = left.data(Qt.DisplayRole)
-            r = right.data(Qt.DisplayRole)
+            links = left.data(Qt.DisplayRole)
+            rechts = right.data(Qt.DisplayRole)
             try:
-                return l < r
+                return links < rechts
             except Exception:
                 return False
 
