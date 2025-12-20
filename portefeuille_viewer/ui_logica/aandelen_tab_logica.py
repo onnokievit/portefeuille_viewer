@@ -1,6 +1,6 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
 from PySide6.QtWidgets import QWidget, QTableWidgetItem,QFileDialog, QMessageBox, QStyledItemDelegate, QStyle
-from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
+from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer
 from PySide6.QtWidgets import QTableWidget
 from PySide6.QtGui import QColor
 
@@ -87,6 +87,12 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.current_sort_order = 0
 		self.col_filters = {}
 		self.selected_brokers = None
+		self._active = False
+		self._dirty = False
+		self._reload_timer = QTimer(self)
+		self._reload_timer.setInterval(500)
+		self._reload_timer.setSingleShot(True)
+		self._reload_timer.timeout.connect(self._reload_if_needed)
 
 		# Engine en pricefeed
 		if portfolio_engine is not None:
@@ -547,6 +553,23 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		if self.current_sort_column >= 0:
 			self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
 
+	def set_active(self, active: bool):
+		self._active = active
+		if active and self._dirty:
+			self._schedule_reload()
+
+	def _schedule_reload(self):
+		self._dirty = True
+		if not self._reload_timer.isActive():
+			self._reload_timer.start()
+
+	def _reload_if_needed(self):
+		if not self._active:
+			return
+		if self._dirty:
+			self._dirty = False
+			self.reload_data()
+
 	def open_broker_popup(self):
 		from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 		df = SNAPSHOT_STORE.aggregator_snapshot_aandelen_live
@@ -570,7 +593,10 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			header = self.tblAandelen.horizontalHeader()
 			self.current_sort_column = header.sortIndicatorSection()
 			self.current_sort_order = header.sortIndicatorOrder()
-		self.reload_data()
+		if not self._active:
+			self._dirty = True
+			return
+		self._schedule_reload()
 
 	@Slot(str, str, float)
 	def on_ticker_display(self, sym: str, cur: str, px: float):

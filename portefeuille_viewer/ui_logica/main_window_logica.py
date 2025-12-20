@@ -49,6 +49,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.repository_tester_tab = RepositoryTesterTab()
         self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
 
+        self.tabWidget.currentChanged.connect(self._on_tab_changed)
+        self._on_tab_changed(self.tabWidget.currentIndex())
 
         self.shortcut_focus_tabbar = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
@@ -66,6 +68,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.tabWidget.setCurrentIndex((self.tabWidget.currentIndex() - 1) % self.tabWidget.count())
                     return True  # event is handled
         return super().eventFilter(obj, event)
+
+    def _on_tab_changed(self, index):
+        if hasattr(self, "aandelen_tab") and hasattr(self.aandelen_tab, "set_active"):
+            self.aandelen_tab.set_active(index == self.tabWidget.indexOf(self.aandelen_tab))
+        if hasattr(self, "opties_open_tab") and hasattr(self.opties_open_tab, "set_active"):
+            self.opties_open_tab.set_active(index == self.tabWidget.indexOf(self.opties_open_tab))
+        if hasattr(self, "sprinters_open_tab") and hasattr(self.sprinters_open_tab, "set_active"):
+            self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
     
     def closeEvent(self, event):
         # Stop hier je services, threads, timers, etc.

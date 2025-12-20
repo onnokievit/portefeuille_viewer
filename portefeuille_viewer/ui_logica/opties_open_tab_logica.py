@@ -217,6 +217,12 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         # self.tableView = self.table  # of self.tableView als dat je QTableView is
         self._table_model = None  # na reload_data()
         self._col_filters = {}
+        self._active = False
+        self._dirty = False
+        self._reload_timer = QTimer(self)
+        self._reload_timer.setInterval(500)
+        self._reload_timer.setSingleShot(True)
+        self._reload_timer.timeout.connect(self._reload_if_needed)
         self.tableView.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableView.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
         self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
@@ -326,11 +332,34 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             header = self.table.horizontalHeader()
             self.current_sort_column = header.sortIndicatorSection()
             self.current_sort_order = header.sortIndicatorOrder()
-        self.reload_data()
+        if not self._active:
+            self._dirty = True
+            return
+        self._schedule_reload()
 
     def _on_db_changed(self, db_name: str):
         load_open_optie_comments_cache()
-        self.reload_data()
+        if not self._active:
+            self._dirty = True
+            return
+        self._schedule_reload()
+
+    def set_active(self, active: bool):
+        self._active = active
+        if active and self._dirty:
+            self._schedule_reload()
+
+    def _schedule_reload(self):
+        self._dirty = True
+        if not self._reload_timer.isActive():
+            self._reload_timer.start()
+
+    def _reload_if_needed(self):
+        if not self._active:
+            return
+        if self._dirty:
+            self._dirty = False
+            self.reload_data()
 
     def on_header_menu(self, pos):
         """

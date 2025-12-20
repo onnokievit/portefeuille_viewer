@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHeaderView
-from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
+from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer
 from portefeuille_viewer.ui.sprinters_open_ui import Ui_Form
 from portefeuille_viewer.ui.models import PolarsTableModel
 import polars as pl
@@ -12,6 +12,12 @@ class SprintersOpenTab(QWidget, Ui_Form):
 		self.portfolio_engine = portfolio_engine
 		self.current_sort_column = -1
 		self.current_sort_order = 0
+		self._active = False
+		self._dirty = False
+		self._reload_timer = QTimer(self)
+		self._reload_timer.setInterval(500)
+		self._reload_timer.setSingleShot(True)
+		self._reload_timer.timeout.connect(self._reload_if_needed)
 
 		# TableView setup
 		self.tableView.verticalHeader().setVisible(False)
@@ -33,7 +39,27 @@ class SprintersOpenTab(QWidget, Ui_Form):
 			header = self.tableView.horizontalHeader()
 			self.current_sort_column = header.sortIndicatorSection()
 			self.current_sort_order = header.sortIndicatorOrder()
-		self.reload_data()
+		if not self._active:
+			self._dirty = True
+			return
+		self._schedule_reload()
+
+	def set_active(self, active: bool):
+		self._active = active
+		if active and self._dirty:
+			self._schedule_reload()
+
+	def _schedule_reload(self):
+		self._dirty = True
+		if not self._reload_timer.isActive():
+			self._reload_timer.start()
+
+	def _reload_if_needed(self):
+		if not self._active:
+			return
+		if self._dirty:
+			self._dirty = False
+			self.reload_data()
 
 	def reload_data(self):
 		df = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
