@@ -2406,7 +2406,7 @@ class SingleAssetAnalyseLogic:
         # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
         if "Koers" in df.columns and "optie_strike" in df.columns:
             df = df.with_columns(
-            ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
+            ( (pl.col("Koers") - pl.col("optie_strike")) / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
 
         df = df.select([
@@ -2422,7 +2422,6 @@ class SingleAssetAnalyseLogic:
             pl.col("SomVantransactie_aantal").alias("aantal_bezit"),
             pl.col("SomVantransactie_euro_totaal").alias("premie"),
             pl.col("opt_total_result").alias("totaal_resultaat_optie"),
-           
             pl.col("SomVantransactie_fee").alias("totaal_fees"),
             pl.col("ITM_OTM").alias("itm_otm"),
 
