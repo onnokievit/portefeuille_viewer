@@ -1,5 +1,5 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QFileDialog, QMessageBox, QStyledItemDelegate, QStyle
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QFileDialog, QMessageBox, QStyledItemDelegate, QStyle, QHeaderView
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer
 from PySide6.QtWidgets import QTableWidget
 from PySide6.QtGui import QColor
@@ -119,6 +119,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.tblAandelen.verticalHeader().setVisible(False)
 		self.tblAandelen.setAlternatingRowColors(True)
 		self.tblAandelen.setSortingEnabled(True)
+		self.tblAandelen.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
 		self.tblAandelen.verticalHeader().setDefaultSectionSize(20)
 
 		self.tblTotalen.setFixedHeight(32)
@@ -128,6 +129,34 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.tblTotalen.setEditTriggers(QTableWidget.NoEditTriggers)
 		self.tblTotalen.setFocusPolicy(Qt.NoFocus)
 		self.tblTotalen.setSelectionMode(QTableWidget.NoSelection)
+
+		self._display_cache = {}
+		self._pct_change_bg_cache = []
+		self.model = PolarsTableModel(pl.DataFrame(), self)
+		orig_data_method = self.model.data
+		def patched_data(index, role):
+			if not index.isValid():
+				return orig_data_method(index, role)
+			if self.model._df.is_empty():
+				return orig_data_method(index, role)
+			colname = self.model._df.columns[index.column()]
+			if role == Qt.DisplayRole and colname in self._display_cache:
+				return self._display_cache[colname][index.row()]
+			if role == Qt.TextAlignmentRole and colname == "koers_prev":
+				return Qt.AlignRight | Qt.AlignVCenter
+			if role == Qt.BackgroundRole and colname == "pct_change":
+				if 0 <= index.row() < len(self._pct_change_bg_cache):
+					return self._pct_change_bg_cache[index.row()]
+				return None
+			return orig_data_method(index, role)
+		self.model.data = patched_data
+
+		self.proxy_model = QSortFilterProxyModel(self)
+		self.proxy_model.setSourceModel(self.model)
+		self.proxy_model.setSortRole(Qt.UserRole)
+		self.tblAandelen.setModel(self.proxy_model)
+		# Custom selectie-kleur voor geselecteerde rijen
+		self.tblAandelen.setItemDelegate(CustomSelectionDelegate(self.tblAandelen))
 
 		# Initieel laden
 		self.reload_data()
@@ -477,13 +506,22 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 			self.tblTotalen.setItem(0, i, item)
 
-		# Format percentage columns in the main table as well
-		self.model = PolarsTableModel(df_sum, self)
-		# Patch the data method to format percentage columns
-		orig_data_method = self.model.data
 		from PySide6.QtGui import QColor
-		# Cache voor kleuren op basis van pct_change waarde
-		self._pct_change_color_cache = {}
+		# Cache voor display-strings en kleuren op basis van pct_change
+		self._display_cache = {}
+		self._pct_change_bg_cache = []
+		display_cols = ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change", "koers_prev"]
+		for colname in display_cols:
+			if colname in df_sum.columns:
+				values = df_sum[colname].to_list()
+				if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
+					self._display_cache[colname] = [
+						(f"{float(v) * 100:.2f}%") if v is not None else "" for v in values
+					]
+				elif colname == "koers_prev":
+					self._display_cache[colname] = [
+						(f"{float(v):.2f}") if v is not None else "" for v in values
+					]
 		def interpolate_color(val, min_val, mid_val, max_val, color_min, color_mid, color_max):
 			if val <= min_val:
 				return QColor(*color_min)
@@ -502,54 +540,23 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 				b = color_mid[2] + ratio * (color_max[2] - color_mid[2])
 				return QColor(int(r), int(g), int(b))
 
-		def patched_data(index, role):
-			colname = self.model._df.columns[index.column()]
-			# Geselecteerde rij krijgt oranje/geel
-			if role == Qt.BackgroundRole and index.isValid():
-				selection_model = self.parent().tblAandelen.selectionModel() if hasattr(self.parent(), 'tblAandelen') else None
-				if selection_model and selection_model.isSelected(index):
-					return QColor(255, 230, 153)
-			if role == Qt.DisplayRole:
-				if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
-					val = self.model._df[colname][index.row()]
-					try:
-						return f"{float(val) * 100:.2f}%"
-					except Exception:
-						return str(val)
-				if colname == "koers_prev":
-					val = self.model._df[colname][index.row()]
-					try:
-						return f"{float(val):.2f}"
-					except Exception:
-						return str(val)
-			if role == Qt.TextAlignmentRole and colname == "koers_prev":
-				return Qt.AlignRight | Qt.AlignVCenter
-			if role == Qt.BackgroundRole and colname == "pct_change":
-				val = self.model._df[colname][index.row()]
+		if "pct_change" in df_sum.columns and not df_sum.is_empty():
+			for v in df_sum["pct_change"].to_list():
 				try:
-					val = float(val)
+					val = float(v)
 				except Exception:
-					return None
-				# Cache lookup
-				if val in self._pct_change_color_cache:
-					return self._pct_change_color_cache[val]
-				color = interpolate_color(
-					val, -0.02, 0, 0.02,
-					(255, 102, 102),  # rood
-					(255, 255, 255),  # wit
-					(153, 255, 153)   # groen
+					self._pct_change_bg_cache.append(None)
+					continue
+				self._pct_change_bg_cache.append(
+					interpolate_color(
+						val, -0.02, 0, 0.02,
+						(255, 102, 102),  # rood
+						(255, 255, 255),  # wit
+						(153, 255, 153)   # groen
+					)
 				)
-				self._pct_change_color_cache[val] = color
-				return color
-			return orig_data_method(index, role)
-		self.model.data = patched_data
 
-		self.proxy_model = QSortFilterProxyModel(self)
-		self.proxy_model.setSourceModel(self.model)
-		self.proxy_model.setSortRole(Qt.UserRole)
-		self.tblAandelen.setModel(self.proxy_model)
-		# Custom selectie-kleur voor geselecteerde rijen
-		self.tblAandelen.setItemDelegate(CustomSelectionDelegate(self.tblAandelen))
+		self.model.set_df(df_sum)
 		if self.current_sort_column >= 0:
 			self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
 
