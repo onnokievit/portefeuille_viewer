@@ -81,8 +81,8 @@ class OptiesOpenTableModel(PolarsTableModel):
 
         if role == Qt.BackgroundRole:
             try:
-                if colname == "pct_change_prev":
-                    v = row_named.get("pct_change_prev")
+                if colname in {"pct_change_prev", "afwijking_pct"}:
+                    v = row_named.get(colname)
                     if v is None:
                         return None
                     try:
@@ -122,8 +122,8 @@ class OptiesOpenTableModel(PolarsTableModel):
                 pass
         if role == Qt.ForegroundRole:
             try:
-                if colname == "pct_change_prev":
-                    v = row_named.get("pct_change_prev")
+                if colname in {"pct_change_prev", "afwijking_pct"}:
+                    v = row_named.get(colname)
                     if v is None:
                         return None
                     try:
@@ -603,7 +603,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         # Voeg berekende kolom toe: % afwijking koers t.o.v. strike (absoluut)
         if "Koers" in df.columns and "optie_strike" in df.columns:
             df = df.with_columns(
-                ( (pl.col("Koers") - pl.col("optie_strike")).abs() / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
+                ( (pl.col("Koers") - pl.col("optie_strike")) / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
         if df is None or df.is_empty():
             df = pl.DataFrame()
