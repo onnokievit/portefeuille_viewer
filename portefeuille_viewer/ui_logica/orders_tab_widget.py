@@ -6,14 +6,52 @@ import polars as pl
 import traceback
 from datetime import datetime
 
-from PySide6.QtWidgets import QWidget, QMessageBox,QAbstractItemView, QLineEdit
+from PySide6.QtWidgets import QWidget, QMessageBox, QAbstractItemView, QLineEdit, QHeaderView
 from PySide6.QtCore import Qt, Signal, QDate
+from PySide6.QtGui import QColor
 
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin  # ← nieuw
 from portefeuille_viewer.ui.orders_tab_ui import Ui_OrdersTabUI
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import HighlightingPandasTableModel
+
+
+class OrdersTableModel(HighlightingPandasTableModel):
+    def __init__(self, df: pd.DataFrame, parent=None, highlight_ids=None, center_cols=None, right_cols=None):
+        super().__init__(df, parent, highlight_ids=highlight_ids)
+        self._center_cols = set(center_cols or [])
+        self._right_cols = set(right_cols or [])
+        self._sign_cache = {}
+
+    def set_sign_cache(self, sign_cache: dict | None):
+        self._sign_cache = sign_cache or {}
+
+    def append_sign_cache(self, sign_cache: dict | None):
+        if not sign_cache:
+            return
+        for col, values in sign_cache.items():
+            if col in self._sign_cache:
+                self._sign_cache[col].extend(values)
+            else:
+                self._sign_cache[col] = list(values)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or self._df is None:
+            return None
+        colname = self._df.columns[index.column()]
+        if role == Qt.TextAlignmentRole:
+            if colname in self._center_cols:
+                return Qt.AlignCenter
+            if colname in self._right_cols:
+                return Qt.AlignRight | Qt.AlignVCenter
+        if role == Qt.ForegroundRole and colname in {"transactie_aantal", "transactie_euro_totaal"}:
+            cache = self._sign_cache.get(colname, [])
+            if 0 <= index.row() < len(cache):
+                sign = cache[index.row()]
+                if sign < 0:
+                    return QColor(220, 0, 0)
+        return super().data(index, role)
 from portefeuille_viewer.data.repository import (
     get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
@@ -83,7 +121,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.seek_id = None
         self._snapshot_store = SNAPSHOT_STORE
         self._pandas = pd
-        self._PandasTableModel = HighlightingPandasTableModel
+        self._PandasTableModel = OrdersTableModel
+        self._center_cols = {"Id", "datum", "optie_exp_date", "order_id"}
+        self._right_cols = {
+            "optie_strike", "optie_call_put", "aantal", "transactie_prijs",
+            "transactie_fee", "transactie_aantal", "transactie_euro_totaal",
+            "order_id_number"
+        }
 
         # Laad referentielijsten
         self._brokers, self._asset_rollups, self._sprinter_details = load_reference_lists()
@@ -273,8 +317,40 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.tableViewOrders.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.tableViewOrders.verticalHeader().setVisible(False)
         header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.setSectionResizeMode(QHeaderView.Interactive)
         # Laad direct records met juiste sortering
         self._load_initial_records()
+
+    def _apply_column_widths(self):
+        if not self._orders_model or self._orders_model._df is None:
+            return
+        header = self.tableViewOrders.horizontalHeader()
+        col_widths = {
+            "Id": 65,
+            "order_id": 80,
+            "order_id_number": 60,
+            "datum": 100,
+            "transactie_oorsprong": 100,
+            "broker": 80,
+            "asset_rollup": 100,
+            "asset_detail": 100,
+            "asset_type": 80,
+            "transactie_type": 80,
+            "optie_exp_date": 80,
+            "optie_strike": 70,
+            "optie_call_put": 50,
+            "aantal": 70,
+            "transactie_aantal": 80,
+            "transactie_prijs": 80,
+            "transactie_euro_totaal": 100,
+            "transactie_fee": 70,
+            "uniek_id": 150,
+            "transactie_oorsprong_detail": 150,
+        }
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        for idx, col in enumerate(self._orders_model._df.columns):
+            if col in col_widths:
+                header.resizeSection(idx, col_widths[col])
 
     def _on_clear_filters(self):
         self._col_filters.clear()
@@ -305,11 +381,15 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             df_pl = self._apply_snapshot_filters(df_pl)
             df_pl = self._apply_snapshot_sorting(df_pl)
             df = df_pl.head(self._page_size).to_pandas()
-        df_view = self._format_df_for_table(df)
+        df_view, sign_cache = self._format_df_for_table(df)
                         
-        self._orders_model = self._PandasTableModel(df_view, self)
+        self._orders_model = self._PandasTableModel(
+            df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
+        )
+        self._orders_model.set_sign_cache(sign_cache)
         self._table_model = self._orders_model
         self.tableViewOrders.setModel(self._orders_model)
+        self._apply_column_widths()
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         self._current_offset = len(df)
         self._no_more_records = (len(df) < self._page_size)
@@ -322,13 +402,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             df_pl = getattr(self._snapshot_store, 'repository_snapshot_alle_transacties', None)
             if df_pl is None or df_pl.is_empty():
                 df = self._pandas.DataFrame()
-                df_view = self._format_df_for_table(df)
+                df_view, sign_cache = self._format_df_for_table(df)
                 if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
-                    self._orders_model = self._PandasTableModel(df_view, self)
+                    self._orders_model = self._PandasTableModel(
+                        df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
+                    )
+                    self._orders_model.set_sign_cache(sign_cache)
                     self.tableViewOrders.setModel(self._orders_model)
+                    self._apply_column_widths()
                     self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
                 else:
                     self._orders_model.append_df(df_view.reset_index(drop=True))
+                    if hasattr(self._orders_model, "append_sign_cache"):
+                        self._orders_model.append_sign_cache(sign_cache)
                 self._no_more_records = True
                 return
             # Filtering en sortering op Polars vóór slicing
@@ -339,13 +425,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 self._no_more_records = True
                 return
             df = df_pl_page.to_pandas()
-            df_view = self._format_df_for_table(df)
+            df_view, sign_cache = self._format_df_for_table(df)
             if initial or not hasattr(self, '_orders_model') or self._orders_model is None:
-                self._orders_model = self._PandasTableModel(df_view, self)
+                self._orders_model = self._PandasTableModel(
+                    df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
+                )
+                self._orders_model.set_sign_cache(sign_cache)
                 self.tableViewOrders.setModel(self._orders_model)
+                self._apply_column_widths()
                 self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
             else:
                 self._orders_model.append_df(df_view.reset_index(drop=True))
+                if hasattr(self._orders_model, "append_sign_cache"):
+                    self._orders_model.append_sign_cache(sign_cache)
             self._current_offset += len(df)
             if len(df) < self._page_size:
                 self._no_more_records = True
@@ -396,15 +488,20 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self._sort_dir = "DESC"
         if df_pl is None or df_pl.is_empty():
             df = self._pandas.DataFrame()
+            sign_cache = {}
         else:
             # Sorteer Polars DataFrame op Id DESC
             df_pl = df_pl.sort("Id", descending=True)
             # Converteer naar pandas
             df = df_pl.to_pandas()
-            df = self._format_df_for_table(df)
+            df, sign_cache = self._format_df_for_table(df)
         # Zet model op de tableView
-        self._orders_model = self._PandasTableModel(df, self)
+        self._orders_model = self._PandasTableModel(
+            df, self, center_cols=self._center_cols, right_cols=self._right_cols
+        )
+        self._orders_model.set_sign_cache(sign_cache)
         self.tableViewOrders.setModel(self._orders_model)
+        self._apply_column_widths()
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
         # print(f"✅ Orders tabel geladen met na updaten van een record (een save) {len(df)} records.")
 
@@ -413,10 +510,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         TABLE_COLS = [
             "Id","datum","transactie_oorsprong","broker","asset_rollup","asset_detail","asset_type",
             "transactie_type","optie_exp_date","optie_strike","optie_call_put",
-            "aantal","transactie_prijs","transactie_fee","uniek_id","transactie_oorsprong_detail"
+            "aantal","transactie_prijs","transactie_fee","uniek_id","transactie_oorsprong_detail","transactie_aantal","transactie_euro_totaal","order_id","order_id_number",
         ]
+        sign_cache = self._build_sign_cache(df)
         if df is None or df.empty:
-            return self._pandas.DataFrame(columns=TABLE_COLS)
+            return self._pandas.DataFrame(columns=TABLE_COLS), sign_cache
         out = df.copy()
         for c in TABLE_COLS:
             if c not in out.columns:
@@ -435,9 +533,14 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 return ""
             return f"{int(v):,}".replace(",", ".")
         out["aantal"] = out["aantal"].apply(fmt_int)
-        for c in ["optie_strike", "transactie_prijs", "transactie_fee"]:
+        if "transactie_aantal" in out.columns:
+            out["transactie_aantal"] = out["transactie_aantal"].apply(fmt_int)
+        for c in ["optie_strike", "transactie_prijs", "transactie_fee", "transactie_euro_totaal"]:
             if c in out.columns:
                 out[c] = out[c].apply(fmt2)
+        for c in ["order_id", "order_id_number"]:
+            if c in out.columns:
+                out[c] = out[c].apply(fmt_int)
         for c in [
             "transactie_oorsprong","broker","asset_rollup","asset_type","transactie_type",
             "asset_detail","optie_call_put","uniek_id","transactie_oorsprong_detail"
@@ -447,7 +550,20 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         out["datum"] = out["datum"].fillna("")
         out["optie_exp_date"] = out["optie_exp_date"].fillna("")
         out = out.fillna("")
-        return out[TABLE_COLS]
+        return out[TABLE_COLS], sign_cache
+
+    def _build_sign_cache(self, df):
+        cache = {}
+        if df is None or df.empty:
+            return cache
+        for col in ("transactie_aantal", "transactie_euro_totaal"):
+            if col in df.columns:
+                vals = self._pandas.to_numeric(df[col], errors="coerce")
+                cache[col] = [
+                    -1 if v < 0 else 1 if v > 0 else 0
+                    for v in vals.fillna(0)
+                ]
+        return cache
 
     def on_save_clicked(self):
         # --- Strikte lijst-validatie: alleen waarden uit de combobox-lijsten toegestaan
