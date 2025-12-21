@@ -29,9 +29,27 @@ class OptiesOpenTableModel(PolarsTableModel):
         self._editable_cols = {"optie_comment"}
         self._commit_callback = commit_callback
         self._color_priority_map = {}
+        self._display_cache = {}
+        self._bg_cache = {}
+        self._fg_cache = {}
+        self._itm_flags = []
+        self._call_put = []
+        self._comment_colors = []
 
     def set_color_priority_map(self, prio_map: dict):
         self._color_priority_map = prio_map or {}
+
+    def set_format_caches(self, display_cache=None, bg_cache=None, fg_cache=None, itm_flags=None, call_put=None, comment_colors=None):
+        self._display_cache = display_cache or {}
+        self._bg_cache = bg_cache or {}
+        self._fg_cache = fg_cache or {}
+        self._itm_flags = itm_flags or []
+        self._call_put = call_put or []
+        self._comment_colors = comment_colors or []
+
+    def update_comment_color_cache(self, row_idx: int, color_val: str):
+        if 0 <= row_idx < len(self._comment_colors):
+            self._comment_colors[row_idx] = color_val or ""
 
     def flags(self, index):
         f = super().flags(index)
@@ -47,24 +65,8 @@ class OptiesOpenTableModel(PolarsTableModel):
             if not index.isValid() or self._df.is_empty():
                 return None
             col_name = self._df.columns[index.column()]
-            if col_name == "pct_change_prev":
-                val = self._df[index.row(), index.column()]
-                if val is None or val == "":
-                    return ""
-                try:
-                    return f"{float(val) * 100:.2f}%"
-                except Exception:
-                    return str(val)
-            if col_name == "koers_prev":
-                val = self._df[index.row(), index.column()]
-                if val is None or val == "":
-                    return ""
-                try:
-                    f = float(val)
-                    # 2 decimalen, decimaal separator komma
-                    return f"{f:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                except Exception:
-                    return str(val)
+            if col_name in self._display_cache:
+                return self._display_cache[col_name][index.row()]
             return super().data(index, role)
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
@@ -72,68 +74,41 @@ class OptiesOpenTableModel(PolarsTableModel):
             val = self._df[index.row(), index.column()]
             return "" if val is None else str(val)
 
-        row_named = self._df.row(index.row(), named=True)
         columns = self._df.columns
         colname = columns[index.column()]
+        row_idx = index.row()
 
         # Kolommen die rood/groen moeten krijgen voor ITM posities
         kleur_kolommen = ["itm", "broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
 
         if role == Qt.BackgroundRole:
             try:
-                if colname in {"pct_change_prev", "afwijking_pct"}:
-                    v = row_named.get(colname)
-                    if v is None:
-                        return None
-                    try:
-                        v = float(v)
-                    except Exception:
-                        return None
-                    if v > 0:
-                        return QColor("#c6f7c6")
-                    if v < 0:
-                        return QColor("#f7c6c6")
+                if colname in self._bg_cache:
+                    cache = self._bg_cache.get(colname, [])
+                    if 0 <= row_idx < len(cache):
+                        return cache[row_idx]
 
                 if colname == "optie_comment" and "optie_comment_color" in columns:
-                    color_val = row_named.get("optie_comment_color") or ""
-                    if color_val:
-                        return QColor(color_val)
-                optie_call_put = (row_named.get("optie_call_put") or "").lower()
+                    if 0 <= row_idx < len(self._comment_colors):
+                        color_val = self._comment_colors[row_idx]
+                        if color_val:
+                            return QColor(color_val)
 
-                itm_otm_val = row_named.get("itm_otm")
-                itm_text = (row_named.get("itm") or "").upper()
-                # Prefer the visible 'itm' column when present; it's robust against dtype issues in itm_otm.
-                if itm_text in {"ITM", "OTM"}:
-                    is_itm = (itm_text == "ITM")
-                elif itm_otm_val is None:
-                    is_itm = False
-                else:
-                    try:
-                        is_itm = int(itm_otm_val) != 0
-                    except Exception:
-                        is_itm = False
-
-                if colname in kleur_kolommen and is_itm:
-                    if optie_call_put == "put":
-                        return QColor(255, 200, 200)  # lichtrood
-                    if optie_call_put == "call":
-                        return QColor(200, 255, 200)  # lichtgroen
+                if colname in kleur_kolommen and 0 <= row_idx < len(self._itm_flags):
+                    if self._itm_flags[row_idx]:
+                        if 0 <= row_idx < len(self._call_put):
+                            if self._call_put[row_idx] == "put":
+                                return QColor(255, 200, 200)  # lichtrood
+                            if self._call_put[row_idx] == "call":
+                                return QColor(200, 255, 200)  # lichtgroen
             except Exception:
                 pass
         if role == Qt.ForegroundRole:
             try:
-                if colname in {"pct_change_prev", "afwijking_pct"}:
-                    v = row_named.get(colname)
-                    if v is None:
-                        return None
-                    try:
-                        v = float(v)
-                    except Exception:
-                        return None
-                    if v > 0:
-                        return QColor(0, 120, 0)
-                    if v < 0:
-                        return QColor(220, 0, 0)
+                if colname in self._fg_cache:
+                    cache = self._fg_cache.get(colname, [])
+                    if 0 <= row_idx < len(cache):
+                        return cache[row_idx]
             except Exception:
                 pass
         if role == Qt.TextAlignmentRole and colname == "koers_prev":
@@ -141,9 +116,10 @@ class OptiesOpenTableModel(PolarsTableModel):
         if role == Qt.UserRole:
             try:
                 if colname == "optie_comment" and "optie_comment_color" in columns:
-                    cval = row_named.get("optie_comment_color") or ""
+                    color_idx = columns.index("optie_comment_color")
+                    cval = self._df[row_idx, color_idx] or ""
                     priority = self._color_priority_map.get(cval, 0)
-                    return (priority, str(row_named.get("optie_comment") or ""))
+                    return (priority, str(self._df[row_idx, index.column()] or ""))
             except Exception:
                 pass
         return super().data(index, role)
@@ -251,6 +227,16 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         QTableView::item:selected:active:focus { background: transparent; color: black; }
         QTableView::item:focus { background: transparent; color: black; }
         """)
+        self._columns_signature = None
+        self.model = OptiesOpenTableModel(pl.DataFrame(), self, commit_callback=self._on_comment_commit)
+        self.model.set_color_priority_map(get_settings().get_comment_color_priority_map())
+        self.proxy_model = CommentSortProxy(self)
+        self.proxy_model.setSourceModel(self.model)
+        self.proxy_model.setSortRole(Qt.UserRole)
+        self.tableView.setModel(self.proxy_model)
+        self.tableView.setSortingEnabled(True)
+        self.table.setModel(self.proxy_model)
+        self._table_model = self.model
         signals.databaseChanged.connect(self._on_db_changed)
         self.reload_data()
 
@@ -562,6 +548,8 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 row_idx = None
             self._table_model._df = df
             if row_idx is not None:
+                if hasattr(self._table_model, "update_comment_color_cache"):
+                    self._table_model.update_comment_color_cache(row_idx, color)
                 tl = self._table_model.index(row_idx, 0)
                 br = self._table_model.index(row_idx, df.width - 1)
                 self._table_model.dataChanged.emit(tl, br, [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole])
@@ -774,27 +762,77 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             pass
         
         
-        self.model = OptiesOpenTableModel(df, self, commit_callback=self._on_comment_commit)
-        self.model.set_color_priority_map(get_settings().get_comment_color_priority_map())
-        self.proxy_model = CommentSortProxy(self)
-        self.proxy_model.setSourceModel(self.model)
-        self.proxy_model.setSortRole(Qt.UserRole)
-        self.tableView.setModel(self.proxy_model)
-        self.tableView.setSortingEnabled(True)
-        # commentkolom: delegate die selectie overlay negeert
-        try:
-            comment_col = df.columns.index("optie_comment")
-            self.tableView.setItemDelegateForColumn(comment_col, CommentNoSelectDelegate(self.tableView))
-        except ValueError:
-            pass
-        self._table_model = self.model  # update voor de mixin
-        self.table.setModel(self.proxy_model)
-        # verberg helperkolommen
-        for hide_col in ("uniek_id", "optie_comment_color", "totaal_fees"):
-            if hide_col in df.columns:
-                idx = df.columns.index(hide_col)
-                self.tableView.setColumnHidden(idx, True)
-        self._apply_column_widths(df)
+        display_cache = {}
+        if "pct_change_prev" in df.columns:
+            values = df["pct_change_prev"].to_list()
+            display_cache["pct_change_prev"] = [
+                (f"{float(v) * 100:.2f}%") if v is not None else "" for v in values
+            ]
+        if "koers_prev" in df.columns:
+            values = df["koers_prev"].to_list()
+            display_cache["koers_prev"] = [
+                (f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
+                for v in values
+            ]
+
+        bg_cache = {}
+        fg_cache = {}
+        for col in ("pct_change_prev", "afwijking_pct"):
+            if col in df.columns:
+                vals = df[col].to_list()
+                bg_cache[col] = [
+                    QColor("#c6f7c6") if v is not None and v > 0 else QColor("#f7c6c6") if v is not None and v < 0 else None
+                    for v in vals
+                ]
+                fg_cache[col] = [
+                    QColor(0, 120, 0) if v is not None and v > 0 else QColor(220, 0, 0) if v is not None and v < 0 else None
+                    for v in vals
+                ]
+
+        itm_flags = []
+        if "itm" in df.columns:
+            itm_flags = [str(v or "").upper() == "ITM" for v in df["itm"].to_list()]
+        elif "itm_otm" in df.columns:
+            vals = df["itm_otm"].to_list()
+            flags = []
+            for v in vals:
+                try:
+                    flags.append(int(v) != 0)
+                except Exception:
+                    flags.append(False)
+            itm_flags = flags
+
+        call_put = []
+        if "optie_call_put" in df.columns:
+            call_put = [(v or "").lower() for v in df["optie_call_put"].to_list()]
+
+        comment_colors = df["optie_comment_color"].to_list() if "optie_comment_color" in df.columns else []
+
+        self.model.set_format_caches(
+            display_cache=display_cache,
+            bg_cache=bg_cache,
+            fg_cache=fg_cache,
+            itm_flags=itm_flags,
+            call_put=call_put,
+            comment_colors=comment_colors,
+        )
+        self.model.set_df(df)
+
+        cols_now = tuple(df.columns) if df is not None else ()
+        if self._columns_signature != cols_now:
+            self._columns_signature = cols_now
+            # commentkolom: delegate die selectie overlay negeert
+            try:
+                comment_col = df.columns.index("optie_comment")
+                self.tableView.setItemDelegateForColumn(comment_col, CommentNoSelectDelegate(self.tableView))
+            except ValueError:
+                pass
+            # verberg helperkolommen
+            for hide_col in ("uniek_id", "optie_comment_color", "totaal_fees"):
+                if hide_col in df.columns:
+                    idx = df.columns.index(hide_col)
+                    self.tableView.setColumnHidden(idx, True)
+            self._apply_column_widths(df)
         if self.current_sort_column >= 0:
             self.tableView.sortByColumn(self.current_sort_column, self.current_sort_order)
         # selectie herstellen
