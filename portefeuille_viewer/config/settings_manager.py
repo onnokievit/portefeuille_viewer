@@ -174,6 +174,24 @@ class SettingsManager:
             self.config.add_section('ui')
         self.config.set('ui', 'theme', theme)
         self.save()
+
+    def get_table_header_bg(self) -> str:
+        return self.config.get('ui', 'table_header_bg', fallback='#c6c6c6')
+
+    def set_table_header_bg(self, color: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'table_header_bg', color)
+        self.save()
+
+    def get_table_total_bg(self) -> str:
+        return self.config.get('ui', 'table_total_bg', fallback='#c6c6c6')
+
+    def set_table_total_bg(self, color: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'table_total_bg', color)
+        self.save()
     
     # === App Settings ===
     def get_last_database(self) -> Optional[str]:

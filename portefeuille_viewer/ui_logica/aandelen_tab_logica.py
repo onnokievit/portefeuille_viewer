@@ -1,5 +1,5 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QFileDialog, QMessageBox, QStyledItemDelegate, QStyle, QHeaderView
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QFileDialog, QMessageBox, QStyledItemDelegate, QStyle, QHeaderView, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer
 from PySide6.QtWidgets import QTableWidget
 from PySide6.QtGui import QColor
@@ -10,6 +10,7 @@ from portefeuille_viewer.ui.models import PolarsTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.signals import signals
 import polars as pl
 from datetime import date
 
@@ -121,14 +122,25 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.tblAandelen.setSortingEnabled(True)
 		self.tblAandelen.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
 		self.tblAandelen.verticalHeader().setDefaultSectionSize(20)
+		self.tblAandelen.horizontalHeader().setStretchLastSection(False)
 
 		self.tblTotalen.setFixedHeight(32)
+		self.tblTotalen.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 		self.tblTotalen.verticalHeader().setVisible(False)
 		self.tblTotalen.horizontalHeader().setVisible(False)
+		self.tblTotalen.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.tblTotalen.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.tblTotalen.horizontalHeader().setStretchLastSection(False)
 		
 		self.tblTotalen.setEditTriggers(QTableWidget.NoEditTriggers)
 		self.tblTotalen.setFocusPolicy(Qt.NoFocus)
 		self.tblTotalen.setSelectionMode(QTableWidget.NoSelection)
+		self._wrap_footer_in_container()
+		self._init_footer_sync()
+		self._header_bg_color = get_settings().get_table_header_bg()
+		self._total_bg_color = get_settings().get_table_total_bg()
+		self._apply_header_style()
+		signals.uiStyleChanged.connect(self._on_ui_style_changed)
 
 		self._display_cache = {}
 		self._pct_change_bg_cache = []
@@ -503,10 +515,13 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			else:
 				val_str = str(val)
 			item = QTableWidgetItem(val_str)
-			item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+			if col == "asset_rollup":
+				item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+			else:
+				item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+			item.setBackground(QColor(self._total_bg_color))
 			self.tblTotalen.setItem(0, i, item)
 
-		from PySide6.QtGui import QColor
 		# Cache voor display-strings en kleuren op basis van pct_change
 		self._display_cache = {}
 		self._pct_change_bg_cache = []
@@ -559,6 +574,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.model.set_df(df_sum)
 		if self.current_sort_column >= 0:
 			self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
+		self._sync_footer_section_sizes()
+		self._sync_footer_scrollbar_gap()
 
 	def set_active(self, active: bool):
 		self._active = active
@@ -656,3 +673,82 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 	def _clear_col_filter(self, colname: str):
 		self.col_filters.pop(colname, None)
 		self.reload_data()
+
+	def _init_footer_sync(self):
+		"""Houd de totalen-rij visueel in sync met de hoofd-tabel."""
+		main_header = self.tblAandelen.horizontalHeader()
+		footer_header = self.tblTotalen.horizontalHeader()
+
+		# Houd kolombreedtes gelijk
+		main_header.sectionResized.connect(
+			lambda idx, _old, new: self.tblTotalen.setColumnWidth(idx, new)
+		)
+		# Houd kolomvolgorde gelijk (als de gebruiker kolommen versleept)
+		main_header.sectionMoved.connect(
+			lambda logical, _old, new: footer_header.moveSection(footer_header.visualIndex(logical), new)
+		)
+
+		# Synchroniseer horizontale scroll
+		main_scroll = self.tblAandelen.horizontalScrollBar()
+		footer_scroll = self.tblTotalen.horizontalScrollBar()
+		main_scroll.valueChanged.connect(footer_scroll.setValue)
+		main_scroll.rangeChanged.connect(lambda _min, _max: self._sync_footer_scrollbar_gap())
+		self.tblAandelen.verticalScrollBar().rangeChanged.connect(
+			lambda _min, _max: self._sync_footer_scrollbar_gap()
+		)
+
+	def _sync_footer_section_sizes(self):
+		"""Initiele sync van kolombreedtes en scrollpositie."""
+		main_header = self.tblAandelen.horizontalHeader()
+		for i in range(main_header.count()):
+			self.tblTotalen.setColumnWidth(i, main_header.sectionSize(i))
+		self.tblTotalen.horizontalScrollBar().setValue(
+			self.tblAandelen.horizontalScrollBar().value()
+		)
+
+	def _sync_footer_scrollbar_gap(self):
+		"""Reserveer dezelfde scrollbar-ruimte als de hoofd-tabel om verspringen te voorkomen."""
+		v_scroll = self.tblAandelen.verticalScrollBar()
+		scroll_width = v_scroll.sizeHint().width() if v_scroll.maximum() > 0 else 0
+		if hasattr(self, "_footer_spacer") and self._footer_spacer is not None:
+			self._footer_spacer.setFixedWidth(scroll_width)
+
+	def _apply_header_style(self):
+		style = f"QHeaderView::section {{ background-color: {self._header_bg_color}; }}"
+		self.tblAandelen.horizontalHeader().setStyleSheet(style)
+		self.tblTotalen.horizontalHeader().setStyleSheet(style)
+
+	def _apply_total_row_bg(self):
+		for col_idx in range(self.tblTotalen.columnCount()):
+			item = self.tblTotalen.item(0, col_idx)
+			if item is not None:
+				item.setBackground(QColor(self._total_bg_color))
+
+	def _on_ui_style_changed(self, key: str):
+		if key == "table_header_bg":
+			self._header_bg_color = get_settings().get_table_header_bg()
+			self._apply_header_style()
+		elif key == "table_total_bg":
+			self._total_bg_color = get_settings().get_table_total_bg()
+			self._apply_total_row_bg()
+
+	def _wrap_footer_in_container(self):
+		"""Plaats de totalen-tabel in een container met spacer voor scrollbar-ruimte."""
+		if hasattr(self, "_footer_container") and self._footer_container is not None:
+			return
+		self._footer_container = QWidget(self)
+		self._footer_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+		footer_layout = QHBoxLayout(self._footer_container)
+		footer_layout.setContentsMargins(0, 0, 0, 0)
+		footer_layout.setSpacing(0)
+		self._footer_spacer = QWidget(self._footer_container)
+		self._footer_spacer.setFixedWidth(0)
+
+		main_layout = self.verticalLayout_main
+		main_layout.removeWidget(self.tblTotalen)
+		self.tblTotalen.setParent(self._footer_container)
+		footer_layout.addWidget(self.tblTotalen)
+		footer_layout.addWidget(self._footer_spacer)
+		main_layout.addWidget(self._footer_container)
+		main_layout.setStretchFactor(self.tblAandelen, 1)
+		main_layout.setStretchFactor(self._footer_container, 0)
