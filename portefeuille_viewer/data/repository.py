@@ -1033,6 +1033,51 @@ def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = N
         signals.databaseChanged.emit()
 
 
+def update_open_optie_comment_color(uniek_id: str, color: str | None) -> None:
+    """
+    Werk alleen de kleur bij voor de laatste comment van een uniek_id.
+    """
+    if not uniek_id:
+        return
+    # zorg dat cache geladen is
+    if getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None) is None:
+        load_open_optie_comments_cache()
+
+    # Update cache: laatste entry voor uniek_id aanpassen
+    try:
+        df_cache = getattr(SNAPSHOT_STORE, "repository_snapshot_open_optie_comments", None)
+        if df_cache is not None and not df_cache.is_empty():
+            df_sub = df_cache.filter(pl.col("uniek_id") == uniek_id)
+            if not df_sub.is_empty():
+                df_sub = df_sub.sort("optie_comment_updated_at", descending=True, nulls_last=True)
+                latest_ts = df_sub["optie_comment_updated_at"][0] if "optie_comment_updated_at" in df_sub.columns else None
+                df_cache = df_cache.with_columns([
+                    pl.when(
+                        (pl.col("uniek_id") == uniek_id)
+                        & (pl.col("optie_comment_updated_at") == latest_ts)
+                    )
+                    .then(pl.lit(color or ""))
+                    .otherwise(pl.col("optie_comment_color"))
+                    .alias("optie_comment_color")
+                ])
+                SNAPSHOT_STORE.repository_snapshot_open_optie_comments = df_cache
+    except Exception as exc:
+        print(f"[comments] kon kleur in cache niet bijwerken: {exc}")
+
+    # markeer dirty met speciale mode zodat flush een UPDATE doet
+    try:
+        dirty_list = getattr(SNAPSHOT_STORE, "repository_dirty_open_optie_comments", None)
+        if dirty_list is None:
+            SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
+            dirty_list = SNAPSHOT_STORE.repository_dirty_open_optie_comments
+        dirty_list.append({"mode": "color_only", "uniek_id": uniek_id, "color": color or ""})
+    except Exception as exc:
+        print(f"[comments] kon dirty list niet bijwerken: {exc}")
+
+    with contextlib.suppress(Exception):
+        signals.databaseChanged.emit()
+
+
 def flush_dirty_open_optie_comments_to_db():
     dirty = getattr(SNAPSHOT_STORE, "repository_dirty_open_optie_comments", None) or []
     if not dirty:
@@ -1041,10 +1086,18 @@ def flush_dirty_open_optie_comments_to_db():
         with get_connection() as conn:
             cur = conn.cursor()
             for row in dirty:
-                cur.execute(
-                    f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
-                    (row.get("uniek_id"), row.get("optie_comment"), row.get("optie_comment_color"), row.get("optie_comment_updated_at")),
-                )
+                if row.get("mode") == "color_only":
+                    cur.execute(
+                        f"UPDATE {OPEN_OPTIE_COMMENTS_TABLE} "
+                        f"SET color = ? "
+                        f"WHERE uniek_id = ? AND updated_at = (SELECT MAX(updated_at) FROM {OPEN_OPTIE_COMMENTS_TABLE} WHERE uniek_id = ?)",
+                        (row.get("color") or "", row.get("uniek_id"), row.get("uniek_id")),
+                    )
+                else:
+                    cur.execute(
+                        f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
+                        (row.get("uniek_id"), row.get("optie_comment"), row.get("optie_comment_color"), row.get("optie_comment_updated_at")),
+                    )
             conn.commit()
         SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
         # print(f"[comments] flushed {len(dirty)} comments to DB")

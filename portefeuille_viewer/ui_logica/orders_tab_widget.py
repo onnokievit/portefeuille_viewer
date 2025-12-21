@@ -23,9 +23,13 @@ class OrdersTableModel(HighlightingPandasTableModel):
         self._center_cols = set(center_cols or [])
         self._right_cols = set(right_cols or [])
         self._sign_cache = {}
+        self._display_headers = {}
 
     def set_sign_cache(self, sign_cache: dict | None):
         self._sign_cache = sign_cache or {}
+
+    def set_display_headers(self, mapping: dict | None):
+        self._display_headers = mapping or {}
 
     def append_sign_cache(self, sign_cache: dict | None):
         if not sign_cache:
@@ -52,6 +56,14 @@ class OrdersTableModel(HighlightingPandasTableModel):
                 if sign < 0:
                     return QColor(220, 0, 0)
         return super().data(index, role)
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role != Qt.DisplayRole or self._df is None:
+            return None
+        if orientation == Qt.Horizontal:
+            col_name = self._df.columns[section]
+            return self._display_headers.get(col_name, col_name)
+        return str(section + 1)
 from portefeuille_viewer.data.repository import (
     get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
@@ -127,6 +139,28 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             "optie_strike", "optie_call_put", "aantal", "transactie_prijs",
             "transactie_fee", "transactie_aantal", "transactie_euro_totaal",
             "order_id_number"
+        }
+        self._display_headers = {
+            "Id": "Id",
+            "order_id": "order_id",
+            "order_id_number": "order_id #",
+            "datum": "datum",
+            "transactie_oorsprong": "oorsprong",
+            "broker": "broker",
+            "asset_rollup": "asset",
+            "asset_detail": "detail",
+            "asset_type": "type",
+            "transactie_type": "transactie",
+            "optie_exp_date": "exp date",
+            "optie_strike": "strike",
+            "optie_call_put": "c/p",
+            "aantal": "aantal",
+            "transactie_aantal": "aantal",
+            "transactie_prijs": "prijs",
+            "transactie_euro_totaal": "totaal",
+            "transactie_fee": "fee",
+            "uniek_id": "uniek_id",
+            "transactie_oorsprong_detail": "oorsprong_detail",
         }
 
         # Laad referentielijsten
@@ -344,7 +378,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             "transactie_prijs": 80,
             "transactie_euro_totaal": 100,
             "transactie_fee": 70,
-            "uniek_id": 150,
+            "uniek_id": 275,
             "transactie_oorsprong_detail": 150,
         }
         header.setSectionResizeMode(QHeaderView.Interactive)
@@ -387,6 +421,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
         )
         self._orders_model.set_sign_cache(sign_cache)
+        self._orders_model.set_display_headers(self._display_headers)
         self._table_model = self._orders_model
         self.tableViewOrders.setModel(self._orders_model)
         self._apply_column_widths()
@@ -408,6 +443,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                         df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
                     )
                     self._orders_model.set_sign_cache(sign_cache)
+                    self._orders_model.set_display_headers(self._display_headers)
                     self.tableViewOrders.setModel(self._orders_model)
                     self._apply_column_widths()
                     self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
@@ -431,6 +467,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                     df_view, self, center_cols=self._center_cols, right_cols=self._right_cols
                 )
                 self._orders_model.set_sign_cache(sign_cache)
+                self._orders_model.set_display_headers(self._display_headers)
                 self.tableViewOrders.setModel(self._orders_model)
                 self._apply_column_widths()
                 self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
@@ -500,6 +537,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             df, self, center_cols=self._center_cols, right_cols=self._right_cols
         )
         self._orders_model.set_sign_cache(sign_cache)
+        self._orders_model.set_display_headers(self._display_headers)
         self.tableViewOrders.setModel(self._orders_model)
         self._apply_column_widths()
         self.tableViewOrders.selectionModel().selectionChanged.connect(self.on_table_select)
