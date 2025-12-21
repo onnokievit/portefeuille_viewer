@@ -18,6 +18,7 @@ from portefeuille_viewer.data.repository import (
     upsert_open_optie_comment,
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
+    update_open_optie_comment_color,
 )
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.config.settings_manager import get_settings
@@ -516,7 +517,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             hexval = chosen.data()
 
         try:
-            upsert_open_optie_comment(current_uniek_id, current_comment, hexval)
+            update_open_optie_comment_color(current_uniek_id, hexval)
             latest = fetch_open_optie_comments([current_uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)

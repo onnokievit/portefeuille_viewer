@@ -22,6 +22,7 @@ from portefeuille_viewer.data.repository import (
     upsert_open_optie_comment,
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
+    update_open_optie_comment_color,
 )
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
@@ -622,7 +623,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
 
         values = self.row_to_dict_db(row)
-        if (values.get("asset_type") or "").strip().lower() != "optie":
+        if (values.get("asset_type") or "").strip().lower() not in {"optie", "aandeel"}:
             return
         uniek_id = build_uniek_id(values)
         if not uniek_id:
@@ -682,7 +683,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
 
         values = self.row_to_dict_db(row)
-        if (values.get("asset_type") or "").strip().lower() != "optie":
+        if (values.get("asset_type") or "").strip().lower() not in {"optie", "aandeel"}:
             return
         uniek_id = build_uniek_id(values)
         if not uniek_id:
@@ -788,7 +789,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             try:
                 uniek_ids = []
                 for rd in rows:
-                    if (rd.get("asset_type") or "").strip().lower() != "optie":
+                    if (rd.get("asset_type") or "").strip().lower() not in {"optie", "aandeel"}:
                         continue
                     uid = build_uniek_id(rd)
                     if uid:
@@ -805,11 +806,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             for row_data in rows:
                 row = self.testOrdersTable.rowCount()
                 self.testOrdersTable.insertRow(row)
+                asset_type = (row_data.get("asset_type") or "").strip().lower()
                 for c, name in enumerate(cols):
                     if name == "optie_comment":
                         val = comment_by_id.get(row_data.get("_uniek_id", ""), "")
                     else:
                         val = row_data.get(name, "")
+                    if asset_type != "optie" and name in ("optie_exp_date", "optie_strike", "optie_call_put"):
+                        val = ""
+                    if val is None:
+                        val = ""
                     if name == "optie_exp_date":
                         val = fmt_date(val)
                     if name in num_cols and val not in ("", None):
@@ -1609,7 +1615,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             hexval = chosen.data()
 
         try:
-            upsert_open_optie_comment(current_uniek_id, current_comment, hexval)
+            update_open_optie_comment_color(current_uniek_id, hexval)
             latest = fetch_open_optie_comments([current_uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
