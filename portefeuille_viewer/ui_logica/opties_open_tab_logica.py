@@ -505,7 +505,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             return
         color_idx = cols.index("optie_comment_color") if "optie_comment_color" in cols else None
         current_uniek_id = self._table_model._df[src_index.row(), uniek_id_idx]
-        current_comment = self._table_model._df[src_index.row(), src_index.column()] or ""
+        # current_comment = self._table_model._df[src_index.row(), src_index.column()] or ""
         current_color = self._table_model._df[src_index.row(), color_idx] if color_idx is not None else ""
 
         menu = QMenu(self)
