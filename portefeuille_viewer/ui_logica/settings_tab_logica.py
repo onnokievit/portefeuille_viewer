@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.signals import signals
 
 class SettingsTab(QWidget, Ui_SettingsTab):
 
@@ -28,6 +29,61 @@ class SettingsTab(QWidget, Ui_SettingsTab):
             self.tableColorOptiesConfig.cellClicked.connect(self._on_comment_color_cell_clicked)
             self.tableColorOptiesConfig.cellChanged.connect(self._on_comment_color_cell_changed)
             self.load_comment_colors()
+
+        self._init_ui_color_settings()
+
+    def _init_ui_color_settings(self):
+        if not hasattr(self, "groupBox_2"):
+            return
+        self.groupBox_2.setTitle("UI kleuren")
+        layout = QHBoxLayout(self.groupBox_2)
+        label = QLabel("Header rij kleur")
+        layout.addWidget(label)
+        self._header_color_btn = QPushButton()
+        self._header_color_btn.setFixedWidth(80)
+        self._header_color_btn.clicked.connect(self._on_header_color_clicked)
+        layout.addWidget(self._header_color_btn)
+
+        label_total = QLabel("Totalen rij kleur")
+        layout.addWidget(label_total)
+        self._total_color_btn = QPushButton()
+        self._total_color_btn.setFixedWidth(80)
+        self._total_color_btn.clicked.connect(self._on_total_color_clicked)
+        layout.addWidget(self._total_color_btn)
+
+        layout.addStretch(1)
+        self._refresh_header_color_button()
+        self._refresh_total_color_button()
+
+    def _refresh_header_color_button(self):
+        color = self.settings_manager.get_table_header_bg()
+        self._header_color_btn.setStyleSheet(f"background-color: {color};")
+        self._header_color_btn.setToolTip(color)
+
+    def _refresh_total_color_button(self):
+        color = self.settings_manager.get_table_total_bg()
+        self._total_color_btn.setStyleSheet(f"background-color: {color};")
+        self._total_color_btn.setToolTip(color)
+
+    def _on_header_color_clicked(self):
+        from PySide6.QtWidgets import QColorDialog
+        current = self.settings_manager.get_table_header_bg()
+        color = QColorDialog.getColor(QColor(current), self, "Kies header kleur")
+        if not color.isValid():
+            return
+        self.settings_manager.set_table_header_bg(color.name())
+        self._refresh_header_color_button()
+        signals.uiStyleChanged.emit("table_header_bg")
+
+    def _on_total_color_clicked(self):
+        from PySide6.QtWidgets import QColorDialog
+        current = self.settings_manager.get_table_total_bg()
+        color = QColorDialog.getColor(QColor(current), self, "Kies totalen kleur")
+        if not color.isValid():
+            return
+        self.settings_manager.set_table_total_bg(color.name())
+        self._refresh_total_color_button()
+        signals.uiStyleChanged.emit("table_total_bg")
 
     def load_comment_colors(self):
         if not hasattr(self, "tableColorOptiesConfig"):

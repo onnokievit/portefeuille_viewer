@@ -204,6 +204,8 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.tableView.horizontalHeader().customContextMenuRequested.connect(self.on_header_menu)
         self.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.tableView.verticalHeader().setDefaultSectionSize(18) 
+        self._header_bg_color = get_settings().get_table_header_bg()
+        self._apply_header_style()
         self.portfolio_engine = portfolio_engine
         self.current_sort_column = -1
         self.current_sort_order = 0
@@ -239,6 +241,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.table.setModel(self.proxy_model)
         self._table_model = self.model
         signals.databaseChanged.connect(self._on_db_changed)
+        signals.uiStyleChanged.connect(self._on_ui_style_changed)
         self.reload_data()
 
     def _apply_column_widths(self, df: pl.DataFrame) -> None:
@@ -270,6 +273,16 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             if col not in df.columns:
                 continue
             header.resizeSection(df.columns.index(col), width)
+
+    def _apply_header_style(self):
+        style = f"QHeaderView::section {{ background-color: {self._header_bg_color}; }}"
+        self.tableView.horizontalHeader().setStyleSheet(style)
+
+    def _on_ui_style_changed(self, key: str):
+        if key != "table_header_bg":
+            return
+        self._header_bg_color = get_settings().get_table_header_bg()
+        self._apply_header_style()
 
     def _reorder_opties_open_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         """

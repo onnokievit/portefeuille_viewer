@@ -21,6 +21,9 @@ class Signals(QObject):
 
     # Optional debug signal
     debugSignal = Signal(str)
+
+    # Emitted when UI style settings change. Payload: setting key (str)
+    uiStyleChanged = Signal(str)
     
     # In signals.py
     #liveDataShouldUpdate = Signal()

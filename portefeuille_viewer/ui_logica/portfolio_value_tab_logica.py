@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QHeaderView
+from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
@@ -8,6 +8,7 @@ from portefeuille_viewer.ui.portfolio_value_ui import Ui_Form
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin
+from portefeuille_viewer.config import get_settings
 
 class PercentColoredPolarsModel(QAbstractTableModel):
     """
@@ -186,6 +187,11 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.ui.tableView.setModel(self.proxy_model)
         self._table_model = self.model
 
+        self._header_bg_color = get_settings().get_table_header_bg()
+        self._total_bg_color = get_settings().get_table_total_bg()
+        self._init_totals_footer()
+        self._apply_header_style()
+
         # Header contextmenu voor filters/sorteren
         header = self.ui.tableView.horizontalHeader()
         header.setSectionsClickable(True)
@@ -196,6 +202,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
         # Table UX tweaks
         header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
         # Gebruik standaardfont uit de UI en zelfde rijhoogte als OptiesOpen
         self.ui.tableView.verticalHeader().setVisible(False)
         self.ui.tableView.verticalHeader().setDefaultSectionSize(18)
@@ -213,6 +220,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 self.reload_snapshot()
         signals.databaseChanged.connect(_on_db_changed)
         signals.ordersCommitted.connect(_on_orders_committed)
+        signals.uiStyleChanged.connect(self._on_ui_style_changed)
 
     def _on_header_clicked(self, section: int):
         """Klik op kolomheader toggelt sorteerorde via proxy model."""
@@ -250,6 +258,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined", None)
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             self.model.set_df(pl.DataFrame({}))
+            self._clear_totals()
             return
         # Ensure percent cols exist; if missing, derive safely
         # df = df.drop("aand_aantal_bezit")
@@ -290,6 +299,9 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
         self.model.set_df(df)
         self._apply_column_widths(df)
+        self._update_totals(df)
+        self._sync_footer_section_sizes()
+        self._sync_footer_scrollbar_gap()
 
 
     def _ensure_percent_columns(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -332,4 +344,143 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         for i, col in enumerate(df.columns):
             if col in widths:
                 header.resizeSection(i, widths[col])
+
+    def _init_totals_footer(self):
+        self.tblTotalen = QTableWidget(self)
+        self.tblTotalen.setRowCount(1)
+        self.tblTotalen.setColumnCount(0)
+        self.tblTotalen.setFixedHeight(32)
+        self.tblTotalen.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.tblTotalen.verticalHeader().setVisible(False)
+        self.tblTotalen.horizontalHeader().setVisible(False)
+        self.tblTotalen.horizontalHeader().setStretchLastSection(False)
+        self.tblTotalen.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.tblTotalen.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.tblTotalen.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tblTotalen.setFocusPolicy(Qt.NoFocus)
+        self.tblTotalen.setSelectionMode(QTableWidget.NoSelection)
+
+        self._footer_container = QWidget(self)
+        self._footer_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        footer_layout = QHBoxLayout(self._footer_container)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(0)
+        self._footer_spacer = QWidget(self._footer_container)
+        self._footer_spacer.setFixedWidth(0)
+
+        footer_layout.addWidget(self.tblTotalen)
+        footer_layout.addWidget(self._footer_spacer)
+
+        main_layout = self.ui.verticalLayout
+        main_layout.addWidget(self._footer_container)
+        main_layout.setStretchFactor(self.ui.tableView, 1)
+        main_layout.setStretchFactor(self._footer_container, 0)
+
+        self._init_footer_sync()
+
+    def _init_footer_sync(self):
+        main_header = self.ui.tableView.horizontalHeader()
+        footer_header = self.tblTotalen.horizontalHeader()
+        main_header.sectionResized.connect(
+            lambda idx, _old, new: self.tblTotalen.setColumnWidth(idx, new)
+        )
+        main_header.sectionMoved.connect(
+            lambda logical, _old, new: footer_header.moveSection(footer_header.visualIndex(logical), new)
+        )
+        main_scroll = self.ui.tableView.horizontalScrollBar()
+        footer_scroll = self.tblTotalen.horizontalScrollBar()
+        main_scroll.valueChanged.connect(footer_scroll.setValue)
+        main_scroll.rangeChanged.connect(lambda _min, _max: self._sync_footer_scrollbar_gap())
+        self.ui.tableView.verticalScrollBar().rangeChanged.connect(
+            lambda _min, _max: self._sync_footer_scrollbar_gap()
+        )
+
+    def _sync_footer_section_sizes(self):
+        main_header = self.ui.tableView.horizontalHeader()
+        for i in range(main_header.count()):
+            self.tblTotalen.setColumnWidth(i, main_header.sectionSize(i))
+        self.tblTotalen.horizontalScrollBar().setValue(
+            self.ui.tableView.horizontalScrollBar().value()
+        )
+
+    def _sync_footer_scrollbar_gap(self):
+        v_scroll = self.ui.tableView.verticalScrollBar()
+        scroll_width = v_scroll.sizeHint().width() if v_scroll.maximum() > 0 else 0
+        if hasattr(self, "_footer_spacer") and self._footer_spacer is not None:
+            self._footer_spacer.setFixedWidth(scroll_width)
+
+    def _apply_header_style(self):
+        style = f"QHeaderView::section {{ background-color: {self._header_bg_color}; }}"
+        self.ui.tableView.horizontalHeader().setStyleSheet(style)
+        self.tblTotalen.horizontalHeader().setStyleSheet(style)
+
+    def _apply_total_row_bg(self):
+        for col_idx in range(self.tblTotalen.columnCount()):
+            item = self.tblTotalen.item(0, col_idx)
+            if item is not None:
+                item.setBackground(QColor(self._total_bg_color))
+
+    def _on_ui_style_changed(self, key: str):
+        if key == "table_header_bg":
+            self._header_bg_color = get_settings().get_table_header_bg()
+            self._apply_header_style()
+        elif key == "table_total_bg":
+            self._total_bg_color = get_settings().get_table_total_bg()
+            self._apply_total_row_bg()
+
+    def _clear_totals(self):
+        if hasattr(self, "tblTotalen"):
+            self.tblTotalen.setColumnCount(0)
+
+    def _format_total_value(self, col: str, val):
+        if val is None:
+            return ""
+        if col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
+            try:
+                return f"{float(val) * 100:.1f}%"
+            except Exception:
+                return str(val)
+        if col in ("total_waarde_lineair", "total_waarde_delta"):
+            try:
+                s = f"{int(round(float(val))):,}".replace(",", ".")
+                return s
+            except Exception:
+                return str(val)
+        if col == "koers":
+            try:
+                return f"{float(val):,.2f}".replace(",", ".")
+            except Exception:
+                return str(val)
+        return str(val)
+
+    def _update_totals(self, df: pl.DataFrame):
+        if df is None or df.is_empty():
+            self._clear_totals()
+            return
+        cols = list(df.columns)
+        self.tblTotalen.setColumnCount(len(cols))
+        totalen = {}
+        for col in cols:
+            if col == "asset_rollup":
+                totalen[col] = "TOTAAL"
+            elif col in ("regio", "sector", "value_grow"):
+                totalen[col] = ""
+            elif col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
+                totalen[col] = 1.0
+            elif col in df.columns:
+                try:
+                    totalen[col] = df[col].sum()
+                except Exception:
+                    totalen[col] = ""
+            else:
+                totalen[col] = ""
+        for i, col in enumerate(cols):
+            val_str = self._format_total_value(col, totalen.get(col))
+            item = QTableWidgetItem(val_str)
+            if col == "asset_rollup":
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            else:
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item.setBackground(QColor(self._total_bg_color))
+            self.tblTotalen.setItem(0, i, item)
 
