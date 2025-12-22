@@ -4,7 +4,7 @@ import polars as pl
 from datetime import datetime, date
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt, Slot, QTimer
-from PySide6.QtGui import QColor, QAction
+from PySide6.QtGui import QColor, QAction, QPen, QPalette
 from PySide6.QtWidgets import QWidget, QMenu, QColorDialog, QAbstractItemView, QStyledItemDelegate, QStyleOptionViewItem, QStyle, QInputDialog, QHeaderView
 
 
@@ -181,7 +181,18 @@ class CommentNoSelectDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         opt = QStyleOptionViewItem(option)
         opt.state &= ~QStyle.State_Selected
+        bg = index.data(Qt.BackgroundRole)
+        if isinstance(bg, QColor):
+            painter.save()
+            painter.fillRect(option.rect, bg)
+            painter.restore()
         super().paint(painter, opt, index)
+        if option.state & QStyle.State_Selected:
+            painter.save()
+            painter.setPen(QPen(option.palette.color(QPalette.Text), 1))
+            rect = option.rect.adjusted(1, 1, -1, -1)
+            painter.drawRoundedRect(rect, 3, 3)
+            painter.restore()
     
 class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     """
@@ -505,7 +516,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             return
         color_idx = cols.index("optie_comment_color") if "optie_comment_color" in cols else None
         current_uniek_id = self._table_model._df[src_index.row(), uniek_id_idx]
-        # current_comment = self._table_model._df[src_index.row(), src_index.column()] or ""
+        current_comment = self._table_model._df[src_index.row(), src_index.column()] or ""
         current_color = self._table_model._df[src_index.row(), color_idx] if color_idx is not None else ""
 
         menu = QMenu(self)
@@ -530,8 +541,13 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             hexval = chosen.data()
 
         try:
-            update_open_optie_comment_color(current_uniek_id, hexval)
             latest = fetch_open_optie_comments([current_uniek_id])
+            if latest is None or latest.is_empty():
+                upsert_open_optie_comment(current_uniek_id, current_comment or "", hexval)
+                latest = fetch_open_optie_comments([current_uniek_id])
+            else:
+                update_open_optie_comment_color(current_uniek_id, hexval)
+                latest = fetch_open_optie_comments([current_uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
                 self._patch_comment_in_model(current_uniek_id, row.get("optie_comment") or "", row.get("optie_comment_color") or "", row.get("optie_comment_updated_at"))

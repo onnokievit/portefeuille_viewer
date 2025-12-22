@@ -1,5 +1,5 @@
 import contextlib
-from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow, QProxyStyle, QTabBar
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
@@ -13,6 +13,8 @@ from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioVa
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
+from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.signals import signals
 
 
 
@@ -51,6 +53,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.tabWidget.currentChanged.connect(self._on_tab_changed)
         self._on_tab_changed(self.tabWidget.currentIndex())
+        self.tabWidget.tabBar().setStyle(_TabBarNoFocusRectStyle())
+        self._apply_tab_style()
+        signals.uiStyleChanged.connect(self._on_ui_style_changed)
 
         self.shortcut_focus_tabbar = QShortcut(QKeySequence(Qt.Key_Escape), self)
         self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
@@ -76,7 +81,37 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.opties_open_tab.set_active(index == self.tabWidget.indexOf(self.opties_open_tab))
         if hasattr(self, "sprinters_open_tab") and hasattr(self.sprinters_open_tab, "set_active"):
             self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
-    
+
+    def _apply_tab_style(self):
+        settings = get_settings()
+        inactive = settings.get_tab_inactive_bg()
+        active = settings.get_tab_active_bg()
+        hover = settings.get_tab_hover_bg()
+        self.tabWidget.setStyleSheet(
+            "QTabBar::tab {"
+            f"background: {inactive};"
+            "padding: 3px 12px;"
+            "border: 1px solid #bfbfbf;"
+            "border-radius: 4px;"
+            "margin-right: 2px;"
+            "}"
+            "QTabBar::tab:selected {"
+            f"background: {active};"
+            "}"
+            "QTabBar::tab:hover {"
+            f"background: {hover};"
+            "}"
+            "QTabBar::tab:focus {"
+            "outline: none;"
+            "border: 1px solid #000000;"
+            "border-radius: 6px;"
+            "}"
+        )
+
+    def _on_ui_style_changed(self, key: str):
+        if key in {"tab_inactive_bg", "tab_active_bg", "tab_hover_bg"}:
+            self._apply_tab_style()
+
     def closeEvent(self, event):
         # Stop hier je services, threads, timers, etc.
         if hasattr(self, 'price_feed'):
@@ -94,5 +129,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             flush_dirty_test_orders_to_db()
 
         print("closeEvent triggered!")
+        super().closeEvent(event)
+
+
+class _TabBarNoFocusRectStyle(QProxyStyle):
+    def drawPrimitive(self, element, option, painter, widget=None):
+        if element == QProxyStyle.PE_FrameFocusRect and isinstance(widget, QTabBar):
+            return
+        super().drawPrimitive(element, option, painter, widget)
+
+    def closeEvent(self, event):
         super().closeEvent(event)
 

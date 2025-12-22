@@ -192,6 +192,34 @@ class SettingsManager:
             self.config.add_section('ui')
         self.config.set('ui', 'table_total_bg', color)
         self.save()
+
+    def get_tab_inactive_bg(self) -> str:
+        return self.config.get('ui', 'tab_inactive_bg', fallback='#d9d9d9')
+
+    def set_tab_inactive_bg(self, color: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'tab_inactive_bg', color)
+        self.save()
+
+    def get_tab_active_bg(self) -> str:
+        return self.config.get('ui', 'tab_active_bg', fallback='#7a7a7a')
+
+    def set_tab_active_bg(self, color: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'tab_active_bg', color)
+        self.save()
+
+    def get_tab_hover_bg(self) -> str:
+        return self.config.get('ui', 'tab_hover_bg', fallback='#f3eed7')
+
+    def set_tab_hover_bg(self, color: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'tab_hover_bg', color)
+        self.save()
+
     
     # === App Settings ===
     def get_last_database(self) -> Optional[str]:
