@@ -1227,12 +1227,12 @@ def portfolio_value_asset_rollup_opties_put():
     df_opties_waarde_2 = df_opties_waarde.with_columns([
         pl.when(pl.col("ITM_OTM") != 0).then(pl.col("waarde_bezit") ).otherwise(None).alias("waarde_ITM"),
         pl.when(pl.col("ITM_OTM") != 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_ITM"),
-        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_OTM")
+        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("waarde_bezit") ).otherwise(None).alias("waarde_OTM"),
+        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_OTM"),
+        
     ])
 
-    df_opties_waarde_2 = df_opties_waarde_2.with_columns([
-        (pl.col("waarde_ITM") ).alias("waarde_ITM"),
-    ])
+
 
     df_opties_waarde_2 = df_opties_waarde_2.with_columns(
         pl.struct(["optie_call_put", "Koers", "optie_strike"])
@@ -1266,7 +1266,8 @@ def portfolio_value_asset_rollup_opties_put():
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
     SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_call_put_detailed = df_opties_waarde_2
+    
     df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
     
     df_opties_waarde_2 = df_opties_waarde_2.group_by("asset_rollup", "broker", "regio", "sector", "value_grow").agg([
