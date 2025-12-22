@@ -1218,7 +1218,11 @@ def portfolio_value_asset_rollup_opties_put():
         raise ValueError("aggregator_snapshot_aandelen_live is niet gevuld!")
     else:
         df_opties_waarde = df_opties.with_columns([
-            (pl.col("SomVantransactie_aantal") * pl.col("optie_strike")*-1).alias("waarde_bezit"),
+            (
+                pl.col("SomVantransactie_aantal")
+                * pl.col("optie_strike")
+                * pl.when(pl.col("optie_call_put") == "call").then(1).otherwise(-1)
+            ).alias("waarde_bezit"),
         ])
     df_opties_waarde_2 = df_opties_waarde.with_columns([
         pl.when(pl.col("ITM_OTM") != 0).then(pl.col("waarde_bezit") ).otherwise(None).alias("waarde_ITM"),
@@ -1258,6 +1262,11 @@ def portfolio_value_asset_rollup_opties_put():
         on="asset_rollup",
         how="left"
     )
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+
     df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
     
     df_opties_waarde_2 = df_opties_waarde_2.group_by("asset_rollup", "broker", "regio", "sector", "value_grow").agg([

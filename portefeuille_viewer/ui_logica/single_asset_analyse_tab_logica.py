@@ -4,8 +4,8 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem,QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea
-from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QApplication, QStyleOptionFocusRect
+from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
 # from streamlit import columns
@@ -129,6 +129,21 @@ class NumberDelegate(QStyledItemDelegate):
             model.setData(index, f"{val:.2f}", Qt.EditRole)
         except Exception:
             model.setData(index, txt, Qt.EditRole)
+
+class CommentNoSelectDelegate(QStyledItemDelegate):
+    """
+    Delegate die selectie-overlay negeert zodat de comment-kleur zichtbaar blijft.
+    """
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        opt.state &= ~QStyle.State_Selected
+        super().paint(painter, opt, index)
+        if option.state & QStyle.State_Selected:
+            painter.save()
+            painter.setPen(QPen(option.palette.color(QPalette.Text), 1))
+            rect = option.rect.adjusted(1, 1, -1, -1)
+            painter.drawRoundedRect(rect, 3, 3)
+            painter.restore()
 
 
 class CommentablePolarsTableModel(ColoredPolarsTableModel):
@@ -299,6 +314,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         _set_delegate("transactie_aantal", num_delegate)
         _set_delegate("transactie_prijs", num_delegate)
         _set_delegate("optie_strike", num_delegate)
+        _set_delegate("optie_comment", CommentNoSelectDelegate(self.testOrdersTable))
         # Klik op asset -> selecteer in asset_selector
         self.testOrdersTable.cellClicked.connect(self._on_test_order_cell_clicked)
         self.testOrdersTable.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -446,6 +462,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         font = QFont("Arial", 8)
         font.setBold(False)
         self.testOrdersTable.setFont(font)
+        self.testOrdersTable.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.testOrdersTable.setStyleSheet("""
+        QTableWidget::item:selected { background: rgba(255,242,204,80); color: black; }
+        QTableWidget::item:selected:active { background: rgba(255,242,204,80); color: black; }
+        QTableWidget::item:selected:active:focus { background: rgba(255,242,204,80); color: black; }
+        """)
         self.testOrdersTable.verticalHeader().setMinimumSectionSize(22)
         self.testOrdersTable.verticalHeader().setDefaultSectionSize(22)
         self.testOrdersTable.verticalHeader().setVisible(False)

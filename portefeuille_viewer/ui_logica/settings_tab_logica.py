@@ -51,9 +51,33 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._total_color_btn.clicked.connect(self._on_total_color_clicked)
         layout.addWidget(self._total_color_btn)
 
+        label_tab_inactive = QLabel("Tab inactief")
+        layout.addWidget(label_tab_inactive)
+        self._tab_inactive_btn = QPushButton()
+        self._tab_inactive_btn.setFixedWidth(80)
+        self._tab_inactive_btn.clicked.connect(self._on_tab_inactive_clicked)
+        layout.addWidget(self._tab_inactive_btn)
+
+        label_tab_active = QLabel("Tab actief")
+        layout.addWidget(label_tab_active)
+        self._tab_active_btn = QPushButton()
+        self._tab_active_btn.setFixedWidth(80)
+        self._tab_active_btn.clicked.connect(self._on_tab_active_clicked)
+        layout.addWidget(self._tab_active_btn)
+
+        label_tab_hover = QLabel("Tab hover")
+        layout.addWidget(label_tab_hover)
+        self._tab_hover_btn = QPushButton()
+        self._tab_hover_btn.setFixedWidth(80)
+        self._tab_hover_btn.clicked.connect(self._on_tab_hover_clicked)
+        layout.addWidget(self._tab_hover_btn)
+
         layout.addStretch(1)
         self._refresh_header_color_button()
         self._refresh_total_color_button()
+        self._refresh_tab_inactive_button()
+        self._refresh_tab_active_button()
+        self._refresh_tab_hover_button()
 
     def _refresh_header_color_button(self):
         color = self.settings_manager.get_table_header_bg()
@@ -64,6 +88,21 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         color = self.settings_manager.get_table_total_bg()
         self._total_color_btn.setStyleSheet(f"background-color: {color};")
         self._total_color_btn.setToolTip(color)
+
+    def _refresh_tab_inactive_button(self):
+        color = self.settings_manager.get_tab_inactive_bg()
+        self._tab_inactive_btn.setStyleSheet(f"background-color: {color};")
+        self._tab_inactive_btn.setToolTip(color)
+
+    def _refresh_tab_active_button(self):
+        color = self.settings_manager.get_tab_active_bg()
+        self._tab_active_btn.setStyleSheet(f"background-color: {color};")
+        self._tab_active_btn.setToolTip(color)
+
+    def _refresh_tab_hover_button(self):
+        color = self.settings_manager.get_tab_hover_bg()
+        self._tab_hover_btn.setStyleSheet(f"background-color: {color};")
+        self._tab_hover_btn.setToolTip(color)
 
     def _on_header_color_clicked(self):
         from PySide6.QtWidgets import QColorDialog
@@ -84,6 +123,37 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self.settings_manager.set_table_total_bg(color.name())
         self._refresh_total_color_button()
         signals.uiStyleChanged.emit("table_total_bg")
+
+    def _on_tab_inactive_clicked(self):
+        from PySide6.QtWidgets import QColorDialog
+        current = self.settings_manager.get_tab_inactive_bg()
+        color = QColorDialog.getColor(QColor(current), self, "Kies tab inactief kleur")
+        if not color.isValid():
+            return
+        self.settings_manager.set_tab_inactive_bg(color.name())
+        self._refresh_tab_inactive_button()
+        signals.uiStyleChanged.emit("tab_inactive_bg")
+
+    def _on_tab_active_clicked(self):
+        from PySide6.QtWidgets import QColorDialog
+        current = self.settings_manager.get_tab_active_bg()
+        color = QColorDialog.getColor(QColor(current), self, "Kies tab actief kleur")
+        if not color.isValid():
+            return
+        self.settings_manager.set_tab_active_bg(color.name())
+        self._refresh_tab_active_button()
+        signals.uiStyleChanged.emit("tab_active_bg")
+
+    def _on_tab_hover_clicked(self):
+        from PySide6.QtWidgets import QColorDialog
+        current = self.settings_manager.get_tab_hover_bg()
+        color = QColorDialog.getColor(QColor(current), self, "Kies tab hover kleur")
+        if not color.isValid():
+            return
+        self.settings_manager.set_tab_hover_bg(color.name())
+        self._refresh_tab_hover_button()
+        signals.uiStyleChanged.emit("tab_hover_bg")
+
 
     def load_comment_colors(self):
         if not hasattr(self, "tableColorOptiesConfig"):
