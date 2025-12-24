@@ -30,6 +30,7 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_gesloten_aandelen_payoff,
     bereken_open_aandelen_payoff,
 )
+from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
     get_cached_orders,
@@ -241,6 +242,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         super().__init__(parent)
         self.setupUi(self)
         self._wrap_in_scroll_area()
+        self._active = False
+        self._summary_dirty = False
+        self._summary_reload_timer = QTimer(self)
+        self._summary_reload_timer.setInterval(300)
+        self._summary_reload_timer.setSingleShot(True)
+        self._summary_reload_timer.timeout.connect(self._reload_summary_if_needed)
 
         # init logic
         self.logic = SingleAssetAnalyseLogic()
@@ -430,6 +437,23 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpenPut.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenPut, pos))
         self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
+
+    def set_active(self, active: bool):
+        self._active = active
+        if active:
+            self._schedule_summary_reload()
+
+    def _schedule_summary_reload(self):
+        self._summary_dirty = True
+        if not self._summary_reload_timer.isActive():
+            self._summary_reload_timer.start()
+
+    def _reload_summary_if_needed(self):
+        if not self._active:
+            return
+        if self._summary_dirty:
+            self._summary_dirty = False
+            self.update_aandelen_table()
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -1250,48 +1274,40 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def update_aandelen_table(self):
         import polars as pl
-        df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_aandelen_live", None)
+        asset = self.asset_selector.currentText()
+        df = build_aandelen_tab_summary(asset_rollup=asset)
         if df is None or df.is_empty():
             df = pl.DataFrame()
-        asset = self.asset_selector.currentText()
-        # Filter op asset_rollup en aantal_bezit
-        df = df.filter(pl.col("asset_rollup") == asset)
-        df = df.filter(pl.col("aantal_bezit") != 0)
-        # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
-        if "koers" in df.columns and "aantal_bezit" in df.columns:
-            df = df.with_columns([
-                pl.col("aantal_bezit").cast(pl.Int64),
-                (pl.col("koers") * pl.col("aantal_bezit")).round(0).cast(pl.Int64).alias("waarde_bezit")
-            ])
-        # Selecteer de gewenste kolommen
-        df = df.select([
-            "broker",
-            "asset_rollup",
-            "koers",
-            "aantal_bezit",
-            "waarde_bezit"
-        ])
-        kleur_kolommen = ["broker", "asset_rollup", "aantal_bezit"]
-        columns = df.columns #noqa
+            self._aandelen_summary_row = None
+        else:
+            self._aandelen_summary_row = df.row(0, named=True)
+
+        kleur_kolommen = ["asset_rollup"]
         def kleur_func(row, colname, kleur_kolommen):
-            # Optioneel: eigen kleurfunctie
             return None
         model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
         self.tableViewAandelen.setModel(model)
-        # Kolombreedtes instellen per kolom
+        # Kolombreedtes instellen per kolom (subset)
         kolombreedtes = {
-            "broker": 60,
             "asset_rollup": 90,
-            "koers": 60,
-            "aantal_bezit": 90,
-            "waarde_bezit": 90,
+            "koers_prev": 70,
+            "koers": 70,
+            "pct_change": 70,
+            "eq_aantal_bezit": 80,
+            "totaal_ex_fee": 90,
+            "totaal_inc_fee": 90,
+            "net_change": 80,
+            "totaal_fee": 80,
+            "regio": 60,
+            "sector": 80,
+            "value_grow": 70,
+            "status": 60,
         }
         header = self.tableViewAandelen.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         for i, col in enumerate(df.columns):
             if col in kolombreedtes:
                 header.resizeSection(i, kolombreedtes[col])
-        # Optioneel: font instellen
         font = QFont("Arial", 8)
         font.setBold(False)
         self.tableViewAandelen.setFont(font)

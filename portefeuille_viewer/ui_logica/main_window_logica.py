@@ -75,6 +75,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return super().eventFilter(obj, event)
 
     def _on_tab_changed(self, index):
+        if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "set_active"):
+            self.single_asset_analyse_tab.set_active(index == self.tabWidget.indexOf(self.single_asset_analyse_tab))
         if hasattr(self, "aandelen_tab") and hasattr(self.aandelen_tab, "set_active"):
             self.aandelen_tab.set_active(index == self.tabWidget.indexOf(self.aandelen_tab))
         if hasattr(self, "opties_open_tab") and hasattr(self.opties_open_tab, "set_active"):
@@ -140,4 +142,3 @@ class _TabBarNoFocusRectStyle(QProxyStyle):
 
     def closeEvent(self, event):
         super().closeEvent(event)
-
