@@ -33,10 +33,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.orders_tab, "Orders")
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
-        self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
-        self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+        
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+        self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
+        self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
 

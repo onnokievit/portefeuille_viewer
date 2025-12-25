@@ -306,8 +306,14 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 				)
 
 		self.model.set_df(df_sum)
-		if self.current_sort_column >= 0:
-			self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
+		if self.current_sort_column < 0:
+			try:
+				self.current_sort_column = df_sum.columns.index("asset_rollup")
+				self.current_sort_order = Qt.AscendingOrder
+			except Exception:
+				self.current_sort_column = 0
+				self.current_sort_order = Qt.AscendingOrder
+		self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
 		self._sync_footer_section_sizes()
 		self._sync_footer_scrollbar_gap()
 
