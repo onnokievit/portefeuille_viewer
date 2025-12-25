@@ -865,6 +865,13 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             self._apply_column_widths(df)
         if self.current_sort_column >= 0:
             self.tableView.sortByColumn(self.current_sort_column, self.current_sort_order)
+        else:
+            try:
+                col_idx = df.columns.index("optie_exp_date")
+            except Exception:
+                col_idx = -1
+            if col_idx >= 0:
+                self.tableView.sortByColumn(col_idx, Qt.AscendingOrder)
         # selectie herstellen
         self._restore_selection()
 

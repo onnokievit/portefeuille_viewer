@@ -360,6 +360,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         #self.update_opties_open_table()
         
         self.asset_selector.addItems(self.logic.load_assets())
+        asset_font = self.asset_selector.font()
+        asset_font.setPointSize(10)
+        asset_font.setBold(True)
+        self.asset_selector.setFont(asset_font)
+        self._align_summary_labels()
         
         self.asset_selector.currentTextChanged.connect(self.on_asset_selected)
         self.endDate.setDate(QDate.currentDate())
@@ -1274,44 +1279,207 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def update_aandelen_table(self):
         import polars as pl
-        asset = self.asset_selector.currentText()
-        df = build_aandelen_tab_summary(asset_rollup=asset)
+        df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_aandelen_live", None)
         if df is None or df.is_empty():
             df = pl.DataFrame()
-            self._aandelen_summary_row = None
-        else:
-            self._aandelen_summary_row = df.row(0, named=True)
-
-        kleur_kolommen = ["asset_rollup"]
+        asset = self.asset_selector.currentText()
+        # Filter op asset_rollup en aantal_bezit
+        df = df.filter(pl.col("asset_rollup") == asset)
+        df = df.filter(pl.col("aantal_bezit") != 0)
+        # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
+        if "koers" in df.columns and "aantal_bezit" in df.columns:
+            df = df.with_columns([
+                pl.col("aantal_bezit").cast(pl.Int64),
+                (pl.col("koers") * pl.col("aantal_bezit")).round(0).cast(pl.Int64).alias("waarde_bezit")
+            ])
+        # Selecteer de gewenste kolommen
+        df = df.select([
+            "broker",
+            "asset_rollup",
+            "koers",
+            "aantal_bezit",
+            "waarde_bezit"
+        ])
+        kleur_kolommen = ["broker", "asset_rollup", "aantal_bezit"]
+        columns = df.columns #noqa
         def kleur_func(row, colname, kleur_kolommen):
+            # Optioneel: eigen kleurfunctie
             return None
         model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
         self.tableViewAandelen.setModel(model)
-        # Kolombreedtes instellen per kolom (subset)
+        # Kolombreedtes instellen per kolom
         kolombreedtes = {
+            "broker": 60,
             "asset_rollup": 90,
-            "koers_prev": 70,
-            "koers": 70,
-            "pct_change": 70,
-            "eq_aantal_bezit": 80,
-            "totaal_ex_fee": 90,
-            "totaal_inc_fee": 90,
-            "net_change": 80,
-            "totaal_fee": 80,
-            "regio": 60,
-            "sector": 80,
-            "value_grow": 70,
-            "status": 60,
+            "koers": 60,
+            "aantal_bezit": 90,
+            "waarde_bezit": 90,
         }
         header = self.tableViewAandelen.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         for i, col in enumerate(df.columns):
             if col in kolombreedtes:
                 header.resizeSection(i, kolombreedtes[col])
+        # Optioneel: font instellen
         font = QFont("Arial", 8)
         font.setBold(False)
         self.tableViewAandelen.setFont(font)
         self.tableViewAandelen.verticalHeader().setVisible(False)
+        self._update_summary_labels()
+
+    def _align_summary_labels(self):
+        labels = [
+            "lbKoersPrev",
+            "lblKoers",
+            "lblPctChange",
+            "lblNetChange",
+            "lblPctLineair",
+            "lblPctDelta",
+        ]
+        for name in labels:
+            label = getattr(self, name, None)
+            if label is not None:
+                label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+    def _format_number(self, val, decimals=2):
+        if val is None:
+            return "-"
+        try:
+            return f"{float(val):.{decimals}f}"
+        except Exception:
+            return str(val)
+
+    def _format_pct(self, val, decimals=2):
+        if val is None:
+            return "-"
+        try:
+            return f"{float(val) * 100:.{decimals}f}%"
+        except Exception:
+            return str(val)
+
+    def _set_label_bg(self, label, color: QColor | None):
+        if label is None:
+            return
+        if color is None:
+            label.setStyleSheet("")
+            return
+        label.setStyleSheet(f"background-color: {color.name()};")
+
+    def _color_green_red(self, val):
+        try:
+            f = float(val)
+        except Exception:
+            return None
+        if f > 0:
+            return QColor(198, 239, 206)
+        if f < 0:
+            return QColor(255, 199, 206)
+        return None
+
+    def _pct_gradient_color(self, val, minv, maxv):
+        try:
+            f = float(val)
+        except Exception:
+            f = 0.0
+        if maxv - minv == 0:
+            t = 0.0
+        else:
+            t = (f - minv) / (maxv - minv)
+            t = max(0.0, min(1.0, t))
+        if t < 0.5:
+            t2 = t / 0.5
+            r = int(0 + (255 - 0) * t2)
+            g = int(180 + (255 - 180) * t2)
+            b = int(90 + (160 - 90) * t2)
+        else:
+            t2 = (t - 0.5) / 0.5
+            r = int(255)
+            g = int(255 - (255 - 90) * t2)
+            b = int(160 - (160 - 90) * t2)
+        return QColor(r, g, b)
+
+    def _get_portfolio_value_pct_color(self, asset_rollup: str, colname: str):
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined", None)
+        if df is None or df.is_empty():
+            return None
+        if colname not in df.columns:
+            if colname == "portfolio_total_waarde_lineair_pct" and "total_waarde_lineair" in df.columns:
+                try:
+                    total = float(df["total_waarde_lineair"].sum())
+                    if total != 0:
+                        df = df.with_columns((pl.col("total_waarde_lineair") / total).alias(colname))
+                except Exception:
+                    return None
+            elif colname == "portfolio_total_waarde_delta_pct" and "total_waarde_delta" in df.columns:
+                try:
+                    total = float(df["total_waarde_delta"].sum())
+                    if total != 0:
+                        df = df.with_columns((pl.col("total_waarde_delta") / total).alias(colname))
+                except Exception:
+                    return None
+        if colname not in df.columns:
+            return None
+        try:
+            vals = [float(v) for v in df[colname].to_list() if v is not None]
+            if not vals:
+                return None
+            minv, maxv = min(vals), max(vals)
+            if minv == maxv:
+                minv, maxv = 0.0, maxv
+            row = df.filter(pl.col("asset_rollup") == asset_rollup)
+            if row.height == 0:
+                return None
+            val = row[colname][0]
+            return self._pct_gradient_color(val, minv, maxv)
+        except Exception:
+            return None
+
+    def _update_summary_labels(self):
+        asset = self.asset_selector.currentText()
+        df_sum = build_aandelen_tab_summary(asset_rollup=asset)
+        row = df_sum.row(0, named=True) if df_sum is not None and not df_sum.is_empty() else None
+
+        koers_prev_val = row.get("koers_prev") if row else None
+        koers_val = row.get("koers") if row else None
+
+        if hasattr(self, "lbKoersPrev"):
+            self.lbKoersPrev.setText(self._format_number(koers_prev_val))
+            self._set_label_bg(self.lbKoersPrev, QColor(221, 235, 247))
+        if hasattr(self, "lblKoers"):
+            self.lblKoers.setText(self._format_number(koers_val))
+            koers_color = None
+            try:
+                if koers_val is not None and koers_prev_val is not None:
+                    if float(koers_val) > float(koers_prev_val):
+                        koers_color = QColor(198, 239, 206)
+                    elif float(koers_val) < float(koers_prev_val):
+                        koers_color = QColor(255, 199, 206)
+            except Exception:
+                koers_color = None
+            self._set_label_bg(self.lblKoers, koers_color)
+        if hasattr(self, "lblPctChange"):
+            pct_val = row.get("pct_change") if row else None
+            self.lblPctChange.setText(self._format_pct(pct_val))
+            self._set_label_bg(self.lblPctChange, self._color_green_red(pct_val))
+        if hasattr(self, "lblNetChange"):
+            net_val = row.get("net_change") if row else None
+            self.lblNetChange.setText(self._format_number(net_val))
+            self._set_label_bg(self.lblNetChange, self._color_green_red(net_val))
+
+        if hasattr(self, "lblPctLineair"):
+            val = row.get("portfolio_total_waarde_lineair_pct") if row else None
+            self.lblPctLineair.setText(self._format_pct(val, decimals=1))
+            self._set_label_bg(
+                self.lblPctLineair,
+                self._get_portfolio_value_pct_color(asset, "portfolio_total_waarde_lineair_pct"),
+            )
+        if hasattr(self, "lblPctDelta"):
+            val = row.get("portfolio_total_waarde_delta_pct") if row else None
+            self.lblPctDelta.setText(self._format_pct(val, decimals=1))
+            self._set_label_bg(
+                self.lblPctDelta,
+                self._get_portfolio_value_pct_color(asset, "portfolio_total_waarde_delta_pct"),
+            )
 
 
 
