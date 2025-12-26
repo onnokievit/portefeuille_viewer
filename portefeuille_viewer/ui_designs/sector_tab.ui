@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1757</width>
-    <height>1220</height>
+    <width>2500</width>
+    <height>2000</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QFrame" name="pieChartValue1">
+  <widget class="QFrame" name="pieChartValueLineair">
    <property name="geometry">
     <rect>
-     <x>110</x>
-     <y>90</y>
-     <width>221</width>
-     <height>181</height>
+     <x>690</x>
+     <y>10</y>
+     <width>561</width>
+     <height>481</height>
     </rect>
    </property>
    <property name="frameShape">
@@ -29,13 +29,13 @@
     <enum>QFrame::Shadow::Raised</enum>
    </property>
   </widget>
-  <widget class="QFrame" name="frame_2">
+  <widget class="QFrame" name="pieChartValueLineairNaOpties">
    <property name="geometry">
     <rect>
-     <x>360</x>
-     <y>90</y>
-     <width>221</width>
-     <height>181</height>
+     <x>1850</x>
+     <y>10</y>
+     <width>561</width>
+     <height>481</height>
     </rect>
    </property>
    <property name="frameShape">
@@ -43,6 +43,32 @@
    </property>
    <property name="frameShadow">
     <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueLineairPutITM">
+   <property name="geometry">
+    <rect>
+     <x>1270</x>
+     <y>10</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QTableView" name="tableSectorValuesLineair">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>10</y>
+     <width>661</width>
+     <height>481</height>
+    </rect>
    </property>
   </widget>
  </widget>
