@@ -12,6 +12,7 @@ from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
+from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
 from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
@@ -45,6 +46,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
+        self.sector_analysis_tab = SectorAnalysisTab()
+        self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
         self.optie_eind_tab = OptieEindTab()
         self.tabWidget.addTab(self.optie_eind_tab, "Optie Eind")
         self.settings_tab = SettingsTab()

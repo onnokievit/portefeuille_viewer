@@ -1,0 +1,395 @@
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea
+from PySide6.QtCore import QSortFilterProxyModel
+from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter, QColor
+import polars as pl
+
+from portefeuille_viewer.ui.sector_tab import Ui_Form
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui.models import PolarsTableModel
+
+
+class SectorAnalysisTab(QWidget, Ui_Form):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setupUi(self)
+        self._wrap_in_scroll_area()
+        self._chart_views = {}
+        self._init_pie_chart("pieChartValueLineair", "pieChartValue1")
+        self._init_pie_chart("pieChartValueLineairNaOpties", "frame_2")
+        self._init_pie_chart("pieChartValueLineairPutITM")
+        self._init_sector_table()
+        self._init_sector_totals_footer()
+        self._chart_data = {}
+        self.reload_data()
+        signals.databaseChanged.connect(self._on_db_changed)
+
+    def _get_pie_frame(self, primary_name: str, fallback_name: str | None = None):
+        if hasattr(self, primary_name):
+            return getattr(self, primary_name)
+        if fallback_name and hasattr(self, fallback_name):
+            return getattr(self, fallback_name)
+        return None
+
+    def _init_pie_chart(self, primary_name: str, fallback_name: str | None = None):
+        frame = self._get_pie_frame(primary_name, fallback_name)
+        if frame is None:
+            return
+        if frame.layout() is None:
+            layout = QVBoxLayout(frame)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+        else:
+            layout = frame.layout()
+        chart = QChart()
+        chart.legend().setAlignment(Qt.AlignRight)
+        chart.setBackgroundVisible(False)
+        series = QPieSeries()
+        chart.addSeries(series)
+        chart_view = QChartView(chart, frame)
+        chart_view.setRenderHint(QPainter.Antialiasing)
+        layout.addWidget(chart_view)
+        self._chart_views[primary_name] = chart_view
+
+    def _init_sector_table(self):
+        if not hasattr(self, "tableSectorValuesLineair"):
+            self._sector_table_model = None
+            self._sector_table_proxy = None
+            return
+        self._sector_table_model = SectorTableModel(pl.DataFrame(), self)
+        self._sector_table_proxy = QSortFilterProxyModel(self)
+        self._sector_table_proxy.setSourceModel(self._sector_table_model)
+        self._sector_table_proxy.setSortRole(Qt.UserRole)
+        self.tableSectorValuesLineair.setModel(self._sector_table_proxy)
+        self.tableSectorValuesLineair.setSortingEnabled(True)
+        self.tableSectorValuesLineair.horizontalHeader().sortIndicatorChanged.connect(
+            lambda _idx, _order: self._update_charts_from_table_order()
+        )
+        header_map = {
+            "sector": "Sector",
+            "value_lineair": "Lineair",
+            "value_lineair_pct": "Lineair %",
+            "value_put_itm": "Put ITM",
+            "value_put_itm_pct": "Put ITM %",
+            "value_na_opties": "Na opties",
+            "value_na_opties_pct": "Na opties %",
+        }
+        self._sector_table_model.set_display_headers(header_map)
+
+    def _on_db_changed(self, _db_name: str):
+        self.reload_data()
+
+    def reload_data(self):
+        df_opties = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
+        df_aandelen = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
+
+        df_opties = df_opties if df_opties is not None else pl.DataFrame()
+        df_aandelen = df_aandelen if df_aandelen is not None else pl.DataFrame()
+
+        frames_lineair = []
+        if not df_opties.is_empty() and "sector" in df_opties.columns and "waarde_bezit" in df_opties.columns:
+            if "optie_call_put" in df_opties.columns:
+                df_put = df_opties.filter(pl.col("optie_call_put") == "put")
+            else:
+                df_put = df_opties
+            df_put = df_put.filter(pl.col("sector").is_not_null())
+            frames_lineair.append(df_put.select(["sector", "waarde_bezit"]))
+        if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
+            df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
+            frames_lineair.append(df_aandelen.select(["sector", "waarde_bezit"]))
+
+        data_lineair = self._build_sector_sum(frames_lineair)
+
+        frames_na_opties = []
+        if not df_opties.is_empty() and "sector" in df_opties.columns:
+            if "optie_call_put" in df_opties.columns and "waarde_ITM" in df_opties.columns:
+                df_put_itm = df_opties.filter(pl.col("optie_call_put") == "put")
+                df_put_itm = df_put_itm.filter(pl.col("sector").is_not_null())
+                frames_na_opties.append(df_put_itm.select(["sector", "waarde_ITM"]).rename({"waarde_ITM": "waarde_bezit"}))
+            if "optie_call_put" in df_opties.columns and "waarde_ITM" in df_opties.columns:
+                df_call_itm = df_opties.filter(pl.col("optie_call_put") == "call")
+                df_call_itm = df_call_itm.filter(pl.col("sector").is_not_null())
+                frames_na_opties.append(df_call_itm.select(["sector", "waarde_ITM"]).rename({"waarde_ITM": "waarde_bezit"}))
+        if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
+            df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
+            frames_na_opties.append(df_aandelen.select(["sector", "waarde_bezit"]))
+
+        data_na_opties = self._build_sector_sum(frames_na_opties)
+
+        frames_put_itm = []
+        if not df_opties.is_empty() and "sector" in df_opties.columns and "waarde_ITM" in df_opties.columns:
+            if "optie_call_put" in df_opties.columns:
+                df_put_itm = df_opties.filter(pl.col("optie_call_put") == "put")
+            else:
+                df_put_itm = df_opties
+            df_put_itm = df_put_itm.filter(pl.col("sector").is_not_null())
+            frames_put_itm.append(df_put_itm.select(["sector", "waarde_ITM"]).rename({"waarde_ITM": "waarde_bezit"}))
+        if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
+            df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
+            frames_put_itm.append(df_aandelen.select(["sector", "waarde_bezit"]))
+
+        data_put_itm = self._build_sector_sum(frames_put_itm)
+        self._set_sector_table_data(data_lineair, data_na_opties, data_put_itm)
+        self._chart_data = {
+            "pieChartValueLineair": data_lineair,
+            "pieChartValueLineairNaOpties": data_na_opties,
+            "pieChartValueLineairPutITM": data_put_itm,
+        }
+        self._update_charts_from_table_order()
+
+    def _build_sector_sum(self, frames: list[pl.DataFrame]) -> dict:
+        if not frames:
+            return {}
+        df_all = pl.concat(frames, how="diagonal_relaxed")
+        if df_all.is_empty():
+            return {}
+        df_sum = (
+            df_all.group_by("sector")
+            .agg(pl.col("waarde_bezit").sum().alias("waarde_bezit"))
+            .sort("waarde_bezit", descending=True)
+        )
+        return {row[0]: row[1] for row in df_sum.rows()}
+
+    def _set_sector_table_data(self, data_lineair: dict, data_na_opties: dict, data_put_itm: dict):
+        if self._sector_table_model is None:
+            return
+        sectors = set(data_lineair.keys()) | set(data_na_opties.keys()) | set(data_put_itm.keys())
+        total_lineair = sum(float(v) for v in data_lineair.values() if v is not None) if data_lineair else 0.0
+        total_na_opties = sum(float(v) for v in data_na_opties.values() if v is not None) if data_na_opties else 0.0
+        total_put_itm = sum(float(v) for v in data_put_itm.values() if v is not None) if data_put_itm else 0.0
+        rows = []
+        for sector in sorted(sectors):
+            val_lineair = float(data_lineair.get(sector, 0.0) or 0.0)
+            val_na_opties = float(data_na_opties.get(sector, 0.0) or 0.0)
+            val_put_itm = float(data_put_itm.get(sector, 0.0) or 0.0)
+            rows.append({
+                "sector": sector,
+                "value_lineair": val_lineair,
+                "value_lineair_pct": (val_lineair / total_lineair * 100.0) if total_lineair else 0.0,
+                "value_na_opties": val_na_opties,
+                "value_na_opties_pct": (val_na_opties / total_na_opties * 100.0) if total_na_opties else 0.0,
+                "value_put_itm": val_put_itm,
+                "value_put_itm_pct": (val_put_itm / total_put_itm * 100.0) if total_put_itm else 0.0,
+            })
+        df = pl.DataFrame(rows) if rows else pl.DataFrame()
+        if not df.is_empty():
+            df = df.select([
+                "sector",
+                "value_lineair",
+                "value_lineair_pct",
+                "value_put_itm",
+                "value_put_itm_pct",
+                "value_na_opties",
+                "value_na_opties_pct",
+            ])
+        self._sector_table_model.set_df(df)
+        self._update_sector_totals(df)
+
+    def _get_sector_order_from_table(self):
+        if self._sector_table_proxy is None or self._sector_table_model is None:
+            return []
+        order = []
+        try:
+            sector_col = self._sector_table_model._cols.index("sector")
+        except Exception:
+            return order
+        for row in range(self._sector_table_proxy.rowCount()):
+            proxy_idx = self._sector_table_proxy.index(row, sector_col)
+            src_idx = self._sector_table_proxy.mapToSource(proxy_idx)
+            if not src_idx.isValid():
+                continue
+            val = self._sector_table_model._df[src_idx.row(), sector_col]
+            if val is not None:
+                order.append(str(val))
+        return order
+
+    def _update_charts_from_table_order(self):
+        order = self._get_sector_order_from_table()
+        if not order and self._chart_data:
+            order = sorted({k for data in self._chart_data.values() for k in data.keys()})
+        for chart_name, data in self._chart_data.items():
+            self._set_pie_data(chart_name, data, order)
+
+    def _set_pie_data(self, chart_name: str, data: dict, order: list[str] | None = None):
+        chart_view = self._chart_views.get(chart_name)
+        if chart_view is None:
+            return
+        chart = chart_view.chart()
+        series = chart.series()[0] if chart.series() else None
+        if series is None:
+            series = QPieSeries()
+            chart.addSeries(series)
+        series.clear()
+        total = 0.0
+        for _sector, value in data.items():
+            try:
+                total += float(value)
+            except Exception:
+                continue
+        if total == 0:
+            return
+        ordered_sectors = order if order else list(data.keys())
+        for sector in ordered_sectors:
+            if sector not in data:
+                continue
+            value = data.get(sector)
+            try:
+                val = float(value)
+            except Exception:
+                continue
+            if val == 0:
+                continue
+            series.append(f"{sector} ({val:,.0f})", val)
+
+    def _init_sector_totals_footer(self):
+        if not hasattr(self, "tableSectorValuesLineair"):
+            self._tbl_sector_totals = None
+            return
+        self._tbl_sector_totals = QTableWidget(self)
+        self._tbl_sector_totals.setRowCount(1)
+        self._tbl_sector_totals.setColumnCount(0)
+        self._tbl_sector_totals.setFixedHeight(32)
+        self._tbl_sector_totals.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._tbl_sector_totals.verticalHeader().setVisible(False)
+        self._tbl_sector_totals.horizontalHeader().setVisible(False)
+        self._tbl_sector_totals.horizontalHeader().setStretchLastSection(False)
+        self._tbl_sector_totals.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tbl_sector_totals.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tbl_sector_totals.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._tbl_sector_totals.setFocusPolicy(Qt.NoFocus)
+        self._tbl_sector_totals.setSelectionMode(QTableWidget.NoSelection)
+
+        parent = self.tableSectorValuesLineair.parentWidget()
+        if parent is None:
+            return
+        self._footer_container = QWidget(parent)
+        self._footer_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        footer_layout = QHBoxLayout(self._footer_container)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(0)
+        self._footer_spacer = QWidget(self._footer_container)
+        self._footer_spacer.setFixedWidth(0)
+        footer_layout.addWidget(self._tbl_sector_totals)
+        footer_layout.addWidget(self._footer_spacer)
+
+        table_rect = self.tableSectorValuesLineair.geometry()
+        self._footer_container.setGeometry(
+            table_rect.x(),
+            table_rect.y() + table_rect.height(),
+            table_rect.width(),
+            32,
+        )
+
+        self._init_footer_sync()
+
+    def _init_footer_sync(self):
+        header = self.tableSectorValuesLineair.horizontalHeader()
+        header.sectionResized.connect(
+            lambda idx, _old, new: self._tbl_sector_totals.setColumnWidth(idx, new)
+        )
+        header.sectionMoved.connect(
+            lambda logical, _old, new: self._tbl_sector_totals.horizontalHeader().moveSection(
+                self._tbl_sector_totals.horizontalHeader().visualIndex(logical), new
+            )
+        )
+        main_scroll = self.tableSectorValuesLineair.horizontalScrollBar()
+        footer_scroll = self._tbl_sector_totals.horizontalScrollBar()
+        main_scroll.valueChanged.connect(footer_scroll.setValue)
+        main_scroll.rangeChanged.connect(lambda _min, _max: self._sync_footer_scrollbar_gap())
+        self.tableSectorValuesLineair.verticalScrollBar().rangeChanged.connect(
+            lambda _min, _max: self._sync_footer_scrollbar_gap()
+        )
+
+    def _sync_footer_scrollbar_gap(self):
+        v_scroll = self.tableSectorValuesLineair.verticalScrollBar()
+        scroll_width = v_scroll.sizeHint().width() if v_scroll.maximum() > 0 else 0
+        if hasattr(self, "_footer_spacer") and self._footer_spacer is not None:
+            self._footer_spacer.setFixedWidth(scroll_width)
+
+    def _update_sector_totals(self, df: pl.DataFrame):
+        if self._tbl_sector_totals is None or df is None or df.is_empty():
+            if self._tbl_sector_totals is not None:
+                self._tbl_sector_totals.setColumnCount(0)
+            return
+        cols = list(df.columns)
+        self._tbl_sector_totals.setColumnCount(len(cols))
+        totals = {}
+        for col in cols:
+            if col == "sector":
+                totals[col] = "TOTAAL"
+            elif col.endswith("_pct"):
+                totals[col] = 100.0
+            else:
+                try:
+                    totals[col] = float(df[col].sum())
+                except Exception:
+                    totals[col] = ""
+        for i, col in enumerate(cols):
+            val = totals.get(col, "")
+            if isinstance(val, float) and col.endswith("_pct"):
+                text = f"{val:.1f}%"
+            elif isinstance(val, float):
+                text = f"{val:,.0f}"
+            else:
+                text = str(val)
+            item = QTableWidgetItem(text)
+            if col == "sector":
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            else:
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item.setBackground(QColor(242, 242, 242))
+            self._tbl_sector_totals.setItem(0, i, item)
+
+    def _wrap_in_scroll_area(self) -> None:
+        try:
+            if getattr(self, "_sector_scroll_area", None) is not None:
+                return
+
+            content = QWidget()
+            for child in self.findChildren(QWidget, options=Qt.FindDirectChildrenOnly):
+                if child is content:
+                    continue
+                child.setParent(content)
+
+            max_w = 0
+            max_h = 0
+            for child in content.findChildren(QWidget):
+                g = child.geometry()
+                max_w = max(max_w, g.x() + g.width())
+                max_h = max(max_h, g.y() + g.height())
+            if max_w > 0 and max_h > 0:
+                content.setMinimumSize(max_w + 10, max_h + 10)
+
+            scroll = QScrollArea(self)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll.setWidget(content)
+            scroll.setGeometry(self.rect())
+
+            self._sector_scroll_area = scroll
+        except Exception as exc:
+            print(f"[ui] kon SectorAnalysisTab niet scrollbaar maken: {exc}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if getattr(self, "_sector_scroll_area", None) is not None:
+            self._sector_scroll_area.setGeometry(self.rect())
+
+
+class SectorTableModel(PolarsTableModel):
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or self._df.is_empty():
+            return None
+        col_name = self._cols[index.column()]
+        val = self._df[index.row(), index.column()]
+        if role == Qt.DisplayRole and col_name.endswith("_pct"):
+            if val is None:
+                return ""
+            try:
+                return f"{float(val):.1f}%"
+            except Exception:
+                return str(val)
+        return super().data(index, role)
