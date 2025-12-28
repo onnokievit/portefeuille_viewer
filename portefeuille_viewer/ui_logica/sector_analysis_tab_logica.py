@@ -1,8 +1,8 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView
 from PySide6.QtCore import QSortFilterProxyModel
-from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtGui import QPainter, QColor, QPen
 import polars as pl
 
 from portefeuille_viewer.ui.sector_tab import Ui_Form
@@ -22,6 +22,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._init_pie_chart("pieChartValueLineairPutITM")
         self._init_sector_table()
         self._init_sector_totals_footer()
+        self._init_sector_table_delta()
+        self._init_sector_totals_footer_delta()
+        self._sector_color_map = {}
         self._chart_data = {}
         self.reload_data()
         signals.databaseChanged.connect(self._on_db_changed)
@@ -44,7 +47,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         else:
             layout = frame.layout()
         chart = QChart()
-        chart.legend().setAlignment(Qt.AlignRight)
+        chart.legend().hide()
         chart.setBackgroundVisible(False)
         series = QPieSeries()
         chart.addSeries(series)
@@ -64,6 +67,11 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._sector_table_proxy.setSortRole(Qt.UserRole)
         self.tableSectorValuesLineair.setModel(self._sector_table_proxy)
         self.tableSectorValuesLineair.setSortingEnabled(True)
+        header = self.tableSectorValuesLineair.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
+        self.tableSectorValuesLineair.verticalHeader().setVisible(False)
+        self._apply_sector_table_widths()
         self.tableSectorValuesLineair.horizontalHeader().sortIndicatorChanged.connect(
             lambda _idx, _order: self._update_charts_from_table_order()
         )
@@ -77,6 +85,31 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "value_na_opties_pct": "Na opties %",
         }
         self._sector_table_model.set_display_headers(header_map)
+
+    def _init_sector_table_delta(self):
+        if not hasattr(self, "tableSectorValuesDelta"):
+            self._sector_table_delta_model = None
+            self._sector_table_delta_proxy = None
+            return
+        self._sector_table_delta_model = SectorTableModel(pl.DataFrame(), self)
+        self._sector_table_delta_proxy = QSortFilterProxyModel(self)
+        self._sector_table_delta_proxy.setSourceModel(self._sector_table_delta_model)
+        self._sector_table_delta_proxy.setSortRole(Qt.UserRole)
+        self.tableSectorValuesDelta.setModel(self._sector_table_delta_proxy)
+        self.tableSectorValuesDelta.setSortingEnabled(True)
+        header = self.tableSectorValuesDelta.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
+        self.tableSectorValuesDelta.verticalHeader().setVisible(False)
+        self._apply_sector_table_delta_widths()
+        header_map = {
+            "sector": "Sector",
+            "value_aandelen_put_delta": "Aandelen + Put Delta",
+            "value_aandelen_delta_all": "Aandelen + Delta (all)",
+            "value_aandelen_put_delta_pct": "Aandelen + Put Delta %",
+            "value_aandelen_delta_all_pct": "Aandelen + Delta (all) %",
+        }
+        self._sector_table_delta_model.set_display_headers(header_map)
 
     def _on_db_changed(self, _db_name: str):
         self.reload_data()
@@ -132,11 +165,13 @@ class SectorAnalysisTab(QWidget, Ui_Form):
 
         data_put_itm = self._build_sector_sum(frames_put_itm)
         self._set_sector_table_data(data_lineair, data_na_opties, data_put_itm)
+        self._set_sector_table_delta_data(df_opties, df_aandelen)
         self._chart_data = {
             "pieChartValueLineair": data_lineair,
             "pieChartValueLineairNaOpties": data_na_opties,
             "pieChartValueLineairPutITM": data_put_itm,
         }
+        self._ensure_sector_colors()
         self._update_charts_from_table_order()
 
     def _build_sector_sum(self, frames: list[pl.DataFrame]) -> dict:
@@ -185,7 +220,85 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 "value_na_opties_pct",
             ])
         self._sector_table_model.set_df(df)
+        self._apply_sector_table_widths()
         self._update_sector_totals(df)
+
+    def _set_sector_table_delta_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame):
+        if self._sector_table_delta_model is None:
+            return
+        df = pl.DataFrame()
+        if df_aandelen is not None and not df_aandelen.is_empty():
+            if "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
+                df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
+                df = (
+                    df_aandelen.group_by("sector")
+                    .agg(pl.col("waarde_bezit").sum().alias("value_aandelen"))
+                    .sort("value_aandelen", descending=True)
+                )
+                total = float(df["value_aandelen"].sum()) if df.height > 0 else 0.0
+                df = df.with_columns(
+                    (pl.col("value_aandelen") / total * 100.0).alias("value_aandelen_pct")
+                    if total
+                    else pl.lit(0.0).alias("value_aandelen_pct")
+                )
+                df = df.select(["sector", "value_aandelen", "value_aandelen_pct"])
+        df_all_delta = pl.DataFrame()
+        if df_opties is not None and not df_opties.is_empty():
+            if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "sector" in df_opties.columns:
+                df_put_delta = (
+                    df_opties.filter(pl.col("optie_call_put") == "put")
+                    .filter(pl.col("sector").is_not_null())
+                    .group_by("sector")
+                    .agg(pl.col("waarde_bezit_delta").sum().alias("value_put_delta"))
+                )
+                df_all_delta = (
+                    df_opties.filter(pl.col("sector").is_not_null())
+                    .group_by("sector")
+                    .agg(pl.col("waarde_bezit_delta").sum().alias("value_delta_all"))
+                )
+                if df.is_empty():
+                    df = df_put_delta
+                else:
+                    df = df.join(df_put_delta, on="sector", how="left")
+                if not df_all_delta.is_empty():
+                    if df.is_empty():
+                        df = df_all_delta
+                    else:
+                        df = df.join(df_all_delta, on="sector", how="left")
+        if not df.is_empty():
+            if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
+                )
+            if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
+                )
+            total_put = float(df["value_aandelen_put_delta"].sum()) if "value_aandelen_put_delta" in df.columns and df.height > 0 else 0.0
+            total_all = float(df["value_aandelen_delta_all"].sum()) if "value_aandelen_delta_all" in df.columns and df.height > 0 else 0.0
+            if "value_aandelen_put_delta" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen_put_delta") / total_put * 100.0).alias("value_aandelen_put_delta_pct")
+                    if total_put
+                    else pl.lit(0.0).alias("value_aandelen_put_delta_pct")
+                )
+            if "value_aandelen_delta_all" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen_delta_all") / total_all * 100.0).alias("value_aandelen_delta_all_pct")
+                    if total_all
+                    else pl.lit(0.0).alias("value_aandelen_delta_all_pct")
+                )
+            cols = [
+                "sector",
+                "value_aandelen_put_delta",
+                "value_aandelen_put_delta_pct",
+                "value_aandelen_delta_all",
+                "value_aandelen_delta_all_pct",
+            ]
+            df = df.select([c for c in cols if c in df.columns])
+        self._sector_table_delta_model.set_df(df)
+        self._apply_sector_table_delta_widths()
+        self._update_sector_totals_delta(df)
 
     def _get_sector_order_from_table(self):
         if self._sector_table_proxy is None or self._sector_table_model is None:
@@ -204,6 +317,32 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             if val is not None:
                 order.append(str(val))
         return order
+
+    def _ensure_sector_colors(self):
+        all_sectors = sorted({k for data in self._chart_data.values() for k in data.keys()})
+        if not all_sectors:
+            return
+        palette = [
+            QColor("#5B9BD5"),
+            QColor("#ED7D31"),
+            QColor("#A5A5A5"),
+            QColor("#FFC000"),
+            QColor("#4472C4"),
+            QColor("#70AD47"),
+            QColor("#264478"),
+            QColor("#9E480E"),
+            QColor("#636363"),
+            QColor("#997300"),
+            QColor("#255E91"),
+            QColor("#548235"),
+            QColor("#7F7F7F"),
+            QColor("#C55A11"),
+            QColor("#8FAADC"),
+            QColor("#F4B183"),
+        ]
+        for idx, sector in enumerate(all_sectors):
+            if sector not in self._sector_color_map:
+                self._sector_color_map[sector] = palette[idx % len(palette)]
 
     def _update_charts_from_table_order(self):
         order = self._get_sector_order_from_table()
@@ -230,6 +369,12 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 continue
         if total == 0:
             return
+        total = 0.0
+        for v in data.values():
+            try:
+                total += float(v)
+            except Exception:
+                continue
         ordered_sectors = order if order else list(data.keys())
         for sector in ordered_sectors:
             if sector not in data:
@@ -241,7 +386,16 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 continue
             if val == 0:
                 continue
-            series.append(f"{sector} ({val:,.0f})", val)
+            pct = (val / total * 100.0) if total else 0.0
+            label = f"{sector}<br/>{val:,.0f} ({pct:.0f}%)"
+            slice_item = series.append(label, val)
+            color = self._sector_color_map.get(sector)
+            if color is not None:
+                slice_item.setBrush(color)
+            slice_item.setPen(QPen(QColor("#FFFFFF"), 1))
+            slice_item.setLabelVisible(True)
+            slice_item.setLabelPosition(QPieSlice.LabelOutside)
+            slice_item.setLabelArmLengthFactor(0.15)
 
     def _init_sector_totals_footer(self):
         if not hasattr(self, "tableSectorValuesLineair"):
@@ -341,6 +495,167 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             item.setBackground(QColor(242, 242, 242))
             self._tbl_sector_totals.setItem(0, i, item)
+        self._sync_footer_section_sizes()
+
+    def _apply_sector_table_widths(self):
+        if not hasattr(self, "tableSectorValuesLineair"):
+            return
+        widths = {
+            "sector": 130,
+            "value_lineair":80,
+            "value_lineair_pct": 80,
+            "value_put_itm": 80,
+            "value_put_itm_pct": 80,
+            "value_na_opties": 80   ,
+            "value_na_opties_pct": 80,
+        }
+        header = self.tableSectorValuesLineair.horizontalHeader()
+        model = getattr(self, "_sector_table_model", None)
+        if model is None or model._df is None:
+            return
+        for i, col in enumerate(model._df.columns):
+            if col in widths:
+                header.resizeSection(i, widths[col])
+        self._sync_footer_section_sizes()
+
+    def _apply_sector_table_delta_widths(self):
+        if not hasattr(self, "tableSectorValuesDelta"):
+            return
+        widths = {
+            "sector": 130,
+            "value_aandelen_put_delta": 80,
+            "value_aandelen_put_delta_pct": 80,
+            "value_aandelen_delta_all": 80,
+            "value_aandelen_delta_all_pct": 80,
+        }
+        header = self.tableSectorValuesDelta.horizontalHeader()
+        model = getattr(self, "_sector_table_delta_model", None)
+        if model is None or model._df is None:
+            return
+        for i, col in enumerate(model._df.columns):
+            if col in widths:
+                header.resizeSection(i, widths[col])
+        self._sync_footer_section_sizes_delta()
+
+    def _init_sector_totals_footer_delta(self):
+        if not hasattr(self, "tableSectorValuesDelta"):
+            self._tbl_sector_totals_delta = None
+            return
+        self._tbl_sector_totals_delta = QTableWidget(self)
+        self._tbl_sector_totals_delta.setRowCount(1)
+        self._tbl_sector_totals_delta.setColumnCount(0)
+        self._tbl_sector_totals_delta.setFixedHeight(32)
+        self._tbl_sector_totals_delta.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._tbl_sector_totals_delta.verticalHeader().setVisible(False)
+        self._tbl_sector_totals_delta.horizontalHeader().setVisible(False)
+        self._tbl_sector_totals_delta.horizontalHeader().setStretchLastSection(False)
+        self._tbl_sector_totals_delta.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tbl_sector_totals_delta.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tbl_sector_totals_delta.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._tbl_sector_totals_delta.setFocusPolicy(Qt.NoFocus)
+        self._tbl_sector_totals_delta.setSelectionMode(QTableWidget.NoSelection)
+
+        parent = self.tableSectorValuesDelta.parentWidget()
+        if parent is None:
+            return
+        self._footer_container_delta = QWidget(parent)
+        self._footer_container_delta.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        footer_layout = QHBoxLayout(self._footer_container_delta)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(0)
+        self._footer_spacer_delta = QWidget(self._footer_container_delta)
+        self._footer_spacer_delta.setFixedWidth(0)
+        footer_layout.addWidget(self._tbl_sector_totals_delta)
+        footer_layout.addWidget(self._footer_spacer_delta)
+
+        table_rect = self.tableSectorValuesDelta.geometry()
+        self._footer_container_delta.setGeometry(
+            table_rect.x(),
+            table_rect.y() + table_rect.height(),
+            table_rect.width(),
+            32,
+        )
+
+        self._init_footer_sync_delta()
+
+    def _init_footer_sync_delta(self):
+        header = self.tableSectorValuesDelta.horizontalHeader()
+        header.sectionResized.connect(
+            lambda idx, _old, new: self._tbl_sector_totals_delta.setColumnWidth(idx, new)
+        )
+        header.sectionMoved.connect(
+            lambda logical, _old, new: self._tbl_sector_totals_delta.horizontalHeader().moveSection(
+                self._tbl_sector_totals_delta.horizontalHeader().visualIndex(logical), new
+            )
+        )
+        main_scroll = self.tableSectorValuesDelta.horizontalScrollBar()
+        footer_scroll = self._tbl_sector_totals_delta.horizontalScrollBar()
+        main_scroll.valueChanged.connect(footer_scroll.setValue)
+        main_scroll.rangeChanged.connect(lambda _min, _max: self._sync_footer_scrollbar_gap_delta())
+        self.tableSectorValuesDelta.verticalScrollBar().rangeChanged.connect(
+            lambda _min, _max: self._sync_footer_scrollbar_gap_delta()
+        )
+
+    def _sync_footer_scrollbar_gap_delta(self):
+        v_scroll = self.tableSectorValuesDelta.verticalScrollBar()
+        scroll_width = v_scroll.sizeHint().width() if v_scroll.maximum() > 0 else 0
+        if hasattr(self, "_footer_spacer_delta") and self._footer_spacer_delta is not None:
+            self._footer_spacer_delta.setFixedWidth(scroll_width)
+
+    def _update_sector_totals_delta(self, df: pl.DataFrame):
+        if self._tbl_sector_totals_delta is None or df is None or df.is_empty():
+            if self._tbl_sector_totals_delta is not None:
+                self._tbl_sector_totals_delta.setColumnCount(0)
+            return
+        cols = list(df.columns)
+        self._tbl_sector_totals_delta.setColumnCount(len(cols))
+        totals = {}
+        for col in cols:
+            if col == "sector":
+                totals[col] = "TOTAAL"
+            elif col.endswith("_pct"):
+                totals[col] = 100.0
+            else:
+                try:
+                    totals[col] = float(df[col].sum())
+                except Exception:
+                    totals[col] = ""
+        for i, col in enumerate(cols):
+            val = totals.get(col, "")
+            if isinstance(val, float) and col.endswith("_pct"):
+                text = f"{val:.1f}%"
+            elif isinstance(val, float):
+                text = f"{val:,.0f}"
+            else:
+                text = str(val)
+            item = QTableWidgetItem(text)
+            if col == "sector":
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            else:
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item.setBackground(QColor(242, 242, 242))
+            self._tbl_sector_totals_delta.setItem(0, i, item)
+        self._sync_footer_section_sizes_delta()
+
+    def _sync_footer_section_sizes(self):
+        if getattr(self, "_tbl_sector_totals", None) is None:
+            return
+        header = self.tableSectorValuesLineair.horizontalHeader()
+        for i in range(header.count()):
+            self._tbl_sector_totals.setColumnWidth(i, header.sectionSize(i))
+        self._tbl_sector_totals.horizontalScrollBar().setValue(
+            self.tableSectorValuesLineair.horizontalScrollBar().value()
+        )
+
+    def _sync_footer_section_sizes_delta(self):
+        if getattr(self, "_tbl_sector_totals_delta", None) is None:
+            return
+        header = self.tableSectorValuesDelta.horizontalHeader()
+        for i in range(header.count()):
+            self._tbl_sector_totals_delta.setColumnWidth(i, header.sectionSize(i))
+        self._tbl_sector_totals_delta.horizontalScrollBar().setValue(
+            self.tableSectorValuesDelta.horizontalScrollBar().value()
+        )
 
     def _wrap_in_scroll_area(self) -> None:
         try:
@@ -390,6 +705,24 @@ class SectorTableModel(PolarsTableModel):
                 return ""
             try:
                 return f"{float(val):.1f}%"
+            except Exception:
+                return str(val)
+        if role == Qt.DisplayRole and col_name in (
+            "value_lineair",
+            "value_put_itm",
+            "value_na_opties",
+            "value_delta_1",
+            "value_delta_2",
+            "value_delta_3",
+            "value_aandelen",
+            "value_put_delta",
+            "value_aandelen_put_delta",
+            "value_aandelen_delta_all",
+        ):
+            if val is None:
+                return ""
+            try:
+                return f"{float(val):,.0f}"
             except Exception:
                 return str(val)
         return super().data(index, role)

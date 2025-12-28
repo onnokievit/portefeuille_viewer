@@ -36,8 +36,6 @@ sys.path.insert(0, os.path.dirname(inspect.getfile(inspect.currentframe())))
 print("✅ Repository geladen uit:", repository.__file__)
 
 
-
-
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
 live_aggregator_opties = LiveAggregatorOpties()
