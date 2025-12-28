@@ -1,4 +1,3 @@
-
 import contextlib
 import pandas as pd
 import pyodbc
@@ -1264,9 +1263,11 @@ def portfolio_value_asset_rollup_opties_put():
     )
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
-    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df_opties_waarde_2  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_call_put_detailed = df_opties_waarde_2
+    
+    df_opties_waarde_3 = df_opties_waarde_2.clone()
+    
     
     df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
     
@@ -1280,6 +1281,19 @@ def portfolio_value_asset_rollup_opties_put():
         ])
     SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put = df_opties_waarde_2
     #return df_opties_waarde_2
+    
+    df_opties_waarde_4 = df_opties_waarde_3.with_columns([
+        pl.when(pl.col("ITM_OTM") != 0).then(pl.col("waarde_bezit_delta") ).otherwise(None).alias("waarde_delta_ITM"),
+        pl.when(pl.col("ITM_OTM") != 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_delta_ITM"),
+        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("waarde_bezit_delta") ).otherwise(None).alias("waarde_delta_OTM"),
+        pl.when(pl.col("ITM_OTM") == 0).then(pl.col("SomVantransactie_aantal") ).otherwise(None).alias("aantal_delta_OTM"),
+        
+    ])    
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
+    SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_4  # sourcery skip # of df_sum als je de gesumde versie wilt zien
+    # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_call_put_detailed = df_opties_waarde_4
 
 
 def estimate_delta(option_type: str, spot: float, strike: float) -> float:

@@ -41,13 +41,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
-
+        self.sector_analysis_tab = SectorAnalysisTab()
+        self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
+        
 
 
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
-        self.sector_analysis_tab = SectorAnalysisTab()
-        self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
         self.optie_eind_tab = OptieEindTab()
         self.tabWidget.addTab(self.optie_eind_tab, "Optie Eind")
         self.settings_tab = SettingsTab()
