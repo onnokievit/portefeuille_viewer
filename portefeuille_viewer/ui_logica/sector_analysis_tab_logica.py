@@ -19,15 +19,24 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._chart_views = {}
         self._init_pie_chart("pieChartValueLineair", "pieChartValue1")
         self._init_pie_chart("pieChartValueLineairNaOpties", "frame_2")
-        self._init_pie_chart("pieChartValueLineairPutITM")
+        self._init_pie_chart("pieChartValueDelta")
+        self._init_pie_chart("pieChartValueDeltaPutITM")
         self._init_sector_table()
         self._init_sector_totals_footer()
         self._init_sector_table_delta()
         self._init_sector_totals_footer_delta()
         self._sector_color_map = {}
         self._chart_data = {}
+        self._put_otm_ratio = 1.0
         self.reload_data()
         signals.databaseChanged.connect(self._on_db_changed)
+        if hasattr(self, "putOTMRatio"):
+            try:
+                self.putOTMRatio.setValue(100)
+                self.putOTMRatio.valueChanged.connect(self._on_put_otm_ratio_changed)
+                self._on_put_otm_ratio_changed(self.putOTMRatio.value())
+            except Exception:
+                pass
 
     def _get_pie_frame(self, primary_name: str, fallback_name: str | None = None):
         if hasattr(self, primary_name):
@@ -79,8 +88,6 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "sector": "Sector",
             "value_lineair": "Lineair",
             "value_lineair_pct": "Lineair %",
-            "value_put_itm": "Put ITM",
-            "value_put_itm_pct": "Put ITM %",
             "value_na_opties": "Na opties",
             "value_na_opties_pct": "Na opties %",
         }
@@ -100,6 +107,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         header = self.tableSectorValuesDelta.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setStretchLastSection(False)
+        header.sortIndicatorChanged.connect(
+            lambda _idx, _order: self._update_delta_charts_from_table_order()
+        )
         self.tableSectorValuesDelta.verticalHeader().setVisible(False)
         self._apply_sector_table_delta_widths()
         header_map = {
@@ -114,6 +124,13 @@ class SectorAnalysisTab(QWidget, Ui_Form):
     def _on_db_changed(self, _db_name: str):
         self.reload_data()
 
+    def _on_put_otm_ratio_changed(self, value):
+        try:
+            self._put_otm_ratio = max(0.0, min(1.0, float(value) / 100.0))
+        except Exception:
+            self._put_otm_ratio = 1.0
+        self.reload_data()
+
     def reload_data(self):
         df_opties = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
         df_aandelen = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
@@ -122,13 +139,24 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         df_aandelen = df_aandelen if df_aandelen is not None else pl.DataFrame()
 
         frames_lineair = []
-        if not df_opties.is_empty() and "sector" in df_opties.columns and "waarde_bezit" in df_opties.columns:
+        if not df_opties.is_empty() and "sector" in df_opties.columns:
             if "optie_call_put" in df_opties.columns:
                 df_put = df_opties.filter(pl.col("optie_call_put") == "put")
             else:
                 df_put = df_opties
-            df_put = df_put.filter(pl.col("sector").is_not_null())
-            frames_lineair.append(df_put.select(["sector", "waarde_bezit"]))
+            if "waarde_ITM" in df_put.columns and "waarde_OTM" in df_put.columns:
+                df_put = df_put.filter(pl.col("sector").is_not_null())
+                df_put = df_put.with_columns([
+                    pl.col("waarde_ITM").cast(pl.Float64).fill_null(0.0).alias("_waarde_itm"),
+                    pl.col("waarde_OTM").cast(pl.Float64).fill_null(0.0).alias("_waarde_otm"),
+                ])
+                df_put = df_put.with_columns(
+                    (pl.col("_waarde_itm") + (pl.col("_waarde_otm") * self._put_otm_ratio)).alias("waarde_bezit_adj")
+                )
+                frames_lineair.append(df_put.select(["sector", "waarde_bezit_adj"]).rename({"waarde_bezit_adj": "waarde_bezit"}))
+            elif "waarde_bezit" in df_put.columns:
+                df_put = df_put.filter(pl.col("sector").is_not_null())
+                frames_lineair.append(df_put.select(["sector", "waarde_bezit"]))
         if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
             df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
             frames_lineair.append(df_aandelen.select(["sector", "waarde_bezit"]))
@@ -151,28 +179,18 @@ class SectorAnalysisTab(QWidget, Ui_Form):
 
         data_na_opties = self._build_sector_sum(frames_na_opties)
 
-        frames_put_itm = []
-        if not df_opties.is_empty() and "sector" in df_opties.columns and "waarde_ITM" in df_opties.columns:
-            if "optie_call_put" in df_opties.columns:
-                df_put_itm = df_opties.filter(pl.col("optie_call_put") == "put")
-            else:
-                df_put_itm = df_opties
-            df_put_itm = df_put_itm.filter(pl.col("sector").is_not_null())
-            frames_put_itm.append(df_put_itm.select(["sector", "waarde_ITM"]).rename({"waarde_ITM": "waarde_bezit"}))
-        if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
-            df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
-            frames_put_itm.append(df_aandelen.select(["sector", "waarde_bezit"]))
-
-        data_put_itm = self._build_sector_sum(frames_put_itm)
-        self._set_sector_table_data(data_lineair, data_na_opties, data_put_itm)
+        self._set_sector_table_data(data_lineair, data_na_opties)
+        data_delta = self._build_sector_delta_chart_data(df_opties, df_aandelen)
         self._set_sector_table_delta_data(df_opties, df_aandelen)
         self._chart_data = {
             "pieChartValueLineair": data_lineair,
             "pieChartValueLineairNaOpties": data_na_opties,
-            "pieChartValueLineairPutITM": data_put_itm,
+            "pieChartValueDelta": data_delta.get("value_aandelen_put_delta", {}),
+            "pieChartValueDeltaPutITM": data_delta.get("value_aandelen_delta_all", {}),
         }
         self._ensure_sector_colors()
         self._update_charts_from_table_order()
+        self._update_delta_charts_from_table_order()
 
     def _build_sector_sum(self, frames: list[pl.DataFrame]) -> dict:
         if not frames:
@@ -187,26 +205,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         )
         return {row[0]: row[1] for row in df_sum.rows()}
 
-    def _set_sector_table_data(self, data_lineair: dict, data_na_opties: dict, data_put_itm: dict):
+    def _set_sector_table_data(self, data_lineair: dict, data_na_opties: dict):
         if self._sector_table_model is None:
             return
-        sectors = set(data_lineair.keys()) | set(data_na_opties.keys()) | set(data_put_itm.keys())
+        sectors = set(data_lineair.keys()) | set(data_na_opties.keys())
         total_lineair = sum(float(v) for v in data_lineair.values() if v is not None) if data_lineair else 0.0
         total_na_opties = sum(float(v) for v in data_na_opties.values() if v is not None) if data_na_opties else 0.0
-        total_put_itm = sum(float(v) for v in data_put_itm.values() if v is not None) if data_put_itm else 0.0
         rows = []
         for sector in sorted(sectors):
             val_lineair = float(data_lineair.get(sector, 0.0) or 0.0)
             val_na_opties = float(data_na_opties.get(sector, 0.0) or 0.0)
-            val_put_itm = float(data_put_itm.get(sector, 0.0) or 0.0)
             rows.append({
                 "sector": sector,
                 "value_lineair": val_lineair,
                 "value_lineair_pct": (val_lineair / total_lineair * 100.0) if total_lineair else 0.0,
                 "value_na_opties": val_na_opties,
                 "value_na_opties_pct": (val_na_opties / total_na_opties * 100.0) if total_na_opties else 0.0,
-                "value_put_itm": val_put_itm,
-                "value_put_itm_pct": (val_put_itm / total_put_itm * 100.0) if total_put_itm else 0.0,
             })
         df = pl.DataFrame(rows) if rows else pl.DataFrame()
         if not df.is_empty():
@@ -214,8 +228,6 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 "sector",
                 "value_lineair",
                 "value_lineair_pct",
-                "value_put_itm",
-                "value_put_itm_pct",
                 "value_na_opties",
                 "value_na_opties_pct",
             ])
@@ -296,9 +308,63 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 "value_aandelen_delta_all_pct",
             ]
             df = df.select([c for c in cols if c in df.columns])
+            fill_cols = [c for c in df.columns if c != "sector"]
+            if fill_cols:
+                df = df.with_columns([pl.col(c).fill_null(0.0) for c in fill_cols])
         self._sector_table_delta_model.set_df(df)
         self._apply_sector_table_delta_widths()
         self._update_sector_totals_delta(df)
+
+    def _build_sector_delta_chart_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame) -> dict:
+        data = {"value_aandelen_put_delta": {}, "value_aandelen_delta_all": {}}
+        df = pl.DataFrame()
+        if df_aandelen is not None and not df_aandelen.is_empty():
+            if "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
+                df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
+                df = (
+                    df_aandelen.group_by("sector")
+                    .agg(pl.col("waarde_bezit").sum().alias("value_aandelen"))
+                )
+        if df_opties is not None and not df_opties.is_empty():
+            if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "sector" in df_opties.columns:
+                df_put_delta = (
+                    df_opties.filter(pl.col("optie_call_put") == "put")
+                    .filter(pl.col("sector").is_not_null())
+                    .group_by("sector")
+                    .agg(pl.col("waarde_bezit_delta").sum().alias("value_put_delta"))
+                )
+                df_all_delta = (
+                    df_opties.filter(pl.col("sector").is_not_null())
+                    .group_by("sector")
+                    .agg(pl.col("waarde_bezit_delta").sum().alias("value_delta_all"))
+                )
+                if df.is_empty():
+                    df = df_put_delta
+                else:
+                    df = df.join(df_put_delta, on="sector", how="left")
+                if not df_all_delta.is_empty():
+                    if df.is_empty():
+                        df = df_all_delta
+                    else:
+                        df = df.join(df_all_delta, on="sector", how="left")
+        if not df.is_empty():
+            if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
+                )
+            if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
+                df = df.with_columns(
+                    (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
+                )
+            if "value_aandelen_put_delta" in df.columns:
+                data["value_aandelen_put_delta"] = {
+                    row[0]: row[1] for row in df.select(["sector", "value_aandelen_put_delta"]).rows()
+                }
+            if "value_aandelen_delta_all" in df.columns:
+                data["value_aandelen_delta_all"] = {
+                    row[0]: row[1] for row in df.select(["sector", "value_aandelen_delta_all"]).rows()
+                }
+        return data
 
     def _get_sector_order_from_table(self):
         if self._sector_table_proxy is None or self._sector_table_model is None:
@@ -314,6 +380,24 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             if not src_idx.isValid():
                 continue
             val = self._sector_table_model._df[src_idx.row(), sector_col]
+            if val is not None:
+                order.append(str(val))
+        return order
+
+    def _get_sector_order_from_delta_table(self):
+        if self._sector_table_delta_proxy is None or self._sector_table_delta_model is None:
+            return []
+        order = []
+        try:
+            sector_col = self._sector_table_delta_model._cols.index("sector")
+        except Exception:
+            return order
+        for row in range(self._sector_table_delta_proxy.rowCount()):
+            proxy_idx = self._sector_table_delta_proxy.index(row, sector_col)
+            src_idx = self._sector_table_delta_proxy.mapToSource(proxy_idx)
+            if not src_idx.isValid():
+                continue
+            val = self._sector_table_delta_model._df[src_idx.row(), sector_col]
             if val is not None:
                 order.append(str(val))
         return order
@@ -349,6 +433,16 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         if not order and self._chart_data:
             order = sorted({k for data in self._chart_data.values() for k in data.keys()})
         for chart_name, data in self._chart_data.items():
+            if chart_name.startswith("pieChartValueDelta"):
+                continue
+            self._set_pie_data(chart_name, data, order)
+
+    def _update_delta_charts_from_table_order(self):
+        order = self._get_sector_order_from_delta_table()
+        if not order and self._chart_data:
+            order = sorted({k for data in self._chart_data.values() for k in data.keys()})
+        for chart_name in ("pieChartValueDelta", "pieChartValueDeltaPutITM"):
+            data = self._chart_data.get(chart_name, {})
             self._set_pie_data(chart_name, data, order)
 
     def _set_pie_data(self, chart_name: str, data: dict, order: list[str] | None = None):
@@ -504,8 +598,6 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "sector": 130,
             "value_lineair":80,
             "value_lineair_pct": 80,
-            "value_put_itm": 80,
-            "value_put_itm_pct": 80,
             "value_na_opties": 80   ,
             "value_na_opties_pct": 80,
         }
@@ -709,7 +801,6 @@ class SectorTableModel(PolarsTableModel):
                 return str(val)
         if role == Qt.DisplayRole and col_name in (
             "value_lineair",
-            "value_put_itm",
             "value_na_opties",
             "value_delta_1",
             "value_delta_2",
