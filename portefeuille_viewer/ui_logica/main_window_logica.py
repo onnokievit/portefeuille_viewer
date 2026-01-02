@@ -134,6 +134,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db
             flush_dirty_test_orders_to_db()
 
+        # Flush open optie comments naar DB en refresh cache
+        with contextlib.suppress(Exception):
+            from portefeuille_viewer.data.repository import (
+                flush_dirty_open_optie_comments_to_db,
+                load_open_optie_comments_cache,
+            )
+            flush_dirty_open_optie_comments_to_db()
+            load_open_optie_comments_cache()
+
         print("closeEvent triggered!")
         super().closeEvent(event)
 

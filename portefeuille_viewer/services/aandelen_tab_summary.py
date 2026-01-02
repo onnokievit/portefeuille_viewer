@@ -106,7 +106,7 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 	)
 
 	df_portfolio_value_combined = _apply_filters(
-		_safe_df(SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined),
+		_safe_df(SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined_put),
 		None,
 		asset_rollup,
 	)
@@ -187,6 +187,8 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		"div_en_bel": 0,
 		"totaal_resultaat": 0,
 		"totaal_fee": 0,
+		"totaal": 0,
+		"close_price": 0,
 		"koers": 0,
 		"status": "",
 		"asset_rollup": "",
