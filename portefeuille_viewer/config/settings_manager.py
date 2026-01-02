@@ -231,6 +231,12 @@ class SettingsManager:
         self.config.set('app', 'last_database', name)
         self.save()
 
+    # === Brokers ===
+    def get_brokers(self):
+        """Haal brokerlijst op uit settings.ini (comma-separated)."""
+        raw = self.config.get('brokers', 'list', fallback='')
+        return [b.strip() for b in raw.split(',') if b.strip()]
+
     # === Comment colors ===
     def get_comment_colors(self):
         """

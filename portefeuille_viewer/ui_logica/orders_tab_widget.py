@@ -65,10 +65,11 @@ class OrdersTableModel(HighlightingPandasTableModel):
             return self._display_headers.get(col_name, col_name)
         return str(section + 1)
 from portefeuille_viewer.data.repository import (
-    get_connection,DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
+    get_connection, DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
     load_reference_lists, update_transactions_atomic, insert_transaction,
-    get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, build_uniek_id, is_pairable
-    )
+    get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, parse_float_field,
+    build_uniek_id, is_pairable
+)
 from portefeuille_viewer.data.test_order_repository import load_test_orders_cache_from_db
 
 
@@ -570,9 +571,17 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             if self._pandas.isna(v):
                 return ""
             return f"{int(v):,}".replace(",", ".")
-        out["aantal"] = out["aantal"].apply(fmt_int)
+        def fmt_qty(val):
+            v = self._pandas.to_numeric(val, errors="coerce")
+            if self._pandas.isna(v):
+                return ""
+            if float(v).is_integer():
+                return f"{int(v):,}".replace(",", ".")
+            s = f"{float(v):,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            return s.rstrip("0").rstrip(",")
+        out["aantal"] = out["aantal"].apply(fmt_qty)
         if "transactie_aantal" in out.columns:
-            out["transactie_aantal"] = out["transactie_aantal"].apply(fmt_int)
+            out["transactie_aantal"] = out["transactie_aantal"].apply(fmt_qty)
         for c in ["optie_strike", "transactie_prijs", "transactie_fee", "transactie_euro_totaal"]:
             if c in out.columns:
                 out[c] = out[c].apply(fmt2)
@@ -680,7 +689,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             asset_type=at1 or None,
             asset_detail=self.comboDetail1.currentText() if at1 == "sprinter" else None,
             transactie_type=self.comboTransType1.currentText() or None,
-            aantal=parse_int_field(self.lineEditAantal1.text()),
+            aantal=parse_float_field(self.lineEditAantal1.text()),
             transactie_prijs=parse_float(self.lineEditPrijs1.text()),
             transactie_fee=-abs(parse_float(self.lineEditFee1.text())) if self.lineEditFee1.text() else None,
             optie_strike=parse_float(self.lineEditOptieStrike1.text()) if (at1 in ["optie", "sprinter"] and self.lineEditOptieStrike1.text()) else None,
@@ -699,7 +708,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 asset_type=at2 or None,
                 asset_detail=self.comboDetail2.currentText() if at2 == "sprinter" else None,
                 transactie_type=self.comboTransType2.currentText() or None,
-                aantal=parse_int_field(self.lineEditAantal2.text()),
+                aantal=parse_float_field(self.lineEditAantal2.text()),
                 transactie_prijs=parse_float(self.lineEditPrijs2.text()),
                 transactie_fee=-abs(parse_float(self.lineEditFee2.text())) if self.lineEditFee2.text() else None,
                 optie_strike=parse_float(self.lineEditOptieStrike2.text()) if (at2 in ["optie", "sprinter"] and self.lineEditOptieStrike2.text()) else None,

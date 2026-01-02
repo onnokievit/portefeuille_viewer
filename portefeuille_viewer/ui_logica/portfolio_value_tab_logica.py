@@ -255,7 +255,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     def reload_snapshot(self):
         # Expected snapshot key: repository_snapshot_portfolio_value_total_combined
         print("🔄 PortfolioValueTab: snapshot herladen...")
-        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined", None)
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             self.model.set_df(pl.DataFrame({}))
             self._clear_totals()
@@ -271,6 +271,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "sector",
             "value_grow",
             "koers",
+            "aand_aantal_bezit",
             "total_waarde_lineair",
             "total_waarde_delta",
             "portfolio_total_waarde_lineair_pct",

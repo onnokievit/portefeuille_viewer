@@ -5,7 +5,7 @@ import polars as pl
 
 from datetime import date, datetime, timedelta
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.config import get_databases, get_default_database
+from portefeuille_viewer.config import get_databases, get_default_database, get_settings
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.domain.engine import compact_float64
 
@@ -782,8 +782,13 @@ def fetch_records_page( ################## dit is de oude versie van fetch_recor
 def load_reference_lists():
     """Haal lijsten voor comboboxen op."""
     try:
+        brokers = get_settings().get_brokers()
         with get_connection() as conn:
-            brokers = pd.read_sql("SELECT DISTINCT broker FROM transacties_bron_data_org", conn)["broker"].dropna().astype(str).tolist()
+            if not brokers:
+                brokers = pd.read_sql(
+                    "SELECT DISTINCT broker FROM transacties_bron_data_org",
+                    conn,
+                )["broker"].dropna().astype(str).tolist()
             rollups = pd.read_sql("SELECT DISTINCT asset_rollup FROM asset_rollup_data", conn)["asset_rollup"].dropna().astype(str).tolist()
             sprinters = pd.read_sql("SELECT DISTINCT asset_detail FROM sprinters_referentie_data", conn)["asset_detail"].dropna().astype(str).tolist()
     except Exception:
@@ -868,6 +873,19 @@ def parse_int_field(s):
         return None
     try:
         return int(float(s))
+    except Exception:
+        return None
+
+
+def parse_float_field(s):
+    """Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'."""
+    if s is None:
+        return None
+    s = str(s).strip().replace(",", ".")
+    if not s:
+        return None
+    try:
+        return float(s)
     except Exception:
         return None
 
@@ -1445,7 +1463,7 @@ def portfolio_value_asset_rollup_combined():
         (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
     ])
 
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined = df_combined
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined_put = df_combined
     #return df_combined
 
 def refresh_all_snapshots():

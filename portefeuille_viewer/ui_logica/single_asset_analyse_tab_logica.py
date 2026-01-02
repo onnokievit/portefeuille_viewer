@@ -1399,7 +1399,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         return QColor(r, g, b)
 
     def _get_portfolio_value_pct_color(self, asset_rollup: str, colname: str):
-        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined", None)
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
         if df is None or df.is_empty():
             return None
         if colname not in df.columns:
@@ -1821,8 +1821,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             hexval = chosen.data()
 
         try:
-            update_open_optie_comment_color(current_uniek_id, hexval)
             latest = fetch_open_optie_comments([current_uniek_id])
+            if latest is None or latest.is_empty():
+                upsert_open_optie_comment(current_uniek_id, current_comment or "", hexval)
+                latest = fetch_open_optie_comments([current_uniek_id])
+            else:
+                update_open_optie_comment_color(current_uniek_id, hexval)
+                latest = fetch_open_optie_comments([current_uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
                 self._patch_comment_in_models(current_uniek_id, row.get("optie_comment") or "", row.get("optie_comment_color") or "", row.get("optie_comment_updated_at"))
