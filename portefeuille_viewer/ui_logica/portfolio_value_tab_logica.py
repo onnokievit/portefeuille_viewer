@@ -94,6 +94,18 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                     return s
                 except Exception:
                     return str(val)
+            if colname in (
+                "aand_aantal_bezit",
+                "opt_aantal_ITM_put",
+                "opt_aantal_OTM_put",
+                "opt_aantal_ITM_call",
+                "opt_aantal_OTM_call",
+            ):
+                try:
+                    s = f"{int(round(abs(float(val)))):,}".replace(",", ".")
+                    return s
+                except Exception:
+                    return str(val)
             # Custom formatting for koers column
             if colname == "koers":
                 try:
@@ -120,7 +132,16 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                     return "" if val is None else str(val)
 
         if role == Qt.TextAlignmentRole:
-            if colname in self._pct_cols or colname in ("total_waarde_lineair", "total_waarde_delta", "koers"):
+            if colname in self._pct_cols or colname in (
+                "total_waarde_lineair",
+                "total_waarde_delta",
+                "koers",
+                "aand_aantal_bezit",
+                "opt_aantal_ITM_put",
+                "opt_aantal_OTM_put",
+                "opt_aantal_ITM_call",
+                "opt_aantal_OTM_call",
+            ):
                 return Qt.AlignRight | Qt.AlignVCenter
             return Qt.AlignLeft | Qt.AlignVCenter
 
@@ -272,6 +293,10 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "value_grow",
             "koers",
             "aand_aantal_bezit",
+            "opt_aantal_ITM_put",
+            "opt_aantal_OTM_put",
+            "opt_aantal_ITM_call",
+            "opt_aantal_OTM_call",
             "total_waarde_lineair",
             "total_waarde_delta",
             "portfolio_total_waarde_lineair_pct",
@@ -331,7 +356,11 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     def _apply_column_widths(self, df: pl.DataFrame):
         widths = {
             "asset_rollup": 140,
-            #"aand_aantal_bezit": 100,
+            "aand_aantal_bezit": 100,
+            "opt_aantal_ITM_put": 110,
+            "opt_aantal_OTM_put": 110,
+            "opt_aantal_ITM_call": 120,
+            "opt_aantal_OTM_call": 120,
             #"aand_waarde_bezit": 110,
             #"opt_waarde_bezit": 110,
             #"opt_waarde_bezit_delta": 130,
@@ -447,6 +476,18 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 return s
             except Exception:
                 return str(val)
+        if col in (
+            "aand_aantal_bezit",
+            "opt_aantal_ITM_put",
+            "opt_aantal_OTM_put",
+            "opt_aantal_ITM_call",
+            "opt_aantal_OTM_call",
+        ):
+            try:
+                s = f"{int(round(abs(float(val)))):,}".replace(",", ".")
+                return s
+            except Exception:
+                return str(val)
         if col == "koers":
             try:
                 return f"{float(val):,.2f}".replace(",", ".")
@@ -468,6 +509,16 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 totalen[col] = ""
             elif col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
                 totalen[col] = 1.0
+            elif col in (
+                "opt_aantal_ITM_put",
+                "opt_aantal_OTM_put",
+                "opt_aantal_ITM_call",
+                "opt_aantal_OTM_call",
+            ):
+                try:
+                    totalen[col] = df[col].abs().sum()
+                except Exception:
+                    totalen[col] = ""
             elif col in df.columns:
                 try:
                     totalen[col] = df[col].sum()
