@@ -1287,17 +1287,32 @@ def portfolio_value_asset_rollup_opties_put():
     df_opties_waarde_3 = df_opties_waarde_2.clone()
     
     
+    group_keys = ["asset_rollup", "broker", "regio", "sector", "value_grow"]
+
     df_opties_waarde_2 = df_opties_waarde_2.filter(pl.col("optie_call_put") == "put")
-    
-    df_opties_waarde_2 = df_opties_waarde_2.group_by("asset_rollup", "broker", "regio", "sector", "value_grow").agg([
+
+    df_opties_waarde_2 = df_opties_waarde_2.group_by(group_keys).agg([
         pl.sum("waarde_bezit").alias("waarde_bezit"),
         pl.sum("waarde_ITM").alias("waarde_ITM"),
         pl.sum("waarde_bezit_delta").alias("waarde_bezit_delta"),
-        pl.sum("aantal_ITM").alias("aantal_ITM"),
-        pl.sum("aantal_OTM").alias("aantal_OTM"),   
+        pl.sum("aantal_ITM").alias("aantal_ITM_put"),
+        pl.sum("aantal_OTM").alias("aantal_OTM_put"),
 
         ])
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put = df_opties_waarde_2
+    df_opties_calls = df_opties_waarde_3.filter(pl.col("optie_call_put") == "call")
+    df_opties_calls = df_opties_calls.group_by(group_keys).agg([
+        pl.sum("aantal_ITM").alias("aantal_ITM_call"),
+        pl.sum("aantal_OTM").alias("aantal_OTM_call"),
+    ])
+    df_opties_waarde_2 = df_opties_waarde_2.join(
+        df_opties_calls,
+        on=group_keys,
+        how="left",
+    ).with_columns([
+        pl.col("aantal_ITM_call").fill_null(0).alias("aantal_ITM_call"),
+        pl.col("aantal_OTM_call").fill_null(0).alias("aantal_OTM_call"),
+    ])
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie = df_opties_waarde_2
     #return df_opties_waarde_2
     
     df_opties_waarde_4 = df_opties_waarde_3.with_columns([
@@ -1404,7 +1419,7 @@ def portfolio_value_asset_rollup_aandelen():
 def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
-    df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_put
+    df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie
 
     if df_aandelen is None or df_opties_put is None:
         raise ValueError("Een van de benodigde dataframes is niet gevuld!")
@@ -1413,8 +1428,10 @@ def portfolio_value_asset_rollup_combined():
         pl.sum("waarde_bezit").alias("opt_waarde_bezit"),
         pl.sum("waarde_ITM").alias("opt_waarde_ITM"),
         pl.sum("waarde_bezit_delta").alias("opt_waarde_bezit_delta"),
-        pl.sum("aantal_ITM").alias("opt_aantal_ITM"),
-        pl.sum("aantal_OTM").alias("opt_aantal_OTM"),   
+        pl.sum("aantal_ITM_put").alias("opt_aantal_ITM_put"),
+        pl.sum("aantal_OTM_put").alias("opt_aantal_OTM_put"),
+        pl.sum("aantal_ITM_call").alias("opt_aantal_ITM_call"),
+        pl.sum("aantal_OTM_call").alias("opt_aantal_OTM_call"),
         ])
     df_opties_put = df_opties_put.drop(["regio", "sector", "value_grow"])
 
@@ -1441,16 +1458,18 @@ def portfolio_value_asset_rollup_combined():
         pl.col("opt_waarde_bezit").fill_null(0).alias("opt_waarde_bezit"),
         pl.col("opt_waarde_ITM").fill_null(0).alias("opt_waarde_ITM"),
         pl.col("opt_waarde_bezit_delta").fill_null(0).alias("opt_waarde_bezit_delta"),
-        pl.col("opt_aantal_ITM").fill_null(0).alias("opt_aantal_ITM"),
-        pl.col("opt_aantal_OTM").fill_null(0).alias("opt_aantal_OTM"),
+        pl.col("opt_aantal_ITM_put").fill_null(0).alias("opt_aantal_ITM_put"),
+        pl.col("opt_aantal_OTM_put").fill_null(0).alias("opt_aantal_OTM_put"),
+        pl.col("opt_aantal_ITM_call").fill_null(0).alias("opt_aantal_ITM_call"),
+        pl.col("opt_aantal_OTM_call").fill_null(0).alias("opt_aantal_OTM_call"),
     ])
 
 
 
     # Bereken totale waarde per asset_rollup en broker
     df_combined = df_combined.with_columns([
-        (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM"))).alias("total_aantal_lineair"),
-        
+        (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM_put"))).alias("total_aantal_lineair"),
+
         (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit") ).alias("total_waarde_lineair"),
         (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit_delta") ).alias("total_waarde_delta"),
     ])
