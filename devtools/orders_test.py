@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 
 def fetch_executions_last_days(
     host: str = "127.0.0.1",
-    port: int = 7496,
-    client_id: int = 77,
+    port: int = 7498,
+    client_id: int = 78,
     timeout: float = 10.0,
     days: int = 5,
 ) -> List[Dict[str, Any]]:
@@ -83,23 +83,26 @@ def fetch_executions_last_days(
 def main() -> int:
     parser = argparse.ArgumentParser(description="E2E: fetch executions from the last N days.")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=7496)
+    parser.add_argument("--ports", default="7498,7496")
     parser.add_argument("--client-id", type=int, default=77)
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--days", type=int, default=5)
     args = parser.parse_args()
 
-    orders = fetch_executions_last_days(
-        host=args.host,
-        port=args.port,
-        client_id=args.client_id,
-        timeout=args.timeout,
-        days=args.days,
-    )
+    ports = [int(p.strip()) for p in args.ports.split(",") if p.strip()]
+    for idx, port in enumerate(ports):
+        client_id = args.client_id + idx
+        orders = fetch_executions_last_days(
+            host=args.host,
+            port=port,
+            client_id=client_id,
+            timeout=args.timeout,
+            days=args.days,
+        )
 
-    print(f"Executions (last {args.days} days): {len(orders)}")
-    for row in orders:
-        print(row)
+        print(f"Port {port} (clientId {client_id}) executions (last {args.days} days): {len(orders)}")
+        for row in orders:
+            print(row)
     return 0
 
 
