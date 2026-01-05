@@ -119,6 +119,20 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addItem(self.horizontalSpacer)
 
+        self.comboBoxSortering = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxSortering.setObjectName(u"comboBoxSortering")
+        self.comboBoxSortering.setMaximumSize(QSize(60, 16777215))
+        self.comboBoxSortering.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+
+        self.horizontalLayout.addWidget(self.comboBoxSortering)
+
+        self.comboBoxSortDirection = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxSortDirection.setObjectName(u"comboBoxSortDirection")
+        self.comboBoxSortDirection.setMaximumSize(QSize(60, 16777215))
+        self.comboBoxSortDirection.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+
+        self.horizontalLayout.addWidget(self.comboBoxSortDirection)
+
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
         self.horizontalLayoutWidget_2.setGeometry(QRect(840, 10, 551, 31))
