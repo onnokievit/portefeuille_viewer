@@ -36,9 +36,13 @@ class OptiesOpenTableModel(PolarsTableModel):
         self._itm_flags = []
         self._call_put = []
         self._comment_colors = []
+        self._comment_color_fg_map = {}
 
     def set_color_priority_map(self, prio_map: dict):
         self._color_priority_map = prio_map or {}
+
+    def set_comment_color_text_map(self, fg_map: dict):
+        self._comment_color_fg_map = fg_map or {}
 
     def set_format_caches(self, display_cache=None, bg_cache=None, fg_cache=None, itm_flags=None, call_put=None, comment_colors=None):
         self._display_cache = display_cache or {}
@@ -106,6 +110,12 @@ class OptiesOpenTableModel(PolarsTableModel):
                 pass
         if role == Qt.ForegroundRole:
             try:
+                if colname == "optie_comment":
+                    if 0 <= row_idx < len(self._comment_colors):
+                        color_val = self._comment_colors[row_idx] or ""
+                        fg = self._comment_color_fg_map.get(color_val)
+                        if fg:
+                            return QColor(fg)
                 if colname in self._fg_cache:
                     cache = self._fg_cache.get(colname, [])
                     if 0 <= row_idx < len(cache):
@@ -244,6 +254,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._columns_signature = None
         self.model = OptiesOpenTableModel(pl.DataFrame(), self, commit_callback=self._on_comment_commit)
         self.model.set_color_priority_map(get_settings().get_comment_color_priority_map())
+        self.model.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         self.proxy_model = CommentSortProxy(self)
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setSortRole(Qt.UserRole)
@@ -446,13 +457,13 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
     def _open_comment_color_popup(self, global_pos):
         color_defs = get_settings().get_comment_colors() or []
-        values = [hexval for _prio, _label, hexval in color_defs if hexval]
+        values = [bg_hex for _prio, _label, bg_hex, _fg_hex in color_defs if bg_hex]
         if "" not in values:
             values.insert(0, "")
         label_map = {"": "Geen kleur"}
-        for _prio, label, hexval in color_defs:
-            if hexval:
-                label_map[hexval] = label
+        for _prio, label, bg_hex, _fg_hex in color_defs:
+            if bg_hex:
+                label_map[bg_hex] = label
 
         pre = set()
         if "optie_comment_color" in (self._col_filters or {}) and "in" in self._col_filters["optie_comment_color"]:
@@ -521,9 +532,9 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
         menu = QMenu(self)
         color_defs = get_settings().get_comment_colors()
-        for _prio, label, hexval in color_defs:
+        for _prio, label, bg_hex, _fg_hex in color_defs:
             act = QAction(label, menu)
-            act.setData(hexval)
+            act.setData(bg_hex)
             menu.addAction(act)
         menu.addSeparator()
         act_custom = QAction("Kies kleur...", menu)

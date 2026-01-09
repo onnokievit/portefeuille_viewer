@@ -155,9 +155,13 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
         self._editable_cols = set(editable_cols or [])
         self._commit_callback = commit_callback
         self._color_priority_map = {}
+        self._comment_color_fg_map = {}
 
     def set_color_priority_map(self, prio_map: dict):
         self._color_priority_map = prio_map or {}
+
+    def set_comment_color_text_map(self, fg_map: dict):
+        self._comment_color_fg_map = fg_map or {}
 
     def data(self, index, role=Qt.DisplayRole):
         if role == Qt.EditRole:
@@ -174,6 +178,18 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                         cval = self._df[index.row(), color_col]
                         if cval:
                             return QColor(cval)
+            except Exception:
+                pass
+        if role == Qt.ForegroundRole:
+            try:
+                colname = self._df.columns[index.column()]
+                if colname == "optie_comment":
+                    color_col = self._df.columns.index("optie_comment_color") if "optie_comment_color" in self._df.columns else None
+                    if color_col is not None:
+                        cval = self._df[index.row(), color_col]
+                        fg = self._comment_color_fg_map.get(cval or "")
+                        if fg:
+                            return QColor(fg)
             except Exception:
                 pass
         if role == Qt.UserRole:
@@ -716,8 +732,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             item.setData(Qt.UserRole, color_hex or "")
             if color_hex:
                 item.setBackground(QColor(color_hex))
+                fg = get_settings().get_comment_color_text_map().get(color_hex)
+                if fg:
+                    item.setForeground(QColor(fg))
             else:
                 item.setBackground(QColor())
+                item.setForeground(QColor())
         finally:
             self.testOrdersTable.blockSignals(False)
 
@@ -753,9 +773,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         menu.addSeparator()
 
         color_defs = get_settings().get_comment_colors()
-        for _prio, label, hexval in color_defs:
+        for _prio, label, bg_hex, _fg_hex in color_defs:
             act = QAction(label, menu)
-            act.setData(hexval)
+            act.setData(bg_hex)
             menu.addAction(act)
 
         menu.addSeparator()
@@ -838,6 +858,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             # comments ophalen op basis van uniek_id (alleen voor optie-rijen)
             comment_by_id = {}
             color_by_id = {}
+            fg_by_bg = get_settings().get_comment_color_text_map()
             try:
                 uniek_ids = []
                 for rd in rows:
@@ -887,6 +908,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                             if color_hex:
                                 item.setData(Qt.UserRole, color_hex)
                                 item.setBackground(QColor(color_hex))
+                                fg = fg_by_bg.get(color_hex)
+                                if fg:
+                                    item.setForeground(QColor(fg))
                     self.testOrdersTable.setItem(row, c, item)
 
         self.testOrdersTable.blockSignals(False)
@@ -1641,6 +1665,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         )
         color_priority_map = get_settings().get_comment_color_priority_map()
         model_all.set_color_priority_map(color_priority_map)
+        model_all.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         display_headers = {
             "asset_rollup": "asset",
             "optie_call_put": "c/p",
@@ -1715,6 +1740,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             commit_callback=self._on_comment_commit,
         )
         model_put.set_color_priority_map(color_priority_map)
+        model_put.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         model_put.set_display_headers(display_headers)
         proxy_put = CommentSortProxy(self)
         proxy_put.setSourceModel(model_put)
@@ -1752,6 +1778,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             commit_callback=self._on_comment_commit,
         )
         model_call.set_color_priority_map(color_priority_map)
+        model_call.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         model_call.set_display_headers(display_headers)
         proxy_call = CommentSortProxy(self)
         proxy_call.setSourceModel(model_call)
@@ -1853,9 +1880,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         menu = QMenu(self)
         color_defs = get_settings().get_comment_colors()
-        for _prio, label, hexval in color_defs:
+        for _prio, label, bg_hex, _fg_hex in color_defs:
             act = QAction(label, menu)
-            act.setData(hexval)
+            act.setData(bg_hex)
             menu.addAction(act)
 
         menu.addSeparator()
@@ -1965,13 +1992,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def _open_comment_color_popup(self, global_pos):
         color_defs = get_settings().get_comment_colors() or []
-        values = [hexval for _prio, _label, hexval in color_defs if hexval]
+        values = [bg_hex for _prio, _label, bg_hex, _fg_hex in color_defs if bg_hex]
         if "" not in values:
             values.insert(0, "")
         label_map = {"": "Geen kleur"}
-        for _prio, label, hexval in color_defs:
-            if hexval:
-                label_map[hexval] = label
+        for _prio, label, bg_hex, _fg_hex in color_defs:
+            if bg_hex:
+                label_map[bg_hex] = label
 
         pre = set()
         if "optie_comment_color" in (self._col_filters or {}) and "in" in self._col_filters["optie_comment_color"]:
