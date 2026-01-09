@@ -18,8 +18,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
     QDoubleSpinBox, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QPushButton, QSizePolicy,
-    QSpacerItem, QTableView, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget)
+    QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QWidget)
 
 from pyqtgraph import PlotWidget
 
@@ -58,7 +58,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 801, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 721, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -115,33 +115,29 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addWidget(self.comboBoxRegio)
 
-        self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.horizontalLayout.addItem(self.horizontalSpacer)
-
-        self.comboBoxSortering = QComboBox(self.horizontalLayoutWidget)
+        self.horizontalLayoutWidget_2 = QWidget(self.widget)
+        self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
+        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 631, 31))
+        self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.comboBoxSortering = QComboBox(self.horizontalLayoutWidget_2)
         self.comboBoxSortering.setObjectName(u"comboBoxSortering")
-        self.comboBoxSortering.setMaximumSize(QSize(60, 16777215))
+        self.comboBoxSortering.setMaximumSize(QSize(180, 16777215))
         self.comboBoxSortering.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
-        self.horizontalLayout.addWidget(self.comboBoxSortering)
+        self.horizontalLayout_2.addWidget(self.comboBoxSortering)
 
-        self.comboBoxSortDirection = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxSortDirection = QComboBox(self.horizontalLayoutWidget_2)
         self.comboBoxSortDirection.setObjectName(u"comboBoxSortDirection")
         self.comboBoxSortDirection.setMaximumSize(QSize(60, 16777215))
         self.comboBoxSortDirection.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
-        self.horizontalLayout.addWidget(self.comboBoxSortDirection)
+        self.horizontalLayout_2.addWidget(self.comboBoxSortDirection)
 
-        self.horizontalLayoutWidget_2 = QWidget(self.widget)
-        self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(840, 10, 551, 31))
-        self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
-        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.lineEditFilterOptiesOpen = QLineEdit(self.horizontalLayoutWidget_2)
         self.lineEditFilterOptiesOpen.setObjectName(u"lineEditFilterOptiesOpen")
-        self.lineEditFilterOptiesOpen.setMinimumSize(QSize(300, 24))
+        self.lineEditFilterOptiesOpen.setMinimumSize(QSize(220, 24))
         self.lineEditFilterOptiesOpen.setMaximumSize(QSize(450, 16777215))
         self.lineEditFilterOptiesOpen.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
@@ -162,7 +158,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
         self.tableViewOptiesOpen.setGeometry(QRect(840, 46, 1081, 257))
-        self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.testOrdersTable = QTableWidget(self.widget)
         self.testOrdersTable.setObjectName(u"testOrdersTable")
         self.testOrdersTable.setGeometry(QRect(840, 380, 1081, 281))
@@ -275,7 +271,9 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)
         QWidget.setTabOrder(self.comboBoxValueGrow, self.comboBoxSector)
         QWidget.setTabOrder(self.comboBoxSector, self.comboBoxRegio)
-        QWidget.setTabOrder(self.comboBoxRegio, self.lineEditFilterOptiesOpen)
+        QWidget.setTabOrder(self.comboBoxRegio, self.comboBoxSortering)
+        QWidget.setTabOrder(self.comboBoxSortering, self.comboBoxSortDirection)
+        QWidget.setTabOrder(self.comboBoxSortDirection, self.lineEditFilterOptiesOpen)
         QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
         QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.checkBoxEnableTestOrders)
         QWidget.setTabOrder(self.checkBoxEnableTestOrders, self.checkBoxAssetOrdersOnly)
