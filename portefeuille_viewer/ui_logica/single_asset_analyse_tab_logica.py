@@ -339,6 +339,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxValueGrow.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxSector.currentTextChanged.connect(self._on_filter_changed)
+        self._init_sort_comboboxes()
         settings = get_settings()
         start_date_str = settings.config.get('app', 'single_asset_analyse_start_date', fallback=None)
         if start_date_str:
@@ -1085,6 +1086,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         settings.save()
 
     def _on_filter_changed(self):
+        current_asset = self.asset_selector.currentText()
         regio = self.comboBoxRegio.currentText()
         status = self.comboBoxStatus.currentText()
         value_grow = self.comboBoxValueGrow.currentText()
@@ -1095,11 +1097,62 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         value_grow = value_grow if value_grow else None
         sector = sector if sector else None
         assets = self.logic.load_assets(regio=regio, status=status, value_grow=value_grow, sector=sector)
+        assets = self._apply_asset_sorting(assets)
         self.asset_selector.clear()
         self.asset_selector.addItems(assets)
-        if assets:
+        if current_asset and current_asset in assets:
+            self.asset_selector.setCurrentText(current_asset)
+        elif assets:
             self.asset_selector.setCurrentIndex(0)
             self.on_asset_selected(assets[0])
+
+    def _init_sort_comboboxes(self):
+        self.comboBoxSortering.clear()
+        self.comboBoxSortering.addItem("alfabetisch")
+        self.comboBoxSortering.addItem("pct_change")
+        self.comboBoxSortering.addItem("totaal_inc_fee")
+        self.comboBoxSortering.addItem("net_change")
+        self.comboBoxSortering.addItem("portfolio_total_waarde_lineair_pct")
+        self.comboBoxSortering.addItem("portfolio_total_waarde_delta_pct")
+
+        self.comboBoxSortDirection.clear()
+        self.comboBoxSortDirection.addItem("ASC")
+        self.comboBoxSortDirection.addItem("DESC")
+
+        self.comboBoxSortering.currentTextChanged.connect(self._on_filter_changed)
+        self.comboBoxSortDirection.currentTextChanged.connect(self._on_filter_changed)
+
+    def _apply_asset_sorting(self, assets: list[str]) -> list[str]:
+        sort_key = (self.comboBoxSortering.currentText() or "").strip()
+        direction = (self.comboBoxSortDirection.currentText() or "ASC").strip().upper()
+        desc = direction == "DESC"
+
+        if not sort_key or sort_key.lower() in {"alfabetisch", "alphabetisch"}:
+            return sorted(assets, reverse=desc)
+
+        df_sum = build_aandelen_tab_summary()
+        if df_sum is None or df_sum.is_empty() or sort_key not in df_sum.columns:
+            return sorted(assets, reverse=desc)
+
+        df_sort = df_sum.select(["asset_rollup", sort_key])
+        value_map: dict[str, float | None] = {}
+        for row in df_sort.to_dicts():
+            asset = row.get("asset_rollup")
+            if asset is None:
+                continue
+            val = row.get(sort_key)
+            try:
+                value_map[str(asset)] = float(val) if val is not None else None
+            except Exception:
+                value_map[str(asset)] = None
+
+        def _key(a: str):
+            v = value_map.get(a)
+            if v is None:
+                return (1, 0.0)
+            return (0, -v if desc else v)
+
+        return sorted(assets, key=_key)
 
     def _fill_filter_comboboxes(self):
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)

@@ -11,7 +11,7 @@ overzichten, verdeling share van assets in totale portfolio, % overzicht
 
 change tov gistereren toevoegen
 
-1.3 uitbreiden single assset analyse met % share, absoluut share in portefeuille
+1.3 uitbreiden single assset analyse 
     uitgeschreven in aantal puts itm, aantal puts otm, aantal aandelen sprinters etc
     voor opties, na opties, 
 
@@ -26,9 +26,9 @@ voor sprinters
 voor aandelen
 
 4) 
-een tradelog systeem op uniek_id, voor opties. bij single_asset of opties_open, 
-een 2e tabel tonen/ editable velden tonen, 
-waar comments geplaatst kunnen worden wat te doen met een bepaald uniek_id voor de volgend optie expiratie
+comments achter in de aandelen tab en portfolio tab, op uniek_id, voor aandelen. gelinked. weggeschreven in de comment db tabel. comment db tabel hernoemen van optie_comment naar trade_comment. 
+link tussen comment tabel en order tabel? 
+
 
 
 
@@ -49,14 +49,21 @@ dividend overzicht toevoegen aan single asset analys
 NEXT dividend implementeren in db (tabel), app (pagina om dit bij te houden, misschien automatiseren?), 
 single asset overview toevoegen, met kleur codering oranje / rood
 
-9) 
-singe asset overview uitbreiden met per_dag_asset_result change t.o.v. per_dag_asset_result vorige dag? 
+
 
 10) 
 hist stock check en per_dag_asset_result integreren? of aanroepen vanuit app? in achtergrond? 
 
 11) 
 zoekveld zoals in orders, ook in aandelen implementeren
+
+12) 
+bij sector analyse, ook een selector voor een sector, met daaronder een tabel die alle assets van die sector weergeeft, met dezelfde data als die gezamenlijk de sector opbouwt
+
+13)  
+een tabel met dagwaarde portfolio, margin etc. voor de grafieken van dag resultaten, absoluut en %. stortingen. etc. 
+indices via IBKR ophalen en aanvullen. 
+ibkr portfolio en marge automatisch laten ophalen? 
 
 
 
