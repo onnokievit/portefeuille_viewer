@@ -14,11 +14,11 @@ USER_CONFIG_DIR = Path(__file__).parent / ".user_settings"
 USER_CONFIG_PATH = USER_CONFIG_DIR / "settings.ini"
 
 DEFAULT_COMMENT_COLORS = [
-    (4, "Rood", "#f8d7da"),
-    (3, "Oranje", "#ffeeba"),
-    (2, "Groen", "#d4edda"),
-    (1, "Grijs", "#bfbfbf"),
-    (0, "Geen", ""),
+    (4, "Rood", "#f8d7da", "#000000"),
+    (3, "Oranje", "#ffeeba", "#000000"),
+    (2, "Groen", "#d4edda", "#000000"),
+    (1, "Grijs", "#bfbfbf", "#ffffff"),
+    (0, "Geen", "", ""),
 ]
 
 
@@ -240,7 +240,7 @@ class SettingsManager:
     # === Comment colors ===
     def get_comment_colors(self):
         """
-        Retourneer lijst van (priority, label, hex) voor comment-kleuren.
+        Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
         Priority bepaalt ook sorteer-volgorde; hoogste eerst.
         """
         colors = []
@@ -250,10 +250,13 @@ class SettingsManager:
                     prio = int(key.strip())
                 except Exception:
                     prio = 0
-                parts = [p.strip() for p in value.split(",", 1)]
+                parts = [p.strip() for p in value.split(",")]
                 label = parts[0] if parts else ""
-                hexval = parts[1] if len(parts) > 1 else ""
-                colors.append((prio, label, hexval))
+                bg_hex = parts[1] if len(parts) > 1 else ""
+                fg_hex = parts[2] if len(parts) > 2 else ""
+                if bg_hex and not fg_hex:
+                    fg_hex = "#000000"
+                colors.append((prio, label, bg_hex, fg_hex))
         if not colors:
             colors = list(DEFAULT_COMMENT_COLORS)
         # Sorteer op priority, hoog naar laag
@@ -261,7 +264,11 @@ class SettingsManager:
 
     def get_comment_color_priority_map(self):
         """Map hex -> priority (int)."""
-        return {hexval: prio for prio, _label, hexval in self.get_comment_colors()}
+        return {bg_hex: prio for prio, _label, bg_hex, _fg_hex in self.get_comment_colors()}
+
+    def get_comment_color_text_map(self):
+        """Map achtergrondkleur hex -> tekstkleur hex."""
+        return {bg_hex: fg_hex for _prio, _label, bg_hex, fg_hex in self.get_comment_colors() if bg_hex}
 
     def set_comment_colors(self, colors):
         """
@@ -269,7 +276,8 @@ class SettingsManager:
 
         `colors` mag zijn:
         - list[(label, hex)]
-        - list[(priority, label, hex)]
+        - list[(label, bg_hex, fg_hex)]
+        - list[(priority, label, bg_hex, fg_hex)]
 
         Keys in ini zijn numeric priority's.
         """
@@ -285,24 +293,41 @@ class SettingsManager:
             if not item:
                 continue
             if len(item) == 2:
-                label, hexval = item
-                normalized.append((None, str(label), str(hexval)))
-            elif len(item) >= 3:
-                prio, label, hexval = item[0], item[1], item[2]
+                label, bg_hex = item
+                fg_hex = "#000000" if bg_hex else ""
+                normalized.append((None, str(label), str(bg_hex), str(fg_hex)))
+            elif len(item) == 3:
+                # Ambigue: (prio,label,bg) of (label,bg,fg)
+                prio = None
+                try:
+                    prio = int(item[0])
+                except Exception:
+                    prio = None
+                if prio is not None:
+                    label, bg_hex = item[1], item[2]
+                    fg_hex = "#000000" if bg_hex else ""
+                    normalized.append((prio, str(label), str(bg_hex), str(fg_hex)))
+                else:
+                    label, bg_hex, fg_hex = item
+                    fg_hex = fg_hex or ("#000000" if bg_hex else "")
+                    normalized.append((None, str(label), str(bg_hex), str(fg_hex)))
+            elif len(item) >= 4:
+                prio, label, bg_hex, fg_hex = item[0], item[1], item[2], item[3]
                 try:
                     prio = int(prio)
                 except Exception:
                     prio = None
-                normalized.append((prio, str(label), str(hexval)))
+                fg_hex = fg_hex or ("#000000" if bg_hex else "")
+                normalized.append((prio, str(label), str(bg_hex), str(fg_hex)))
 
         # Als prio ontbreekt: toekennen op basis van volgorde (hoog->laag)
-        if any(p is None for p, _l, _h in normalized):
+        if any(p is None for p, _l, _b, _f in normalized):
             n = len(normalized)
-            normalized = [(n - 1 - i, l, h) for i, (_p, l, h) in enumerate(normalized)]
+            normalized = [(n - 1 - i, l, b, f) for i, (_p, l, b, f) in enumerate(normalized)]
 
         # schrijf weg (hoog->laag)
-        for prio, label, hexval in sorted(normalized, key=lambda x: x[0], reverse=True):
-            self.config.set("comment_colors", str(prio), f"{label},{hexval}")
+        for prio, label, bg_hex, fg_hex in sorted(normalized, key=lambda x: x[0], reverse=True):
+            self.config.set("comment_colors", str(prio), f"{label},{bg_hex},{fg_hex}")
 
         self.save()
 

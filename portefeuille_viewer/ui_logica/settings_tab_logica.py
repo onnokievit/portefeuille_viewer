@@ -24,8 +24,8 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         # Comment kleur-config (open opties)
         self._loading_comment_colors = False
         if hasattr(self, "tableColorOptiesConfig"):
-            self.tableColorOptiesConfig.setColumnCount(2)
-            self.tableColorOptiesConfig.setHorizontalHeaderLabels(["Naam", "Kleur"])
+            self.tableColorOptiesConfig.setColumnCount(3)
+            self.tableColorOptiesConfig.setHorizontalHeaderLabels(["Naam", "Achtergrond", "Tekst"])
             self.tableColorOptiesConfig.cellClicked.connect(self._on_comment_color_cell_clicked)
             self.tableColorOptiesConfig.cellChanged.connect(self._on_comment_color_cell_changed)
             self.load_comment_colors()
@@ -160,14 +160,17 @@ class SettingsTab(QWidget, Ui_SettingsTab):
             return
         self._loading_comment_colors = True
         try:
-            colors = self.settings_manager.get_comment_colors()  # (prio,label,hex)
+            colors = self.settings_manager.get_comment_colors()  # (prio,label,bg,fg)
             self.tableColorOptiesConfig.setRowCount(len(colors))
-            for row, (_prio, label, hexval) in enumerate(colors):
+            for row, (_prio, label, bg_hex, fg_hex) in enumerate(colors):
                 name_item = self._make_editable_item(label)
                 self.tableColorOptiesConfig.setItem(row, 0, name_item)
 
-                color_item = self._make_color_item(hexval)
-                self.tableColorOptiesConfig.setItem(row, 1, color_item)
+                bg_item = self._make_color_item(bg_hex, use_foreground=False)
+                self.tableColorOptiesConfig.setItem(row, 1, bg_item)
+
+                fg_item = self._make_color_item(fg_hex, use_foreground=True)
+                self.tableColorOptiesConfig.setItem(row, 2, fg_item)
         finally:
             self._loading_comment_colors = False
 
@@ -177,15 +180,19 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         item.setFlags(item.flags() | Qt.ItemIsEditable)
         return item
 
-    def _make_color_item(self, hexval):
+    def _make_color_item(self, hexval, *, use_foreground: bool):
         from PySide6.QtWidgets import QTableWidgetItem
-        item = QTableWidgetItem("")
+        item = QTableWidgetItem("A" if (use_foreground and hexval) else "")
         item.setData(Qt.UserRole, hexval or "")
         if hexval:
             item.setToolTip(hexval)
         item.setFlags((item.flags() & ~Qt.ItemIsEditable) | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
         if hexval:
-            item.setBackground(QColor(hexval))
+            if use_foreground:
+                item.setForeground(QColor(hexval))
+                item.setBackground(QColor("#ffffff"))
+            else:
+                item.setBackground(QColor(hexval))
         return item
 
     def _save_comment_colors_from_table(self):
@@ -196,21 +203,25 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         colors = []
         for r in range(rows):
             name_item = table.item(r, 0)
-            color_item = table.item(r, 1)
+            bg_item = table.item(r, 1)
+            fg_item = table.item(r, 2)
             label = (name_item.text() if name_item else "").strip()
-            hexval = ""
-            if color_item:
-                hexval = (color_item.data(Qt.UserRole) or color_item.text() or "").strip()
+            bg_hex = ""
+            fg_hex = ""
+            if bg_item:
+                bg_hex = (bg_item.data(Qt.UserRole) or bg_item.text() or "").strip()
+            if fg_item:
+                fg_hex = (fg_item.data(Qt.UserRole) or fg_item.text() or "").strip()
             if not label:
                 continue
-            colors.append((label, hexval))
+            colors.append((label, bg_hex, fg_hex))
         if colors:
             self.settings_manager.set_comment_colors(colors)
 
     def _on_comment_color_cell_clicked(self, row, col):
         if not hasattr(self, "tableColorOptiesConfig"):
             return
-        if col != 1:
+        if col not in (1, 2):
             return
         from PySide6.QtWidgets import QColorDialog
         item = self.tableColorOptiesConfig.item(row, col)
@@ -220,11 +231,17 @@ class SettingsTab(QWidget, Ui_SettingsTab):
             return
         hexval = color.name()
         if item is None:
-            item = self._make_color_item(hexval)
+            item = self._make_color_item(hexval, use_foreground=(col == 2))
             self.tableColorOptiesConfig.setItem(row, col, item)
         else:
             item.setData(Qt.UserRole, hexval)
-            item.setBackground(QColor(hexval))
+            if col == 2:
+                item.setForeground(QColor(hexval))
+                item.setBackground(QColor("#ffffff"))
+                item.setText("A")
+            else:
+                item.setBackground(QColor(hexval))
+                item.setText("")
             item.setToolTip(hexval)
         self._save_comment_colors_from_table()
 
