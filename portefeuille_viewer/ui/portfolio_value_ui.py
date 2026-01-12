@@ -34,30 +34,30 @@ class Ui_Form(object):
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout = QHBoxLayout()
         self.horizontalLayout.setObjectName(u"horizontalLayout")
-        self.comboBox = QComboBox(self.widget)
-        self.comboBox.setObjectName(u"comboBox")
+        self.comboBoxSector = QComboBox(self.widget)
+        self.comboBoxSector.setObjectName(u"comboBoxSector")
 
-        self.horizontalLayout.addWidget(self.comboBox)
+        self.horizontalLayout.addWidget(self.comboBoxSector)
 
-        self.comboBox_2 = QComboBox(self.widget)
-        self.comboBox_2.setObjectName(u"comboBox_2")
+        self.comboBoxValueGrow = QComboBox(self.widget)
+        self.comboBoxValueGrow.setObjectName(u"comboBoxValueGrow")
 
-        self.horizontalLayout.addWidget(self.comboBox_2)
+        self.horizontalLayout.addWidget(self.comboBoxValueGrow)
 
-        self.comboBox_3 = QComboBox(self.widget)
-        self.comboBox_3.setObjectName(u"comboBox_3")
+        self.comboBoxRegion = QComboBox(self.widget)
+        self.comboBoxRegion.setObjectName(u"comboBoxRegion")
 
-        self.horizontalLayout.addWidget(self.comboBox_3)
+        self.horizontalLayout.addWidget(self.comboBoxRegion)
 
         self.comboBox_4 = QComboBox(self.widget)
         self.comboBox_4.setObjectName(u"comboBox_4")
 
         self.horizontalLayout.addWidget(self.comboBox_4)
 
-        self.pushButton_2 = QPushButton(self.widget)
-        self.pushButton_2.setObjectName(u"pushButton_2")
+        self.btnClearFilter = QPushButton(self.widget)
+        self.btnClearFilter.setObjectName(u"btnClearFilter")
 
-        self.horizontalLayout.addWidget(self.pushButton_2)
+        self.horizontalLayout.addWidget(self.btnClearFilter)
 
 
         self.horizontalLayout_2.addLayout(self.horizontalLayout)
@@ -71,10 +71,10 @@ class Ui_Form(object):
 
         self.verticalLayout.addWidget(self.tableView)
 
-        QWidget.setTabOrder(self.comboBox, self.comboBox_2)
-        QWidget.setTabOrder(self.comboBox_2, self.comboBox_3)
-        QWidget.setTabOrder(self.comboBox_3, self.comboBox_4)
-        QWidget.setTabOrder(self.comboBox_4, self.pushButton_2)
+        QWidget.setTabOrder(self.comboBoxSector, self.comboBoxValueGrow)
+        QWidget.setTabOrder(self.comboBoxValueGrow, self.comboBoxRegion)
+        QWidget.setTabOrder(self.comboBoxRegion, self.comboBox_4)
+        QWidget.setTabOrder(self.comboBox_4, self.btnClearFilter)
 
         self.retranslateUi(Form)
 
@@ -83,6 +83,6 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
-        self.pushButton_2.setText(QCoreApplication.translate("Form", u"PushButton", None))
+        self.btnClearFilter.setText(QCoreApplication.translate("Form", u"PushButton", None))
     # retranslateUi
 
