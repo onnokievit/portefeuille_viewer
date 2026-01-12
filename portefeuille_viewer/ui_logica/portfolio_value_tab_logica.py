@@ -213,6 +213,15 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._init_totals_footer()
         self._apply_header_style()
 
+        # Sector filter combobox (supports older UI names as fallback)
+        self._sector_combo_label = "Alle sectoren"
+        self.comboBoxSector = getattr(self.ui, "comboBoxSector", None) or getattr(self.ui, "comboBox", None)
+        if self.comboBoxSector is not None:
+            self.comboBoxSector.currentTextChanged.connect(self._on_sector_changed)
+        self.btnClearFilter = getattr(self.ui, "btnClearFilter", None) or getattr(self.ui, "pushButton_2", None)
+        if self.btnClearFilter is not None:
+            self.btnClearFilter.clicked.connect(self._on_clear_filters_clicked)
+
         # Header contextmenu voor filters/sorteren
         header = self.ui.tableView.horizontalHeader()
         header.setSectionsClickable(True)
@@ -273,9 +282,53 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         """Compat-methode voor HeaderFilterMenuMixin; herlaadt de snapshot."""
         self.reload_snapshot()
 
+    def _apply_in_filter(self, colname, selected):
+        if not selected:
+            self._col_filters.pop(colname, None)
+        else:
+            self._col_filters[colname] = {"in": selected}
+        self.apply_filters()
+
+    def _on_sector_changed(self, text: str):
+        if not text or text == self._sector_combo_label:
+            self._col_filters.pop("sector", None)
+        else:
+            self._col_filters["sector"] = {"eq": text}
+        self.apply_filters()
+
+    def _on_clear_filters_clicked(self):
+        if self.comboBoxSector is not None:
+            self.comboBoxSector.blockSignals(True)
+            self.comboBoxSector.setCurrentIndex(0)
+            self.comboBoxSector.blockSignals(False)
+        self._col_filters.clear()
+        self.apply_filters()
+
+    def _refresh_sector_combo(self, df: pl.DataFrame):
+        if self.comboBoxSector is None:
+            return
+        sectors = []
+        if df is not None and not df.is_empty() and "sector" in df.columns:
+            sectors = [
+                str(v) for v in df["sector"].unique().to_list()
+                if v is not None and str(v).strip() != ""
+            ]
+        sectors = sorted(set(sectors), key=str.lower)
+        current = self.comboBoxSector.currentText()
+        self.comboBoxSector.blockSignals(True)
+        self.comboBoxSector.clear()
+        self.comboBoxSector.addItem(self._sector_combo_label)
+        for sector in sectors:
+            self.comboBoxSector.addItem(sector)
+        if current and current in sectors:
+            self.comboBoxSector.setCurrentText(current)
+        else:
+            self.comboBoxSector.setCurrentIndex(0)
+        self.comboBoxSector.blockSignals(False)
+
     def reload_snapshot(self):
         # Expected snapshot key: repository_snapshot_portfolio_value_total_combined
-        print("🔄 PortfolioValueTab: snapshot herladen...")
+        # print("🔄 PortfolioValueTab: snapshot herladen...")
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             self.model.set_df(pl.DataFrame({}))
@@ -304,6 +357,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             # enzovoort: alleen wat je in deze tab wilt tonen/filteren
         ]
         df = df.select([c for c in cols_to_keep if c in df.columns])
+        self._refresh_sector_combo(df)
 
         df = self._ensure_percent_columns(df)
 

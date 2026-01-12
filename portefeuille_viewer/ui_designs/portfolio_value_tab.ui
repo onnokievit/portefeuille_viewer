@@ -38,19 +38,19 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout">
         <item>
-         <widget class="QComboBox" name="comboBox"/>
+         <widget class="QComboBox" name="comboBoxSector"/>
         </item>
         <item>
-         <widget class="QComboBox" name="comboBox_2"/>
+         <widget class="QComboBox" name="comboBoxValueGrow"/>
         </item>
         <item>
-         <widget class="QComboBox" name="comboBox_3"/>
+         <widget class="QComboBox" name="comboBoxRegion"/>
         </item>
         <item>
          <widget class="QComboBox" name="comboBox_4"/>
         </item>
         <item>
-         <widget class="QPushButton" name="pushButton_2">
+         <widget class="QPushButton" name="btnClearFilter">
           <property name="text">
            <string>PushButton</string>
           </property>
@@ -71,11 +71,11 @@
   </layout>
  </widget>
  <tabstops>
-  <tabstop>comboBox</tabstop>
-  <tabstop>comboBox_2</tabstop>
-  <tabstop>comboBox_3</tabstop>
+  <tabstop>comboBoxSector</tabstop>
+  <tabstop>comboBoxValueGrow</tabstop>
+  <tabstop>comboBoxRegion</tabstop>
   <tabstop>comboBox_4</tabstop>
-  <tabstop>pushButton_2</tabstop>
+  <tabstop>btnClearFilter</tabstop>
  </tabstops>
  <resources/>
  <connections/>
