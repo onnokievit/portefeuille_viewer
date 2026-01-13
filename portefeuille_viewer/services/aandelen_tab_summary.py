@@ -62,7 +62,7 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 			pl.col("clos_sp_transactie_fee").sum(),
 		])
 	else:
-		df_clos_sp_sum = df_gesloten_opties
+		df_clos_sp_sum = df_gesloten_sprinters
 
 	df_open_opties = _apply_filters(
 		_safe_df(SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live),
@@ -280,7 +280,6 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		df_sum = df
 
 	df_sum = df_sum.with_columns((pl.col("totaal_inc_fee") - pl.col("totaal")).alias("net_change"))
-
 	########### Kolom indeling ##################################
 	df_sum = df_sum.select([
 		"asset_rollup",
