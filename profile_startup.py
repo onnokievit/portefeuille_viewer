@@ -6,9 +6,9 @@ import os
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)
 
-import portefeuille_viewer_0_11
+import portefeuille_viewer_0_13
 
 def run():
-    portefeuille_viewer_0_11.main()
+    portefeuille_viewer_0_13.main()
 
 cProfile.run("run()", "startup.prof")
