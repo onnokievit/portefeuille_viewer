@@ -36,6 +36,7 @@ class OptiesOpenTableModel(PolarsTableModel):
         self._itm_flags = []
         self._call_put = []
         self._comment_colors = []
+        self._comment_textcolors = []
         self._comment_color_fg_map = {}
 
     def set_color_priority_map(self, prio_map: dict):
@@ -44,17 +45,22 @@ class OptiesOpenTableModel(PolarsTableModel):
     def set_comment_color_text_map(self, fg_map: dict):
         self._comment_color_fg_map = fg_map or {}
 
-    def set_format_caches(self, display_cache=None, bg_cache=None, fg_cache=None, itm_flags=None, call_put=None, comment_colors=None):
+    def set_format_caches(self, display_cache=None, bg_cache=None, fg_cache=None, itm_flags=None, call_put=None, comment_colors=None, comment_textcolors=None):
         self._display_cache = display_cache or {}
         self._bg_cache = bg_cache or {}
         self._fg_cache = fg_cache or {}
         self._itm_flags = itm_flags or []
         self._call_put = call_put or []
         self._comment_colors = comment_colors or []
+        self._comment_textcolors = comment_textcolors or []
 
     def update_comment_color_cache(self, row_idx: int, color_val: str):
         if 0 <= row_idx < len(self._comment_colors):
             self._comment_colors[row_idx] = color_val or ""
+
+    def update_comment_textcolor_cache(self, row_idx: int, text_val: str):
+        if 0 <= row_idx < len(self._comment_textcolors):
+            self._comment_textcolors[row_idx] = text_val or ""
 
     def flags(self, index):
         f = super().flags(index)
@@ -111,6 +117,10 @@ class OptiesOpenTableModel(PolarsTableModel):
         if role == Qt.ForegroundRole:
             try:
                 if colname == "optie_comment":
+                    if 0 <= row_idx < len(self._comment_textcolors):
+                        text_val = self._comment_textcolors[row_idx] or ""
+                        if text_val:
+                            return QColor(text_val)
                     if 0 <= row_idx < len(self._comment_colors):
                         color_val = self._comment_colors[row_idx] or ""
                         fg = self._comment_color_fg_map.get(color_val)
@@ -552,22 +562,30 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             hexval = chosen.data()
 
         try:
+            fg_by_bg = get_settings().get_comment_color_text_map()
+            textcolor = fg_by_bg.get(hexval, "")
             latest = fetch_open_optie_comments([current_uniek_id])
             if latest is None or latest.is_empty():
-                upsert_open_optie_comment(current_uniek_id, current_comment or "", hexval)
+                upsert_open_optie_comment(current_uniek_id, current_comment or "", hexval, textcolor)
                 latest = fetch_open_optie_comments([current_uniek_id])
             else:
-                update_open_optie_comment_color(current_uniek_id, hexval)
+                update_open_optie_comment_color(current_uniek_id, hexval, textcolor)
                 latest = fetch_open_optie_comments([current_uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
-                self._patch_comment_in_model(current_uniek_id, row.get("optie_comment") or "", row.get("optie_comment_color") or "", row.get("optie_comment_updated_at"))
+                self._patch_comment_in_model(
+                    current_uniek_id,
+                    row.get("optie_comment") or "",
+                    row.get("optie_comment_color") or "",
+                    row.get("optie_comment_textcolor") or "",
+                    row.get("optie_comment_updated_at"),
+                )
             if not self.commentFlushTimer.isActive():
                 self.commentFlushTimer.start()
         except Exception as exc:
             print(f"[comments] kon kleur niet opslaan: {exc}")
 
-    def _patch_comment_in_model(self, uniek_id: str, comment: str, color: str, ts):
+    def _patch_comment_in_model(self, uniek_id: str, comment: str, color: str, textcolor: str, ts):
         if not uniek_id:
             return
         self._restore_selection_uniek = uniek_id
@@ -579,6 +597,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             df = df.with_columns([
                 pl.when(pl.col("uniek_id") == uniek_id).then(pl.lit(comment)).otherwise(pl.col("optie_comment")).alias("optie_comment"),
                 pl.when(pl.col("uniek_id") == uniek_id).then(pl.lit(color)).otherwise(pl.col("optie_comment_color")).alias("optie_comment_color"),
+                pl.when(pl.col("uniek_id") == uniek_id).then(pl.lit(textcolor)).otherwise(pl.col("optie_comment_textcolor")).alias("optie_comment_textcolor"),
                 pl.when(pl.col("uniek_id") == uniek_id).then(pl.lit(ts)).otherwise(pl.col("optie_comment_updated_at")).alias("optie_comment_updated_at"),
             ])
             # vind de rij-index om dataChanged te emitten zonder reset
@@ -591,9 +610,11 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             if row_idx is not None:
                 if hasattr(self._table_model, "update_comment_color_cache"):
                     self._table_model.update_comment_color_cache(row_idx, color)
+                if hasattr(self._table_model, "update_comment_textcolor_cache"):
+                    self._table_model.update_comment_textcolor_cache(row_idx, textcolor)
                 tl = self._table_model.index(row_idx, 0)
                 br = self._table_model.index(row_idx, df.width - 1)
-                self._table_model.dataChanged.emit(tl, br, [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole])
+                self._table_model.dataChanged.emit(tl, br, [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole, Qt.ForegroundRole])
             self._restore_selection()
         except Exception as exc:
             print(f"[comments] patch failed: {exc}")
@@ -603,12 +624,19 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             uniek_id = row_data.get("uniek_id")
             comment = row_data.get("optie_comment") or ""
             color = row_data.get("optie_comment_color") or ""
+            textcolor = row_data.get("optie_comment_textcolor") or ""
             ts = row_data.get("optie_comment_updated_at")
-            upsert_open_optie_comment(uniek_id, comment, color, ts)
+            upsert_open_optie_comment(uniek_id, comment, color, textcolor, ts)
             latest = fetch_open_optie_comments([uniek_id])
             if latest is not None and not latest.is_empty():
                 row = latest.row(0, named=True)
-                self._patch_comment_in_model(uniek_id, row.get("optie_comment") or "", row.get("optie_comment_color") or "", row.get("optie_comment_updated_at"))
+                self._patch_comment_in_model(
+                    uniek_id,
+                    row.get("optie_comment") or "",
+                    row.get("optie_comment_color") or "",
+                    row.get("optie_comment_textcolor") or "",
+                    row.get("optie_comment_updated_at"),
+                )
             if not self.commentFlushTimer.isActive():
                 self.commentFlushTimer.start()
             self._restore_selection_uniek = uniek_id
@@ -676,6 +704,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 ]).map_elements(lambda s: build_uniek_id({**s, "asset_type": "optie"}), return_dtype=pl.Utf8).alias("uniek_id"),
                 pl.lit("").alias("optie_comment"),
                 pl.lit("").alias("optie_comment_color"),
+                pl.lit("").alias("optie_comment_textcolor"),
                 pl.lit(None).alias("optie_comment_updated_at"),
             ])
             # comments uit cache
@@ -692,12 +721,16 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     exprs.append(pl.coalesce([pl.col("optie_comment_color_comment_db"), pl.col("optie_comment_color")]).fill_null("").alias("optie_comment_color"))
                 else:
                     exprs.append(pl.col("optie_comment_color").fill_null("").alias("optie_comment_color"))
+                if "optie_comment_textcolor_comment_db" in df.columns:
+                    exprs.append(pl.coalesce([pl.col("optie_comment_textcolor_comment_db"), pl.col("optie_comment_textcolor")]).fill_null("").alias("optie_comment_textcolor"))
+                else:
+                    exprs.append(pl.col("optie_comment_textcolor").fill_null("").alias("optie_comment_textcolor"))
                 if "optie_comment_updated_at_comment_db" in df.columns:
                     exprs.append(pl.coalesce([pl.col("optie_comment_updated_at_comment_db"), pl.col("optie_comment_updated_at")]).alias("optie_comment_updated_at"))
                 else:
                     exprs.append(pl.col("optie_comment_updated_at"))
                 df = df.with_columns(exprs)
-                for col in ("optie_comment_comment_db", "optie_comment_color_comment_db", "optie_comment_updated_at_comment_db"):
+                for col in ("optie_comment_comment_db", "optie_comment_color_comment_db", "optie_comment_textcolor_comment_db", "optie_comment_updated_at_comment_db"):
                     if col in df.columns:
                         df = df.drop(col)
 
@@ -848,6 +881,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             call_put = [(v or "").lower() for v in df["optie_call_put"].to_list()]
 
         comment_colors = df["optie_comment_color"].to_list() if "optie_comment_color" in df.columns else []
+        comment_textcolors = df["optie_comment_textcolor"].to_list() if "optie_comment_textcolor" in df.columns else []
 
         self.model.set_format_caches(
             display_cache=display_cache,
@@ -856,6 +890,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             itm_flags=itm_flags,
             call_put=call_put,
             comment_colors=comment_colors,
+            comment_textcolors=comment_textcolors,
         )
         self.model.set_df(df)
 
@@ -869,7 +904,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             except ValueError:
                 pass
             # verberg helperkolommen
-            for hide_col in ("uniek_id", "optie_comment_color", "totaal_fees"):
+            for hide_col in ("uniek_id", "optie_comment_color", "optie_comment_textcolor", "totaal_fees"):
                 if hide_col in df.columns:
                     idx = df.columns.index(hide_col)
                     self.tableView.setColumnHidden(idx, True)

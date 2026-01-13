@@ -213,11 +213,19 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._init_totals_footer()
         self._apply_header_style()
 
-        # Sector filter combobox (supports older UI names as fallback)
+        # Filter comboboxes (supports older UI names as fallback)
         self._sector_combo_label = "Alle sectoren"
+        self._value_grow_combo_label = "Waarde & groei"
+        self._region_combo_label = "Alle regions"
         self.comboBoxSector = getattr(self.ui, "comboBoxSector", None) or getattr(self.ui, "comboBox", None)
         if self.comboBoxSector is not None:
             self.comboBoxSector.currentTextChanged.connect(self._on_sector_changed)
+        self.comboBoxValueGrow = getattr(self.ui, "comboBoxValueGrow", None) or getattr(self.ui, "comboBox_2", None)
+        if self.comboBoxValueGrow is not None:
+            self.comboBoxValueGrow.currentTextChanged.connect(self._on_value_grow_changed)
+        self.comboBoxRegion = getattr(self.ui, "comboBoxRegion", None) or getattr(self.ui, "comboBox_3", None)
+        if self.comboBoxRegion is not None:
+            self.comboBoxRegion.currentTextChanged.connect(self._on_region_changed)
         self.btnClearFilter = getattr(self.ui, "btnClearFilter", None) or getattr(self.ui, "pushButton_2", None)
         if self.btnClearFilter is not None:
             self.btnClearFilter.clicked.connect(self._on_clear_filters_clicked)
@@ -301,6 +309,14 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             self.comboBoxSector.blockSignals(True)
             self.comboBoxSector.setCurrentIndex(0)
             self.comboBoxSector.blockSignals(False)
+        if self.comboBoxValueGrow is not None:
+            self.comboBoxValueGrow.blockSignals(True)
+            self.comboBoxValueGrow.setCurrentIndex(0)
+            self.comboBoxValueGrow.blockSignals(False)
+        if self.comboBoxRegion is not None:
+            self.comboBoxRegion.blockSignals(True)
+            self.comboBoxRegion.setCurrentIndex(0)
+            self.comboBoxRegion.blockSignals(False)
         self._col_filters.clear()
         self.apply_filters()
 
@@ -325,6 +341,69 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         else:
             self.comboBoxSector.setCurrentIndex(0)
         self.comboBoxSector.blockSignals(False)
+
+    def _on_value_grow_changed(self, text: str):
+        if not text or text == self._value_grow_combo_label:
+            self._col_filters.pop("value_grow", None)
+        else:
+            self._col_filters["value_grow"] = {"eq": text}
+        self.apply_filters()
+
+    def _refresh_value_grow_combo(self, df: pl.DataFrame):
+        if self.comboBoxValueGrow is None:
+            return
+        values = []
+        if df is not None and not df.is_empty() and "value_grow" in df.columns:
+            values = [
+                str(v) for v in df["value_grow"].unique().to_list()
+                if v is not None and str(v).strip() != ""
+            ]
+        values = sorted(set(values), key=str.lower)
+        current = self.comboBoxValueGrow.currentText()
+        self.comboBoxValueGrow.blockSignals(True)
+        self.comboBoxValueGrow.clear()
+        self.comboBoxValueGrow.addItem(self._value_grow_combo_label)
+        for val in values:
+            self.comboBoxValueGrow.addItem(val)
+        if current and current in values:
+            self.comboBoxValueGrow.setCurrentText(current)
+        else:
+            self.comboBoxValueGrow.setCurrentIndex(0)
+        self.comboBoxValueGrow.blockSignals(False)
+
+    def _on_region_changed(self, text: str):
+        col = getattr(self, "_region_col", "regio")
+        if not text or text == self._region_combo_label:
+            self._col_filters.pop(col, None)
+        else:
+            self._col_filters[col] = {"eq": text}
+        self.apply_filters()
+
+    def _refresh_region_combo(self, df: pl.DataFrame):
+        if self.comboBoxRegion is None:
+            return
+        col = "regio"
+        if df is not None and "regio" not in df.columns and "region" in df.columns:
+            col = "region"
+        self._region_col = col
+        values = []
+        if df is not None and not df.is_empty() and col in df.columns:
+            values = [
+                str(v) for v in df[col].unique().to_list()
+                if v is not None and str(v).strip() != ""
+            ]
+        values = sorted(set(values), key=str.lower)
+        current = self.comboBoxRegion.currentText()
+        self.comboBoxRegion.blockSignals(True)
+        self.comboBoxRegion.clear()
+        self.comboBoxRegion.addItem(self._region_combo_label)
+        for val in values:
+            self.comboBoxRegion.addItem(val)
+        if current and current in values:
+            self.comboBoxRegion.setCurrentText(current)
+        else:
+            self.comboBoxRegion.setCurrentIndex(0)
+        self.comboBoxRegion.blockSignals(False)
 
     def reload_snapshot(self):
         # Expected snapshot key: repository_snapshot_portfolio_value_total_combined
@@ -358,6 +437,8 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         ]
         df = df.select([c for c in cols_to_keep if c in df.columns])
         self._refresh_sector_combo(df)
+        self._refresh_value_grow_combo(df)
+        self._refresh_region_combo(df)
 
         df = self._ensure_percent_columns(df)
 

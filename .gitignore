@@ -7,6 +7,11 @@ __pycache__/
 # VS Code settings
 .vscode/
 
+# Virtual environments
+venv/
+.venv/
+venv_test/
+
 # Access databases
 *.accdb
 

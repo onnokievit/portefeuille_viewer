@@ -77,7 +77,19 @@ class PriceFeedIB(QObject):
                 feed._is_ready = True
                 feed.ready.emit()
 
-            def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):
+            def error(self, reqId, *args):
+                # IB 10.25: (errorCode, errorString, advancedOrderRejectJson?)
+                # IB 10.37: (errorTime, errorCode, errorString, advancedOrderRejectJson?)
+                errorTime = None
+                advancedOrderRejectJson = ""
+                if len(args) == 2:
+                    errorCode, errorString = args
+                elif len(args) == 3:
+                    errorCode, errorString, advancedOrderRejectJson = args
+                elif len(args) >= 4:
+                    errorTime, errorCode, errorString, advancedOrderRejectJson = args[:4]
+                else:
+                    return
                 # Handle clientId conflict: auto-retry once with incremented clientId
                 if errorCode == 326:
                     if not getattr(feed, "_reconnect_attempted", False):

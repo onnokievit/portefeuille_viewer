@@ -52,7 +52,7 @@
         <item>
          <widget class="QPushButton" name="btnClearFilter">
           <property name="text">
-           <string>PushButton</string>
+           <string>Clear Filter</string>
           </property>
          </widget>
         </item>

@@ -33,6 +33,8 @@ db_path = DB_MAP.get(DEFAULT_DB_NAME, "") if DEFAULT_DB_NAME else ""
 conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path};" if db_path else ""
 # Tabelnaam voor optienotities; verwacht kolommen: uniek_id (TEXT, PK), comment (MEMO/TEXT), updated_at (DATETIME)
 OPEN_OPTIE_COMMENTS_TABLE = "open_optie_comments"
+OPEN_OPTIE_COMMENTS_TEXTCOLOR_COLUMNS = ("tekstcolor", "textcolor")
+OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL = None
 
 def reload_db_config():
     """Herlaad database configuratie na wijzigingen in settings."""
@@ -927,12 +929,13 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
     """
     Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.
     Retourneert per uniek_id alleen de laatste entry (dagboekprincipe).
-    Kolommen: uniek_id, optie_comment, optie_comment_color, optie_comment_updated_at.
+    Kolommen: uniek_id, optie_comment, optie_comment_color, optie_comment_textcolor, optie_comment_updated_at.
     """
     empty_df = pl.DataFrame({
         "uniek_id": pl.Series([], dtype=pl.Utf8),
         "optie_comment": pl.Series([], dtype=pl.Utf8),
         "optie_comment_color": pl.Series([], dtype=pl.Utf8),
+        "optie_comment_textcolor": pl.Series([], dtype=pl.Utf8),
         "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
     })
     if not uniek_ids:
@@ -956,6 +959,7 @@ def fetch_open_optie_comments(uniek_ids: list[str]) -> pl.DataFrame:
             .agg([
                 pl.col("optie_comment").first().alias("optie_comment"),
                 pl.col("optie_comment_color").first().alias("optie_comment_color"),
+                pl.col("optie_comment_textcolor").first().alias("optie_comment_textcolor"),
                 pl.col("optie_comment_updated_at").first().alias("optie_comment_updated_at"),
             ])
         )
@@ -970,17 +974,32 @@ def load_open_optie_comments_cache():
     """
     Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_snapshot_open_optie_comments).
     """
+    global OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL
     try:
         with get_connection() as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT uniek_id, comment, color, updated_at FROM {OPEN_OPTIE_COMMENTS_TABLE}")
-            rows = cur.fetchall()
+            rows = None
+            for col in OPEN_OPTIE_COMMENTS_TEXTCOLOR_COLUMNS:
+                try:
+                    cur.execute(
+                        f"SELECT uniek_id, comment, color, {col}, updated_at FROM {OPEN_OPTIE_COMMENTS_TABLE}"
+                    )
+                    rows = cur.fetchall()
+                    OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL = col
+                    break
+                except Exception:
+                    continue
+            if rows is None:
+                cur.execute(f"SELECT uniek_id, comment, color, updated_at FROM {OPEN_OPTIE_COMMENTS_TABLE}")
+                rows = cur.fetchall()
+                OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL = None
     except Exception as exc:
         print(f"[comments] load cache failed: {exc}")
         SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl.DataFrame({
             "uniek_id": pl.Series([], dtype=pl.Utf8),
             "optie_comment": pl.Series([], dtype=pl.Utf8),
             "optie_comment_color": pl.Series([], dtype=pl.Utf8),
+            "optie_comment_textcolor": pl.Series([], dtype=pl.Utf8),
             "optie_comment_updated_at": pl.Series([], dtype=pl.Datetime),
         })
         return
@@ -988,14 +1007,29 @@ def load_open_optie_comments_cache():
     normalized_rows = []
     for r in rows:
         try:
-            if len(r) >= 4:
-                normalized_rows.append((r[0], r[1], r[2], r[3]))
-            elif len(r) == 3:
-                normalized_rows.append((r[0], r[1], None, r[2]))
+            if OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL:
+                if len(r) >= 5:
+                    normalized_rows.append((r[0], r[1], r[2], r[3], r[4]))
+                elif len(r) == 4:
+                    normalized_rows.append((r[0], r[1], r[2], None, r[3]))
+            else:
+                if len(r) >= 4:
+                    normalized_rows.append((r[0], r[1], r[2], "", r[3]))
+                elif len(r) == 3:
+                    normalized_rows.append((r[0], r[1], None, "", r[2]))
         except Exception as exc:
             print(f"[comments] skip row err={exc} value={r}")
 
-    df = pd.DataFrame(normalized_rows, columns=["uniek_id", "optie_comment", "optie_comment_color", "optie_comment_updated_at"])
+    df = pd.DataFrame(
+        normalized_rows,
+        columns=[
+            "uniek_id",
+            "optie_comment",
+            "optie_comment_color",
+            "optie_comment_textcolor",
+            "optie_comment_updated_at",
+        ],
+    )
     try:
         df["optie_comment_updated_at"] = pd.to_datetime(df["optie_comment_updated_at"], errors="coerce", dayfirst=True)
     except Exception:
@@ -1004,12 +1038,19 @@ def load_open_optie_comments_cache():
         pl.col("uniek_id").cast(pl.Utf8),
         pl.col("optie_comment").cast(pl.Utf8),
         pl.col("optie_comment_color").cast(pl.Utf8),
+        pl.col("optie_comment_textcolor").cast(pl.Utf8),
     ])
     SNAPSHOT_STORE.repository_snapshot_open_optie_comments = pl_df
     # print(f"[comments] cache loaded: {pl_df.height} rows")
 
 
-def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = None, updated_at=None) -> None:
+def upsert_open_optie_comment(
+    uniek_id: str,
+    comment: str,
+    color: str | None = None,
+    textcolor: str | None = None,
+    updated_at=None,
+) -> None:
     """
     Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor DB flush.
     """
@@ -1024,6 +1065,7 @@ def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = N
         "uniek_id": uniek_id,
         "optie_comment": comment,
         "optie_comment_color": color or "",
+        "optie_comment_textcolor": textcolor or "",
         "optie_comment_updated_at": updated_at,
     }
     # append aan cache
@@ -1050,7 +1092,7 @@ def upsert_open_optie_comment(uniek_id: str, comment: str, color: str | None = N
         signals.databaseChanged.emit()
 
 
-def update_open_optie_comment_color(uniek_id: str, color: str | None) -> None:
+def update_open_optie_comment_color(uniek_id: str, color: str | None, textcolor: str | None = None) -> None:
     """
     Werk alleen de kleur bij voor de laatste comment van een uniek_id.
     """
@@ -1077,6 +1119,16 @@ def update_open_optie_comment_color(uniek_id: str, color: str | None) -> None:
                     .otherwise(pl.col("optie_comment_color"))
                     .alias("optie_comment_color")
                 ])
+                if "optie_comment_textcolor" in df_cache.columns:
+                    df_cache = df_cache.with_columns([
+                        pl.when(
+                            (pl.col("uniek_id") == uniek_id)
+                            & (pl.col("optie_comment_updated_at") == latest_ts)
+                        )
+                        .then(pl.lit(textcolor or ""))
+                        .otherwise(pl.col("optie_comment_textcolor"))
+                        .alias("optie_comment_textcolor")
+                    ])
                 SNAPSHOT_STORE.repository_snapshot_open_optie_comments = df_cache
     except Exception as exc:
         print(f"[comments] kon kleur in cache niet bijwerken: {exc}")
@@ -1087,7 +1139,12 @@ def update_open_optie_comment_color(uniek_id: str, color: str | None) -> None:
         if dirty_list is None:
             SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
             dirty_list = SNAPSHOT_STORE.repository_dirty_open_optie_comments
-        dirty_list.append({"mode": "color_only", "uniek_id": uniek_id, "color": color or ""})
+        dirty_list.append({
+            "mode": "color_only",
+            "uniek_id": uniek_id,
+            "color": color or "",
+            "textcolor": textcolor or "",
+        })
     except Exception as exc:
         print(f"[comments] kon dirty list niet bijwerken: {exc}")
 
@@ -1104,17 +1161,42 @@ def flush_dirty_open_optie_comments_to_db():
             cur = conn.cursor()
             for row in dirty:
                 if row.get("mode") == "color_only":
-                    cur.execute(
-                        f"UPDATE {OPEN_OPTIE_COMMENTS_TABLE} "
-                        f"SET color = ? "
-                        f"WHERE uniek_id = ? AND updated_at = (SELECT MAX(updated_at) FROM {OPEN_OPTIE_COMMENTS_TABLE} WHERE uniek_id = ?)",
-                        (row.get("color") or "", row.get("uniek_id"), row.get("uniek_id")),
-                    )
+                    if OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL:
+                        cur.execute(
+                            f"UPDATE {OPEN_OPTIE_COMMENTS_TABLE} "
+                            f"SET color = ?, {OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL} = ? "
+                            f"WHERE uniek_id = ? AND updated_at = (SELECT MAX(updated_at) FROM {OPEN_OPTIE_COMMENTS_TABLE} WHERE uniek_id = ?)",
+                            (
+                                row.get("color") or "",
+                                row.get("textcolor") or "",
+                                row.get("uniek_id"),
+                                row.get("uniek_id"),
+                            ),
+                        )
+                    else:
+                        cur.execute(
+                            f"UPDATE {OPEN_OPTIE_COMMENTS_TABLE} "
+                            f"SET color = ? "
+                            f"WHERE uniek_id = ? AND updated_at = (SELECT MAX(updated_at) FROM {OPEN_OPTIE_COMMENTS_TABLE} WHERE uniek_id = ?)",
+                            (row.get("color") or "", row.get("uniek_id"), row.get("uniek_id")),
+                        )
                 else:
-                    cur.execute(
-                        f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
-                        (row.get("uniek_id"), row.get("optie_comment"), row.get("optie_comment_color"), row.get("optie_comment_updated_at")),
-                    )
+                    if OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL:
+                        cur.execute(
+                            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, {OPEN_OPTIE_COMMENTS_TEXTCOLOR_COL}, updated_at) VALUES (?, ?, ?, ?, ?)",
+                            (
+                                row.get("uniek_id"),
+                                row.get("optie_comment"),
+                                row.get("optie_comment_color"),
+                                row.get("optie_comment_textcolor") or "",
+                                row.get("optie_comment_updated_at"),
+                            ),
+                        )
+                    else:
+                        cur.execute(
+                            f"INSERT INTO {OPEN_OPTIE_COMMENTS_TABLE} (uniek_id, comment, color, updated_at) VALUES (?, ?, ?, ?)",
+                            (row.get("uniek_id"), row.get("optie_comment"), row.get("optie_comment_color"), row.get("optie_comment_updated_at")),
+                        )
             conn.commit()
         SNAPSHOT_STORE.repository_dirty_open_optie_comments = []
         # print(f"[comments] flushed {len(dirty)} comments to DB")
