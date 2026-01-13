@@ -83,6 +83,6 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
-        self.btnClearFilter.setText(QCoreApplication.translate("Form", u"PushButton", None))
+        self.btnClearFilter.setText(QCoreApplication.translate("Form", u"Clear Filter", None))
     # retranslateUi
 
