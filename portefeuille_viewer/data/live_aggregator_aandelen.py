@@ -23,6 +23,7 @@ class LiveAggregatorAandelen(QObject):
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.databaseChanged.connect(self._on_database_changed)
         #signals.ordersCommitted.connect(self.refresh_data)
+
         
     
     def _on_database_changed(self, db_name):

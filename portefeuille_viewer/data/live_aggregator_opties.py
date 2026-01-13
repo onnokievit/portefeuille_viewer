@@ -25,6 +25,7 @@ class LiveAggregatorOpties(QObject):
         signals.databaseChanged.connect(self._on_database_changed)
         #signals.ordersCommitted.connect(self.refresh_data)
 
+
     def _on_database_changed(self, db_name):
         # Indien relevant, herlaad data bij database wissel
         self.refresh_data()
