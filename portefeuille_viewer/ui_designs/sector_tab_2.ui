@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>2500</width>
+    <height>2000</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="QFrame" name="pieChartValueLineair">
+   <property name="geometry">
+    <rect>
+     <x>690</x>
+     <y>70</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueLineairNaOpties">
+   <property name="geometry">
+    <rect>
+     <x>1270</x>
+     <y>70</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QTableView" name="tableSectorValuesLineair">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>70</y>
+     <width>501</width>
+     <height>481</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueDeltaPutITM">
+   <property name="geometry">
+    <rect>
+     <x>1270</x>
+     <y>660</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueDelta">
+   <property name="geometry">
+    <rect>
+     <x>690</x>
+     <y>660</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QTableView" name="tableSectorValuesDelta">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>660</y>
+     <width>501</width>
+     <height>481</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QSlider" name="putOTMRatio">
+   <property name="geometry">
+    <rect>
+     <x>190</x>
+     <y>40</y>
+     <width>231</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Orientation::Horizontal</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueGrowLineair">
+   <property name="geometry">
+    <rect>
+     <x>690</x>
+     <y>1220</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QTableView" name="tableValueGrowValuesLineair">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>1220</y>
+     <width>501</width>
+     <height>481</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueGrowDelta">
+   <property name="geometry">
+    <rect>
+     <x>690</x>
+     <y>1810</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QTableView" name="tableValueGrowValuesDelta">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>1810</y>
+     <width>501</width>
+     <height>481</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QSlider" name="putOTMRatioValueGrow">
+   <property name="geometry">
+    <rect>
+     <x>190</x>
+     <y>1190</y>
+     <width>231</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Orientation::Horizontal</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueGrowLineairNaOpties">
+   <property name="geometry">
+    <rect>
+     <x>1270</x>
+     <y>1220</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+  <widget class="QFrame" name="pieChartValueGrowDeltaPutITM">
+   <property name="geometry">
+    <rect>
+     <x>1270</x>
+     <y>1810</y>
+     <width>561</width>
+     <height>481</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::Shape::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Shadow::Raised</enum>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
