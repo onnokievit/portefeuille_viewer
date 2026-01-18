@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QMessageBox
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, Qt, QSortFilterProxyModel
 
 from portefeuille_viewer.ui.optie_eind_ui import Ui_OptieEindTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -12,6 +12,76 @@ import polars as pl
 import pandas as pd
 import numpy as np
 import datetime
+
+
+class OptieEindTableModel(PandasTableModel):
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or self._df is None:
+            return None
+        col_name = self._df.columns[index.column()]
+        val = self._df.iat[index.row(), index.column()]
+
+        if role == Qt.UserRole:
+            if col_name == "include":
+                return 1 if bool(val) else 0
+            if col_name in ("optie_exp_date", "datum"):
+                try:
+                    ts = pd.to_datetime(val, errors="coerce")
+                    return None if pd.isna(ts) else ts.to_pydatetime()
+                except Exception:
+                    return None
+            if pd.isna(val):
+                return None
+            return val
+
+        if col_name == "include":
+            if role == Qt.CheckStateRole:
+                return Qt.Checked if bool(val) else Qt.Unchecked
+            if role == Qt.DisplayRole:
+                return ""
+        return super().data(index, role)
+
+    def flags(self, index):
+        if not index.isValid():
+            return Qt.ItemIsEnabled
+        col_name = self._df.columns[index.column()]
+        if col_name == "include":
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        return super().flags(index)
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if not index.isValid() or self._df is None:
+            return False
+        col_name = self._df.columns[index.column()]
+        if col_name == "include" and role in (Qt.EditRole, Qt.CheckStateRole):
+            if role == Qt.CheckStateRole:
+                new_value = (value == Qt.Checked)
+            else:
+                new_value = bool(value)
+            self._df.iat[index.row(), index.column()] = new_value
+            self.dataChanged.emit(index, index, [Qt.CheckStateRole, Qt.DisplayRole])
+            return True
+        return super().setData(index, value, role)
+
+
+class OptieEindSortProxy(QSortFilterProxyModel):
+    def lessThan(self, left, right):
+        try:
+            col = left.column()
+            col_name = self.sourceModel()._df.columns[col]
+            if col_name in ("optie_exp_date", "datum"):
+                lv = self.sourceModel().data(left, Qt.UserRole)
+                rv = self.sourceModel().data(right, Qt.UserRole)
+                if lv is None and rv is None:
+                    return False
+                if lv is None:
+                    return True
+                if rv is None:
+                    return False
+                return lv < rv
+        except Exception:
+            pass
+        return super().lessThan(left, right)
 
 # This class defines a widget in a Python application that includes functionality for fetching data,
 # adding records to a database, clearing test accounts, and moving records to production, with default
@@ -32,6 +102,9 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         self.btnTestAccountLeegmaken.clicked.connect(self.clear_test_account)
         self.btnMoveToProductie.clicked.connect(self.move_records_to_productie)
         self.btnSelecteerBrokers.clicked.connect(self.open_broker_popup)
+        self.tblOptieEind.pressed.connect(self._on_table_clicked)
+        if hasattr(self, "pushButtonInclude"):
+            self.pushButtonInclude.clicked.connect(self.toggle_include_all_none)
         # Zet standaarddatums
 
         def next_friday(date=None):
@@ -72,7 +145,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             conn.commit()
         QMessageBox.information(self, "Test account", "Alle records zijn verwijderd uit transacties_bron_data_test_accounts.")
         signals.databaseChanged.emit(self.active_db_name)
-        self.model = None
+        self.reload_table()
 
     def open_broker_popup(self):
         opties = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
@@ -330,9 +403,26 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         else:
             df_concat = df_output.with_columns([pl.lit(None).alias("transactie_oorsprong_detail")])
 
+        if "optie_exp_date" in df_concat.columns:
+            df_concat = df_concat.with_columns(pl.col("optie_exp_date").cast(pl.Date))
+        if "datum" in df_concat.columns:
+            df_concat = df_concat.with_columns(pl.col("datum").cast(pl.Date))
 
-        self.model = PandasTableModel(df_concat.to_pandas())
-        self.tblOptieEind.setModel(self.model)
+        df_concat = df_concat.with_columns([pl.lit(True).alias("include")])
+        cols = [c for c in df_concat.columns if c != "include"] + ["include"]
+        df_concat = df_concat.select(cols)
+        self.model = OptieEindTableModel(df_concat.to_pandas())
+        self._table_proxy = OptieEindSortProxy(self)
+        self._table_proxy.setSourceModel(self.model)
+        self._table_proxy.setSortRole(Qt.UserRole)
+        self.tblOptieEind.setModel(self._table_proxy)
+        self.tblOptieEind.setSortingEnabled(True)
+        try:
+            include_idx = self.model._df.columns.get_loc("include")
+            self.tblOptieEind.setColumnWidth(include_idx, 60)
+        except Exception:
+            pass
+        self._update_include_button_label()
         # self.add_records_to_db()        
         
 
@@ -368,6 +458,8 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         
 
         df = self.model._df if hasattr(self.model, '_df') else self.model._data
+        if "include" in df.columns:
+            df = df[df["include"].fillna(True)]
         df_db = df[list(col_map.keys())].rename(columns=col_map)
         df_db = self._convert_df_for_access(df_db)
         df_db = df_db[upload_cols]
@@ -391,6 +483,64 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             conn.commit()
         QMessageBox.information(self, "Toevoegen", f"{len(df_db)} records toegevoegd aan transacties_bron_data_test_accounts.")
         signals.databaseChanged.emit(self.active_db_name)
+
+    def _on_table_clicked(self, index):
+        if not index.isValid() or not self.model or not hasattr(self.model, "_df"):
+            return
+        src_index = self._table_proxy.mapToSource(index) if hasattr(self, "_table_proxy") else index
+        if not src_index.isValid():
+            return
+        df = self.model._df
+        if df is None or df.empty or "include" not in df.columns:
+            return
+        try:
+            col_name = df.columns[src_index.column()]
+        except Exception:
+            return
+        if col_name != "include":
+            return
+        current = bool(df.iat[src_index.row(), src_index.column()])
+        df.iat[src_index.row(), src_index.column()] = (not current)
+        self.model.dataChanged.emit(src_index, src_index, [Qt.CheckStateRole, Qt.DisplayRole])
+        self._update_include_button_label()
+
+    def _get_include_state(self):
+        if not self.model or not hasattr(self.model, "_df"):
+            return None, None
+        df = self.model._df
+        if df is None or df.empty or "include" not in df.columns:
+            return None, None
+        series = df["include"].fillna(True)
+        all_selected = bool(series.all())
+        any_selected = bool(series.any())
+        return all_selected, any_selected
+
+    def _update_include_button_label(self):
+        if not hasattr(self, "pushButtonInclude"):
+            return
+        all_selected, any_selected = self._get_include_state()
+        if all_selected:
+            self.pushButtonInclude.setText("Select none")
+        elif any_selected:
+            self.pushButtonInclude.setText("Select all")
+        else:
+            self.pushButtonInclude.setText("Select all")
+
+    def toggle_include_all_none(self):
+        if not self.model or not hasattr(self.model, "_df"):
+            return
+        df = self.model._df
+        if df is None or df.empty or "include" not in df.columns:
+            return
+        all_selected, _any_selected = self._get_include_state()
+        new_value = False if all_selected else True
+        df["include"] = new_value
+        if self.model.rowCount() and self.model.columnCount():
+            col = df.columns.get_loc("include")
+            tl = self.model.index(0, col)
+            br = self.model.index(self.model.rowCount() - 1, col)
+            self.model.dataChanged.emit(tl, br, [Qt.CheckStateRole, Qt.DisplayRole])
+        self._update_include_button_label()
 
     def _convert_df_for_access(self, df):
         date_cols = ["datum", "optie_exp_date"]

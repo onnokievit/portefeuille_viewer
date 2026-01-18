@@ -465,14 +465,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else:
                         df = df.join(df_all_delta, on="sector", how="left")
         if not df.is_empty():
+            if "value_put_delta" in df.columns:
+                df = df.with_columns(pl.col("value_put_delta").fill_null(0.0))
+            if "value_delta_all" in df.columns:
+                df = df.with_columns(pl.col("value_delta_all").fill_null(0.0))
             if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_put_delta" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_put_delta"))
             if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_delta_all" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_delta_all"))
             total_put = float(df["value_aandelen_put_delta"].sum()) if "value_aandelen_put_delta" in df.columns and df.height > 0 else 0.0
             total_all = float(df["value_aandelen_delta_all"].sum()) if "value_aandelen_delta_all" in df.columns and df.height > 0 else 0.0
             if "value_aandelen_put_delta" in df.columns:
@@ -545,14 +553,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else:
                         df = df.join(df_all_delta, on="value_grow", how="left")
         if not df.is_empty():
+            if "value_put_delta" in df.columns:
+                df = df.with_columns(pl.col("value_put_delta").fill_null(0.0))
+            if "value_delta_all" in df.columns:
+                df = df.with_columns(pl.col("value_delta_all").fill_null(0.0))
             if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_put_delta" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_put_delta"))
             if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_delta_all" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_delta_all"))
             total_put = float(df["value_aandelen_put_delta"].sum()) if "value_aandelen_put_delta" in df.columns and df.height > 0 else 0.0
             total_all = float(df["value_aandelen_delta_all"].sum()) if "value_aandelen_delta_all" in df.columns and df.height > 0 else 0.0
             if "value_aandelen_put_delta" in df.columns:
@@ -615,14 +631,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else:
                         df = df.join(df_all_delta, on="sector", how="left")
         if not df.is_empty():
+            if "value_put_delta" in df.columns:
+                df = df.with_columns(pl.col("value_put_delta").fill_null(0.0))
+            if "value_delta_all" in df.columns:
+                df = df.with_columns(pl.col("value_delta_all").fill_null(0.0))
             if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_put_delta" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_put_delta"))
             if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_delta_all" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_delta_all"))
             if "value_aandelen_put_delta" in df.columns:
                 data["value_aandelen_put_delta"] = {
                     row[0]: row[1] for row in df.select(["sector", "value_aandelen_put_delta"]).rows()
@@ -666,14 +690,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else:
                         df = df.join(df_all_delta, on="value_grow", how="left")
         if not df.is_empty():
+            if "value_put_delta" in df.columns:
+                df = df.with_columns(pl.col("value_put_delta").fill_null(0.0))
+            if "value_delta_all" in df.columns:
+                df = df.with_columns(pl.col("value_delta_all").fill_null(0.0))
             if "value_aandelen" in df.columns and "value_put_delta" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_put_delta")).alias("value_aandelen_put_delta")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_put_delta" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_put_delta"))
             if "value_aandelen" in df.columns and "value_delta_all" in df.columns:
                 df = df.with_columns(
                     (pl.col("value_aandelen") + pl.col("value_delta_all")).alias("value_aandelen_delta_all")
                 )
+            elif "value_aandelen" in df.columns and "value_aandelen_delta_all" not in df.columns:
+                df = df.with_columns(pl.col("value_aandelen").alias("value_aandelen_delta_all"))
             if "value_aandelen_put_delta" in df.columns:
                 data["value_aandelen_put_delta"] = {
                     row[0]: row[1] for row in df.select(["value_grow", "value_aandelen_put_delta"]).rows()
