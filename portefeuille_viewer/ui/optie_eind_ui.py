@@ -23,7 +23,7 @@ class Ui_OptieEindTab(object):
     def setupUi(self, OptieEindTab):
         if not OptieEindTab.objectName():
             OptieEindTab.setObjectName(u"OptieEindTab")
-        OptieEindTab.resize(1450, 800)
+        OptieEindTab.resize(1645, 800)
         self.verticalLayout_main = QVBoxLayout(OptieEindTab)
         self.verticalLayout_main.setObjectName(u"verticalLayout_main")
         self.layoutTop = QHBoxLayout()
@@ -71,6 +71,11 @@ class Ui_OptieEindTab(object):
 
         self.layoutTop.addWidget(self.btnOptieEindOphalen)
 
+        self.pushButtonInclude = QPushButton(OptieEindTab)
+        self.pushButtonInclude.setObjectName(u"pushButtonInclude")
+
+        self.layoutTop.addWidget(self.pushButtonInclude)
+
         self.btnRecordsToevoegen = QPushButton(OptieEindTab)
         self.btnRecordsToevoegen.setObjectName(u"btnRecordsToevoegen")
 
@@ -110,6 +115,7 @@ class Ui_OptieEindTab(object):
         self.lblTransactieDatum.setText(QCoreApplication.translate("OptieEindTab", u"Transactie Datum:", None))
         self.btnSelecteerBrokers.setText(QCoreApplication.translate("OptieEindTab", u"Selecteer brokers", None))
         self.btnOptieEindOphalen.setText(QCoreApplication.translate("OptieEindTab", u"Optie Eind ophalen", None))
+        self.pushButtonInclude.setText(QCoreApplication.translate("OptieEindTab", u"All / None", None))
         self.btnRecordsToevoegen.setText(QCoreApplication.translate("OptieEindTab", u"Records toevoegen aan transactiedatabase", None))
         self.btnTestAccountLeegmaken.setText(QCoreApplication.translate("OptieEindTab", u"Test account leegmaken", None))
         self.btnMoveToProductie.setText(QCoreApplication.translate("OptieEindTab", u"Move records to productie", None))
