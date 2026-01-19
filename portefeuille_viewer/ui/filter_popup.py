@@ -195,10 +195,36 @@ class HeaderFilterMenuMixin:
     def _open_value_popup_for_column(self, colname: str, global_pos):
         # Probeer eerst uit de DataFrame te halen (voor in-memory tabellen)
         df = getattr(self._table_model, "_df", None)
-        if df is not None and colname in df.columns:
+        df_full = None
+        if hasattr(self, "_filter_values_snapshot_key"):
+            key = getattr(self, "_filter_values_snapshot_key")
+            if key:
+                try:
+                    from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+                    df_full = getattr(SNAPSHOT_STORE, key, None)
+                except Exception:
+                    df_full = None
+        source_df = df_full if df_full is not None else df
+        if source_df is not None and colname in source_df.columns:
             # Polars: .unique().to_list(), Pandas: .unique().tolist()
             try:
-                values = df[colname].unique().to_list() if hasattr(df[colname], "to_list") else df[colname].unique().tolist()
+                col = source_df[colname]
+                try:
+                    import pandas as pd
+                except Exception:
+                    pd = None
+                if pd is not None and isinstance(col, pd.Series):
+                    values = col.dropna().unique().tolist()
+                elif hasattr(col, "unique"):
+                    uniq = col.unique()
+                    if hasattr(uniq, "to_list"):
+                        values = uniq.to_list()
+                    else:
+                        values = list(uniq)
+                elif hasattr(col, "to_list"):
+                    values = col.to_list()
+                else:
+                    values = list(col)
             except Exception as e:
                 QMessageBox.critical(self, "Filter", f"Kon waarden voor '{colname}' niet ophalen uit DataFrame:\n{e}")
                 return

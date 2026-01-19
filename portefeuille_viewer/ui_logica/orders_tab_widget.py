@@ -135,6 +135,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self._snapshot_store = SNAPSHOT_STORE
         self._pandas = pd
         self._PandasTableModel = OrdersTableModel
+        self._filter_values_snapshot_key = "repository_snapshot_alle_transacties"
         self._center_cols = {"Id", "datum", "optie_exp_date", "order_id"}
         self._right_cols = {
             "optie_strike", "optie_call_put", "aantal", "transactie_prijs",
