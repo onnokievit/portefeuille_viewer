@@ -164,6 +164,18 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
         self._comment_color_fg_map = fg_map or {}
 
     def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if not index.isValid() or self._df.is_empty():
+                return None
+            colname = self._df.columns[index.column()]
+            if colname == "aantal_bezit":
+                val = self._df[index.row(), index.column()]
+                if val is None:
+                    return ""
+                try:
+                    return f"{float(val):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
                 return ""
