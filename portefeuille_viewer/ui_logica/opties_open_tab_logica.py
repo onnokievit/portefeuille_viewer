@@ -848,6 +848,12 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 (f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
                 for v in values
             ]
+        if "aantal_bezit" in df.columns:
+            values = df["aantal_bezit"].to_list()
+            display_cache["aantal_bezit"] = [
+                (f"{float(v):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
+                for v in values
+            ]
 
         bg_cache = {}
         fg_cache = {}
