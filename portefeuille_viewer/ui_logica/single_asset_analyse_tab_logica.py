@@ -4,7 +4,7 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QApplication, QStyleOptionFocusRect
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
@@ -2220,8 +2220,19 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         step_size = self.stepSizeBox.value()
         steps = [round(center * (i - 8) * step_size + center, 2) for i in range(17)]
+        self._payoff_steps = steps
 
-        headers = [str(s) for s in steps]
+        def _format_step(val: float) -> str:
+            try:
+                if abs(val) >= 1000:
+                    text = f"{val:,.0f}"
+                else:
+                    text = f"{val:,.2f}"
+                return text.replace(",", "X").replace(".", ",").replace("X", ".")
+            except Exception:
+                return str(val)
+
+        headers = [_format_step(s) for s in steps]
 
         self.payoff_table.setHorizontalHeaderLabels(headers)
 
@@ -2345,14 +2356,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         #print("Updating payoff chart...")
         factor = getattr(self.logic, "currency_factor", 1.0)
         self.plot_widget.clear()
-        # x-as: koerswaarden uit de header
+        # x-as: koerswaarden uit de berekende stappen (niet uit de geformatteerde header)
         x_values = []
-        for i in range(self.payoff_table.columnCount()):
-            header_item = self.payoff_table.horizontalHeaderItem(i)
-            try:
-                x_values.append(float(header_item.text()))
-            except Exception:
-                x_values.append(i)
+        steps = getattr(self, "_payoff_steps", None)
+        if steps and len(steps) == self.payoff_table.columnCount():
+            x_values = list(steps)
+        else:
+            for i in range(self.payoff_table.columnCount()):
+                header_item = self.payoff_table.horizontalHeaderItem(i)
+                try:
+                    x_values.append(float(header_item.text()))
+                except Exception:
+                    x_values.append(i)
 
         # y-waarden uit de tabel
         y_totaal = []
