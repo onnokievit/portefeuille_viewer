@@ -41,6 +41,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._put_otm_ratio_value_grow = 1.0
         self.reload_data()
         signals.databaseChanged.connect(self._on_db_changed)
+        signals.ordersCommitted.connect(self.reload_data)
         if hasattr(self, "putOTMRatio"):
             try:
                 self.putOTMRatio.setValue(100)
@@ -962,6 +963,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         )
 
         self._init_footer_sync()
+        self._update_scroll_content_size()
 
     def _init_value_grow_totals_footer(self):
         if not hasattr(self, "tableValueGrowValuesLineair"):
@@ -1003,6 +1005,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         )
 
         self._init_footer_sync_value_grow()
+        self._update_scroll_content_size()
 
     def _init_footer_sync(self):
         header = self.tableSectorValuesLineair.horizontalHeader()
@@ -1238,6 +1241,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         )
 
         self._init_footer_sync_delta()
+        self._update_scroll_content_size()
 
     def _init_value_grow_totals_footer_delta(self):
         if not hasattr(self, "tableValueGrowValuesDelta"):
@@ -1279,6 +1283,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         )
 
         self._init_footer_sync_value_grow_delta()
+        self._update_scroll_content_size()
 
     def _init_footer_sync_delta(self):
         header = self.tableSectorValuesDelta.horizontalHeader()
@@ -1468,6 +1473,22 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             self._sector_scroll_area = scroll
         except Exception as exc:
             print(f"[ui] kon SectorAnalysisTab niet scrollbaar maken: {exc}")
+
+    def _update_scroll_content_size(self) -> None:
+        scroll = getattr(self, "_sector_scroll_area", None)
+        if scroll is None:
+            return
+        content = scroll.widget()
+        if content is None:
+            return
+        max_w = 0
+        max_h = 0
+        for child in content.findChildren(QWidget):
+            g = child.geometry()
+            max_w = max(max_w, g.x() + g.width())
+            max_h = max(max_h, g.y() + g.height())
+        if max_w > 0 and max_h > 0:
+            content.setMinimumSize(max_w + 10, max_h + 10)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
