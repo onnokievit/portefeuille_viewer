@@ -177,8 +177,19 @@ def load_alle_transacties() -> pl.DataFrame:
     Laadt alle transacties uit de database.
     """
     sql = "SELECT * FROM transacties_bron_data"  # vervang door jouw Access-query
+    schema_overrides = {
+        "aantal": pl.Decimal(18, 3),
+        "transactie_aantal": pl.Decimal(18, 3),
+        "transactie_prijs": pl.Decimal(18, 4),
+        "transactie_fee": pl.Decimal(18, 4),
+        "transactie_euro_totaal": pl.Decimal(18, 4),
+        "optie_strike": pl.Decimal(18, 4),
+        "multiplier_close_price": pl.Decimal(18, 6),
+        "order_id": pl.Decimal(18, 0),
+        "order_id_number": pl.Decimal(18, 0),
+    }
     with get_connection() as conn:
-        df = pl.read_database(sql, conn)
+        df = pl.read_database(sql, conn, schema_overrides=schema_overrides)
     compact_float64(df)
     SNAPSHOT_STORE.safe_write("repository_snapshot_alle_transacties", df)
     
