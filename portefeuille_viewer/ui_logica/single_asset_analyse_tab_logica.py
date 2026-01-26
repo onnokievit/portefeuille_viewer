@@ -176,6 +176,14 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                     return f"{float(val):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return str(val)
+            if colname in {"optie_strike", "premie"}:
+                val = self._df[index.row(), index.column()]
+                if val is None:
+                    return ""
+                try:
+                    return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
                 return ""

@@ -854,6 +854,13 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 (f"{float(v):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
                 for v in values
             ]
+        for col in ("optie_strike", "premie"):
+            if col in df.columns:
+                values = df[col].to_list()
+                display_cache[col] = [
+                    (f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
+                    for v in values
+                ]
 
         bg_cache = {}
         fg_cache = {}
