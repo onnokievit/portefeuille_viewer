@@ -276,6 +276,24 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
 
 
 
+
+class AandelenTableModel(ColoredPolarsTableModel):
+    """Custom model to format aantal_bezit with 2 decimals in open aandelen table."""
+    def data(self, index, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if not index.isValid() or self._df.is_empty():
+                return None
+            colname = self._df.columns[index.column()]
+            if colname == "aantal_bezit":
+                val = self._df[index.row(), index.column()]
+                if val is None:
+                    return ""
+                try:
+                    return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
+        return super().data(index, role)
+
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuMixin):
 
@@ -393,6 +411,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
         self.stepSizeBox.setLocale(QLocale(QLocale.C))
+        self.stepSizeBox.setDecimals(1)
+        self.stepSizeBox.setSingleStep(0.5)
+        self.stepSizeBox.setValue(2)
 
         
         font = QFont("Arial", 8)  # Kies je gewenste lettertype en grootte
@@ -1367,7 +1388,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         kleur_kolommen = ["broker", "asset_rollup", "SomVantransctie_aantal"]
         def kleur_func(row, colname, kleur_kolommen):
             return None
-        model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
+        model = AandelenTableModel(df, kleur_kolommen, kleur_func, self)
         self.tableViewSprinters.setModel(model)
         # Kolombreedtes instellen per kolom
         kolombreedtes = {
@@ -1405,8 +1426,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
         if "koers" in df.columns and "aantal_bezit" in df.columns:
             df = df.with_columns([
-                pl.col("aantal_bezit").cast(pl.Int64),
-                (pl.col("koers") * pl.col("aantal_bezit")).round(0).cast(pl.Int64).alias("waarde_bezit")
+                pl.col("aantal_bezit").cast(pl.Float64),
+                (pl.col("koers") * pl.col("aantal_bezit")).alias("waarde_bezit")
             ])
         # Selecteer de gewenste kolommen
         df = df.select([
@@ -1421,7 +1442,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         def kleur_func(row, colname, kleur_kolommen):
             # Optioneel: eigen kleurfunctie
             return None
-        model = ColoredPolarsTableModel(df, kleur_kolommen, kleur_func, self)
+        model = AandelenTableModel(df, kleur_kolommen, kleur_func, self)
         self.tableViewAandelen.setModel(model)
         # Kolombreedtes instellen per kolom
         kolombreedtes = {
@@ -2226,7 +2247,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         
         center = float(live_price)
 
-        step_size = self.stepSizeBox.value()
+        step_pct = self.stepSizeBox.value()
+        step_size = step_pct / 100.0
         steps = [round(center * (i - 8) * step_size + center, 2) for i in range(17)]
         self._payoff_steps = steps
 

@@ -806,7 +806,23 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
             with get_connection() as conn:
                 sql = "SELECT * FROM transacties_bron_data_org WHERE Id = ?"
-                updated_df = pl.read_database(sql, conn, execute_options={"parameters": [record_id]})
+                schema_overrides = {
+                    "aantal": pl.Decimal(18, 3),
+                    "transactie_aantal": pl.Decimal(18, 3),
+                    "transactie_prijs": pl.Decimal(18, 4),
+                    "transactie_fee": pl.Decimal(18, 4),
+                    "transactie_euro_totaal": pl.Decimal(18, 4),
+                    "optie_strike": pl.Decimal(18, 4),
+                    "multiplier_close_price": pl.Decimal(18, 6),
+                    "order_id": pl.Decimal(18, 0),
+                    "order_id_number": pl.Decimal(18, 0),
+                }
+                updated_df = pl.read_database(
+                    sql,
+                    conn,
+                    schema_overrides=schema_overrides,
+                    execute_options={"parameters": [record_id]},
+                )
 
             if updated_df.is_empty():
                 print(f"⚠️ Record {record_id} niet gevonden in database na UPDATE")
@@ -814,6 +830,13 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
             # Verwijder het oude record en voeg het nieuwe toe
             # Dit is eenvoudiger dan veld-voor-veld updaten en garandeert consistentie
+            snap = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+            if snap is not None:
+                updated_df = updated_df.with_columns([
+                    pl.col(c).cast(snap.schema[c], strict=False)
+                    for c in updated_df.columns
+                    if c in snap.schema
+                ])
             mask = SNAPSHOT_STORE.repository_snapshot_alle_transacties["Id"] != record_id
             SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([
                 SNAPSHOT_STORE.repository_snapshot_alle_transacties.filter(mask),
@@ -821,9 +844,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             ])
             # print(f"✅ Record {record_id} geüpdatet in snapshot")
         except Exception as e:
-            self._extracted_from__update_transaction_in_snapshot_37(
-                '❌ Fout bij updaten record ', record_id, ' in snapshot: ', e
-            )
+            print(f"Fout bij updaten record {record_id} in snapshot: {e}")
 
 
     def on_reset_clicked(self):
