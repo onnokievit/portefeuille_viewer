@@ -1186,6 +1186,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.asset_selector.addItems(assets)
         if current_asset and current_asset in assets:
             self.asset_selector.setCurrentText(current_asset)
+        elif current_asset:
+            self._ensure_asset_in_selector_and_select(current_asset)
         elif assets:
             self.asset_selector.setCurrentIndex(0)
             self.on_asset_selected(assets[0])
@@ -1356,9 +1358,28 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         value = (item.text() or "").strip()
         if not value:
             return
-        idx = self.asset_selector.findText(value)
+        self._ensure_asset_in_selector_and_select(value)
+
+    def _ensure_asset_in_selector_and_select(self, asset_rollup: str) -> None:
+        asset_rollup = (asset_rollup or "").strip()
+        if not asset_rollup:
+            return
+        idx = self.asset_selector.findText(asset_rollup)
         if idx >= 0:
             self.asset_selector.setCurrentIndex(idx)
+            return
+        # Voeg tijdelijk toe als het asset bestaat in de brede lijst
+        df_all = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
+        if df_all is None or df_all.height == 0 or "asset_rollup" not in df_all.columns:
+            return
+        try:
+            exists = df_all.filter(pl.col("asset_rollup") == asset_rollup).height > 0
+        except Exception:
+            exists = False
+        if not exists:
+            return
+        self.asset_selector.addItem(asset_rollup)
+        self.asset_selector.setCurrentText(asset_rollup)
 
     def update_sprinters_table(self):
         import polars as pl
