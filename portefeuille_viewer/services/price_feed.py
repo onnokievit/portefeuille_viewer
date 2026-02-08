@@ -124,12 +124,29 @@ class PriceFeedIB(QObject):
                 if not key:
                     return
                 sym, cur = key
-                if tickType in (4,9,68,75):  # last/close + delayed varianten
+                feed.log.emit(f"IB TICK price sym={sym} cur={cur} tickType={tickType} price={price}")
+                if tickType in (4, 9, 68, 75):  # last/close + delayed varianten
                     with feed._lock:
-                        entry = feed._prices.setdefault((sym,cur), {})
+                        entry = feed._prices.setdefault((sym, cur), {})
                         entry["last"] = float(price)
                         entry["ts"] = time.time()
                     feed.priceUpdated.emit(sym, cur, float(price))
+                    return
+
+                if tickType in (1, 2):  # bid/ask
+                    with feed._lock:
+                        entry = feed._prices.setdefault((sym, cur), {})
+                        if tickType == 1:
+                            entry["bid"] = float(price)
+                        else:
+                            entry["ask"] = float(price)
+                        entry["ts"] = time.time()
+                        bid = entry.get("bid")
+                        ask = entry.get("ask")
+                        last = entry.get("last")
+                    if last is None and bid is not None and ask is not None:
+                        mid = (bid + ask) / 2.0
+                        feed.priceUpdated.emit(sym, cur, mid)
 
             # Dispatcher for contractDetails
             def contractDetails(self, reqId, contractDetails):
