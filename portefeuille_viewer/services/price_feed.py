@@ -124,7 +124,6 @@ class PriceFeedIB(QObject):
                 if not key:
                     return
                 sym, cur = key
-                feed.log.emit(f"IB TICK price sym={sym} cur={cur} tickType={tickType} price={price}")
                 if tickType in (4, 9, 68, 75):  # last/close + delayed varianten
                     with feed._lock:
                         entry = feed._prices.setdefault((sym, cur), {})
