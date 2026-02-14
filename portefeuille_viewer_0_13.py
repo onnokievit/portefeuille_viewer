@@ -91,7 +91,6 @@ def main():
         settings.get_ib_port(),
         settings.get_ib_client_id()
     )
-    price_feed._feed.log.connect(print)
     stop_event, thread = start_live_price_updater(price_feed)
     portfolio_engine = PortfolioEngine(price_feed)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
