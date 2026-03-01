@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QWidget, QMessageBox
 from PySide6.QtCore import QDate, Qt, QSortFilterProxyModel
+from PySide6.QtGui import QColor
 
 from portefeuille_viewer.ui.optie_eind_ui import Ui_OptieEindTab
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -8,6 +9,7 @@ from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.repository import load_last_prices_dict
 from portefeuille_viewer.data.repository import build_uniek_id
+from portefeuille_viewer.data.repository import fetch_open_optie_comments
 import polars as pl
 import pandas as pd
 import numpy as np
@@ -39,6 +41,22 @@ class OptieEindTableModel(PandasTableModel):
                 return Qt.Checked if bool(val) else Qt.Unchecked
             if role == Qt.DisplayRole:
                 return ""
+
+        if col_name == "optie_comment":
+            if role == Qt.BackgroundRole and "optie_comment_color" in self._df.columns:
+                try:
+                    color_val = self._df.at[index.row(), "optie_comment_color"]
+                    if isinstance(color_val, str) and color_val:
+                        return QColor(color_val)
+                except Exception:
+                    pass
+            if role == Qt.ForegroundRole and "optie_comment_textcolor" in self._df.columns:
+                try:
+                    text_color_val = self._df.at[index.row(), "optie_comment_textcolor"]
+                    if isinstance(text_color_val, str) and text_color_val:
+                        return QColor(text_color_val)
+                except Exception:
+                    pass
         return super().data(index, role)
 
     def flags(self, index):
@@ -183,6 +201,8 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         if self.asset:
             df_transacties = df_transacties.filter(pl.col("asset_rollup") == self.asset)
 
+        # comments worden later gekoppeld op dezelfde berekende uniek_id als in opties_open
+
         df_grouped_optie = (
             df_transacties
             .filter(pl.col("asset_type").is_in(["optie"]))
@@ -293,6 +313,81 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         df_output = df_output.with_columns([pl.lit(0).alias("transactie_prijs")])
         df_output = df_output.with_columns([pl.lit(transactie_datum).alias("datum")])
 
+        # Koppel comments via dezelfde uniek_id-opbouw als in opties_open_tab
+        df_output = df_output.with_columns([
+            pl.when(pl.col("asset_type") == "optie")
+            .then(
+                pl.struct([
+                    "broker",
+                    "asset_rollup",
+                    "optie_exp_date",
+                    "optie_call_put",
+                    "optie_strike",
+                ]).map_elements(lambda s: build_uniek_id({**s, "asset_type": "optie"}), return_dtype=pl.Utf8)
+            )
+            .otherwise(pl.lit(None))
+            .alias("_comment_uniek_id"),
+            pl.lit("").alias("optie_comment"),
+            pl.lit("").alias("optie_comment_color"),
+            pl.lit("").alias("optie_comment_textcolor"),
+        ])
+
+        try:
+            comment_ids = (
+                df_output
+                .filter(pl.col("_comment_uniek_id").is_not_null())
+                .select(pl.col("_comment_uniek_id").cast(pl.Utf8))
+                .unique()
+                .to_series()
+                .to_list()
+            )
+            comment_ids = [x for x in comment_ids if x]
+        except Exception:
+            comment_ids = []
+
+        if comment_ids:
+            try:
+                df_comments = fetch_open_optie_comments(comment_ids)
+                if df_comments is not None and not df_comments.is_empty():
+                    df_output = df_output.join(
+                        df_comments.select([
+                            pl.col("uniek_id").alias("_comment_uniek_id"),
+                            "optie_comment",
+                            "optie_comment_color",
+                            "optie_comment_textcolor",
+                        ]),
+                        on="_comment_uniek_id",
+                        how="left",
+                        suffix="_comment_db",
+                    )
+                    if "optie_comment_comment_db" in df_output.columns:
+                        exprs = [
+                            pl.coalesce([pl.col("optie_comment_comment_db"), pl.col("optie_comment")])
+                            .fill_null("")
+                            .alias("optie_comment"),
+                        ]
+                        if "optie_comment_color_comment_db" in df_output.columns:
+                            exprs.append(
+                                pl.coalesce([pl.col("optie_comment_color_comment_db"), pl.col("optie_comment_color")])
+                                .fill_null("")
+                                .alias("optie_comment_color")
+                            )
+                        if "optie_comment_textcolor_comment_db" in df_output.columns:
+                            exprs.append(
+                                pl.coalesce([pl.col("optie_comment_textcolor_comment_db"), pl.col("optie_comment_textcolor")])
+                                .fill_null("")
+                                .alias("optie_comment_textcolor")
+                            )
+                        df_output = df_output.with_columns(exprs)
+                        for c in ("optie_comment_comment_db", "optie_comment_color_comment_db", "optie_comment_textcolor_comment_db"):
+                            if c in df_output.columns:
+                                df_output = df_output.drop(c)
+            except Exception:
+                pass
+
+        if "_comment_uniek_id" in df_output.columns:
+            df_output = df_output.drop("_comment_uniek_id")
+
         # Haal hoogste order_id op uit transacties
         repo_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
         if repo_tx is not None and "order_id" in repo_tx.columns:
@@ -359,7 +454,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         kolommen = [
             "datum","broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type",  "aantal", "transactie_prijs",
             "optie_exp_date", "optie_strike", "optie_call_put",
-            "transactie_oorsprong", "order_id", "order_id_number"
+            "transactie_oorsprong", "order_id", "order_id_number", "optie_comment", "optie_comment_color", "optie_comment_textcolor"
         ]
         # Voeg ontbrekende kolommen toe aan aandelen_df
         for col in kolommen:
@@ -422,6 +517,12 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             self.tblOptieEind.setColumnWidth(include_idx, 60)
         except Exception:
             pass
+        for hide_col in ("optie_comment_color", "optie_comment_textcolor"):
+            try:
+                idx = self.model._df.columns.get_loc(hide_col)
+                self.tblOptieEind.setColumnHidden(idx, True)
+            except Exception:
+                pass
         self._update_include_button_label()
         # self.add_records_to_db()        
         

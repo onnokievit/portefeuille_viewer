@@ -18,8 +18,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
     QDoubleSpinBox, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QPushButton, QSizePolicy,
-    QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget)
+    QSpacerItem, QTableView, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget)
 
 from pyqtgraph import PlotWidget
 
@@ -37,7 +37,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.widget.setMinimumSize(QSize(1000, 1000))
         self.priceAantalChart = PlotWidget(self.widget)
         self.priceAantalChart.setObjectName(u"priceAantalChart")
-        self.priceAantalChart.setGeometry(QRect(10, 830, 811, 191))
+        self.priceAantalChart.setGeometry(QRect(10, 830, 811, 211))
         self.verticalLayout_7 = QVBoxLayout(self.priceAantalChart)
         self.verticalLayout_7.setSpacing(9)
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
@@ -51,7 +51,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.layoutChart.setContentsMargins(2, 2, 2, 2)
         self.resultaatChart = PlotWidget(self.widget)
         self.resultaatChart.setObjectName(u"resultaatChart")
-        self.resultaatChart.setGeometry(QRect(10, 1030, 811, 191))
+        self.resultaatChart.setGeometry(QRect(10, 1050, 811, 211))
         self.verticalLayout_9 = QVBoxLayout(self.resultaatChart)
         self.verticalLayout_9.setSpacing(9)
         self.verticalLayout_9.setObjectName(u"verticalLayout_9")
@@ -117,7 +117,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 631, 31))
+        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 1161, 31))
         self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
@@ -135,6 +135,10 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout_2.addWidget(self.comboBoxSortDirection)
 
+        self.horizontalSpacer_2 = QSpacerItem(200, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
+
         self.lineEditFilterOptiesOpen = QLineEdit(self.horizontalLayoutWidget_2)
         self.lineEditFilterOptiesOpen.setObjectName(u"lineEditFilterOptiesOpen")
         self.lineEditFilterOptiesOpen.setMinimumSize(QSize(220, 24))
@@ -150,6 +154,10 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout_2.addWidget(self.buttonClearFiltersOptiesOpen, 0, Qt.AlignmentFlag.AlignRight)
 
+        self.horizontalSpacer = QSpacerItem(200, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayout_2.addItem(self.horizontalSpacer)
+
         self.payoff_table = QTableWidget(self.widget)
         self.payoff_table.setObjectName(u"payoff_table")
         self.payoff_table.setGeometry(QRect(6, 46, 811, 257))
@@ -162,21 +170,23 @@ class Ui_SingleAssetAnalyseTab(object):
         self.testOrdersTable = QTableWidget(self.widget)
         self.testOrdersTable.setObjectName(u"testOrdersTable")
         self.testOrdersTable.setGeometry(QRect(840, 380, 1081, 281))
+        self.testOrdersTable.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.testOrdersTable.setTabKeyNavigation(False)
         self.tableViewOptiesOpenPut = QTableView(self.widget)
         self.tableViewOptiesOpenPut.setObjectName(u"tableViewOptiesOpenPut")
-        self.tableViewOptiesOpenPut.setGeometry(QRect(840, 990, 1081, 121))
+        self.tableViewOptiesOpenPut.setGeometry(QRect(840, 950, 1081, 181))
         self.tableViewOptiesOpenPut.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewOptiesOpenCall = QTableView(self.widget)
         self.tableViewOptiesOpenCall.setObjectName(u"tableViewOptiesOpenCall")
-        self.tableViewOptiesOpenCall.setGeometry(QRect(840, 850, 1081, 117))
+        self.tableViewOptiesOpenCall.setGeometry(QRect(840, 710, 1081, 181))
         self.tableViewOptiesOpenCall.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewAandelen = QTableView(self.widget)
         self.tableViewAandelen.setObjectName(u"tableViewAandelen")
-        self.tableViewAandelen.setGeometry(QRect(840, 1140, 431, 77))
+        self.tableViewAandelen.setGeometry(QRect(840, 1180, 431, 77))
         self.tableViewAandelen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewSprinters = QTableView(self.widget)
         self.tableViewSprinters.setObjectName(u"tableViewSprinters")
-        self.tableViewSprinters.setGeometry(QRect(1290, 1140, 631, 78))
+        self.tableViewSprinters.setGeometry(QRect(1290, 1180, 631, 78))
         self.tableViewSprinters.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.groupBox = QGroupBox(self.widget)
         self.groupBox.setObjectName(u"groupBox")
@@ -240,27 +250,49 @@ class Ui_SingleAssetAnalyseTab(object):
         self.buttonDeleteTestOrder = QPushButton(self.groupBox_2)
         self.buttonDeleteTestOrder.setObjectName(u"buttonDeleteTestOrder")
         self.buttonDeleteTestOrder.setGeometry(QRect(450, 14, 121, 31))
+        self.buttonDeleteTestOrder.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.checkBoxEnableTestOrders = QCheckBox(self.groupBox_2)
         self.checkBoxEnableTestOrders.setObjectName(u"checkBoxEnableTestOrders")
         self.checkBoxEnableTestOrders.setGeometry(QRect(22, 20, 121, 20))
+        self.checkBoxEnableTestOrders.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.buttonAddTestOrder = QPushButton(self.groupBox_2)
         self.buttonAddTestOrder.setObjectName(u"buttonAddTestOrder")
         self.buttonAddTestOrder.setGeometry(QRect(320, 14, 121, 31))
+        self.buttonAddTestOrder.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.checkBoxAssetOrdersOnly = QCheckBox(self.groupBox_2)
         self.checkBoxAssetOrdersOnly.setObjectName(u"checkBoxAssetOrdersOnly")
         self.checkBoxAssetOrdersOnly.setGeometry(QRect(162, 20, 151, 20))
-        self.label_2 = QLabel(self.widget)
-        self.label_2.setObjectName(u"label_2")
-        self.label_2.setGeometry(QRect(850, 830, 49, 16))
-        self.label_3 = QLabel(self.widget)
-        self.label_3.setObjectName(u"label_3")
-        self.label_3.setGeometry(QRect(850, 970, 49, 16))
-        self.label_4 = QLabel(self.widget)
-        self.label_4.setObjectName(u"label_4")
-        self.label_4.setGeometry(QRect(850, 1120, 101, 16))
-        self.label_12 = QLabel(self.widget)
-        self.label_12.setObjectName(u"label_12")
-        self.label_12.setGeometry(QRect(1300, 1120, 101, 16))
+        self.checkBoxAssetOrdersOnly.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.label_15 = QLabel(self.widget)
+        self.label_15.setObjectName(u"label_15")
+        self.label_15.setGeometry(QRect(840, 920, 1081, 31))
+        self.label_15.setStyleSheet(u"background-color: rgb(198, 239, 206);\n"
+"background-color: rgb(248, 194, 200);\n"
+"border: 1px solid #34495e;\n"
+"border-radius:6px;\n"
+"margin-top: 0px;  /* ruimte voor de titel */")
+        self.label_16 = QLabel(self.widget)
+        self.label_16.setObjectName(u"label_16")
+        self.label_16.setGeometry(QRect(840, 680, 1081, 31))
+        self.label_16.setStyleSheet(u"background-color: rgb(198, 239, 206);\n"
+"border: 1px solid #34495e;\n"
+"border-radius: 6px;\n"
+"margin-top: 0px;  /* ruimte voor de titel */")
+        self.label_17 = QLabel(self.widget)
+        self.label_17.setObjectName(u"label_17")
+        self.label_17.setGeometry(QRect(840, 1150, 431, 31))
+        self.label_17.setStyleSheet(u"\n"
+"background-color: rgb(255, 238, 186);\n"
+"border: 1px solid #34495e;\n"
+"border-radius: 6px;\n"
+"margin-top: 0px;  /* ruimte voor de titel */")
+        self.label_18 = QLabel(self.widget)
+        self.label_18.setObjectName(u"label_18")
+        self.label_18.setGeometry(QRect(1290, 1150, 631, 31))
+        self.label_18.setStyleSheet(u"background-color: rgb(255, 238, 186);\n"
+"border: 1px solid #34495e;\n"
+"border-radius: 6px;\n"
+"margin-top: 0px;  /* ruimte voor de titel */")
 
         self.verticalLayout_2.addWidget(self.widget)
 
@@ -275,11 +307,11 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.comboBoxSortering, self.comboBoxSortDirection)
         QWidget.setTabOrder(self.comboBoxSortDirection, self.lineEditFilterOptiesOpen)
         QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
-        QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.checkBoxEnableTestOrders)
-        QWidget.setTabOrder(self.checkBoxEnableTestOrders, self.checkBoxAssetOrdersOnly)
-        QWidget.setTabOrder(self.checkBoxAssetOrdersOnly, self.buttonAddTestOrder)
+        QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.buttonAddTestOrder)
         QWidget.setTabOrder(self.buttonAddTestOrder, self.buttonDeleteTestOrder)
-        QWidget.setTabOrder(self.buttonDeleteTestOrder, self.testOrdersTable)
+        QWidget.setTabOrder(self.buttonDeleteTestOrder, self.checkBoxAssetOrdersOnly)
+        QWidget.setTabOrder(self.checkBoxAssetOrdersOnly, self.checkBoxEnableTestOrders)
+        QWidget.setTabOrder(self.checkBoxEnableTestOrders, self.testOrdersTable)
 
         self.retranslateUi(SingleAssetAnalyseTab)
 
@@ -307,9 +339,9 @@ class Ui_SingleAssetAnalyseTab(object):
         self.checkBoxEnableTestOrders.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Enable Test Orders", None))
         self.buttonAddTestOrder.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Add test order", None))
         self.checkBoxAssetOrdersOnly.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Show asset orders only", None))
-        self.label_2.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Calls", None))
-        self.label_3.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Puts", None))
-        self.label_4.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Aandelen", None))
-        self.label_12.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Sprinters", None))
+        self.label_15.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Puts", None))
+        self.label_16.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Calls", None))
+        self.label_17.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Aandelen", None))
+        self.label_18.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Sprinters", None))
     # retranslateUi
 
