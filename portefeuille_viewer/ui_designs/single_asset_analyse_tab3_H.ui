@@ -43,7 +43,7 @@
         <x>10</x>
         <y>830</y>
         <width>811</width>
-        <height>191</height>
+        <height>211</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -95,9 +95,9 @@
       <property name="geometry">
        <rect>
         <x>10</x>
-        <y>1030</y>
+        <y>1050</y>
         <width>811</width>
-        <height>191</height>
+        <height>211</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_9">
@@ -238,7 +238,7 @@
        <rect>
         <x>760</x>
         <y>10</y>
-        <width>631</width>
+        <width>1161</width>
         <height>31</height>
        </rect>
       </property>
@@ -268,6 +268,19 @@
           <string notr="true">background-color: rgb(230, 230, 230);</string>
          </property>
         </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>200</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
        </item>
        <item>
         <widget class="QLineEdit" name="lineEditFilterOptiesOpen">
@@ -303,6 +316,19 @@
           <string>Clear Filter</string>
          </property>
         </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>200</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>
@@ -344,14 +370,20 @@
         <height>281</height>
        </rect>
       </property>
+      <property name="focusPolicy">
+       <enum>Qt::FocusPolicy::NoFocus</enum>
+      </property>
+      <property name="tabKeyNavigation">
+       <bool>false</bool>
+      </property>
      </widget>
      <widget class="QTableView" name="tableViewOptiesOpenPut">
       <property name="geometry">
        <rect>
         <x>840</x>
-        <y>990</y>
+        <y>950</y>
         <width>1081</width>
-        <height>121</height>
+        <height>181</height>
        </rect>
       </property>
       <property name="focusPolicy">
@@ -362,9 +394,9 @@
       <property name="geometry">
        <rect>
         <x>840</x>
-        <y>850</y>
+        <y>710</y>
         <width>1081</width>
-        <height>117</height>
+        <height>181</height>
        </rect>
       </property>
       <property name="focusPolicy">
@@ -375,7 +407,7 @@
       <property name="geometry">
        <rect>
         <x>840</x>
-        <y>1140</y>
+        <y>1180</y>
         <width>431</width>
         <height>77</height>
        </rect>
@@ -388,7 +420,7 @@
       <property name="geometry">
        <rect>
         <x>1290</x>
-        <y>1140</y>
+        <y>1180</y>
         <width>631</width>
         <height>78</height>
        </rect>
@@ -642,6 +674,9 @@
          <height>31</height>
         </rect>
        </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
        <property name="text">
         <string>Delete test order</string>
        </property>
@@ -654,6 +689,9 @@
          <width>121</width>
          <height>20</height>
         </rect>
+       </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
        </property>
        <property name="text">
         <string>Enable Test Orders</string>
@@ -668,6 +706,9 @@
          <height>31</height>
         </rect>
        </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
        <property name="text">
         <string>Add test order</string>
        </property>
@@ -681,58 +722,87 @@
          <height>20</height>
         </rect>
        </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
        <property name="text">
         <string>Show asset orders only</string>
        </property>
       </widget>
      </widget>
-     <widget class="QLabel" name="label_2">
+     <widget class="QLabel" name="label_15">
       <property name="geometry">
        <rect>
-        <x>850</x>
-        <y>830</y>
-        <width>49</width>
-        <height>16</height>
+        <x>840</x>
+        <y>920</y>
+        <width>1081</width>
+        <height>31</height>
        </rect>
       </property>
-      <property name="text">
-       <string>Calls</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_3">
-      <property name="geometry">
-       <rect>
-        <x>850</x>
-        <y>970</y>
-        <width>49</width>
-        <height>16</height>
-       </rect>
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(198, 239, 206);
+background-color: rgb(248, 194, 200);
+border: 1px solid #34495e;
+border-radius:6px;
+margin-top: 0px;  /* ruimte voor de titel */</string>
       </property>
       <property name="text">
        <string>Puts</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_4">
+     <widget class="QLabel" name="label_16">
       <property name="geometry">
        <rect>
-        <x>850</x>
-        <y>1120</y>
-        <width>101</width>
-        <height>16</height>
+        <x>840</x>
+        <y>680</y>
+        <width>1081</width>
+        <height>31</height>
        </rect>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(198, 239, 206);
+border: 1px solid #34495e;
+border-radius: 6px;
+margin-top: 0px;  /* ruimte voor de titel */</string>
+      </property>
+      <property name="text">
+       <string>Calls</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_17">
+      <property name="geometry">
+       <rect>
+        <x>840</x>
+        <y>1150</y>
+        <width>431</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">
+background-color: rgb(255, 238, 186);
+border: 1px solid #34495e;
+border-radius: 6px;
+margin-top: 0px;  /* ruimte voor de titel */</string>
       </property>
       <property name="text">
        <string>Aandelen</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_12">
+     <widget class="QLabel" name="label_18">
       <property name="geometry">
        <rect>
-        <x>1300</x>
-        <y>1120</y>
-        <width>101</width>
-        <height>16</height>
+        <x>1290</x>
+        <y>1150</y>
+        <width>631</width>
+        <height>31</height>
        </rect>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(255, 238, 186);
+border: 1px solid #34495e;
+border-radius: 6px;
+margin-top: 0px;  /* ruimte voor de titel */</string>
       </property>
       <property name="text">
        <string>Sprinters</string>
@@ -763,10 +833,10 @@
   <tabstop>comboBoxSortDirection</tabstop>
   <tabstop>lineEditFilterOptiesOpen</tabstop>
   <tabstop>buttonClearFiltersOptiesOpen</tabstop>
-  <tabstop>checkBoxEnableTestOrders</tabstop>
-  <tabstop>checkBoxAssetOrdersOnly</tabstop>
   <tabstop>buttonAddTestOrder</tabstop>
   <tabstop>buttonDeleteTestOrder</tabstop>
+  <tabstop>checkBoxAssetOrdersOnly</tabstop>
+  <tabstop>checkBoxEnableTestOrders</tabstop>
   <tabstop>testOrdersTable</tabstop>
  </tabstops>
  <resources/>

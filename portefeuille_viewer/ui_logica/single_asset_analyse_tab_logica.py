@@ -296,7 +296,6 @@ class AandelenTableModel(ColoredPolarsTableModel):
 
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuMixin):
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
@@ -399,6 +398,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.comboBoxValueGrow.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxSector.currentTextChanged.connect(self._on_filter_changed)
         self._init_sort_comboboxes()
+
         settings = get_settings()
         start_date_str = settings.config.get('app', 'single_asset_analyse_start_date', fallback=None)
         if start_date_str:
