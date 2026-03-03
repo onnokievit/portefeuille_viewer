@@ -3,16 +3,15 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from time import perf_counter
 
 import polars as pl
 
 from common import (
     DEFAULT_DB_PATH,
-    chunked,
     get_connection,
     normalize_numeric_columns,
     parse_iso_date,
-    sql_date_literal,
 )
 
 
@@ -21,15 +20,13 @@ PRECISION_MAP = {
     "optie_strike": 2,
     "optie_premie": 2,
     "optie_fee": 2,
-    "asset_close_raw": 6,
     "asset_close_effective": 6,
-    "price_factor_split": 6,
-    "price_factor_override": 6,
-    "price_factor_total": 6,
     "optie_waarde": 6,
     "open_optie_waarde_itm": 2,
     "winst_verlies": 2,
 }
+
+TEMP_STAGE_TABLE = "TempOpenOptiesV2Stage"
 
 
 @dataclass
@@ -38,6 +35,22 @@ class RebuildScope:
     from_date: date
     to_date: date
     mode: str
+
+
+@dataclass
+class RunOptions:
+    insert_mode: str
+
+
+class PhaseTimer:
+    def __init__(self) -> None:
+        self._last = perf_counter()
+
+    def mark(self, label: str) -> None:
+        now = perf_counter()
+        elapsed = now - self._last
+        self._last = now
+        print(f"[timing] {label}: {elapsed:.3f}s")
 
 
 def parse_args():
@@ -49,6 +62,12 @@ def parse_args():
     parser.add_argument("--to-date", help="YYYY-MM-DD, default vandaag")
     parser.add_argument("--debug-uniek-id")
     parser.add_argument("--validate-v1", action="store_true")
+    parser.add_argument(
+        "--insert-mode",
+        choices=["temp_table", "executemany"],
+        default="temp_table",
+        help="Methode voor Access inserts benchmarken",
+    )
     return parser.parse_args()
 
 
@@ -243,20 +262,25 @@ def build_open_series(df_tx: pl.DataFrame, scope: RebuildScope) -> pl.DataFrame:
 def materialize_daily_open_rows(df_series: pl.DataFrame, scope: RebuildScope) -> pl.DataFrame:
     if df_series.is_empty():
         return pl.DataFrame()
-
-    rows: list[dict] = []
-    for item in df_series.to_dicts():
-        start = max(item["interval_start"], scope.from_date)
-        end = min(item["interval_end"], scope.to_date)
-        current = start
-        while current <= end:
-            out = dict(item)
-            out["datum"] = current
-            rows.append(out)
-            current += timedelta(days=1)
-    if not rows:
-        return pl.DataFrame()
-    return pl.DataFrame(rows).drop(["interval_start", "interval_end"])
+    scope_start = pl.lit(scope.from_date, dtype=pl.Date)
+    scope_end = pl.lit(scope.to_date, dtype=pl.Date)
+    return (
+        df_series.with_columns(
+            pl.max_horizontal("interval_start", scope_start).alias("effective_start"),
+            pl.min_horizontal("interval_end", scope_end).alias("effective_end"),
+        )
+        .filter(pl.col("effective_end") >= pl.col("effective_start"))
+        .with_columns(
+            pl.date_ranges(
+                "effective_start",
+                "effective_end",
+                interval="1d",
+                closed="both",
+            ).alias("datum")
+        )
+        .explode("datum")
+        .drop(["interval_start", "interval_end", "effective_start", "effective_end"])
+    )
 
 
 def attach_raw_prices(df_daily: pl.DataFrame, df_prices: pl.DataFrame) -> pl.DataFrame:
@@ -276,63 +300,72 @@ def attach_raw_prices(df_daily: pl.DataFrame, df_prices: pl.DataFrame) -> pl.Dat
 def compute_split_factor(df_daily: pl.DataFrame, df_splits: pl.DataFrame) -> pl.DataFrame:
     if df_daily.is_empty():
         return df_daily
+    if df_splits.is_empty():
+        return df_daily.with_columns(pl.lit(1.0).alias("price_factor_split"))
 
     split_map: dict[str, list[dict]] = {}
     for row in df_splits.to_dicts():
+        split_date = row["split_date"]
+        if isinstance(split_date, datetime):
+            split_date = split_date.date()
+        row["split_date"] = split_date
         split_map.setdefault(row["asset_rollup"], []).append(row)
 
+    series_rows = (
+        df_daily.select(["uniek_id", "asset_rollup", "series_open_date"])
+        .unique(maintain_order=True)
+        .to_dicts()
+    )
     factors = []
-    for row in df_daily.to_dicts():
+    for row in series_rows:
         factor = 1.0
         for split in split_map.get(row["asset_rollup"], []):
-            split_date = split["split_date"]
-            if isinstance(split_date, datetime):
-                split_date = split_date.date()
             # IBKR historical prices are back-adjusted after a split.
             # For series opened before a later split, the factor must correct
             # the whole life of that old series, not only dates after split_date.
-            if split_date > row["series_open_date"]:
+            if split["split_date"] > row["series_open_date"]:
                 factor *= float(split["split_factor"] or 1.0)
-        factors.append(factor)
-    return df_daily.with_columns(pl.Series("price_factor_split", factors))
+        factors.append(
+            {
+                "uniek_id": row["uniek_id"],
+                "asset_rollup": row["asset_rollup"],
+                "series_open_date": row["series_open_date"],
+                "price_factor_split": factor,
+            }
+        )
+    return df_daily.join(pl.DataFrame(factors), on=["uniek_id", "asset_rollup", "series_open_date"], how="left")
 
 
 def attach_override_factor(df_daily: pl.DataFrame, df_overrides: pl.DataFrame) -> pl.DataFrame:
     if df_daily.is_empty():
         return df_daily
+    if df_overrides.is_empty():
+        return df_daily.with_columns(pl.lit(1.0).alias("price_factor_override"))
 
-    override_map: dict[str, list[dict]] = {}
-    for row in df_overrides.to_dicts():
-        override_map.setdefault(row["uniek_id"], []).append(row)
-
-    override_factors = []
-    rule_types = []
-    rule_ids = []
-    for row in df_daily.to_dicts():
-        factor = 1.0
-        rule_type = "split_only"
-        rule_id = None
-        for override in override_map.get(row["uniek_id"], []):
-            start = override["effective_from_date"]
-            end = override["effective_to_date"]
-            if isinstance(start, datetime):
-                start = start.date()
-            if isinstance(end, datetime):
-                end = end.date()
-            if start <= row["datum"] and (end is None or end >= row["datum"]):
-                factor = float(override["override_factor"] or 1.0)
-                rule_type = override.get("override_type") or "override_only"
-                rule_id = override.get("Id")
-                break
-        override_factors.append(factor)
-        rule_types.append(rule_type)
-        rule_ids.append(rule_id)
-
-    return df_daily.with_columns(
-        pl.Series("price_factor_override", override_factors),
-        pl.Series("valuation_rule_type", rule_types),
-        pl.Series("valuation_rule_id", rule_ids),
+    overrides = (
+        df_overrides.with_columns(
+            pl.col("effective_from_date").cast(pl.Date),
+            pl.col("effective_to_date").cast(pl.Date),
+        )
+        .sort(["uniek_id", "effective_from_date"])
     )
+    joined = (
+        df_daily.sort(["uniek_id", "datum"])
+        .join_asof(
+            overrides,
+            left_on="datum",
+            right_on="effective_from_date",
+            by="uniek_id",
+            strategy="backward",
+        )
+    )
+    is_active = (
+        pl.col("effective_from_date").is_not_null()
+        & (pl.col("effective_to_date").is_null() | (pl.col("effective_to_date") >= pl.col("datum")))
+    )
+    return joined.with_columns(
+        pl.when(is_active).then(pl.col("override_factor")).otherwise(pl.lit(1.0)).alias("price_factor_override")
+    ).drop(["effective_from_date", "effective_to_date", "override_factor", "override_type", "reason", "Id"])
 
 
 def compute_effective_prices_and_valuation(df_daily: pl.DataFrame) -> pl.DataFrame:
@@ -365,8 +398,6 @@ def compute_effective_prices_and_valuation(df_daily: pl.DataFrame) -> pl.DataFra
         .with_columns(
             (pl.col("optie_waarde") * pl.col("transactie_aantal")).alias("open_optie_waarde_itm"),
             (pl.col("optie_premie") + pl.col("optie_waarde") * pl.col("transactie_aantal")).alias("winst_verlies"),
-            pl.lit("intrinsic_only").alias("valuation_method"),
-            pl.lit(datetime.now()).alias("updated_at"),
         )
     )
 
@@ -392,7 +423,43 @@ def delete_target_range(conn, scope: RebuildScope) -> None:
     conn.commit()
 
 
-def insert_v2_rows(conn, df_final: pl.DataFrame) -> None:
+def drop_temp_stage_table(conn) -> None:
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"DROP TABLE {TEMP_STAGE_TABLE}")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
+def create_temp_stage_table(conn) -> None:
+    drop_temp_stage_table(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        f"""
+        CREATE TABLE {TEMP_STAGE_TABLE} (
+            datum DATETIME,
+            broker TEXT(50),
+            asset_rollup TEXT(20),
+            uniek_id TEXT(255),
+            optie_exp_date DATETIME,
+            optie_strike CURRENCY,
+            optie_call_put TEXT(10),
+            transactie_aantal DOUBLE,
+            optie_premie CURRENCY,
+            optie_fee CURRENCY,
+            asset_close_effective DOUBLE,
+            itm_otm BYTE,
+            optie_waarde DOUBLE,
+            open_optie_waarde_itm CURRENCY,
+            winst_verlies CURRENCY
+        )
+        """
+    )
+    conn.commit()
+
+
+def insert_v2_rows(conn, df_final: pl.DataFrame, run_options: RunOptions) -> None:
     if df_final.is_empty():
         print("Geen rijen om te inserten.")
         return
@@ -408,27 +475,36 @@ def insert_v2_rows(conn, df_final: pl.DataFrame) -> None:
         "transactie_aantal",
         "optie_premie",
         "optie_fee",
-        "asset_close_raw",
         "asset_close_effective",
         "itm_otm",
         "optie_waarde",
         "open_optie_waarde_itm",
         "winst_verlies",
-        "price_factor_split",
-        "price_factor_override",
-        "price_factor_total",
-        "valuation_rule_type",
-        "valuation_rule_id",
-        "valuation_method",
-        "updated_at",
     ]
     df_final = df_final.select(insert_cols)
-    rows = [tuple(row) for row in df_final.iter_rows()]
+    rows = df_final.rows()
     placeholders = ",".join(["?"] * len(insert_cols))
     query = f"INSERT INTO per_dag_open_opties_opgerold_v2 ({','.join(insert_cols)}) VALUES ({placeholders})"
     cursor = conn.cursor()
-    for group in chunked(rows, 1000):
-        cursor.executemany(query, group)
+    if run_options.insert_mode == "temp_table":
+        create_temp_stage_table(conn)
+        try:
+            stage_query = f"INSERT INTO {TEMP_STAGE_TABLE} ({','.join(insert_cols)}) VALUES ({placeholders})"
+            cursor.executemany(stage_query, rows)
+            conn.commit()
+            cursor.execute(
+                f"""
+                INSERT INTO per_dag_open_opties_opgerold_v2 ({','.join(insert_cols)})
+                SELECT {','.join(insert_cols)}
+                FROM {TEMP_STAGE_TABLE}
+                """
+            )
+            conn.commit()
+        finally:
+            drop_temp_stage_table(conn)
+        return
+    if run_options.insert_mode == "executemany":
+        cursor.executemany(query, rows)
     conn.commit()
 
 
@@ -481,30 +557,49 @@ def debug_uniek_id(df_final: pl.DataFrame, uniek_id: str) -> None:
 
 def main() -> None:
     args = parse_args()
+    run_options = RunOptions(insert_mode=args.insert_mode)
+    overall_start = perf_counter()
+    timer = PhaseTimer()
     with get_connection(args.db) as conn:
         scope = resolve_scope(args, conn)
         print(f"Scope mode={scope.mode} assets={scope.assets or 'ALL'} from={scope.from_date} to={scope.to_date}")
+        timer.mark("resolve_scope")
         df_tx = load_option_transactions(conn, scope)
+        timer.mark(f"load_option_transactions ({df_tx.height} rows)")
         df_series = build_open_series(df_tx, scope)
+        timer.mark(f"build_open_series ({df_series.height} rows)")
         df_daily = materialize_daily_open_rows(df_series, scope)
+        timer.mark(f"materialize_daily_open_rows ({df_daily.height} rows)")
         if df_daily.is_empty():
             print("Geen open opties gevonden voor deze scope.")
             return
         df_prices = load_price_history(conn, scope)
+        timer.mark(f"load_price_history ({df_prices.height} rows)")
         df_splits = load_stock_splits(conn, scope)
+        timer.mark(f"load_stock_splits ({df_splits.height} rows)")
         df_overrides = load_option_price_factor_overrides(conn)
+        timer.mark(f"load_option_price_factor_overrides ({df_overrides.height} rows)")
         df_daily = attach_raw_prices(df_daily, df_prices)
+        timer.mark("attach_raw_prices")
         df_daily = compute_split_factor(df_daily, df_splits)
+        timer.mark("compute_split_factor")
         df_daily = attach_override_factor(df_daily, df_overrides)
+        timer.mark("attach_override_factor")
         df_final = compute_effective_prices_and_valuation(df_daily)
+        timer.mark("compute_effective_prices_and_valuation")
         df_final = normalize_for_access(df_final)
+        timer.mark("normalize_for_access")
         if args.debug_uniek_id:
             debug_uniek_id(df_final, args.debug_uniek_id)
         delete_target_range(conn, scope)
-        insert_v2_rows(conn, df_final)
+        timer.mark("delete_target_range")
+        insert_v2_rows(conn, df_final, run_options)
+        timer.mark(f"insert_v2_rows ({run_options.insert_mode})")
         print(f"Ingevoegd: {df_final.height} rijen")
         if args.validate_v1:
             maybe_validate_v1(conn, scope)
+            timer.mark("maybe_validate_v1")
+    print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
 
 
 if __name__ == "__main__":

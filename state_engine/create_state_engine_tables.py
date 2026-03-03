@@ -12,7 +12,7 @@ TABLE_DEFINITIONS = {
             Id AUTOINCREMENT PRIMARY KEY,
             datum DATETIME,
             broker TEXT(50),
-            asset_rollup TEXT(100),
+            asset_rollup TEXT(20),
             uniek_id TEXT(255),
             optie_exp_date DATETIME,
             optie_strike CURRENCY,
@@ -20,25 +20,17 @@ TABLE_DEFINITIONS = {
             transactie_aantal DOUBLE,
             optie_premie CURRENCY,
             optie_fee CURRENCY,
-            asset_close_raw DOUBLE,
             asset_close_effective DOUBLE,
             itm_otm BYTE,
             optie_waarde DOUBLE,
             open_optie_waarde_itm CURRENCY,
-            winst_verlies CURRENCY,
-            price_factor_split DOUBLE,
-            price_factor_override DOUBLE,
-            price_factor_total DOUBLE,
-            valuation_rule_type TEXT(50),
-            valuation_rule_id LONG,
-            valuation_method TEXT(50),
-            updated_at DATETIME
+            winst_verlies CURRENCY
         )
     """,
     "stock_splits": """
         CREATE TABLE stock_splits (
             Id AUTOINCREMENT PRIMARY KEY,
-            asset_rollup TEXT(100),
+            asset_rollup TEXT(20),
             split_date DATETIME,
             split_factor DOUBLE,
             split_type TEXT(30),
