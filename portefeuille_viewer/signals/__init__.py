@@ -19,6 +19,18 @@ class Signals(QObject):
     # Emitted when orders are committed (insert/update/delete). No payload
     ordersCommitted = Signal()
 
+    # Emitted when a state-engine rebuild is requested. Payload: dict with scope/context.
+    stateRebuildRequested = Signal(dict)
+
+    # Emitted when a state-engine rebuild actually starts. Payload: dict with scope/context.
+    stateRebuildStarted = Signal(dict)
+
+    # Emitted when a state-engine rebuild finishes. Payload: dict with scope/context/result.
+    stateRebuildFinished = Signal(dict)
+
+    # Emitted when a state-engine rebuild fails. Payload: error message.
+    stateRebuildFailed = Signal(str)
+
     # Optional debug signal
     debugSignal = Signal(str)
 
@@ -34,6 +46,18 @@ class Signals(QObject):
 
     def queued_emit_snapshotUpdated(self, snapshot_key: str):
         QTimer.singleShot(0, lambda: self.snapshotUpdated.emit(snapshot_key))
+
+    def queued_emit_stateRebuildRequested(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.stateRebuildRequested.emit(payload))
+
+    def queued_emit_stateRebuildStarted(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.stateRebuildStarted.emit(payload))
+
+    def queued_emit_stateRebuildFinished(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.stateRebuildFinished.emit(payload))
+
+    def queued_emit_stateRebuildFailed(self, message: str):
+        QTimer.singleShot(0, lambda: self.stateRebuildFailed.emit(message))
 
 
 signals = Signals()

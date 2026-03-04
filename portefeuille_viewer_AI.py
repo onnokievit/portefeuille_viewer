@@ -11,6 +11,7 @@ from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
+from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
@@ -66,15 +67,46 @@ def refresh_everything():
     elapsed_time = end_time - start_time
     print(SNAPSHOT_STORE.snapshot_store_summary())
     print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
+
+
+def refresh_transaction_derived_snapshots(payload: dict | None = None):
+    start_time = time.time()
+    try:
+        repository.load_aandelen_from_tx()
+        repository.load_open_opties_from_tx()
+        repository.load_gesloten_opties_from_tx()
+        repository.load_gesloten_opties_no_broker()
+        repository.load_open_sprinters_from_tx()
+        repository.load_gesloten_sprinters_from_tx()
+        repository.build_repository_active_asset_rollup_data()
+        live_aggregator_aandelen.process_live_update()
+        live_aggregator_opties.process_live_update()
+        repository.portfolio_value_asset_rollup_opties_put()
+        repository.portfolio_value_asset_rollup_aandelen()
+        repository.portfolio_value_asset_rollup_combined()
+    except Exception as exc:
+        print(f"[snapshot-refresh] failed: {exc}")
+        raise
+    elapsed_time = time.time() - start_time
+    reason = (payload or {}).get("reason", "unknown")
+    print(f"[snapshot-refresh] transaction-derived snapshots refreshed in {elapsed_time:.2f}s ({reason})")
     
 
 
 def main():
     refresh_everything()
+    state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     
     # Koppel signalen aan orchestrator
-    signals.ordersCommitted.connect(refresh_everything)
+    signals.stateRebuildRequested.connect(refresh_transaction_derived_snapshots)
+    signals.stateRebuildRequested.connect(state_engine_runner.handle_rebuild_requested)
     signals.databaseChanged.connect(lambda db_name: refresh_everything())
+    signals.stateRebuildFinished.connect(
+        lambda payload: print(f"[state-engine] rebuild finished: {payload}")
+    )
+    signals.stateRebuildFailed.connect(
+        lambda message: print(f"[state-engine] rebuild failed: {message}")
+    )
     import faulthandler
     faulthandler.enable()
     app = QApplication(sys.argv)

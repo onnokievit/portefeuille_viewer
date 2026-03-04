@@ -571,7 +571,13 @@ def main() -> None:
         df_daily = materialize_daily_open_rows(df_series, scope)
         timer.mark(f"materialize_daily_open_rows ({df_daily.height} rows)")
         if df_daily.is_empty():
-            print("Geen open opties gevonden voor deze scope.")
+            delete_target_range(conn, scope)
+            timer.mark("delete_target_range")
+            print("Geen open opties gevonden voor deze scope. Bestaande scope in v2 is opgeschoond.")
+            if args.validate_v1:
+                maybe_validate_v1(conn, scope)
+                timer.mark("maybe_validate_v1")
+            print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
             return
         df_prices = load_price_history(conn, scope)
         timer.mark(f"load_price_history ({df_prices.height} rows)")

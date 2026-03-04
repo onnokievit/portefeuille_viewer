@@ -753,13 +753,22 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         if tweede_id:
             msg += f" (en gekoppeld aan {tweede_id})"
         QMessageBox.information(self, "Succes", msg)
-        self.load_table_data()
+        self._append_transactions_to_snapshot_by_ids([x for x in [eerste_id, tweede_id] if x is not None])
+        self._load_initial_records()
+        self._emit_state_rebuild_payload(
+            old_rows=[],
+            new_rows=[eerste_order] + ([tweede_order] if tweede_order else []),
+            reason="order_insert",
+        )
         self.reset_form()  # Optioneel: reset velden na insert
         self.toggle_order2_fields()
         self.comboOorsprong1.setFocus()
         return
 
     def _update_existing_orders(self, eerste_order, tweede_order):
+        old_rows = self._fetch_transactions_from_db_by_ids(
+            [x for x in [self.EDIT_ID, self.EDIT_ID2] if x is not None]
+        )
         try:
 
             data_update_1 = dict(eerste_order)
@@ -782,6 +791,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         if self.EDIT_ID2 is not None and data_update_2 is not None:
             msg = f"✅ Records {self.EDIT_ID} en {self.EDIT_ID2} bijgewerkt"
         QMessageBox.information(self, "Succes", msg)
+        self._emit_state_rebuild_payload(
+            old_rows=old_rows,
+            new_rows=[eerste_order] + ([tweede_order] if tweede_order else []),
+            reason="order_update",
+        )
         # reset + refresh
         self.EDIT_ID = None
         self.EDIT_ID2 = None
@@ -846,6 +860,98 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         except Exception as e:
             print(f"Fout bij updaten record {record_id} in snapshot: {e}")
 
+    def _fetch_transactions_from_db_by_ids(self, ids_to_fetch: list[int]) -> list[dict]:
+        if not ids_to_fetch:
+            return []
+        placeholders = ",".join("?" for _ in ids_to_fetch)
+        sql = f"SELECT * FROM transacties_bron_data_org WHERE Id IN ({placeholders}) ORDER BY Id"
+        with get_connection() as conn:
+            df = pd.read_sql(sql, conn, params=ids_to_fetch)
+        return df.to_dict(orient="records")
+
+    def _append_transactions_to_snapshot_by_ids(self, ids_to_fetch: list[int]) -> None:
+        if SNAPSHOT_STORE.repository_snapshot_alle_transacties is None or not ids_to_fetch:
+            return
+        try:
+            with get_connection() as conn:
+                sql = f"SELECT * FROM transacties_bron_data_org WHERE Id IN ({','.join('?' for _ in ids_to_fetch)}) ORDER BY Id"
+                schema_overrides = {
+                    "aantal": pl.Decimal(18, 3),
+                    "transactie_aantal": pl.Decimal(18, 3),
+                    "transactie_prijs": pl.Decimal(18, 4),
+                    "transactie_fee": pl.Decimal(18, 4),
+                    "transactie_euro_totaal": pl.Decimal(18, 4),
+                    "optie_strike": pl.Decimal(18, 4),
+                    "multiplier_close_price": pl.Decimal(18, 6),
+                    "order_id": pl.Decimal(18, 0),
+                    "order_id_number": pl.Decimal(18, 0),
+                }
+                inserted_df = pl.read_database(
+                    sql,
+                    conn,
+                    schema_overrides=schema_overrides,
+                    execute_options={"parameters": ids_to_fetch},
+                )
+            if inserted_df.is_empty():
+                return
+            snap = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+            inserted_df = inserted_df.with_columns(
+                [
+                    pl.col(c).cast(snap.schema[c], strict=False)
+                    for c in inserted_df.columns
+                    if c in snap.schema
+                ]
+            )
+            SNAPSHOT_STORE.repository_snapshot_alle_transacties = pl.concat([snap, inserted_df])
+        except Exception as e:
+            print(f"Fout bij toevoegen records {ids_to_fetch} aan snapshot: {e}")
+
+    def _build_state_rebuild_payload(self, old_rows: list[dict], new_rows: list[dict], reason: str) -> dict | None:
+        all_rows = [dict(row or {}) for row in [*(old_rows or []), *(new_rows or [])]]
+        if not all_rows:
+            return None
+
+        asset_type_map = {
+            "optie": "opties",
+            "aandeel": "aandelen",
+            "sprinter": "sprinters",
+        }
+        asset_classes = sorted(
+            {
+                asset_type_map.get(str(row.get("asset_type") or "").strip().lower())
+                for row in all_rows
+                if asset_type_map.get(str(row.get("asset_type") or "").strip().lower())
+            }
+        )
+        affected_assets = sorted(
+            {
+                str(row.get("asset_rollup") or "").strip()
+                for row in all_rows
+                if str(row.get("asset_rollup") or "").strip()
+            }
+        )
+        date_values = []
+        for row in all_rows:
+            parsed = pd.to_datetime(row.get("datum"), errors="coerce")
+            if pd.notna(parsed):
+                date_values.append(parsed.date().isoformat())
+
+        if not asset_classes or not affected_assets or not date_values:
+            return None
+
+        return {
+            "asset_classes": asset_classes,
+            "affected_assets": affected_assets,
+            "from_date": min(date_values),
+            "reason": reason,
+            "mode": "asset_incremental",
+        }
+
+    def _emit_state_rebuild_payload(self, old_rows: list[dict], new_rows: list[dict], reason: str) -> None:
+        payload = self._build_state_rebuild_payload(old_rows, new_rows, reason)
+        if payload:
+            signals.stateRebuildRequested.emit(payload)
+
 
     def on_reset_clicked(self):
         # Reset formulier naar lege staat
@@ -868,6 +974,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             ids_to_delete = [self.EDIT_ID]
             if self.EDIT_ID2 is not None:
                 ids_to_delete.append(self.EDIT_ID2)
+            old_rows = self._fetch_transactions_from_db_by_ids(ids_to_delete)
             
             # print(f"🔍 Te verwijderen Id(s): {ids_to_delete}")
             
@@ -903,7 +1010,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 self, "Succes",
                 f"✅ Order verwijderd: {deleted_count} record(s) (Id: {id_list_str})"
             )
-            
+            self._emit_state_rebuild_payload(
+                old_rows=old_rows,
+                new_rows=[],
+                reason="order_delete",
+            )
+
             # Reset form en refresh
             self.EDIT_ID = None
             self.EDIT_ID2 = None

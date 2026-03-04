@@ -124,21 +124,39 @@ class PriceFeedIB(QObject):
                 if not key:
                     return
                 sym, cur = key
-                if tickType in (4, 9, 68, 75):  # last/close + delayed varianten
+                px = float(price)
+                if tickType in (4, 68):  # last + delayed last
+                    if px <= 0:
+                        return
                     with feed._lock:
                         entry = feed._prices.setdefault((sym, cur), {})
-                        entry["last"] = float(price)
+                        entry["last"] = px
                         entry["ts"] = time.time()
-                    feed.priceUpdated.emit(sym, cur, float(price))
+                    feed.priceUpdated.emit(sym, cur, px)
+                    return
+
+                if tickType in (9, 75):  # close + delayed close as fallback
+                    if px <= 0:
+                        return
+                    with feed._lock:
+                        entry = feed._prices.setdefault((sym, cur), {})
+                        has_last = entry.get("last") is not None
+                        if not has_last:
+                            entry["close"] = px
+                            entry["ts"] = time.time()
+                    if not has_last:
+                        feed.priceUpdated.emit(sym, cur, px)
                     return
 
                 if tickType in (1, 2):  # bid/ask
+                    if px <= 0:
+                        return
                     with feed._lock:
                         entry = feed._prices.setdefault((sym, cur), {})
                         if tickType == 1:
-                            entry["bid"] = float(price)
+                            entry["bid"] = px
                         else:
-                            entry["ask"] = float(price)
+                            entry["ask"] = px
                         entry["ts"] = time.time()
                         bid = entry.get("bid")
                         ask = entry.get("ask")
