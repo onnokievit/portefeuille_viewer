@@ -766,9 +766,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         return
 
     def _update_existing_orders(self, eerste_order, tweede_order):
-        old_rows = self._fetch_transactions_from_db_by_ids(
-            [x for x in [self.EDIT_ID, self.EDIT_ID2] if x is not None]
-        )
+        ids_for_update = [x for x in [self.EDIT_ID, self.EDIT_ID2] if x is not None]
+        old_rows = self._fetch_transactions_from_db_by_ids(ids_for_update)
         try:
 
             data_update_1 = dict(eerste_order)
@@ -791,9 +790,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         if self.EDIT_ID2 is not None and data_update_2 is not None:
             msg = f"✅ Records {self.EDIT_ID} en {self.EDIT_ID2} bijgewerkt"
         QMessageBox.information(self, "Succes", msg)
+        # Herlees gecommitte data zodat rebuild-scope altijd de echte DB-waarden volgt
+        # (bijv. asset-move update: old_asset + new_asset).
+        new_rows_from_db = self._fetch_transactions_from_db_by_ids(ids_for_update)
         self._emit_state_rebuild_payload(
             old_rows=old_rows,
-            new_rows=[eerste_order] + ([tweede_order] if tweede_order else []),
+            new_rows=new_rows_from_db,
             reason="order_update",
         )
         # reset + refresh
@@ -950,7 +952,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
     def _emit_state_rebuild_payload(self, old_rows: list[dict], new_rows: list[dict], reason: str) -> None:
         payload = self._build_state_rebuild_payload(old_rows, new_rows, reason)
         if payload:
-            signals.stateRebuildRequested.emit(payload)
+            print(f"[orders] stateRebuildRequested payload: {payload}")
+            signals.queued_emit_stateRebuildRequested(payload)
 
 
     def on_reset_clicked(self):

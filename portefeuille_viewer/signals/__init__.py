@@ -31,6 +31,18 @@ class Signals(QObject):
     # Emitted when a state-engine rebuild fails. Payload: error message.
     stateRebuildFailed = Signal(str)
 
+    # Emitted when a historical price update is requested. Payload: dict with scope/context.
+    priceUpdateRequested = Signal(dict)
+
+    # Emitted when a historical price update actually starts. Payload: dict with scope/context.
+    priceUpdateStarted = Signal(dict)
+
+    # Emitted when a historical price update finishes. Payload: dict with scope/context/result.
+    priceUpdateFinished = Signal(dict)
+
+    # Emitted when a historical price update fails. Payload: error message.
+    priceUpdateFailed = Signal(str)
+
     # Optional debug signal
     debugSignal = Signal(str)
 
@@ -58,6 +70,18 @@ class Signals(QObject):
 
     def queued_emit_stateRebuildFailed(self, message: str):
         QTimer.singleShot(0, lambda: self.stateRebuildFailed.emit(message))
+
+    def queued_emit_priceUpdateRequested(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.priceUpdateRequested.emit(payload))
+
+    def queued_emit_priceUpdateStarted(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.priceUpdateStarted.emit(payload))
+
+    def queued_emit_priceUpdateFinished(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.priceUpdateFinished.emit(payload))
+
+    def queued_emit_priceUpdateFailed(self, message: str):
+        QTimer.singleShot(0, lambda: self.priceUpdateFailed.emit(message))
 
 
 signals = Signals()
