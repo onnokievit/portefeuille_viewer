@@ -159,22 +159,31 @@ def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
 
 
 def load_stock_splits(conn, scope: RebuildScope) -> pl.DataFrame:
-    # split_factor is the valuation correction factor for asset_close_raw.
-    # It is not the legal split ratio text. Examples:
-    # - normal split 1 -> 10  => factor 10.0
-    # - reverse split 1-for-5 => factor 0.2
-    sql = """
-        SELECT Id, asset_rollup, split_date, split_factor, split_type
+    # Central stock_splits semantics:
+    # - share_factor: quantity factor after the action
+    #   (2:1 split -> 2.0, 1-for-5 reverse split -> 0.2)
+    # Options use share_factor as the historical price correction factor to get
+    # back from back-adjusted close data to the old contract scale.
+    cursor = conn.cursor()
+    available_cols = {row.column_name for row in cursor.columns(table="stock_splits")}
+    effective_col = "effective_date" if "effective_date" in available_cols else "split_date"
+    action_col = "action_type" if "action_type" in available_cols else "split_type"
+    factor_col = "share_factor" if "share_factor" in available_cols else "split_factor"
+    effective_expr = effective_col if effective_col == "effective_date" else f"{effective_col} AS effective_date"
+    action_expr = action_col if action_col == "action_type" else f"{action_col} AS action_type"
+    factor_expr = factor_col if factor_col == "share_factor" else f"{factor_col} AS share_factor"
+    sql = f"""
+        SELECT Id, asset_rollup, {effective_expr}, {factor_expr}, {action_expr}
         FROM stock_splits
         WHERE active = True
-          AND split_date <= ?
+          AND {effective_col} <= ?
     """
     params: list = [scope.to_date]
     if scope.assets:
         placeholders = ",".join("?" for _ in scope.assets)
         sql += f" AND asset_rollup IN ({placeholders})"
         params.extend(scope.assets)
-    sql += " ORDER BY asset_rollup, split_date"
+    sql += " ORDER BY asset_rollup, effective_date"
     return pl.read_database(sql, conn, execute_options={"parameters": params})
 
 
@@ -305,10 +314,10 @@ def compute_split_factor(df_daily: pl.DataFrame, df_splits: pl.DataFrame) -> pl.
 
     split_map: dict[str, list[dict]] = {}
     for row in df_splits.to_dicts():
-        split_date = row["split_date"]
-        if isinstance(split_date, datetime):
-            split_date = split_date.date()
-        row["split_date"] = split_date
+        effective_date = row["effective_date"]
+        if isinstance(effective_date, datetime):
+            effective_date = effective_date.date()
+        row["effective_date"] = effective_date
         split_map.setdefault(row["asset_rollup"], []).append(row)
 
     series_rows = (
@@ -323,8 +332,8 @@ def compute_split_factor(df_daily: pl.DataFrame, df_splits: pl.DataFrame) -> pl.
             # IBKR historical prices are back-adjusted after a split.
             # For series opened before a later split, the factor must correct
             # the whole life of that old series, not only dates after split_date.
-            if split["split_date"] > row["series_open_date"]:
-                factor *= float(split["split_factor"] or 1.0)
+            if split["effective_date"] > row["series_open_date"]:
+                factor *= float(split["share_factor"] or 1.0)
         factors.append(
             {
                 "uniek_id": row["uniek_id"],
@@ -414,13 +423,25 @@ def delete_target_range(conn, scope: RebuildScope) -> None:
         cursor.execute("DELETE FROM per_dag_open_opties_opgerold_v2")
         conn.commit()
         return
+
+    batch_days = 30
     for asset in scope.assets:
-        cursor.execute(
-            "DELETE FROM per_dag_open_opties_opgerold_v2 WHERE asset_rollup = ? AND datum >= ?",
-            asset,
-            scope.from_date,
-        )
-    conn.commit()
+        batch_start = scope.from_date
+        while batch_start <= scope.to_date:
+            batch_end = min(batch_start + timedelta(days=batch_days - 1), scope.to_date)
+            cursor.execute(
+                """
+                DELETE FROM per_dag_open_opties_opgerold_v2
+                WHERE asset_rollup = ?
+                  AND datum >= ?
+                  AND datum <= ?
+                """,
+                asset,
+                batch_start,
+                batch_end,
+            )
+            conn.commit()
+            batch_start = batch_end + timedelta(days=1)
 
 
 def drop_temp_stage_table(conn) -> None:
@@ -508,6 +529,54 @@ def insert_v2_rows(conn, df_final: pl.DataFrame, run_options: RunOptions) -> Non
     conn.commit()
 
 
+def update_state_engine_status(
+    conn,
+    scope: RebuildScope,
+    df_tx: pl.DataFrame,
+    df_prices: pl.DataFrame,
+) -> None:
+    affected_assets = scope.assets or (
+        sorted({str(x).strip() for x in df_tx.select("asset_rollup").unique().to_series().to_list() if x is not None and str(x).strip()})
+        if not df_tx.is_empty()
+        else []
+    )
+    if not affected_assets:
+        return
+
+    price_dates: dict[str, date | None] = {}
+    if not df_prices.is_empty():
+        grouped = df_prices.group_by("asset_rollup").agg(pl.col("datum").max().alias("last_price_date"))
+        for row in grouped.to_dicts():
+            last_price_date = row["last_price_date"]
+            if isinstance(last_price_date, datetime):
+                last_price_date = last_price_date.date()
+            price_dates[str(row["asset_rollup"]).strip()] = last_price_date
+
+    cursor = conn.cursor()
+    run_at = datetime.now()
+    for asset in affected_assets:
+        cursor.execute(
+            "DELETE FROM state_engine_status WHERE engine_name=? AND asset_rollup=?",
+            "open_opties_v2",
+            asset,
+        )
+        cursor.execute(
+            """
+            INSERT INTO state_engine_status
+                (engine_name, asset_class, asset_rollup, last_rebuilt_through_date, last_price_date_used, last_run_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            "open_opties_v2",
+            "opties",
+            asset,
+            scope.to_date,
+            price_dates.get(asset),
+            run_at,
+            "ok",
+        )
+    conn.commit()
+
+
 def maybe_validate_v1(conn, scope: RebuildScope) -> None:
     cursor = conn.cursor()
     if scope.assets is None:
@@ -573,6 +642,8 @@ def main() -> None:
         if df_daily.is_empty():
             delete_target_range(conn, scope)
             timer.mark("delete_target_range")
+            update_state_engine_status(conn, scope, df_tx, pl.DataFrame())
+            timer.mark("update_state_engine_status")
             print("Geen open opties gevonden voor deze scope. Bestaande scope in v2 is opgeschoond.")
             if args.validate_v1:
                 maybe_validate_v1(conn, scope)
@@ -601,6 +672,8 @@ def main() -> None:
         timer.mark("delete_target_range")
         insert_v2_rows(conn, df_final, run_options)
         timer.mark(f"insert_v2_rows ({run_options.insert_mode})")
+        update_state_engine_status(conn, scope, df_tx, df_prices)
+        timer.mark("update_state_engine_status")
         print(f"Ingevoegd: {df_final.height} rijen")
         if args.validate_v1:
             maybe_validate_v1(conn, scope)

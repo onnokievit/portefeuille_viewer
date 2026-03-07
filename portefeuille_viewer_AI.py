@@ -2,7 +2,7 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
-from PySide6.QtCore import qInstallMessageHandler
+from PySide6.QtCore import QTimer, qInstallMessageHandler
 import inspect
 from portefeuille_viewer.signals import signals
 
@@ -11,6 +11,7 @@ from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
+from portefeuille_viewer.services.historical_price_update_runner import HistoricalPriceUpdateRunner
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -96,16 +97,34 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
 def main():
     refresh_everything()
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
+    historical_price_update_runner = HistoricalPriceUpdateRunner()
     
-    # Koppel signalen aan orchestrator
-    signals.stateRebuildRequested.connect(refresh_transaction_derived_snapshots)
+    # Koppel signalen aan orchestrator:
+    # 1) request -> alleen state-engine starten
+    # 2) finished(ok) -> daarna afgeleide snapshots verversen
     signals.stateRebuildRequested.connect(state_engine_runner.handle_rebuild_requested)
+    signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
     signals.databaseChanged.connect(lambda db_name: refresh_everything())
+    signals.databaseChanged.connect(state_engine_runner.handle_database_changed)
+    signals.stateRebuildFinished.connect(
+        lambda payload: refresh_transaction_derived_snapshots(payload)
+        if (payload or {}).get("status") == "ok"
+        else None
+    )
     signals.stateRebuildFinished.connect(
         lambda payload: print(f"[state-engine] rebuild finished: {payload}")
     )
     signals.stateRebuildFailed.connect(
         lambda message: print(f"[state-engine] rebuild failed: {message}")
+    )
+    signals.priceUpdateStarted.connect(
+        lambda payload: print(f"[price-update] started: {payload}")
+    )
+    signals.priceUpdateFinished.connect(
+        lambda payload: print(f"[price-update] finished: {payload.get('status')} ({payload.get('fetch_start_date', 'n/a')} -> today)")
+    )
+    signals.priceUpdateFailed.connect(
+        lambda message: print(f"[price-update] failed: {message}")
     )
     import faulthandler
     faulthandler.enable()
@@ -127,6 +146,8 @@ def main():
     portfolio_engine = PortfolioEngine(price_feed)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
     w.show()
+    # Start price-update pas nadat UI volledig staat en event-loop idle is.
+    QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()
     else:
