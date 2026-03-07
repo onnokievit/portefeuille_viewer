@@ -13,7 +13,38 @@ from common import DEFAULT_DB_PATH, get_connection, normalize_numeric_columns, p
 
 
 TEMP_STAGE_TABLE_PREFIX = "TempAssetResultV2Stage"
+DENSE_TABLE_NAME = "per_dag_asset_result_v2_dense"
 DIVIDEND_FEE_TYPES = ("dividend", "div_belasting", "871_fee", "transactiebelasting")
+DIVIDEND_FEE_TYPE_ALIASES = {
+    "dividend": "dividend",
+    "div_belasting": "div_belasting",
+    "div belasting": "div_belasting",
+    "dividend_belasting": "div_belasting",
+    "871_fee": "871_fee",
+    "871 fee": "871_fee",
+    "871-fee": "871_fee",
+    "transactiebelasting": "transactiebelasting",
+    "transactie_belasting": "transactiebelasting",
+    "transaction_tax": "transactiebelasting",
+}
+DIVIDEND_FEE_SQL_FILTER_VALUES = tuple(sorted(set(DIVIDEND_FEE_TYPE_ALIASES.keys())))
+ASSET_RESULT_INSERT_COLS = [
+    "datum",
+    "asset_rollup",
+    "aandelen_resultaat_v2",
+    "asset_fee_v2",
+    "optie_resultaat_v2",
+    "gesloten_opties",
+    "optie_fee_v2",
+    "sprinter_resultaat_v2",
+    "gesloten_sprinters",
+    "sprinter_fee_v2",
+    "dividend_v2",
+    "dividend_belasting_v2",
+    "fees_dividend_belasting_v2",
+    "totaal_v2",
+    "updated_at",
+]
 
 PRECISION_MAP = {
     "aandelen_resultaat_v2": 2,
@@ -86,17 +117,68 @@ def fetch_min_state_date(conn, table_name: str) -> date | None:
     return value.date() if isinstance(value, datetime) else value
 
 
+def fetch_min_state_date_for_assets(conn, table_name: str, assets: list[str] | None) -> date | None:
+    if not assets:
+        return fetch_min_state_date(conn, table_name)
+    placeholders = ",".join("?" for _ in assets)
+    sql = f"SELECT MIN(datum) FROM {table_name} WHERE asset_rollup IN ({placeholders})"
+    cur = conn.cursor()
+    try:
+        row = cur.execute(sql, assets).fetchone()
+    except Exception:
+        return None
+    if not row or row[0] is None:
+        return None
+    value = row[0]
+    return value.date() if isinstance(value, datetime) else value
+
+
+def fetch_max_price_date(conn, assets: list[str] | None = None) -> date | None:
+    cur = conn.cursor()
+    if assets:
+        placeholders = ",".join("?" for _ in assets)
+        sql = f"SELECT MAX(datum) FROM historical_data_correct WHERE asset_rollup IN ({placeholders})"
+        row = cur.execute(sql, assets).fetchone()
+    else:
+        row = cur.execute("SELECT MAX(datum) FROM historical_data_correct").fetchone()
+    if not row or row[0] is None:
+        return None
+    value = row[0]
+    return value.date() if isinstance(value, datetime) else value
+
+
+def clamp_to_available_price_date(conn, requested_to_date: date, assets: list[str] | None) -> date:
+    max_price_date = fetch_max_price_date(conn, assets)
+    if max_price_date is None:
+        return requested_to_date
+    clamped = min(requested_to_date, max_price_date)
+    if clamped < requested_to_date:
+        print(
+            f"[scope] to_date clamped van {requested_to_date} naar {clamped} "
+            f"(laatste prijsdatum historical_data_correct)"
+        )
+    return clamped
+
+
 def resolve_scope(args, conn) -> RebuildScope:
-    today = parse_iso_date(args.to_date) or date.today()
+    requested_to_date = parse_iso_date(args.to_date) or date.today()
     assets = _normalize_assets(args.asset_rollups)
+    safe_to_date = clamp_to_available_price_date(conn, requested_to_date, assets)
     if args.mode == "asset_incremental":
         from_date = parse_iso_date(args.from_date)
         if not from_date:
             raise ValueError("--from-date is verplicht voor asset_incremental")
-        return RebuildScope(assets=assets, from_date=from_date, to_date=today, mode=args.mode)
+        return RebuildScope(assets=assets, from_date=from_date, to_date=safe_to_date, mode=args.mode)
 
     if args.mode == "asset_split_rebuild" and assets:
-        return RebuildScope(assets=assets, from_date=date(1900, 1, 1), to_date=today, mode=args.mode)
+        min_dates_assets = [
+            fetch_min_state_date_for_assets(conn, "per_dag_aandelen_state_v2", assets),
+            fetch_min_state_date_for_assets(conn, "per_dag_open_opties_opgerold_v2", assets),
+            fetch_min_state_date_for_assets(conn, "per_dag_open_sprinters_opgerold_v2", assets),
+        ]
+        min_dates_assets = [d for d in min_dates_assets if d is not None]
+        start_assets = min(min_dates_assets) if min_dates_assets else safe_to_date
+        return RebuildScope(assets=assets, from_date=start_assets, to_date=safe_to_date, mode=args.mode)
 
     min_dates = [
         fetch_min_state_date(conn, "per_dag_aandelen_state_v2"),
@@ -104,8 +186,8 @@ def resolve_scope(args, conn) -> RebuildScope:
         fetch_min_state_date(conn, "per_dag_open_sprinters_opgerold_v2"),
     ]
     min_dates = [d for d in min_dates if d is not None]
-    start = min(min_dates) if min_dates else today
-    return RebuildScope(assets=assets, from_date=start, to_date=today, mode=args.mode)
+    start = min(min_dates) if min_dates else safe_to_date
+    return RebuildScope(assets=assets, from_date=start, to_date=safe_to_date, mode=args.mode)
 
 
 def _asset_filter_sql(scope: RebuildScope, alias: str = "") -> tuple[str, list]:
@@ -335,6 +417,16 @@ def load_sprinters_component(conn, scope: RebuildScope) -> pl.DataFrame:
 
 
 def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
+    empty_result = pl.DataFrame(
+        schema={
+            "datum": pl.Date,
+            "asset_rollup": pl.Utf8,
+            "dividend_v2": pl.Float64,
+            "dividend_belasting_v2": pl.Float64,
+            "fees_dividend_belasting_v2": pl.Float64,
+        }
+    )
+
     if scope.assets:
         placeholders_assets = ",".join("?" for _ in scope.assets)
         asset_filter = f" AND f.asset IN ({placeholders_assets})"
@@ -342,36 +434,34 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
     else:
         asset_filter = ""
         asset_params = []
-    fee_types_placeholders = ",".join("?" for _ in DIVIDEND_FEE_TYPES)
+    fee_types_placeholders = ",".join("?" for _ in DIVIDEND_FEE_SQL_FILTER_VALUES)
     sql = f"""
         SELECT f.datum, f.asset AS asset_rollup, f.fee_type, SUM(f.amount) AS amount
         FROM fees_dividend AS f
-        WHERE f.fee_type IN ({fee_types_placeholders})
+        WHERE LCase(f.fee_type) IN ({fee_types_placeholders})
           AND f.datum <= ?
           {asset_filter}
         GROUP BY f.datum, f.asset, f.fee_type
         ORDER BY f.asset, f.fee_type, f.datum
     """
-    params = [*DIVIDEND_FEE_TYPES, scope.to_date, *asset_params]
+    params = [*DIVIDEND_FEE_SQL_FILTER_VALUES, scope.to_date, *asset_params]
     df = pl.read_database(sql, conn, execute_options={"parameters": params})
     if df.is_empty():
-        return pl.DataFrame(
-            schema={
-                "datum": pl.Date,
-                "asset_rollup": pl.Utf8,
-                "dividend_v2": pl.Float64,
-                "dividend_belasting_v2": pl.Float64,
-                "fees_dividend_belasting_v2": pl.Float64,
-            }
-        )
+        return empty_result
 
     df = (
         df.with_columns(
             pl.col("datum").cast(pl.Date),
             pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
-            pl.col("fee_type").cast(pl.Utf8).str.strip_chars(),
+            pl.col("fee_type")
+            .cast(pl.Utf8)
+            .str.strip_chars()
+            .str.to_lowercase()
+            .map_elements(lambda v: DIVIDEND_FEE_TYPE_ALIASES.get(v), return_dtype=pl.Utf8)
+            .alias("fee_type"),
             pl.col("amount").fill_null(0.0),
         )
+        .filter(pl.col("fee_type").is_not_null())
         .sort(["asset_rollup", "fee_type", "datum"])
         .with_columns(
             pl.col("amount").cum_sum().over(["asset_rollup", "fee_type"]).alias("cum_amount")
@@ -383,6 +473,13 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
             aggregate_function="max",
         )
         .pipe(_ensure_columns, ["dividend", "div_belasting", "871_fee", "transactiebelasting"])
+        .sort(["asset_rollup", "datum"])
+        .with_columns(
+            pl.col("dividend").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("div_belasting").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("871_fee").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("transactiebelasting").fill_null(strategy="forward").over("asset_rollup"),
+        )
         .with_columns(
             pl.col("dividend").fill_null(0.0).alias("dividend_v2"),
             pl.col("div_belasting").fill_null(0.0).alias("dividend_belasting_v2"),
@@ -396,25 +493,39 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
         .select(["datum", "asset_rollup", "dividend_v2", "dividend_belasting_v2", "fees_dividend_belasting_v2"])
     )
 
+    base = pl.DataFrame(
+        schema={
+            "asset_rollup": pl.Utf8,
+            "base_dividend_v2": pl.Float64,
+            "base_dividend_belasting_v2": pl.Float64,
+            "base_fees_dividend_belasting_v2": pl.Float64,
+        }
+    )
+
     if scope.from_date > date(1900, 1, 1):
-        # Incremental: add baseline cumulative value from day before from_date.
+        # Incremental: baseline cumulative value from day before from_date.
         baseline_cutoff = scope.from_date - timedelta(days=1)
         sql_base = f"""
             SELECT f.asset AS asset_rollup, f.fee_type, SUM(f.amount) AS base_amount
             FROM fees_dividend AS f
-            WHERE f.fee_type IN ({fee_types_placeholders})
+            WHERE LCase(f.fee_type) IN ({fee_types_placeholders})
               AND f.datum <= ?
               {asset_filter}
             GROUP BY f.asset, f.fee_type
         """
-        params_base = [*DIVIDEND_FEE_TYPES, baseline_cutoff, *asset_params]
+        params_base = [*DIVIDEND_FEE_SQL_FILTER_VALUES, baseline_cutoff, *asset_params]
         base = pl.read_database(sql_base, conn, execute_options={"parameters": params_base})
         if not base.is_empty():
             base = base.with_columns(
                 pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
-                pl.col("fee_type").cast(pl.Utf8).str.strip_chars(),
+                pl.col("fee_type")
+                .cast(pl.Utf8)
+                .str.strip_chars()
+                .str.to_lowercase()
+                .map_elements(lambda v: DIVIDEND_FEE_TYPE_ALIASES.get(v), return_dtype=pl.Utf8)
+                .alias("fee_type"),
                 pl.col("base_amount").fill_null(0.0),
-            )
+            ).filter(pl.col("fee_type").is_not_null())
             base = (
                 base.pivot(
                     values="base_amount",
@@ -435,29 +546,34 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
                 )
                 .select(["asset_rollup", "base_dividend_v2", "base_dividend_belasting_v2", "base_fees_dividend_belasting_v2"])
             )
-            df = (
-                df.join(base, on="asset_rollup", how="left")
-                .with_columns(
-                    pl.col("base_dividend_v2").fill_null(0.0),
-                    pl.col("base_dividend_belasting_v2").fill_null(0.0),
-                    pl.col("base_fees_dividend_belasting_v2").fill_null(0.0),
-                )
-                .with_columns(
-                    (pl.col("dividend_v2") + pl.col("base_dividend_v2")).alias("dividend_v2"),
-                    (pl.col("dividend_belasting_v2") + pl.col("base_dividend_belasting_v2")).alias("dividend_belasting_v2"),
-                    (pl.col("fees_dividend_belasting_v2") + pl.col("base_fees_dividend_belasting_v2")).alias("fees_dividend_belasting_v2"),
-                )
-                .drop(["base_dividend_v2", "base_dividend_belasting_v2", "base_fees_dividend_belasting_v2"])
-            )
 
     df = df.filter(pl.col("datum") >= pl.lit(scope.from_date, dtype=pl.Date))
 
     # Carry-forward cumulatieve dividend-standen naar alle dagen in de scope.
     # Zonder dit staan alleen event-dagen gevuld en worden tussenliggende dagen 0.
-    if df.is_empty():
-        return df
+    if scope.assets:
+        assets_df = pl.DataFrame(
+            {
+                "asset_rollup": [
+                    str(a).strip()
+                    for a in scope.assets
+                    if a is not None and str(a).strip()
+                ]
+            }
+        ).unique()
+    else:
+        asset_frames = []
+        if not df.is_empty():
+            asset_frames.append(df.select("asset_rollup").unique())
+        if not base.is_empty():
+            asset_frames.append(base.select("asset_rollup").unique())
+        if not asset_frames:
+            return empty_result
+        assets_df = pl.concat(asset_frames, how="vertical").unique()
 
-    assets_df = df.select("asset_rollup").unique()
+    if assets_df.is_empty():
+        return empty_result
+
     calendar_df = pl.DataFrame(
         {
             "datum": pl.date_range(
@@ -470,16 +586,34 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
     )
     grid = assets_df.join(calendar_df, how="cross").sort(["asset_rollup", "datum"])
     events = df.sort(["asset_rollup", "datum"])
-    dense = (
-        grid.join_asof(events, on="datum", by="asset_rollup", strategy="backward")
-        .with_columns(
+    dense = grid.join_asof(events, on="datum", by="asset_rollup", strategy="backward")
+
+    if not base.is_empty():
+        dense = (
+            dense.join(base, on="asset_rollup", how="left")
+            .with_columns(
+                pl.col("base_dividend_v2").fill_null(0.0),
+                pl.col("base_dividend_belasting_v2").fill_null(0.0),
+                pl.col("base_fees_dividend_belasting_v2").fill_null(0.0),
+            )
+            .with_columns(
+                (pl.col("dividend_v2").fill_null(0.0) + pl.col("base_dividend_v2")).alias("dividend_v2"),
+                (pl.col("dividend_belasting_v2").fill_null(0.0) + pl.col("base_dividend_belasting_v2")).alias("dividend_belasting_v2"),
+                (
+                    pl.col("fees_dividend_belasting_v2").fill_null(0.0)
+                    + pl.col("base_fees_dividend_belasting_v2")
+                ).alias("fees_dividend_belasting_v2"),
+            )
+            .drop(["base_dividend_v2", "base_dividend_belasting_v2", "base_fees_dividend_belasting_v2"])
+        )
+    else:
+        dense = dense.with_columns(
             pl.col("dividend_v2").fill_null(0.0),
             pl.col("dividend_belasting_v2").fill_null(0.0),
             pl.col("fees_dividend_belasting_v2").fill_null(0.0),
         )
-        .select(["datum", "asset_rollup", "dividend_v2", "dividend_belasting_v2", "fees_dividend_belasting_v2"])
-    )
-    return dense
+
+    return dense.select(["datum", "asset_rollup", "dividend_v2", "dividend_belasting_v2", "fees_dividend_belasting_v2"])
 
 
 def build_final(df_a: pl.DataFrame, df_o: pl.DataFrame, df_s: pl.DataFrame, df_d: pl.DataFrame) -> pl.DataFrame:
@@ -493,6 +627,20 @@ def build_final(df_a: pl.DataFrame, df_o: pl.DataFrame, df_s: pl.DataFrame, df_d
         .join(df_o, on=["datum", "asset_rollup"], how="left")
         .join(df_s, on=["datum", "asset_rollup"], how="left")
         .join(df_d, on=["datum", "asset_rollup"], how="left")
+        .sort(["asset_rollup", "datum"])
+        .with_columns(
+            pl.col("aandelen_resultaat_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("asset_fee_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("optie_resultaat_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("gesloten_opties").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("optie_fee_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("sprinter_resultaat_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("gesloten_sprinters").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("sprinter_fee_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("dividend_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("dividend_belasting_v2").fill_null(strategy="forward").over("asset_rollup"),
+            pl.col("fees_dividend_belasting_v2").fill_null(strategy="forward").over("asset_rollup"),
+        )
         .with_columns(
             pl.col("aandelen_resultaat_v2").fill_null(0.0),
             pl.col("asset_fee_v2").fill_null(0.0),
@@ -524,12 +672,22 @@ def build_final(df_a: pl.DataFrame, df_o: pl.DataFrame, df_s: pl.DataFrame, df_d
 
 
 def delete_target_range(conn, scope: RebuildScope) -> None:
+    delete_target_range_for_table(conn, scope, "per_dag_asset_result_v2")
+
+
+def delete_target_range_for_table(conn, scope: RebuildScope, table_name: str) -> None:
     def _to_access_date_literal(d: date) -> str:
         return f"#{d.month}/{d.day}/{d.year}#"
 
     cursor = conn.cursor()
     if scope.assets is None:
-        cursor.execute("DELETE FROM per_dag_asset_result_v2")
+        cursor.execute(f"DELETE FROM {table_name}")
+        conn.commit()
+        return
+
+    if scope.mode == "asset_split_rebuild":
+        for asset in scope.assets:
+            cursor.execute(f"DELETE FROM {table_name} WHERE asset_rollup = ?", asset)
         conn.commit()
         return
 
@@ -539,7 +697,7 @@ def delete_target_range(conn, scope: RebuildScope) -> None:
         while batch_start <= scope.to_date:
             batch_end = min(batch_start + timedelta(days=batch_days - 1), scope.to_date)
             sql = (
-                "DELETE FROM per_dag_asset_result_v2 "
+                f"DELETE FROM {table_name} "
                 "WHERE asset_rollup = ? "
                 f"AND datum >= {_to_access_date_literal(batch_start)} "
                 f"AND datum <= {_to_access_date_literal(batch_end)}"
@@ -600,43 +758,67 @@ def create_temp_stage_table(conn, table_name: str) -> None:
     conn.commit()
 
 
+def table_exists(conn, table_name: str) -> bool:
+    cur = conn.cursor()
+    return any(row.table_name == table_name for row in cur.tables(table=table_name))
+
+
+def ensure_dense_table(conn) -> None:
+    if table_exists(conn, DENSE_TABLE_NAME):
+        return
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        CREATE TABLE {DENSE_TABLE_NAME} (
+            Id AUTOINCREMENT PRIMARY KEY,
+            datum DATETIME,
+            asset_rollup TEXT(20),
+            aandelen_resultaat_v2 CURRENCY,
+            asset_fee_v2 CURRENCY,
+            optie_resultaat_v2 CURRENCY,
+            gesloten_opties CURRENCY,
+            optie_fee_v2 CURRENCY,
+            sprinter_resultaat_v2 CURRENCY,
+            gesloten_sprinters CURRENCY,
+            sprinter_fee_v2 CURRENCY,
+            dividend_v2 CURRENCY,
+            dividend_belasting_v2 CURRENCY,
+            fees_dividend_belasting_v2 CURRENCY,
+            totaal_v2 CURRENCY,
+            updated_at DATETIME
+        )
+        """
+    )
+    conn.commit()
+    try:
+        cur.execute(
+            f"CREATE INDEX idx_asset_result_v2_dense_datum_asset ON {DENSE_TABLE_NAME} (datum, asset_rollup)"
+        )
+    except Exception:
+        pass
+    conn.commit()
+
+
 def insert_rows(conn, df_final: pl.DataFrame, run_options: RunOptions) -> None:
     if df_final.is_empty():
         print("Geen rijen om te inserten.")
         return
 
-    insert_cols = [
-        "datum",
-        "asset_rollup",
-        "aandelen_resultaat_v2",
-        "asset_fee_v2",
-        "optie_resultaat_v2",
-        "gesloten_opties",
-        "optie_fee_v2",
-        "sprinter_resultaat_v2",
-        "gesloten_sprinters",
-        "sprinter_fee_v2",
-        "dividend_v2",
-        "dividend_belasting_v2",
-        "fees_dividend_belasting_v2",
-        "totaal_v2",
-        "updated_at",
-    ]
-    rows = df_final.select(insert_cols).rows()
-    placeholders = ",".join(["?"] * len(insert_cols))
-    query = f"INSERT INTO per_dag_asset_result_v2 ({','.join(insert_cols)}) VALUES ({placeholders})"
+    rows = df_final.select(ASSET_RESULT_INSERT_COLS).rows()
+    placeholders = ",".join(["?"] * len(ASSET_RESULT_INSERT_COLS))
+    query = f"INSERT INTO per_dag_asset_result_v2 ({','.join(ASSET_RESULT_INSERT_COLS)}) VALUES ({placeholders})"
     cur = conn.cursor()
     if run_options.insert_mode == "temp_table":
         stage_table = run_options.temp_table_name
         try:
             create_temp_stage_table(conn, stage_table)
-            stage_query = f"INSERT INTO [{stage_table}] ({','.join(insert_cols)}) VALUES ({placeholders})"
+            stage_query = f"INSERT INTO [{stage_table}] ({','.join(ASSET_RESULT_INSERT_COLS)}) VALUES ({placeholders})"
             cur.executemany(stage_query, rows)
             conn.commit()
             cur.execute(
                 f"""
-                INSERT INTO per_dag_asset_result_v2 ({','.join(insert_cols)})
-                SELECT {','.join(insert_cols)}
+                INSERT INTO per_dag_asset_result_v2 ({','.join(ASSET_RESULT_INSERT_COLS)})
+                SELECT {','.join(ASSET_RESULT_INSERT_COLS)}
                 FROM [{stage_table}]
                 """
             )
@@ -650,6 +832,102 @@ def insert_rows(conn, df_final: pl.DataFrame, run_options: RunOptions) -> None:
             drop_temp_stage_table(conn, stage_table)
         return
 
+    cur.executemany(query, rows)
+    conn.commit()
+
+
+def build_dense_rows(conn, scope: RebuildScope, source_to_date: date | None = None) -> pl.DataFrame:
+    empty_dense = pl.DataFrame(
+        schema={
+            "datum": pl.Date,
+            "asset_rollup": pl.Utf8,
+            "aandelen_resultaat_v2": pl.Float64,
+            "asset_fee_v2": pl.Float64,
+            "optie_resultaat_v2": pl.Float64,
+            "gesloten_opties": pl.Float64,
+            "optie_fee_v2": pl.Float64,
+            "sprinter_resultaat_v2": pl.Float64,
+            "gesloten_sprinters": pl.Float64,
+            "sprinter_fee_v2": pl.Float64,
+            "dividend_v2": pl.Float64,
+            "dividend_belasting_v2": pl.Float64,
+            "fees_dividend_belasting_v2": pl.Float64,
+            "totaal_v2": pl.Float64,
+            "updated_at": pl.Datetime,
+        }
+    )
+    asset_filter, asset_params = _asset_filter_sql(scope)
+    sql = f"""
+        SELECT
+            datum,
+            asset_rollup,
+            aandelen_resultaat_v2,
+            asset_fee_v2,
+            optie_resultaat_v2,
+            gesloten_opties,
+            optie_fee_v2,
+            sprinter_resultaat_v2,
+            gesloten_sprinters,
+            sprinter_fee_v2,
+            dividend_v2,
+            dividend_belasting_v2,
+            fees_dividend_belasting_v2,
+            totaal_v2,
+            updated_at
+        FROM per_dag_asset_result_v2
+        WHERE datum <= ?
+        {asset_filter}
+        ORDER BY asset_rollup, datum
+    """
+    effective_source_to_date = source_to_date or scope.to_date
+    params = [effective_source_to_date, *asset_params]
+    events = pl.read_database(sql, conn, execute_options={"parameters": params})
+    if events.is_empty():
+        return empty_dense
+
+    events = (
+        events.with_columns(
+            pl.col("datum").cast(pl.Date),
+            pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
+        )
+        .sort(["asset_rollup", "datum"])
+    )
+
+    if scope.assets:
+        assets = [a for a in {str(x).strip() for x in scope.assets if x is not None and str(x).strip()}]
+        assets_df = pl.DataFrame({"asset_rollup": assets}).sort("asset_rollup")
+    else:
+        assets_df = events.select("asset_rollup").unique().sort("asset_rollup")
+    if assets_df.is_empty():
+        return empty_dense
+
+    calendar = pl.DataFrame(
+        {
+            "datum": pl.date_range(
+                scope.from_date,
+                scope.to_date,
+                interval="1d",
+                eager=True,
+            )
+        }
+    )
+    grid = assets_df.join(calendar, how="cross").sort(["asset_rollup", "datum"])
+    dense = (
+        grid.join_asof(events, on="datum", by="asset_rollup", strategy="backward")
+        .filter(pl.col("totaal_v2").is_not_null())
+        .with_columns(pl.lit(datetime.now()).alias("updated_at"))
+        .select(ASSET_RESULT_INSERT_COLS)
+    )
+    return normalize_numeric_columns(dense, PRECISION_MAP)
+
+
+def insert_dense_rows(conn, df_dense: pl.DataFrame) -> None:
+    if df_dense.is_empty():
+        return
+    rows = df_dense.select(ASSET_RESULT_INSERT_COLS).rows()
+    placeholders = ",".join(["?"] * len(ASSET_RESULT_INSERT_COLS))
+    query = f"INSERT INTO {DENSE_TABLE_NAME} ({','.join(ASSET_RESULT_INSERT_COLS)}) VALUES ({placeholders})"
+    cur = conn.cursor()
     cur.executemany(query, rows)
     conn.commit()
 
@@ -683,6 +961,8 @@ def update_state_engine_status(conn, scope: RebuildScope, df_final: pl.DataFrame
 
 def main() -> None:
     args = parse_args()
+    requested_to_date = parse_iso_date(args.to_date) or date.today()
+    requested_to_date = min(requested_to_date, date.today())
     run_options = RunOptions(
         insert_mode=args.insert_mode,
         temp_table_name=f"{TEMP_STAGE_TABLE_PREFIX}_{uuid4().hex[:8]}",
@@ -692,7 +972,27 @@ def main() -> None:
     with get_connection(args.db) as conn:
         drop_stale_temp_stage_tables(conn)
         scope = resolve_scope(args, conn)
+        dense_scope = RebuildScope(
+            assets=scope.assets,
+            from_date=scope.from_date,
+            to_date=max(scope.to_date, requested_to_date),
+            mode=scope.mode,
+        )
+        if dense_scope.to_date > scope.to_date:
+            stale_scope = RebuildScope(
+                assets=scope.assets,
+                from_date=scope.to_date + timedelta(days=1),
+                to_date=dense_scope.to_date,
+                mode=scope.mode,
+            )
+            delete_target_range(conn, stale_scope)
+            print(
+                f"Oude bronrijen opgeschoond buiten geclampte range: "
+                f"{stale_scope.from_date} t/m {stale_scope.to_date}"
+            )
         print(f"Scope mode={scope.mode} assets={scope.assets or 'ALL'} from={scope.from_date} to={scope.to_date}")
+        if dense_scope.to_date != scope.to_date:
+            print(f"Dense scope voor chart: from={dense_scope.from_date} to={dense_scope.to_date}")
         timer.mark("resolve_scope")
 
         df_a = load_aandelen_component(conn, scope)
@@ -717,9 +1017,17 @@ def main() -> None:
         timer.mark("delete_target_range")
         insert_rows(conn, df_final, run_options)
         timer.mark(f"insert_rows ({run_options.insert_mode})")
+        ensure_dense_table(conn)
+        timer.mark("ensure_dense_table")
+        delete_target_range_for_table(conn, dense_scope, DENSE_TABLE_NAME)
+        timer.mark("delete_dense_target_range")
+        df_dense = build_dense_rows(conn, dense_scope, source_to_date=scope.to_date)
+        timer.mark(f"build_dense_rows ({df_dense.height} rows)")
+        insert_dense_rows(conn, df_dense)
+        timer.mark("insert_dense_rows")
         update_state_engine_status(conn, scope, df_final)
         timer.mark("update_state_engine_status")
-        print(f"Ingevoegd: {df_final.height} rijen")
+        print(f"Ingevoegd: {df_final.height} rijen (dense: {df_dense.height})")
 
     print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
 

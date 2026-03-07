@@ -42,10 +42,12 @@ def resolve_db_path() -> str:
 def to_timestamp(value) -> float | None:
     if value is None:
         return None
+    epoch = datetime(1970, 1, 1)
     if isinstance(value, datetime):
-        return value.timestamp()
+        return (value - epoch).total_seconds()
     if isinstance(value, date):
-        return datetime(value.year, value.month, value.day).timestamp()
+        dt = datetime(value.year, value.month, value.day)
+        return (dt - epoch).total_seconds()
     return None
 
 
@@ -118,7 +120,13 @@ class AssetResultViewer(QMainWindow):
             WHERE asset_rollup = ?
             ORDER BY datum
         """
-        sql_v2 = """
+        sql_v2_dense = """
+            SELECT datum, totaal_v2
+            FROM per_dag_asset_result_v2_dense
+            WHERE asset_rollup = ?
+            ORDER BY datum
+        """
+        sql_v2_fallback = """
             SELECT datum, totaal_v2
             FROM per_dag_asset_result_v2
             WHERE asset_rollup = ?
@@ -128,7 +136,13 @@ class AssetResultViewer(QMainWindow):
         with self._get_connection() as conn:
             cur = conn.cursor()
             rows_v1 = cur.execute(sql_v1, (asset_rollup,)).fetchall()
-            rows_v2 = cur.execute(sql_v2, (asset_rollup,)).fetchall()
+            try:
+                rows_v2 = cur.execute(sql_v2_dense, (asset_rollup,)).fetchall()
+            except Exception:
+                rows_v2 = cur.execute(sql_v2_fallback, (asset_rollup,)).fetchall()
+            else:
+                if not rows_v2:
+                    rows_v2 = cur.execute(sql_v2_fallback, (asset_rollup,)).fetchall()
 
         x_v1: list[float] = []
         y_v1: list[float] = []
