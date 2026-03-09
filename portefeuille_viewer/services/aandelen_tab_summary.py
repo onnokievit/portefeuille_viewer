@@ -122,8 +122,11 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		if asset_rollup:
 			df_asset_result = df_asset_result.filter(pl.col("asset_rollup") == asset_rollup)
 
+	# Neem per asset de laatste rij met beschikbare close_price.
+	# Zo voorkomen we lege koers_prev op niet-handelsdagen (weekend/feestdag).
 	df_aset_result_latest = (
 		df_asset_result
+		.filter(pl.col("close_price").is_not_null())
 		.sort(["asset_rollup", "datum"])
 		.group_by("asset_rollup")
 		.agg([pl.all().last()])

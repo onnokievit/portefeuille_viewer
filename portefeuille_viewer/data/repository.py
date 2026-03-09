@@ -108,13 +108,97 @@ def load_asset_rollup_data() -> pl.DataFrame:
 # ------------------------------------------------------------
 def load_per_dag_asset_result() -> pl.DataFrame:
     """
-    Laadt de per_dag_asset_result-tabel uit de database.
+    Laadt per-dag result voor UI op v2-basis met v1-compatibele kolomnamen.
     """
-    sql = "SELECT datum, asset_rollup, close_price, totaal_aantal_bezit, totaal FROM per_dag_asset_result"
-    
+    df_v2 = getattr(SNAPSHOT_STORE, "repository_snapshot_per_dag_asset_result_v2", None)
+    df_close = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+
+    if df_v2 is not None and df_close is not None and df_v2.height > 0:
+        left = df_v2.select(
+            [
+                pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
+                pl.col("asset_rollup"),
+                pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal"),
+                pl.col("totaal_aantal_bezit_v2").cast(pl.Float64, strict=False).alias("totaal_aantal_bezit"),
+            ]
+        )
+        right = df_close.select(
+            [
+                pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
+                pl.col("asset_rollup"),
+                pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"),
+            ]
+        )
+        df = left.join(right, on=["datum", "asset_rollup"], how="left").select(
+            ["datum", "asset_rollup", "close_price", "totaal_aantal_bezit", "totaal"]
+        )
+    else:
+        sql = """
+            SELECT
+                r.datum,
+                r.asset_rollup,
+                hp.close_price AS close_price,
+                r.totaal_aantal_bezit_v2 AS totaal_aantal_bezit,
+                r.totaal_v2 AS totaal
+            FROM
+                per_dag_asset_result_v2 AS r
+                LEFT JOIN (
+                    SELECT
+                        datum,
+                        asset_rollup,
+                        MAX([close]) AS close_price
+                    FROM
+                        historical_data_correct
+                    GROUP BY
+                        datum,
+                        asset_rollup
+                ) AS hp
+                    ON r.datum = hp.datum
+                    AND r.asset_rollup = hp.asset_rollup
+            ORDER BY
+                r.asset_rollup,
+                r.datum
+        """
+        with get_connection() as conn:
+            df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.safe_write("repository_per_dag_asset_result", df)
+    return compact_float64(df)
+
+
+def load_historical_close_snapshot() -> pl.DataFrame:
+    """
+    Laad minimale historical close-data in memory voor snelle chart-opbouw.
+    """
+    sql = """
+        SELECT
+            datum,
+            asset_rollup,
+            [close] AS close_price
+        FROM historical_data_correct
+        WHERE asset_rollup IS NOT NULL
+    """
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.safe_write("repository_per_dag_asset_result", df)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_historical_close", df)
+    return compact_float64(df)
+
+
+def load_per_dag_asset_result_v2_snapshot() -> pl.DataFrame:
+    """
+    Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.
+    """
+    sql = """
+        SELECT
+            datum,
+            asset_rollup,
+            totaal_v2,
+            totaal_aantal_bezit_v2
+        FROM per_dag_asset_result_v2
+        WHERE asset_rollup IS NOT NULL
+    """
+    with get_connection() as conn:
+        df = pl.read_database(sql, conn)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_per_dag_asset_result_v2", df)
     return compact_float64(df)
 
 # ------------------------------------------------------------
@@ -1589,6 +1673,8 @@ def refresh_all_snapshots():
     load_asset_rollup_data()
     load_sprinter_referentie_data()
     load_dividend_data()
+    load_historical_close_snapshot()
+    load_per_dag_asset_result_v2_snapshot()
     load_per_dag_asset_result()
     load_optie_referentie_data()
         
