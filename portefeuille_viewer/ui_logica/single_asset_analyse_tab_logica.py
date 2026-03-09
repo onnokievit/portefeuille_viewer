@@ -4,7 +4,7 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QCheckBox
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
@@ -404,6 +404,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if start_date_str:
             self.startDate.setDate(QDate.fromString(start_date_str, 'yyyy-MM-dd'))
         self.endDate.setDate(QDate.currentDate())
+        self.checkBoxMarketDaysOnly = QCheckBox("Marktdagen only", self.horizontalLayoutWidget)
+        self.checkBoxMarketDaysOnly.setChecked(True)
+        self.horizontalLayout.addWidget(self.checkBoxMarketDaysOnly, 0, Qt.AlignmentFlag.AlignLeft)
 
         # self.gridLayout_2.setColumnStretch(0, 10)
         # self.gridLayout_2.setColumnStretch(1, 6)
@@ -435,6 +438,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.startDate.dateChanged.connect(self.update_history_charts)
         self.startDate.dateChanged.connect(self.save_start_date_to_settings)
         self.endDate.dateChanged.connect(self.update_history_charts)
+        self.checkBoxMarketDaysOnly.toggled.connect(self.update_history_charts)
 
         # Initialiseer pyqtgraph plot_widget
         self.plot_widget = pg.PlotWidget()
@@ -627,9 +631,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _set_plot_ranges(widget: pg.PlotWidget, x_values, y_values, *, padding=0.02):
         if x_values is None or y_values is None or len(x_values) == 0 or len(y_values) == 0:
             return
+        import math
 
         x_min, x_max = float(min(x_values)), float(max(x_values))
-        y_min, y_max = float(min(y_values)), float(max(y_values))
+        finite_y = [float(v) for v in y_values if v is not None and math.isfinite(float(v))]
+        if not finite_y:
+            if x_min == x_max:
+                x_max = x_min + 1.0
+            widget.setXRange(x_min, x_max, padding=padding)
+            return
+        y_min, y_max = float(min(finite_y)), float(max(finite_y))
         if x_min == x_max:
             x_max = x_min + 1.0
         if y_min == y_max:
@@ -2146,7 +2157,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df = self.logic.load_asset_history(
             self.asset_selector.currentText(),
             self.startDate.date(),
-            self.endDate.date()
+            self.endDate.date(),
+            market_days_only=self.checkBoxMarketDaysOnly.isChecked(),
         )
         if df.height == 0:
             self.priceAantalChart.clear()
@@ -2156,7 +2168,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         import numpy as np
         x = np.arange(len(df))
         datums = df["datum"].to_list()
-        close_price = [float(v) if v is not None and v != '' else 0.0 for v in df["close_price"].to_list()]
+        close_price = [float(v) if v is not None and v != '' else np.nan for v in df["close_price"].to_list()]
         aantal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal_aantal_bezit"].to_list()]
         factor = getattr(self.logic, "currency_factor", 1.0)
         totaal = [float(v) / factor if v is not None and v != '' else 0.0 for v in df["totaal"].to_list()]
@@ -2782,34 +2794,133 @@ class SingleAssetAnalyseLogic:
 
     import polars as pl
 
-    def load_asset_history(self, asset, start_date, end_date):
-        # Use the in-memory Polars DataFrame from the repository snapshot
-        df = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
-        if df is None or df.height == 0:
+    def load_asset_history(self, asset, start_date, end_date, market_days_only: bool = True):
+        if not asset:
             return pl.DataFrame({})
-        # Convert QDate to Python datetime.date if needed
-        if hasattr(start_date, 'toPython'):  # QDate
+
+        # Convert QDate to Python date when needed.
+        if hasattr(start_date, "toPython"):
             start_date = start_date.toPython()
-        elif hasattr(start_date, 'toPyDate'):
+        elif hasattr(start_date, "toPyDate"):
             start_date = start_date.toPyDate()
-        if hasattr(end_date, 'toPython'):
+        if hasattr(end_date, "toPython"):
             end_date = end_date.toPython()
-        elif hasattr(end_date, 'toPyDate'):
+        elif hasattr(end_date, "toPyDate"):
             end_date = end_date.toPyDate()
-        # Convert to Polars datetime
-        start_date = pl.datetime(start_date.year, start_date.month, start_date.day)
-        end_date = pl.datetime(end_date.year, end_date.month, end_date.day)
-        # Ensure 'datum' is a datetime column
-        if df["datum"].dtype != pl.Datetime:
-            df = df.with_columns([
-                pl.col("datum").str.strptime(pl.Datetime, "%d/%m/%Y", strict=False).alias("datum")
-            ])
-        mask = (
-            (df["asset_rollup"] == asset) &
-            (df["datum"] >= start_date) &
-            (df["datum"] <= end_date)
+        if start_date is None or end_date is None or start_date > end_date:
+            return pl.DataFrame({})
+
+        # Prices (calendar source for market days)
+        df_prices = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+        if df_prices is None or df_prices.height == 0:
+            # Fallback to legacy merged snapshot if historical-close snapshot is not available.
+            df_legacy = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
+            if df_legacy is None or df_legacy.height == 0:
+                return pl.DataFrame({})
+            df_legacy = df_legacy.with_columns(
+                [
+                    pl.coalesce(
+                        [
+                            pl.col("datum").cast(pl.Date, strict=False),
+                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+                        ]
+                    ).alias("datum")
+                ]
+            )
+            return (
+                df_legacy.filter(
+                    (pl.col("asset_rollup") == asset)
+                    & (pl.col("datum") >= start_date)
+                    & (pl.col("datum") <= end_date)
+                )
+                .sort("datum")
+            )
+
+        df_prices = (
+            df_prices.with_columns(
+                [
+                    pl.coalesce(
+                        [
+                            pl.col("datum").cast(pl.Date, strict=False),
+                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+                        ]
+                    ).alias("datum"),
+                    pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"),
+                ]
+            )
+            .filter(
+                (pl.col("asset_rollup") == asset)
+                & (pl.col("datum") >= start_date)
+                & (pl.col("datum") <= end_date)
+            )
+            .select(["datum", "asset_rollup", "close_price"])
+            .sort("datum")
         )
-        return df.filter(mask).sort("datum")
+        if df_prices.is_empty():
+            return pl.DataFrame({})
+
+        # v2 result data
+        df_v2 = getattr(SNAPSHOT_STORE, "repository_snapshot_per_dag_asset_result_v2", None)
+        if df_v2 is None:
+            df_v2 = pl.DataFrame({})
+        if df_v2.height > 0:
+            df_v2 = (
+                df_v2.with_columns(
+                    [
+                        pl.coalesce(
+                            [
+                                pl.col("datum").cast(pl.Date, strict=False),
+                                pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                                pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+                            ]
+                        ).alias("datum"),
+                        pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal"),
+                        pl.col("totaal_aantal_bezit_v2").cast(pl.Float64, strict=False).alias("totaal_aantal_bezit"),
+                    ]
+                )
+                .filter(
+                    (pl.col("asset_rollup") == asset)
+                    & (pl.col("datum") >= start_date)
+                    & (pl.col("datum") <= end_date)
+                )
+                .select(["datum", "asset_rollup", "totaal", "totaal_aantal_bezit"])
+                .sort("datum")
+            )
+        else:
+            df_v2 = pl.DataFrame(
+                {
+                    "datum": [],
+                    "asset_rollup": [],
+                    "totaal": [],
+                    "totaal_aantal_bezit": [],
+                }
+            )
+
+        # Market-days base join
+        df_joined = df_prices.join(df_v2, on=["datum", "asset_rollup"], how="left").with_columns(
+            [
+                pl.col("totaal").fill_null(strategy="forward").fill_null(0.0),
+                pl.col("totaal_aantal_bezit").fill_null(strategy="forward").fill_null(0.0),
+            ]
+        )
+
+        if market_days_only:
+            return df_joined.sort("datum")
+
+        # All days: dense calendar + forward fill from latest market day values.
+        cal = pl.DataFrame({"datum": pl.date_range(start=start_date, end=end_date, interval="1d", eager=True)})
+        cal = cal.with_columns(pl.lit(asset).alias("asset_rollup"))
+        dense = cal.join(df_joined, on=["datum", "asset_rollup"], how="left").sort("datum")
+        dense = dense.with_columns(
+            [
+                pl.col("close_price").fill_null(strategy="forward"),
+                pl.col("totaal").fill_null(strategy="forward").fill_null(0.0),
+                pl.col("totaal_aantal_bezit").fill_null(strategy="forward").fill_null(0.0),
+            ]
+        )
+        return dense
 
     def load_option_open_data(self):
         # print("Load open opties data for single asset analyse aangeroepen")
