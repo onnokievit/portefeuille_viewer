@@ -1,4 +1,5 @@
 import contextlib
+import math
 import re
 from datetime import datetime
 import polars as pl
@@ -461,6 +462,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # self._mpl_hover_cid = self.canvas.mpl_connect('motion_notify_event', self._on_mpl_hover)
         self._mpl_last_lines = []
         self._mpl_x_mapping = []  # mapping van x_scaled naar koerswaarde
+        self._live_summary_asset = None
+        self._live_summary_row = None
 
 
 
@@ -1166,8 +1169,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # test orders cache opnieuw laden en tabel verversen
         load_test_orders_cache_from_db()
         self.fill_test_orders_table(get_cached_orders(self.asset_selector.currentText()))
+        self._live_summary_asset = None
+        self._live_summary_row = None
         
     def on_orders_committed(self):
+        self._live_summary_asset = None
+        self._live_summary_row = None
         self.update_opties_open_table()
         
 
@@ -1603,10 +1610,34 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         except Exception:
             return None
 
-    def _update_summary_labels(self):
-        asset = self.asset_selector.currentText()
+    def _get_live_summary_row(self, asset: str, refresh: bool = False):
+        if not asset:
+            return None
+        if (
+            not refresh
+            and self._live_summary_asset == asset
+            and self._live_summary_row is not None
+        ):
+            return self._live_summary_row
         df_sum = build_aandelen_tab_summary(asset_rollup=asset)
         row = df_sum.row(0, named=True) if df_sum is not None and not df_sum.is_empty() else None
+        self._live_summary_asset = asset
+        self._live_summary_row = row
+        return row
+
+    @staticmethod
+    def _as_finite_float(value):
+        try:
+            v = float(value)
+        except Exception:
+            return None
+        if not math.isfinite(v):
+            return None
+        return v
+
+    def _update_summary_labels(self):
+        asset = self.asset_selector.currentText()
+        row = self._get_live_summary_row(asset, refresh=False)
 
         koers_prev_val = row.get("koers_prev") if row else None
         koers_val = row.get("koers") if row else None
@@ -2132,6 +2163,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def on_asset_selected(self, asset_rollup):
         self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
         self.logic.set_asset(asset_rollup)
+        self._get_live_summary_row(asset_rollup, refresh=True)
         # Laad testorders uit DB voor dit asset en vul de tabel
         try:
             if getattr(self, "show_all_test_orders", False):
@@ -2154,8 +2186,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_sprinters_table()
 
     def update_history_charts(self):
+        asset = self.asset_selector.currentText()
         df = self.logic.load_asset_history(
-            self.asset_selector.currentText(),
+            asset,
             self.startDate.date(),
             self.endDate.date(),
             market_days_only=self.checkBoxMarketDaysOnly.isChecked(),
@@ -2166,12 +2199,47 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
 
         import numpy as np
-        x = np.arange(len(df))
         datums = df["datum"].to_list()
         close_price = [float(v) if v is not None and v != '' else np.nan for v in df["close_price"].to_list()]
         aantal = [float(v) if v is not None and v != '' else 0.0 for v in df["totaal_aantal_bezit"].to_list()]
         factor = getattr(self.logic, "currency_factor", 1.0)
         totaal = [float(v) / factor if v is not None and v != '' else 0.0 for v in df["totaal"].to_list()]
+        live_row = self._get_live_summary_row(asset, refresh=False)
+        live_koers = self._as_finite_float(live_row.get("koers")) if live_row else None
+        live_totaal_inc_fee = self._as_finite_float(live_row.get("totaal_inc_fee")) if live_row else None
+        if live_koers is not None and live_totaal_inc_fee is not None:
+            today = datetime.now().date()
+
+            def _is_today(value):
+                if value is None:
+                    return False
+                if hasattr(value, "date"):
+                    try:
+                        return value.date() == today
+                    except Exception:
+                        return False
+                if isinstance(value, str):
+                    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                        try:
+                            return datetime.strptime(value, fmt).date() == today
+                        except Exception:
+                            continue
+                return value == today
+
+            today_idx = next((i for i, d in enumerate(datums) if _is_today(d)), None)
+            # totaal_inc_fee from build_aandelen_tab_summary is already in display currency
+            # (USD assets converted to EUR there), so do not divide by factor again.
+            live_totaal = live_totaal_inc_fee
+            if today_idx is None:
+                datums.append(today)
+                close_price.append(live_koers)
+                totaal.append(live_totaal)
+                aantal.append(aantal[-1] if aantal else 0.0)
+            else:
+                close_price[today_idx] = live_koers
+                totaal[today_idx] = live_totaal
+
+        x = np.arange(len(datums))
 
         # --- Chart 1: priceAantalChart (zoals eerder) ---
         pw = self.priceAantalChart
@@ -2211,17 +2279,32 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         ticks2 = [(i, str(datums[i])) for i in range(0, len(datums), max(1, len(datums)//10))]
         ax2 = rw.getPlotItem().getAxis('bottom')
         ax2.setTicks([ticks2])                    
-        import datetime
         n = len(datums)
         step = max(1, n // 10)
         ticks = []
         for i in range(0, n, step):
             d = datums[i]
             if isinstance(d, str):
-                d = datetime.datetime.strptime(d, "%Y-%m-%d")  # pas aan aan je formaat
+                parsed = None
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                    try:
+                        parsed = datetime.strptime(d, fmt)
+                        break
+                    except Exception:
+                        continue
+                d = parsed or datetime.now()
             ticks.append((i, d.strftime("%m/%y")))
         if (n-1) % step != 0:
             d = datums[-1]
+            if isinstance(d, str):
+                parsed = None
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                    try:
+                        parsed = datetime.strptime(d, fmt)
+                        break
+                    except Exception:
+                        continue
+                d = parsed or datetime.now()
             ticks.append((n-1, d.strftime("%m/%y")))
         pw.getPlotItem().getAxis('bottom').setTicks([ticks])
         rw.getPlotItem().getAxis('bottom').setTicks([ticks])
