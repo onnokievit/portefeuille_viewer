@@ -312,29 +312,23 @@ def build_state_intervals(df_tx: pl.DataFrame, df_actions: pl.DataFrame, scope: 
                     continue
                 pending_share_factor *= share_factor
 
-            # Pas pending splitfactor toe zodra dat nodig is:
-            # - direct bij normale transactiedag
-            # - of op laatste eventdag
-            # Maar sla toepassing over als transacties de conversie al expliciet bevatten.
+            # Equity split-events zijn in deze omgeving expliciet verwerkt via transacties
+            # (oude aandelen eruit, nieuwe erin, eventuele cash-afrekening).
+            # Daarom passen we GEEN extra quantity-scaling toe op open posities;
+            # transacties blijven de enige bron voor aantallen.
+            #
+            # pending_share_factor wordt alleen gebruikt als tijdelijke prijs-schaal
+            # voor tussenliggende dagen zonder transacties en wordt gereset zodra
+            # er een eventdag met transacties is (of aan het einde van de reeks).
             if pending_share_factor != 1.0:
-                net_pos_before_split = open_long_qty - open_short_qty
-                expected_split_delta = net_pos_before_split * (pending_share_factor - 1.0)
-                tol = max(1e-6, abs(expected_split_delta) * 1e-6)
-                split_is_already_encoded = abs(expected_split_delta) > tol and abs(day_signed_qty - expected_split_delta) <= tol
                 is_last_event = idx == (len(event_dates) - 1)
                 should_apply_now = bool(day_rows) or is_last_event
 
-                if split_is_already_encoded:
+                if should_apply_now:
                     pending_share_factor = 1.0
-                elif should_apply_now:
-                    open_long_qty *= pending_share_factor
-                    open_short_qty *= pending_share_factor
-                    pending_share_factor = 1.0
-                    # Cost basis (in currency) remains economically the same through a pure split.
-                    # Only quantity scales; avg price is derived later via basis / qty.
                 else:
-                    # Split is uitgesteld (bijv. broker-conversie de volgende dag):
-                    # waardeer tussenliggend nog op oude contractschaal.
+                    # Transactie-omzetting volgt op latere dag; waardeer tussentijds
+                    # op oude contractschaal om cashflows/waardering consistent te houden.
                     price_scale_factor = pending_share_factor
 
             day_tx_qty = 0.0
