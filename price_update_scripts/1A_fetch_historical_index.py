@@ -242,6 +242,35 @@ def parse_args() -> tuple[int, set[str] | None]:
     return days, asset_filter
 
 
+def exchange_candidates_for_target(target: IndexTarget) -> list[str]:
+    candidates: list[str] = []
+    ex = (target.exchange or "").strip().upper()
+    pex = (target.primary_exchange or "").strip().upper()
+    if ex:
+        candidates.append(ex)
+    if pex and pex not in candidates:
+        candidates.append(pex)
+
+    # SMART is often invalid for IND contracts; add symbol-based fallbacks.
+    sym = (target.symbol or "").strip().upper()
+    hints = {
+        "EOE": ["FTA", "AEB"],
+        "AEX": ["FTA", "AEB"],
+        "DAX": ["EUREX", "DTB"],
+        "NDX": ["NASDAQ", "CBOE"],
+        "TSX": ["TSE"],
+        "TXCX": ["TSE"],
+    }.get(sym, [])
+    for h in hints:
+        if h not in candidates:
+            candidates.append(h)
+
+    # Last fallback
+    if "SMART" not in candidates:
+        candidates.append("SMART")
+    return candidates
+
+
 def main() -> int:
     days, asset_filter = parse_args()
     targets = load_index_targets(asset_filter=asset_filter)
@@ -252,9 +281,7 @@ def main() -> int:
     all_frames: list[pd.DataFrame] = []
     failed = 0
     for i, target in enumerate(targets):
-        candidates = [target.exchange]
-        if target.primary_exchange and target.primary_exchange not in candidates:
-            candidates.append(target.primary_exchange)
+        candidates = exchange_candidates_for_target(target)
 
         df = None
         last_err = None

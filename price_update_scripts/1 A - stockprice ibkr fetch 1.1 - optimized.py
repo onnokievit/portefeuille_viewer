@@ -1,6 +1,6 @@
 from ibapi import wrapper
 from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
+
 from ibapi.contract import Contract
 from ibapi.utils import iswrapper  # Just for decorator
 from ibapi.common import BarData
@@ -18,7 +18,7 @@ conn_str = (r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\\Users\\o
 
 # Keep the SQL query exactly as requested by you
 # sql_query_stock_range = "SELECT * FROM asset_rollup_data WHERE asset_rollup = 'BNP'"
-sql_query_stock_range = "SELECT * FROM asset_rollup_data WHERE INCL_EXCL = 1"
+sql_query_stock_range = "SELECT * FROM asset_rollup_data WHERE INCL_EXCL = 1 AND LCASE([type]) = 'aandeel'"
 
 # Column used to filter valid rows
 currency_column = 'ib_currency'
