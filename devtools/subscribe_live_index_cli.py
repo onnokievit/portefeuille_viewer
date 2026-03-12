@@ -92,6 +92,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--exchange", default="FTA")
     p.add_argument("--currency", default="EUR")
     p.add_argument("--primary-exchange", default="")
+    p.add_argument("--conid", type=int, default=0, help="Optional IB contract id (conId)")
+    p.add_argument("--local-symbol", default="", help="Optional localSymbol override")
     p.add_argument("--duration-sec", type=int, default=60, help="How long to listen for ticks")
     p.add_argument(
         "--market-data-type",
@@ -126,10 +128,15 @@ def main() -> int:
         currency=args.currency,
         primary_exchange=args.primary_exchange,
     )
+    if args.conid:
+        contract.conId = int(args.conid)
+    if args.local_symbol:
+        contract.localSymbol = args.local_symbol
     req_id = 9001
     print(
         f"[{ts()}] Subscribing: symbol={args.symbol} secType=IND "
-        f"exchange={args.exchange} primary={args.primary_exchange or '-'} currency={args.currency}"
+        f"exchange={args.exchange} primary={args.primary_exchange or '-'} "
+        f"currency={args.currency} conId={args.conid or '-'} localSymbol={args.local_symbol or '-'}"
     )
     app.reqMktData(req_id, contract, "", False, False, [])
 

@@ -75,6 +75,9 @@ class PriceFeedIB(QObject):
 
             def nextValidId(self, orderId: int):
                 feed._is_ready = True
+                # Prefer delayed feed so indices without realtime entitlement still stream.
+                with contextlib.suppress(Exception):
+                    self.reqMarketDataType(3)
                 feed.ready.emit()
 
             def error(self, reqId, *args):
@@ -230,19 +233,74 @@ class PriceFeedIB(QObject):
             c.primaryExchange = primaryExchange
         return c
 
+    def _resolve_index_exchange(self, symbol: str, exchange: Optional[str], primary_exchange: Optional[str]) -> str:
+        ex = (exchange or "").strip().upper()
+        pex = (primary_exchange or "").strip().upper()
+        # SMART is usually invalid/ambiguous for IND contracts; prefer concrete venue.
+        if ex and ex not in {"SMART"}:
+            return ex
+        if pex and pex not in {"SMART"}:
+            return pex
+        # Last-resort symbol hints for common indices.
+        sym = (symbol or "").strip().upper()
+        hints = {
+            "EOE": "FTA",
+            "AEX": "FTA",
+            "DAX": "EUREX",
+            "NDX": "NASDAQ",
+            "TSX": "TSE",
+            "TXCX": "TSE",
+        }
+        return hints.get(sym, "SMART")
+
+    def _make_index(self, symbol, currency, exchange, primaryExchange):
+        c = self._Contract()
+        c.symbol = symbol
+        c.secType = "IND"
+        c.currency = currency
+        c.exchange = self._resolve_index_exchange(symbol, exchange, primaryExchange)
+        if primaryExchange:
+            c.primaryExchange = primaryExchange
+        return c
+
+    def _build_contract(self, symbol: str, currency: str, asset_type: str, exchange: Optional[str], primary_exchange: Optional[str]):
+        t = (asset_type or "").strip().lower()
+        if t == "index":
+            return self._make_index(symbol, currency, exchange, primary_exchange)
+        return self._make_stock(symbol, currency, primary_exchange)
+
     @Slot(list)
-    def ensure_subscriptions(self, rows: List[Tuple[str, str, Optional[str]]]):
-        """Vraag marktdata aan voor lijst van (sym, cur, prim_exch)."""
+    def ensure_subscriptions(self, rows: List[Tuple]):
+        """Vraag marktdata aan voor subscriptions.
+
+        Ondersteunt:
+        - legacy: (sym, cur, prim_exch)
+        - nieuw:   (sym, cur, asset_type, exchange, prim_exch)
+        """
         if not self._app:
             return
-        for (sym, cur, pex) in rows:
-            label = (sym, cur, pex or "")
+        for row in rows:
+            sym = cur = None
+            asset_type = "aandeel"
+            exch = None
+            pex = None
+            if isinstance(row, (list, tuple)):
+                if len(row) >= 5:
+                    sym, cur, asset_type, exch, pex = row[:5]
+                elif len(row) >= 3:
+                    sym, cur, pex = row[:3]
+                elif len(row) >= 2:
+                    sym, cur = row[:2]
+            if not sym or not cur:
+                continue
+            label = (sym, cur, (asset_type or "").strip().lower(), exch or "", pex or "")
             if label in self._subscribed:
                 continue
             tid = self._tid_next
             self._tid_next += 1
             self._tid_by_key[tid] = (sym, cur)
-            self._app.reqMktData(tid, self._make_stock(sym, cur, pex), "", False, False, [])
+            contract = self._build_contract(sym, cur, asset_type, exch, pex)
+            self._app.reqMktData(tid, contract, "", False, False, [])
             self._subscribed.add(label)
             time.sleep(0.01)
 
@@ -324,7 +382,7 @@ class PriceFeedService(QObject):
     def is_ready(self) -> bool:
         return self._feed.is_ready()
 
-    def ensure_subscriptions(self, rows: List[tuple[str, str, Optional[str]]]):
+    def ensure_subscriptions(self, rows: List[tuple]):
         self._feed.ensure_subscriptions(rows)
 
     def shutdown(self):

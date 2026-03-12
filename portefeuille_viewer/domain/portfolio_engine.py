@@ -132,7 +132,7 @@ class PortfolioEngine(QObject):
             return
         
         try:
-            # Converteer naar format (ib_symbol, ib_currency, prim_exchange)
+            # Converteer naar format (ib_symbol, ib_currency, type, exchange, prim_exchange)
             from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
             asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
 
@@ -153,9 +153,29 @@ class PortfolioEngine(QObject):
                 # Column missing -> include all (backward compatible)
                 filtered = asset_map
 
-            subs_df = filtered.select(["ib_symbol", "ib_currency", "prim_exchange"]).unique()
-            # Convert to list of tuples for ensure_subscriptions and drop rows with missing symbol/currency
-            subs = [tuple(x) for x in subs_df.to_numpy().tolist() if x[0] is not None and x[0] != "" and x[1] is not None and x[1] != ""]
+            wanted_cols = ["ib_symbol", "ib_currency", "type", "exchange", "prim_exchange"]
+            existing_cols = [c for c in wanted_cols if c in filtered.columns]
+            subs_df = filtered.select(existing_cols).unique()
+
+            # Ensure all expected columns exist (backward compatibility)
+            if "type" not in subs_df.columns:
+                subs_df = subs_df.with_columns(pl.lit("aandeel").alias("type"))
+            if "exchange" not in subs_df.columns:
+                subs_df = subs_df.with_columns(pl.lit("").alias("exchange"))
+            if "prim_exchange" not in subs_df.columns:
+                subs_df = subs_df.with_columns(pl.lit("").alias("prim_exchange"))
+
+            # Convert to tuples for ensure_subscriptions and drop rows with missing symbol/currency
+            subs = []
+            for rec in subs_df.to_dicts():
+                sym = rec.get("ib_symbol")
+                cur = rec.get("ib_currency")
+                if sym is None or str(sym).strip() == "" or cur is None or str(cur).strip() == "":
+                    continue
+                asset_type = str(rec.get("type") or "aandeel").strip().lower()
+                exchange = str(rec.get("exchange") or "").strip()
+                prim_exchange = str(rec.get("prim_exchange") or "").strip()
+                subs.append((str(sym).strip(), str(cur).strip(), asset_type, exchange, prim_exchange))
 
             print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbol-currency pairs (filtered by INCL_EXCL if present)...")
             if subs:
