@@ -1593,13 +1593,59 @@ def portfolio_value_asset_rollup_aandelen():
     SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen = df_aandelen_waarde
     #return df_aandelen_waarde
 
+def portfolio_value_asset_rollup_sprinters():
+    df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+    if df_assets is None or df_assets.height == 0:
+        SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = pl.DataFrame({})
+        return
+
+    # Prefer repository snapshot (tx-derived, always available after load_open_sprinters_from_tx).
+    # Fallback to live aggregator snapshot when needed.
+    df_sprinters = SNAPSHOT_STORE.repository_snapshot_open_sprinters
+    if df_sprinters is None or df_sprinters.height == 0:
+        df_sprinters = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
+    if df_sprinters is None or df_sprinters.height == 0:
+        SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = pl.DataFrame({})
+        return
+
+    df_sprinters_waarde = df_sprinters.with_columns(
+        [
+            pl.col("SomVantransactie_aantal").cast(pl.Float64).alias("SomVantransactie_aantal"),
+            pl.col("optie_strike").cast(pl.Float64).alias("optie_strike"),
+            (
+                pl.col("SomVantransactie_aantal").cast(pl.Float64)
+                * pl.col("optie_strike").cast(pl.Float64)
+            ).alias("spr_waarde_bezit"),
+        ]
+    )
+
+    df_sprinters_waarde = df_sprinters_waarde.join(
+        df_assets.select(["asset_rollup", "regio", "sector", "value_grow"]),
+        on="asset_rollup",
+        how="left",
+    )
+
+    df_sprinters_waarde = df_sprinters_waarde.group_by(
+        ["asset_rollup", "regio", "sector", "value_grow"]
+    ).agg(
+        [
+            pl.sum("SomVantransactie_aantal").alias("aantal_sprinters"),
+            pl.sum("spr_waarde_bezit").alias("spr_waarde_bezit"),
+        ]
+    )
+
+    SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = df_sprinters_waarde
+
 def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
     df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie
+    df_sprinters = SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters
 
     if df_aandelen is None or df_opties_put is None:
         raise ValueError("Een van de benodigde dataframes is niet gevuld!")
+    if df_sprinters is None:
+        df_sprinters = pl.DataFrame({})
 
     df_opties_put = df_opties_put.group_by("asset_rollup",  "regio", "sector", "value_grow").agg([
         pl.sum("waarde_bezit").alias("opt_waarde_bezit"),
@@ -1611,12 +1657,34 @@ def portfolio_value_asset_rollup_combined():
         pl.sum("aantal_OTM_call").alias("opt_aantal_OTM_call"),
         ])
     df_opties_put = df_opties_put.drop(["regio", "sector", "value_grow"])
+    if not df_sprinters.is_empty():
+        df_sprinters = df_sprinters.group_by("asset_rollup", "regio", "sector", "value_grow").agg([
+            pl.sum("aantal_sprinters").alias("aantal_sprinters"),
+            pl.sum("spr_waarde_bezit").alias("spr_waarde_bezit"),
+        ])
+        df_sprinters = df_sprinters.drop(["regio", "sector", "value_grow"])
+    else:
+        df_sprinters = pl.DataFrame(
+            schema={
+                "asset_rollup": pl.Utf8,
+                "aantal_sprinters": pl.Float64,
+                "spr_waarde_bezit": pl.Float64,
+            }
+        )
 
 
     df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow","koers").agg([
         pl.sum("aantal_bezit").alias("aand_aantal_bezit"),
         pl.sum("waarde_bezit").alias("aand_waarde_bezit"),
         ])
+
+    # Ensure join key uses a stable dtype across sources.
+    if "asset_rollup" in df_aandelen.columns:
+        df_aandelen = df_aandelen.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
+    if "asset_rollup" in df_opties_put.columns:
+        df_opties_put = df_opties_put.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
+    if "asset_rollup" in df_sprinters.columns:
+        df_sprinters = df_sprinters.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
 
 
     
@@ -1628,10 +1696,21 @@ def portfolio_value_asset_rollup_combined():
         # suffix="opt_"
     )
 
-    df_combined = df_combined.drop(["asset_rollup_right"])
+    if "asset_rollup_right" in df_combined.columns:
+        df_combined = df_combined.drop(["asset_rollup_right"])
+
+    df_combined = df_combined.join(
+        df_sprinters,
+        on=["asset_rollup"],
+        how="outer",
+    )
+    if "asset_rollup_right" in df_combined.columns:
+        df_combined = df_combined.drop(["asset_rollup_right"])
 
     # Vervang nullen door 0 voor sommaties
     df_combined = df_combined.with_columns([
+        pl.col("aand_aantal_bezit").fill_null(0).alias("aand_aantal_bezit"),
+        pl.col("aand_waarde_bezit").fill_null(0).alias("aand_waarde_bezit"),
         pl.col("opt_waarde_bezit").fill_null(0).alias("opt_waarde_bezit"),
         pl.col("opt_waarde_ITM").fill_null(0).alias("opt_waarde_ITM"),
         pl.col("opt_waarde_bezit_delta").fill_null(0).alias("opt_waarde_bezit_delta"),
@@ -1639,6 +1718,8 @@ def portfolio_value_asset_rollup_combined():
         pl.col("opt_aantal_OTM_put").fill_null(0).alias("opt_aantal_OTM_put"),
         pl.col("opt_aantal_ITM_call").fill_null(0).alias("opt_aantal_ITM_call"),
         pl.col("opt_aantal_OTM_call").fill_null(0).alias("opt_aantal_OTM_call"),
+        pl.col("aantal_sprinters").fill_null(0).alias("aantal_sprinters"),
+        pl.col("spr_waarde_bezit").fill_null(0).alias("spr_waarde_bezit"),
     ])
 
 
@@ -1647,8 +1728,8 @@ def portfolio_value_asset_rollup_combined():
     df_combined = df_combined.with_columns([
         (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM_put"))).alias("total_aantal_lineair"),
 
-        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit") ).alias("total_waarde_lineair"),
-        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit_delta") ).alias("total_waarde_delta"),
+        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit") + pl.col("spr_waarde_bezit")).alias("total_waarde_lineair"),
+        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit_delta") + pl.col("spr_waarde_bezit")).alias("total_waarde_delta"),
     ])
 
     total_portfolio_value_lineair = df_combined['total_waarde_lineair'].sum()
@@ -1681,6 +1762,7 @@ def refresh_all_snapshots():
     build_repository_active_asset_rollup_data()
     portfolio_value_asset_rollup_opties_put()
     portfolio_value_asset_rollup_aandelen()
+    portfolio_value_asset_rollup_sprinters()
     portfolio_value_asset_rollup_combined()
 
 

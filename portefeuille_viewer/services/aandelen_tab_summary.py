@@ -111,7 +111,7 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		asset_rollup,
 	)
 
-	df_asset_result = _safe_df(SNAPSHOT_STORE.repository_per_dag_asset_result)
+	df_asset_result = _safe_df(SNAPSHOT_STORE.repository_snapshot_per_dag_asset_result_v2)
 	today = date.today()
 	if not df_asset_result.is_empty():
 		df_asset_result = df_asset_result.filter(pl.col("datum") < today)
@@ -119,18 +119,45 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 			df_asset_result = df_asset_result.with_columns(
 				pl.col("datum").str.strptime(pl.Date, "%d/%m/%Y")
 			)
+		if "totaal_v2" in df_asset_result.columns:
+			df_asset_result = df_asset_result.with_columns(
+				pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal")
+			)
 		if asset_rollup:
 			df_asset_result = df_asset_result.filter(pl.col("asset_rollup") == asset_rollup)
 
-	# Neem per asset de laatste rij met beschikbare close_price.
-	# Zo voorkomen we lege koers_prev op niet-handelsdagen (weekend/feestdag).
+	# Neem per asset de laatste v2-rij (referentie voor net_change).
 	df_aset_result_latest = (
 		df_asset_result
+		.sort(["asset_rollup", "datum"])
+		.group_by("asset_rollup")
+		.agg([pl.col("totaal").last().alias("totaal")])
+	) if not df_asset_result.is_empty() else pl.DataFrame()
+
+	# Neem per asset de laatste rij met beschikbare close_price (< vandaag).
+	# Zo voorkomen we lege koers_prev op niet-handelsdagen (weekend/feestdag).
+	df_historical_close = _safe_df(SNAPSHOT_STORE.repository_snapshot_historical_close)
+	if not df_historical_close.is_empty():
+		if "datum" in df_historical_close.columns:
+			df_historical_close = df_historical_close.with_columns(
+				pl.coalesce(
+					[
+						pl.col("datum").cast(pl.Date, strict=False),
+						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+					]
+				).alias("datum")
+			)
+		df_historical_close = df_historical_close.filter(pl.col("datum") < today)
+		if asset_rollup:
+			df_historical_close = df_historical_close.filter(pl.col("asset_rollup") == asset_rollup)
+	df_close_latest = (
+		df_historical_close
 		.filter(pl.col("close_price").is_not_null())
 		.sort(["asset_rollup", "datum"])
 		.group_by("asset_rollup")
-		.agg([pl.all().last()])
-	) if not df_asset_result.is_empty() else pl.DataFrame()
+		.agg([pl.col("close_price").last().alias("close_price")])
+	) if not df_historical_close.is_empty() else pl.DataFrame()
 
 	########### einde import data ##################################
 
@@ -173,7 +200,9 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 			how="left",
 		)
 	if not df_aset_result_latest.is_empty():
-		df_final = df_final.join(df_aset_result_latest.select(["asset_rollup", "close_price", "totaal"]), on=["asset_rollup"], how="left")
+		df_final = df_final.join(df_aset_result_latest.select(["asset_rollup", "totaal"]), on=["asset_rollup"], how="left")
+	if not df_close_latest.is_empty():
+		df_final = df_final.join(df_close_latest.select(["asset_rollup", "close_price"]), on=["asset_rollup"], how="left")
 
 	required_columns = {
 		"open_sp_aantal": 0,
