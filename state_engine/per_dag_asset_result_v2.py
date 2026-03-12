@@ -545,8 +545,11 @@ def load_aandelen_component(conn, scope: RebuildScope) -> pl.DataFrame:
         SELECT
             datum,
             asset_rollup,
-            SUM(realized_pnl_total + unrealized_pnl_total) AS aandelen_resultaat_v2,
-            SUM(cum_fee) AS asset_fee_v2
+            SUM(
+                IIF(realized_pnl_total IS NULL, 0, realized_pnl_total)
+                + IIF(unrealized_pnl_total IS NULL, 0, unrealized_pnl_total)
+            ) AS aandelen_resultaat_v2,
+            SUM(IIF(cum_fee IS NULL, 0, cum_fee)) AS asset_fee_v2
         FROM per_dag_aandelen_state_v2
         WHERE datum >= ? AND datum <= ?
         {asset_filter}
