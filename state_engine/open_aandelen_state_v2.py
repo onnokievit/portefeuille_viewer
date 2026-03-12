@@ -86,11 +86,11 @@ def fetch_min_transaction_date(conn, asset_rollup: str | None = None) -> date:
     cursor = conn.cursor()
     if asset_rollup:
         cursor.execute(
-            "SELECT MIN(datum) FROM transacties_bron_data WHERE asset_type='aandeel' AND asset_rollup=?",
+            "SELECT MIN(datum) FROM transacties_bron_data WHERE asset_type IN ('aandeel','future') AND asset_rollup=?",
             asset_rollup,
         )
     else:
-        cursor.execute("SELECT MIN(datum) FROM transacties_bron_data WHERE asset_type='aandeel'")
+        cursor.execute("SELECT MIN(datum) FROM transacties_bron_data WHERE asset_type IN ('aandeel','future')")
     result = cursor.fetchone()[0]
     if result is None:
         raise RuntimeError("Geen aandelentransacties gevonden.")
@@ -136,7 +136,7 @@ def load_equity_transactions(conn, scope: RebuildScope) -> pl.DataFrame:
             transactie_euro_totaal,
             transactie_fee
         FROM transacties_bron_data
-        WHERE asset_type='aandeel'
+        WHERE asset_type IN ('aandeel','future')
           AND datum <= ?
     """
     params: list = [scope.to_date]
@@ -192,22 +192,45 @@ def load_stock_splits(conn, scope: RebuildScope) -> pl.DataFrame:
 
 
 def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
-    sql = """
+    sql_range = """
         SELECT asset_rollup, datum, close
         FROM hist_data_per_asset_symbol
         WHERE datum >= ? AND datum <= ?
     """
-    params: list = [scope.from_date - timedelta(days=10), scope.to_date]
+    params_range: list = [scope.from_date - timedelta(days=10), scope.to_date]
     if scope.assets:
         placeholders = ",".join("?" for _ in scope.assets)
-        sql += f" AND asset_rollup IN ({placeholders})"
-        params.extend(scope.assets)
-    sql += " ORDER BY asset_rollup, datum"
-    return (
-        pl.read_database(sql, conn, execute_options={"parameters": params})
-        .with_columns(pl.col("datum").cast(pl.Date))
-        .rename({"close": "close_price_effective"})
-    )
+        sql_range += f" AND asset_rollup IN ({placeholders})"
+        params_range.extend(scope.assets)
+    sql_range += " ORDER BY asset_rollup, datum"
+
+    sql_anchor = """
+        SELECT p.asset_rollup, p.datum, p.close
+        FROM hist_data_per_asset_symbol AS p
+        INNER JOIN (
+            SELECT asset_rollup, MAX(datum) AS max_datum
+            FROM hist_data_per_asset_symbol
+            WHERE datum < ? AND datum <= ?
+    """
+    params_anchor: list = [scope.from_date - timedelta(days=10), scope.to_date]
+    if scope.assets:
+        placeholders = ",".join("?" for _ in scope.assets)
+        sql_anchor += f" AND asset_rollup IN ({placeholders})"
+        params_anchor.extend(scope.assets)
+    sql_anchor += """
+            GROUP BY asset_rollup
+        ) AS a
+            ON p.asset_rollup = a.asset_rollup
+           AND p.datum = a.max_datum
+    """
+
+    df_range = pl.read_database(sql_range, conn, execute_options={"parameters": params_range})
+    df_anchor = pl.read_database(sql_anchor, conn, execute_options={"parameters": params_anchor})
+    if df_range.is_empty() and df_anchor.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "datum": pl.Date, "close_price_effective": pl.Float64})
+
+    df = pl.concat([df_range, df_anchor], how="vertical").unique(subset=["asset_rollup", "datum"], keep="last")
+    return df.with_columns(pl.col("datum").cast(pl.Date)).rename({"close": "close_price_effective"}).sort(["asset_rollup", "datum"])
 
 
 def aggregate_daily_transactions(df_tx: pl.DataFrame) -> pl.DataFrame:

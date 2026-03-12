@@ -153,7 +153,7 @@ class PortfolioEngine(QObject):
                 # Column missing -> include all (backward compatible)
                 filtered = asset_map
 
-            wanted_cols = ["ib_symbol", "ib_currency", "type", "exchange", "prim_exchange"]
+            wanted_cols = ["ib_symbol", "ib_currency", "type", "exchange", "prim_exchange", "contractid"]
             existing_cols = [c for c in wanted_cols if c in filtered.columns]
             subs_df = filtered.select(existing_cols).unique()
 
@@ -164,6 +164,8 @@ class PortfolioEngine(QObject):
                 subs_df = subs_df.with_columns(pl.lit("").alias("exchange"))
             if "prim_exchange" not in subs_df.columns:
                 subs_df = subs_df.with_columns(pl.lit("").alias("prim_exchange"))
+            if "contractid" not in subs_df.columns:
+                subs_df = subs_df.with_columns(pl.lit(None).alias("contractid"))
 
             # Convert to tuples for ensure_subscriptions and drop rows with missing symbol/currency
             subs = []
@@ -175,7 +177,8 @@ class PortfolioEngine(QObject):
                 asset_type = str(rec.get("type") or "aandeel").strip().lower()
                 exchange = str(rec.get("exchange") or "").strip()
                 prim_exchange = str(rec.get("prim_exchange") or "").strip()
-                subs.append((str(sym).strip(), str(cur).strip(), asset_type, exchange, prim_exchange))
+                contractid = rec.get("contractid")
+                subs.append((str(sym).strip(), str(cur).strip(), asset_type, exchange, prim_exchange, contractid))
 
             print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbol-currency pairs (filtered by INCL_EXCL if present)...")
             if subs:

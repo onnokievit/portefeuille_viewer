@@ -263,11 +263,39 @@ class PriceFeedIB(QObject):
             c.primaryExchange = primaryExchange
         return c
 
-    def _build_contract(self, symbol: str, currency: str, asset_type: str, exchange: Optional[str], primary_exchange: Optional[str]):
+    def _make_future(self, symbol, currency, exchange, primaryExchange):
+        c = self._Contract()
+        c.symbol = symbol
+        c.secType = "FUT"
+        c.currency = currency
+        c.exchange = exchange or primaryExchange or "SMART"
+        if primaryExchange:
+            c.primaryExchange = primaryExchange
+        return c
+
+    def _build_contract(
+        self,
+        symbol: str,
+        currency: str,
+        asset_type: str,
+        exchange: Optional[str],
+        primary_exchange: Optional[str],
+        contract_id: Optional[int] = None,
+    ):
         t = (asset_type or "").strip().lower()
         if t == "index":
-            return self._make_index(symbol, currency, exchange, primary_exchange)
-        return self._make_stock(symbol, currency, primary_exchange)
+            c = self._make_index(symbol, currency, exchange, primary_exchange)
+        elif t in {"future", "fut"}:
+            c = self._make_future(symbol, currency, exchange, primary_exchange)
+        else:
+            c = self._make_stock(symbol, currency, primary_exchange)
+        try:
+            cid = int(contract_id) if contract_id is not None and str(contract_id).strip() != "" else 0
+        except Exception:
+            cid = 0
+        if cid > 0:
+            c.conId = cid
+        return c
 
     @Slot(list)
     def ensure_subscriptions(self, rows: List[Tuple]):
@@ -275,7 +303,7 @@ class PriceFeedIB(QObject):
 
         Ondersteunt:
         - legacy: (sym, cur, prim_exch)
-        - nieuw:   (sym, cur, asset_type, exchange, prim_exch)
+        - nieuw:   (sym, cur, asset_type, exchange, prim_exch[, contractid])
         """
         if not self._app:
             return
@@ -284,8 +312,11 @@ class PriceFeedIB(QObject):
             asset_type = "aandeel"
             exch = None
             pex = None
+            cid = None
             if isinstance(row, (list, tuple)):
-                if len(row) >= 5:
+                if len(row) >= 6:
+                    sym, cur, asset_type, exch, pex, cid = row[:6]
+                elif len(row) >= 5:
                     sym, cur, asset_type, exch, pex = row[:5]
                 elif len(row) >= 3:
                     sym, cur, pex = row[:3]
@@ -293,13 +324,13 @@ class PriceFeedIB(QObject):
                     sym, cur = row[:2]
             if not sym or not cur:
                 continue
-            label = (sym, cur, (asset_type or "").strip().lower(), exch or "", pex or "")
+            label = (sym, cur, (asset_type or "").strip().lower(), exch or "", pex or "", str(cid or ""))
             if label in self._subscribed:
                 continue
             tid = self._tid_next
             self._tid_next += 1
             self._tid_by_key[tid] = (sym, cur)
-            contract = self._build_contract(sym, cur, asset_type, exch, pex)
+            contract = self._build_contract(sym, cur, asset_type, exch, pex, cid)
             self._app.reqMktData(tid, contract, "", False, False, [])
             self._subscribed.add(label)
             time.sleep(0.01)
