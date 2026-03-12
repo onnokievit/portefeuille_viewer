@@ -89,6 +89,7 @@ def main() -> int:
     for script_name, extra_args in [
         ("1 A - stockprice ibkr fetch 1.1 - optimized.py", [str(payload["days_range"])]),
         ("1A_fetch_historical_index.py", [str(payload["days_range"])]),
+        ("1A_fetch_historical_futures.py", [str(payload["days_range"])]),
         ("1 B - stockprice merge into historical data correct.py", []),
         ("1 C - delete temp stock price table.py", []),
     ]:

@@ -172,7 +172,9 @@ def clamp_to_available_price_date(conn, requested_to_date: date, assets: list[st
 def resolve_scope(args, conn) -> RebuildScope:
     requested_to_date = parse_iso_date(args.to_date) or date.today()
     assets = _normalize_assets(args.asset_rollups)
-    safe_to_date = clamp_to_available_price_date(conn, requested_to_date, assets)
+    # Voor asset_incremental willen we ook dagen zonder nieuwe price-bars kunnen materialiseren
+    # (bijv. delisted assets met carry-forward resultaat).
+    safe_to_date = requested_to_date if args.mode == "asset_incremental" else clamp_to_available_price_date(conn, requested_to_date, assets)
     if args.mode == "asset_incremental":
         from_date = parse_iso_date(args.from_date)
         if not from_date:

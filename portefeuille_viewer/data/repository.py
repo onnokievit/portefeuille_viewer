@@ -635,7 +635,7 @@ def load_gesloten_sprinters_from_tx(df_tx: pl.DataFrame | None = None) -> pl.Dat
 
 
 
-asset_types = ["aandeel", "optie", "sprinter"]
+asset_types = ["aandeel", "future", "optie", "sprinter"]
 transactie_types = ["koop", "verkoop"]
 transactie_oorsprong = ["OPEN", "CLOSE", "ASSIGN", "EXPIRE", "DOORROL", "STOCKSPLIT", "EXERCISE"]
 

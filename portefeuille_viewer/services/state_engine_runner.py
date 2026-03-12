@@ -76,12 +76,16 @@ class StateEngineRunner(QObject):
             self.handle_rebuild_requested(payload)
 
     def _build_price_catchup_payload(self, fetch_start_date: str | None = None) -> dict | None:
+        today = date.today()
         db_path = getattr(repository, "db_path", None)
         if not db_path:
             return None
 
         option_assets = self._get_assets_by_type(db_path, "optie")
-        equity_assets = self._get_assets_by_type(db_path, "aandeel")
+        equity_assets_aandeel = self._get_assets_by_type(db_path, "aandeel")
+        equity_assets_future = self._get_assets_by_type(db_path, "future")
+        equity_assets = sorted(set(equity_assets_aandeel) | set(equity_assets_future))
+        future_assets_set = set(equity_assets_future)
         sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
         all_assets = sorted(set(option_assets) | set(equity_assets) | set(sprinter_assets))
         if not all_assets:
@@ -111,18 +115,25 @@ class StateEngineRunner(QObject):
                     or shared_last > local_last
                     or shared_last > local_v2_last
                 ):
+                    needs_price_catchup = True
+                else:
+                    needs_price_catchup = False
+                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
+                if needs_price_catchup or needs_calendar_extend:
                     classes.add("opties")
                     outdated_assets.add(asset)
-                    if fetch_start_date:
+                    if fetch_start_date and needs_price_catchup:
                         from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif local_v2_last is not None:
+                    elif needs_price_catchup and local_v2_last is not None:
                         from_dates.append(local_v2_last)
-                    elif local_last is not None:
+                    elif needs_price_catchup and local_last is not None:
                         from_dates.append(local_last)
-                    else:
+                    elif needs_price_catchup:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="optie")
                         if first_tx_date:
                             from_dates.append(first_tx_date)
+                    else:
+                        from_dates.append(today)
 
         # Aandelen catchup
         if equity_assets:
@@ -140,18 +151,26 @@ class StateEngineRunner(QObject):
                     or shared_last > local_last
                     or shared_last > local_v2_last
                 ):
+                    needs_price_catchup = True
+                else:
+                    needs_price_catchup = False
+                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
+                if needs_price_catchup or needs_calendar_extend:
                     classes.add("aandelen")
                     outdated_assets.add(asset)
-                    if fetch_start_date:
+                    if fetch_start_date and needs_price_catchup:
                         from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif local_v2_last is not None:
+                    elif needs_price_catchup and local_v2_last is not None:
                         from_dates.append(local_v2_last)
-                    elif local_last is not None:
+                    elif needs_price_catchup and local_last is not None:
                         from_dates.append(local_last)
-                    else:
-                        first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="aandeel")
+                    elif needs_price_catchup:
+                        tx_type = "future" if asset in future_assets_set else "aandeel"
+                        first_tx_date = self._get_first_tx_date(db_path, asset, asset_type=tx_type)
                         if first_tx_date:
                             from_dates.append(first_tx_date)
+                    else:
+                        from_dates.append(today)
 
         # Sprinters catchup
         if sprinter_assets:
@@ -169,18 +188,25 @@ class StateEngineRunner(QObject):
                     or shared_last > local_last
                     or shared_last > local_v2_last
                 ):
+                    needs_price_catchup = True
+                else:
+                    needs_price_catchup = False
+                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
+                if needs_price_catchup or needs_calendar_extend:
                     classes.add("sprinters")
                     outdated_assets.add(asset)
-                    if fetch_start_date:
+                    if fetch_start_date and needs_price_catchup:
                         from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif local_v2_last is not None:
+                    elif needs_price_catchup and local_v2_last is not None:
                         from_dates.append(local_v2_last)
-                    elif local_last is not None:
+                    elif needs_price_catchup and local_last is not None:
                         from_dates.append(local_last)
-                    else:
+                    elif needs_price_catchup:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="sprinter")
                         if first_tx_date:
                             from_dates.append(first_tx_date)
+                    else:
+                        from_dates.append(today)
 
         if not classes or not outdated_assets or not from_dates:
             return None

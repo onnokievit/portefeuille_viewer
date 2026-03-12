@@ -22,7 +22,7 @@ INFO_STATUS_CODES = {2103, 2104, 2105, 2106, 2107, 2108, 2158, 2159, 1100, 1101,
 
 
 @dataclass
-class IndexTarget:
+class FutureTarget:
     asset_rollup: str
     symbol: str
     currency: str
@@ -31,7 +31,7 @@ class IndexTarget:
     contract_id: int | None
 
 
-class IndexHistApp(EWrapper, EClient):
+class FutureHistApp(EWrapper, EClient):
     def __init__(self) -> None:
         EClient.__init__(self, self)
         self.done = threading.Event()
@@ -80,12 +80,12 @@ class IndexHistApp(EWrapper, EClient):
         self.done.set()
 
 
-def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget]:
+def load_future_targets(asset_filter: set[str] | None = None) -> list[FutureTarget]:
     sql = """
         SELECT asset_rollup, ib_symbol, ib_currency, exchange, prim_exchange, contractid
         FROM asset_rollup_data
         WHERE INCL_EXCL = 1
-          AND LCASE([type]) = 'index'
+          AND LCASE([type]) = 'future'
           AND ib_symbol IS NOT NULL
           AND ib_currency IS NOT NULL
     """
@@ -95,17 +95,19 @@ def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget
         return []
 
     df = df.fillna("")
-    targets: list[IndexTarget] = []
+    targets: list[FutureTarget] = []
     for _, row in df.iterrows():
         asset_rollup = str(row.get("asset_rollup", "")).strip()
         if not asset_rollup:
             continue
         if asset_filter and asset_rollup.upper() not in asset_filter:
             continue
+
         symbol = str(row.get("ib_symbol", "")).strip()
         currency = str(row.get("ib_currency", "")).strip()
         exchange = str(row.get("exchange", "")).strip()
         primary_exchange = str(row.get("prim_exchange", "")).strip()
+
         raw_contract_id = row.get("contractid", None)
         contract_id = None
         try:
@@ -113,14 +115,16 @@ def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget
                 contract_id = int(float(raw_contract_id))
         except Exception:
             contract_id = None
+
         if not symbol or not currency:
             continue
         if not exchange and primary_exchange:
             exchange = primary_exchange
         if not exchange:
             continue
+
         targets.append(
-            IndexTarget(
+            FutureTarget(
                 asset_rollup=asset_rollup,
                 symbol=symbol,
                 currency=currency,
@@ -132,8 +136,8 @@ def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget
     return targets
 
 
-def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_override: str | None = None) -> pd.DataFrame:
-    app = IndexHistApp()
+def fetch_target(target: FutureTarget, days: int, client_id: int) -> pd.DataFrame:
+    app = FutureHistApp()
     app.connect("127.0.0.1", 7496, clientId=client_id)
     t = threading.Thread(target=app.run, daemon=True)
     t.start()
@@ -146,8 +150,8 @@ def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_overri
 
     c = Contract()
     c.symbol = target.symbol
-    c.secType = "IND"
-    c.exchange = exchange_override or target.exchange
+    c.secType = "FUT"
+    c.exchange = target.exchange
     c.currency = target.currency
     if target.contract_id and target.contract_id > 0:
         c.conId = int(target.contract_id)
@@ -179,10 +183,12 @@ def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_overri
 
     if app.error_text:
         raise RuntimeError(app.error_text)
+
     df = pd.DataFrame(app.rows)
     if df.empty:
         return df
     df = df.sort_values("date").reset_index(drop=True)
+    # Keep symbol aligned with merge key used in historical_data_correct.
     df["symbol"] = target.symbol
     df["asset_rollup"] = target.asset_rollup
     return df[["date", "symbol", "asset_rollup", "open", "high", "low", "close", "volume", "wap"]]
@@ -190,7 +196,7 @@ def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_overri
 
 def save_df_to_access_temp(df: pd.DataFrame) -> int:
     if df.empty:
-        print("Index fetch: no rows to write.")
+        print("Future fetch: no rows to write.")
         return 0
 
     out = df.copy().rename(columns={"date": "datum"})
@@ -235,7 +241,7 @@ def save_df_to_access_temp(df: pd.DataFrame) -> int:
             pass
         cur.executemany(insert_sql, rows)
         conn.commit()
-    print(f"Index fetch: inserted {len(rows)} rows into {TEMP_TABLE}.")
+    print(f"Future fetch: inserted {len(rows)} rows into {TEMP_TABLE}.")
     return len(rows)
 
 
@@ -253,83 +259,43 @@ def parse_args() -> tuple[int, set[str] | None]:
     return days, asset_filter
 
 
-def exchange_candidates_for_target(target: IndexTarget) -> list[str]:
-    candidates: list[str] = []
-    ex = (target.exchange or "").strip().upper()
-    pex = (target.primary_exchange or "").strip().upper()
-    if ex:
-        candidates.append(ex)
-    if pex and pex not in candidates:
-        candidates.append(pex)
-
-    # SMART is often invalid for IND contracts; add symbol-based fallbacks.
-    sym = (target.symbol or "").strip().upper()
-    hints = {
-        "EOE": ["FTA", "AEB"],
-        "AEX": ["FTA", "AEB"],
-        "DAX": ["EUREX", "DTB"],
-        "NDX": ["NASDAQ", "CBOE"],
-        "TSX": ["TSE"],
-        "TXCX": ["TSE"],
-    }.get(sym, [])
-    for h in hints:
-        if h not in candidates:
-            candidates.append(h)
-
-    # Last fallback
-    if "SMART" not in candidates:
-        candidates.append("SMART")
-    return candidates
-
-
 def main() -> int:
     days, asset_filter = parse_args()
-    targets = load_index_targets(asset_filter=asset_filter)
+    targets = load_future_targets(asset_filter=asset_filter)
     if not targets:
-        print("Index fetch: no index targets found (type='index' and INCL_EXCL=1).")
+        print("Future fetch: no future targets found (type='future' and INCL_EXCL=1).")
         return 0
 
     all_frames: list[pd.DataFrame] = []
     failed = 0
     for i, target in enumerate(targets):
-        candidates = exchange_candidates_for_target(target)
-
-        df = None
-        last_err = None
-        for ex in candidates:
-            for attempt in (1, 2):
-                try:
-                    cid = random.randint(1000, 9999) + (i * 100) + attempt
-                    df = fetch_target(target, days=days, client_id=cid, exchange_override=ex)
-                    if df is not None and not df.empty:
-                        break
-                except Exception as exc:
-                    last_err = exc
-                    time.sleep(1.0)
-                    continue
-            if df is not None and not df.empty:
-                break
-
-        if df is None or df.empty:
+        try:
+            cid = random.randint(1000, 9999) + (i * 100)
+            df = fetch_target(target, days=days, client_id=cid)
+        except Exception as exc:
             failed += 1
-            print(f"Index fetch FAILED [{target.asset_rollup}/{target.symbol}]: {last_err or 'No data'}")
+            print(f"Future fetch FAILED [{target.asset_rollup}/{target.symbol}]: {exc}")
+            continue
+        if df.empty:
+            failed += 1
+            print(f"Future fetch FAILED [{target.asset_rollup}/{target.symbol}]: No data")
             continue
 
         print(
-            f"Index fetch OK [{target.asset_rollup}/{target.symbol}] rows={len(df)} "
+            f"Future fetch OK [{target.asset_rollup}/{target.symbol}] rows={len(df)} "
             f"range={df['date'].iloc[0]}->{df['date'].iloc[-1]}"
         )
         all_frames.append(df)
-        time.sleep(1.0)
+        time.sleep(0.8)
 
     if not all_frames:
-        print("Index fetch: no rows collected for any index.")
+        print("Future fetch: no rows collected for any future.")
         return 0
 
     merged = pd.concat(all_frames, ignore_index=True)
     merged = merged.drop_duplicates(subset=["date", "symbol"], keep="last").reset_index(drop=True)
     save_df_to_access_temp(merged)
-    print(f"Index fetch finished. assets_ok={len(all_frames)} assets_failed={failed} rows={len(merged)}")
+    print(f"Future fetch finished. assets_ok={len(all_frames)} assets_failed={failed} rows={len(merged)}")
     return 0
 
 
