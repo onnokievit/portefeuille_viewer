@@ -65,6 +65,7 @@ def refresh_everything():
     live_aggregator_opties.process_live_update()
     repository.portfolio_value_asset_rollup_opties_put()
     repository.portfolio_value_asset_rollup_aandelen()
+    repository.portfolio_value_asset_rollup_sprinters()
     repository.portfolio_value_asset_rollup_combined()  
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -89,6 +90,7 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
         live_aggregator_opties.process_live_update()
         repository.portfolio_value_asset_rollup_opties_put()
         repository.portfolio_value_asset_rollup_aandelen()
+        repository.portfolio_value_asset_rollup_sprinters()
         repository.portfolio_value_asset_rollup_combined()
     except Exception as exc:
         print(f"[snapshot-refresh] failed: {exc}")

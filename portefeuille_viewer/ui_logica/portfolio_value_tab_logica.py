@@ -96,6 +96,7 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                     return str(val)
             if colname in (
                 "aand_aantal_bezit",
+                "aantal_sprinters",
                 "opt_aantal_ITM_put",
                 "opt_aantal_OTM_put",
                 "opt_aantal_ITM_call",
@@ -137,6 +138,7 @@ class PercentColoredPolarsModel(QAbstractTableModel):
                 "total_waarde_delta",
                 "koers",
                 "aand_aantal_bezit",
+                "aantal_sprinters",
                 "opt_aantal_ITM_put",
                 "opt_aantal_OTM_put",
                 "opt_aantal_ITM_call",
@@ -256,8 +258,13 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         def _on_orders_committed():
             with contextlib.suppress(Exception):
                 self.reload_snapshot()
+        def _on_state_rebuild_finished(payload: dict | None):
+            with contextlib.suppress(Exception):
+                if (payload or {}).get("status") == "ok":
+                    self.reload_snapshot()
         signals.databaseChanged.connect(_on_db_changed)
         signals.ordersCommitted.connect(_on_orders_committed)
+        signals.stateRebuildFinished.connect(_on_state_rebuild_finished)
         signals.uiStyleChanged.connect(self._on_ui_style_changed)
 
     def _on_header_clicked(self, section: int):
@@ -425,6 +432,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "value_grow",
             "koers",
             "aand_aantal_bezit",
+            "aantal_sprinters",
             "opt_aantal_ITM_put",
             "opt_aantal_OTM_put",
             "opt_aantal_ITM_call",
@@ -492,6 +500,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         widths = {
             "asset_rollup": 140,
             "aand_aantal_bezit": 100,
+            "aantal_sprinters": 100,
             "opt_aantal_ITM_put": 110,
             "opt_aantal_OTM_put": 110,
             "opt_aantal_ITM_call": 120,
@@ -613,6 +622,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 return str(val)
         if col in (
             "aand_aantal_bezit",
+            "aantal_sprinters",
             "opt_aantal_ITM_put",
             "opt_aantal_OTM_put",
             "opt_aantal_ITM_call",
@@ -645,6 +655,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             elif col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
                 totalen[col] = 1.0
             elif col in (
+                "aantal_sprinters",
                 "opt_aantal_ITM_put",
                 "opt_aantal_OTM_put",
                 "opt_aantal_ITM_call",

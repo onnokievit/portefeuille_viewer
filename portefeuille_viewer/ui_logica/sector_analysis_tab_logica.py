@@ -42,6 +42,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self.reload_data()
         signals.databaseChanged.connect(self._on_db_changed)
         signals.ordersCommitted.connect(self.reload_data)
+        signals.stateRebuildFinished.connect(self._on_state_rebuild_finished)
         if hasattr(self, "putOTMRatio"):
             try:
                 self.putOTMRatio.setValue(100)
@@ -199,6 +200,10 @@ class SectorAnalysisTab(QWidget, Ui_Form):
     def _on_db_changed(self, _db_name: str):
         self.reload_data()
 
+    def _on_state_rebuild_finished(self, payload: dict | None):
+        if (payload or {}).get("status") == "ok":
+            self.reload_data()
+
     def _on_put_otm_ratio_changed(self, value):
         try:
             self._put_otm_ratio = max(0.0, min(1.0, float(value) / 100.0))
@@ -216,9 +221,11 @@ class SectorAnalysisTab(QWidget, Ui_Form):
     def reload_data(self):
         df_opties = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
         df_aandelen = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
+        df_sprinters = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters", None)
 
         df_opties = df_opties if df_opties is not None else pl.DataFrame()
         df_aandelen = df_aandelen if df_aandelen is not None else pl.DataFrame()
+        df_sprinters = df_sprinters if df_sprinters is not None else pl.DataFrame()
 
         frames_lineair = []
         if not df_opties.is_empty() and "sector" in df_opties.columns:
@@ -242,6 +249,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
             df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
             frames_lineair.append(df_aandelen.select(["sector", "waarde_bezit"]))
+        if not df_sprinters.is_empty() and "sector" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+            df_sprinters = df_sprinters.filter(pl.col("sector").is_not_null())
+            frames_lineair.append(df_sprinters.select(["sector", "spr_waarde_bezit"]).rename({"spr_waarde_bezit": "waarde_bezit"}))
 
         data_lineair = self._build_sector_sum(frames_lineair)
 
@@ -258,12 +268,15 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         if not df_aandelen.is_empty() and "sector" in df_aandelen.columns and "waarde_bezit" in df_aandelen.columns:
             df_aandelen = df_aandelen.filter(pl.col("sector").is_not_null())
             frames_na_opties.append(df_aandelen.select(["sector", "waarde_bezit"]))
+        if not df_sprinters.is_empty() and "sector" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+            df_sprinters = df_sprinters.filter(pl.col("sector").is_not_null())
+            frames_na_opties.append(df_sprinters.select(["sector", "spr_waarde_bezit"]).rename({"spr_waarde_bezit": "waarde_bezit"}))
 
         data_na_opties = self._build_sector_sum(frames_na_opties)
 
         self._set_sector_table_data(data_lineair, data_na_opties)
-        data_delta = self._build_sector_delta_chart_data(df_opties, df_aandelen)
-        self._set_sector_table_delta_data(df_opties, df_aandelen)
+        data_delta = self._build_sector_delta_chart_data(df_opties, df_aandelen, df_sprinters)
+        self._set_sector_table_delta_data(df_opties, df_aandelen, df_sprinters)
         self._chart_data = {
             "pieChartValueLineair": data_lineair,
             "pieChartValueLineairNaOpties": data_na_opties,
@@ -272,8 +285,10 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         }
         df_opties_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
         df_aandelen_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
+        df_sprinters_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters", None)
         df_opties_vg = df_opties_vg if df_opties_vg is not None else pl.DataFrame()
         df_aandelen_vg = df_aandelen_vg if df_aandelen_vg is not None else pl.DataFrame()
+        df_sprinters_vg = df_sprinters_vg if df_sprinters_vg is not None else pl.DataFrame()
         frames_lineair_value_grow = []
         if not df_opties_vg.is_empty() and "value_grow" in df_opties_vg.columns:
             if "optie_call_put" in df_opties_vg.columns:
@@ -298,6 +313,11 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         if not df_aandelen_vg.is_empty() and "value_grow" in df_aandelen_vg.columns and "waarde_bezit" in df_aandelen_vg.columns:
             df_aandelen_vg = df_aandelen_vg.filter(pl.col("value_grow").is_not_null())
             frames_lineair_value_grow.append(df_aandelen_vg.select(["value_grow", "waarde_bezit"]))
+        if not df_sprinters_vg.is_empty() and "value_grow" in df_sprinters_vg.columns and "spr_waarde_bezit" in df_sprinters_vg.columns:
+            df_sprinters_vg = df_sprinters_vg.filter(pl.col("value_grow").is_not_null())
+            frames_lineair_value_grow.append(
+                df_sprinters_vg.select(["value_grow", "spr_waarde_bezit"]).rename({"spr_waarde_bezit": "waarde_bezit"})
+            )
 
         data_lineair_value_grow = self._build_value_grow_sum(frames_lineair_value_grow)
 
@@ -318,12 +338,17 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         if not df_aandelen_vg.is_empty() and "value_grow" in df_aandelen_vg.columns and "waarde_bezit" in df_aandelen_vg.columns:
             df_aandelen_vg = df_aandelen_vg.filter(pl.col("value_grow").is_not_null())
             frames_na_opties_value_grow.append(df_aandelen_vg.select(["value_grow", "waarde_bezit"]))
+        if not df_sprinters_vg.is_empty() and "value_grow" in df_sprinters_vg.columns and "spr_waarde_bezit" in df_sprinters_vg.columns:
+            df_sprinters_vg = df_sprinters_vg.filter(pl.col("value_grow").is_not_null())
+            frames_na_opties_value_grow.append(
+                df_sprinters_vg.select(["value_grow", "spr_waarde_bezit"]).rename({"spr_waarde_bezit": "waarde_bezit"})
+            )
 
         data_na_opties_value_grow = self._build_value_grow_sum(frames_na_opties_value_grow)
 
         self._set_value_grow_table_data(data_lineair_value_grow, data_na_opties_value_grow)
-        data_delta_value_grow = self._build_value_grow_delta_chart_data(df_opties_vg, df_aandelen_vg)
-        self._set_value_grow_table_delta_data(df_opties_vg, df_aandelen_vg)
+        data_delta_value_grow = self._build_value_grow_delta_chart_data(df_opties_vg, df_aandelen_vg, df_sprinters_vg)
+        self._set_value_grow_table_delta_data(df_opties_vg, df_aandelen_vg, df_sprinters_vg)
         self._value_grow_chart_data = {
             "pieChartValueGrowLineair": data_lineair_value_grow,
             "pieChartValueGrowLineairNaOpties": data_na_opties_value_grow,
@@ -423,7 +448,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._apply_value_grow_table_widths()
         self._update_value_grow_totals(df)
 
-    def _set_sector_table_delta_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame):
+    def _set_sector_table_delta_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame, df_sprinters: pl.DataFrame | None = None):
         if self._sector_table_delta_model is None:
             return
         df = pl.DataFrame()
@@ -442,6 +467,20 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else pl.lit(0.0).alias("value_aandelen_pct")
                 )
                 df = df.select(["sector", "value_aandelen", "value_aandelen_pct"])
+        if df_sprinters is not None and not df_sprinters.is_empty():
+            if "sector" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+                df_sprinters = df_sprinters.filter(pl.col("sector").is_not_null())
+                df_spr = (
+                    df_sprinters.group_by("sector")
+                    .agg(pl.col("spr_waarde_bezit").sum().alias("value_sprinters"))
+                )
+                if df.is_empty():
+                    df = df_spr.rename({"value_sprinters": "value_aandelen"})
+                else:
+                    df = df.join(df_spr, on="sector", how="left")
+                    df = df.with_columns(
+                        (pl.col("value_aandelen").fill_null(0.0) + pl.col("value_sprinters").fill_null(0.0)).alias("value_aandelen")
+                    ).drop(["value_sprinters"])
         df_all_delta = pl.DataFrame()
         if df_opties is not None and not df_opties.is_empty():
             if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "sector" in df_opties.columns:
@@ -511,7 +550,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._apply_sector_table_delta_widths()
         self._update_sector_totals_delta(df)
 
-    def _set_value_grow_table_delta_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame):
+    def _set_value_grow_table_delta_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame, df_sprinters: pl.DataFrame | None = None):
         if self._value_grow_table_delta_model is None:
             return
         df = pl.DataFrame()
@@ -530,6 +569,20 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     else pl.lit(0.0).alias("value_aandelen_pct")
                 )
                 df = df.select(["value_grow", "value_aandelen", "value_aandelen_pct"])
+        if df_sprinters is not None and not df_sprinters.is_empty():
+            if "value_grow" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+                df_sprinters = df_sprinters.filter(pl.col("value_grow").is_not_null())
+                df_spr = (
+                    df_sprinters.group_by("value_grow")
+                    .agg(pl.col("spr_waarde_bezit").sum().alias("value_sprinters"))
+                )
+                if df.is_empty():
+                    df = df_spr.rename({"value_sprinters": "value_aandelen"})
+                else:
+                    df = df.join(df_spr, on="value_grow", how="left")
+                    df = df.with_columns(
+                        (pl.col("value_aandelen").fill_null(0.0) + pl.col("value_sprinters").fill_null(0.0)).alias("value_aandelen")
+                    ).drop(["value_sprinters"])
         df_all_delta = pl.DataFrame()
         if df_opties is not None and not df_opties.is_empty():
             if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "value_grow" in df_opties.columns:
@@ -599,7 +652,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._apply_value_grow_table_delta_widths()
         self._update_value_grow_totals_delta(df)
 
-    def _build_sector_delta_chart_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame) -> dict:
+    def _build_sector_delta_chart_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame, df_sprinters: pl.DataFrame | None = None) -> dict:
         data = {"value_aandelen_put_delta": {}, "value_aandelen_delta_all": {}}
         df = pl.DataFrame()
         if df_aandelen is not None and not df_aandelen.is_empty():
@@ -609,6 +662,20 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     df_aandelen.group_by("sector")
                     .agg(pl.col("waarde_bezit").sum().alias("value_aandelen"))
                 )
+        if df_sprinters is not None and not df_sprinters.is_empty():
+            if "sector" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+                df_sprinters = df_sprinters.filter(pl.col("sector").is_not_null())
+                df_spr = (
+                    df_sprinters.group_by("sector")
+                    .agg(pl.col("spr_waarde_bezit").sum().alias("value_sprinters"))
+                )
+                if df.is_empty():
+                    df = df_spr.rename({"value_sprinters": "value_aandelen"})
+                else:
+                    df = df.join(df_spr, on="sector", how="left")
+                    df = df.with_columns(
+                        (pl.col("value_aandelen").fill_null(0.0) + pl.col("value_sprinters").fill_null(0.0)).alias("value_aandelen")
+                    ).drop(["value_sprinters"])
         if df_opties is not None and not df_opties.is_empty():
             if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "sector" in df_opties.columns:
                 df_put_delta = (
@@ -658,7 +725,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 }
         return data
 
-    def _build_value_grow_delta_chart_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame) -> dict:
+    def _build_value_grow_delta_chart_data(self, df_opties: pl.DataFrame, df_aandelen: pl.DataFrame, df_sprinters: pl.DataFrame | None = None) -> dict:
         data = {"value_aandelen_put_delta": {}, "value_aandelen_delta_all": {}}
         df = pl.DataFrame()
         if df_aandelen is not None and not df_aandelen.is_empty():
@@ -668,6 +735,20 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                     df_aandelen.group_by("value_grow")
                     .agg(pl.col("waarde_bezit").sum().alias("value_aandelen"))
                 )
+        if df_sprinters is not None and not df_sprinters.is_empty():
+            if "value_grow" in df_sprinters.columns and "spr_waarde_bezit" in df_sprinters.columns:
+                df_sprinters = df_sprinters.filter(pl.col("value_grow").is_not_null())
+                df_spr = (
+                    df_sprinters.group_by("value_grow")
+                    .agg(pl.col("spr_waarde_bezit").sum().alias("value_sprinters"))
+                )
+                if df.is_empty():
+                    df = df_spr.rename({"value_sprinters": "value_aandelen"})
+                else:
+                    df = df.join(df_spr, on="value_grow", how="left")
+                    df = df.with_columns(
+                        (pl.col("value_aandelen").fill_null(0.0) + pl.col("value_sprinters").fill_null(0.0)).alias("value_aandelen")
+                    ).drop(["value_sprinters"])
         if df_opties is not None and not df_opties.is_empty():
             if "optie_call_put" in df_opties.columns and "waarde_bezit_delta" in df_opties.columns and "value_grow" in df_opties.columns:
                 df_put_delta = (
