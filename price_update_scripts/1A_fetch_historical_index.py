@@ -132,7 +132,13 @@ def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget
     return targets
 
 
-def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_override: str | None = None) -> pd.DataFrame:
+def fetch_target(
+    target: IndexTarget,
+    days: int,
+    client_id: int,
+    exchange_override: str | None = None,
+    use_conid: bool = False,
+) -> pd.DataFrame:
     app = IndexHistApp()
     app.connect("127.0.0.1", 7496, clientId=client_id)
     t = threading.Thread(target=app.run, daemon=True)
@@ -149,7 +155,7 @@ def fetch_target(target: IndexTarget, days: int, client_id: int, exchange_overri
     c.secType = "IND"
     c.exchange = exchange_override or target.exchange
     c.currency = target.currency
-    if target.contract_id and target.contract_id > 0:
+    if use_conid and target.contract_id and target.contract_id > 0:
         c.conId = int(target.contract_id)
     if target.primary_exchange:
         c.primaryExchange = target.primary_exchange
@@ -297,16 +303,27 @@ def main() -> int:
         df = None
         last_err = None
         for ex in candidates:
-            for attempt in (1, 2):
-                try:
-                    cid = random.randint(1000, 9999) + (i * 100) + attempt
-                    df = fetch_target(target, days=days, client_id=cid, exchange_override=ex)
-                    if df is not None and not df.empty:
-                        break
-                except Exception as exc:
-                    last_err = exc
-                    time.sleep(1.0)
+            for use_conid in (False, True):
+                if use_conid and not (target.contract_id and target.contract_id > 0):
                     continue
+                for attempt in (1, 2):
+                    try:
+                        cid = random.randint(1000, 9999) + (i * 100) + attempt
+                        df = fetch_target(
+                            target,
+                            days=days,
+                            client_id=cid,
+                            exchange_override=ex,
+                            use_conid=use_conid,
+                        )
+                        if df is not None and not df.empty:
+                            break
+                    except Exception as exc:
+                        last_err = exc
+                        time.sleep(1.0)
+                        continue
+                if df is not None and not df.empty:
+                    break
             if df is not None and not df.empty:
                 break
 

@@ -71,15 +71,16 @@ class StateEngineRunner(QObject):
         return normalized
 
     def request_catchup_for_active_db(self, fetch_start_date: str | None = None) -> None:
-        payload = self._build_price_catchup_payload(fetch_start_date=fetch_start_date)
-        if payload:
+        payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date)
+        for payload in payloads:
             self.handle_rebuild_requested(payload)
 
-    def _build_price_catchup_payload(self, fetch_start_date: str | None = None) -> dict | None:
+    def _build_price_catchup_payloads(self, fetch_start_date: str | None = None) -> list[dict]:
         today = date.today()
+        fetch_start = datetime.strptime(fetch_start_date, "%Y-%m-%d").date() if fetch_start_date else None
         db_path = getattr(repository, "db_path", None)
         if not db_path:
-            return None
+            return []
 
         option_assets = self._get_assets_by_type(db_path, "optie")
         equity_assets_aandeel = self._get_assets_by_type(db_path, "aandeel")
@@ -89,51 +90,41 @@ class StateEngineRunner(QObject):
         sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
         all_assets = sorted(set(option_assets) | set(equity_assets) | set(sprinter_assets))
         if not all_assets:
-            return None
+            return []
 
         shared_last_dates = self._get_shared_last_price_dates(all_assets)
         if not shared_last_dates:
-            return None
-
-        outdated_assets: set[str] = set()
-        from_dates: list[date] = []
-        classes: set[str] = set()
+            return []
 
         # Opties catchup
+        payload_by_asset: dict[str, dict] = {}
+        def ensure_asset_payload(asset: str) -> dict:
+            p = payload_by_asset.get(asset)
+            if p is None:
+                p = {"classes": set(), "from_dates": []}
+                payload_by_asset[asset] = p
+            return p
+
         if option_assets:
             local_status_opt = self._get_local_state_status(db_path, option_assets, engine_name="open_opties_v2")
-            local_v2_opt = self._get_local_v2_max_dates(db_path, option_assets, table_name="per_dag_open_opties_opgerold_v2")
             for asset in option_assets:
                 shared_last = shared_last_dates.get(asset)
                 if shared_last is None:
                     continue
                 local_last = local_status_opt.get(asset)
-                local_v2_last = local_v2_opt.get(asset)
-                if (
-                    local_last is None
-                    or local_v2_last is None
-                    or shared_last > local_last
-                    or shared_last > local_v2_last
-                ):
-                    needs_price_catchup = True
-                else:
-                    needs_price_catchup = False
-                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
-                if needs_price_catchup or needs_calendar_extend:
-                    classes.add("opties")
-                    outdated_assets.add(asset)
-                    if fetch_start_date and needs_price_catchup:
-                        from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif needs_price_catchup and local_v2_last is not None:
-                        from_dates.append(local_v2_last)
-                    elif needs_price_catchup and local_last is not None:
-                        from_dates.append(local_last)
-                    elif needs_price_catchup:
+                # Opties: local_v2 kan oud zijn zodra series gesloten zijn; gebruik status als primaire waarheid.
+                needs_price_catchup = (local_last is None or shared_last > local_last)
+                if needs_price_catchup:
+                    payload = ensure_asset_payload(asset)
+                    payload["classes"].add("opties")
+                    if fetch_start is not None:
+                        payload["from_dates"].append(fetch_start)
+                    elif local_last is not None:
+                        payload["from_dates"].append(local_last)
+                    else:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="optie")
                         if first_tx_date:
-                            from_dates.append(first_tx_date)
-                    else:
-                        from_dates.append(today)
+                            payload["from_dates"].append(first_tx_date)
 
         # Aandelen catchup
         if equity_assets:
@@ -145,32 +136,22 @@ class StateEngineRunner(QObject):
                     continue
                 local_last = local_status_eq.get(asset)
                 local_v2_last = local_v2_eq.get(asset)
-                if (
-                    local_last is None
-                    or local_v2_last is None
-                    or shared_last > local_last
-                    or shared_last > local_v2_last
-                ):
-                    needs_price_catchup = True
-                else:
-                    needs_price_catchup = False
+                needs_price_catchup = (local_last is None or shared_last > local_last)
                 needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
                 if needs_price_catchup or needs_calendar_extend:
-                    classes.add("aandelen")
-                    outdated_assets.add(asset)
-                    if fetch_start_date and needs_price_catchup:
-                        from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif needs_price_catchup and local_v2_last is not None:
-                        from_dates.append(local_v2_last)
+                    payload = ensure_asset_payload(asset)
+                    payload["classes"].add("aandelen")
+                    if fetch_start is not None and needs_price_catchup:
+                        payload["from_dates"].append(fetch_start)
                     elif needs_price_catchup and local_last is not None:
-                        from_dates.append(local_last)
+                        payload["from_dates"].append(local_last)
                     elif needs_price_catchup:
                         tx_type = "future" if asset in future_assets_set else "aandeel"
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type=tx_type)
                         if first_tx_date:
-                            from_dates.append(first_tx_date)
-                    else:
-                        from_dates.append(today)
+                            payload["from_dates"].append(first_tx_date)
+                    elif needs_calendar_extend:
+                        payload["from_dates"].append(today)
 
         # Sprinters catchup
         if sprinter_assets:
@@ -182,42 +163,38 @@ class StateEngineRunner(QObject):
                     continue
                 local_last = local_status_sp.get(asset)
                 local_v2_last = local_v2_sp.get(asset)
-                if (
-                    local_last is None
-                    or local_v2_last is None
-                    or shared_last > local_last
-                    or shared_last > local_v2_last
-                ):
-                    needs_price_catchup = True
-                else:
-                    needs_price_catchup = False
+                needs_price_catchup = (local_last is None or shared_last > local_last)
                 needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
                 if needs_price_catchup or needs_calendar_extend:
-                    classes.add("sprinters")
-                    outdated_assets.add(asset)
-                    if fetch_start_date and needs_price_catchup:
-                        from_dates.append(datetime.strptime(fetch_start_date, "%Y-%m-%d").date())
-                    elif needs_price_catchup and local_v2_last is not None:
-                        from_dates.append(local_v2_last)
+                    payload = ensure_asset_payload(asset)
+                    payload["classes"].add("sprinters")
+                    if fetch_start is not None and needs_price_catchup:
+                        payload["from_dates"].append(fetch_start)
                     elif needs_price_catchup and local_last is not None:
-                        from_dates.append(local_last)
+                        payload["from_dates"].append(local_last)
                     elif needs_price_catchup:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="sprinter")
                         if first_tx_date:
-                            from_dates.append(first_tx_date)
-                    else:
-                        from_dates.append(today)
+                            payload["from_dates"].append(first_tx_date)
+                    elif needs_calendar_extend:
+                        payload["from_dates"].append(today)
 
-        if not classes or not outdated_assets or not from_dates:
-            return None
-
-        return {
-            "asset_classes": sorted(classes),
-            "affected_assets": sorted(outdated_assets),
-            "from_date": min(from_dates).isoformat(),
-            "reason": "price_catchup",
-            "mode": "asset_incremental",
-        }
+        out: list[dict] = []
+        for asset, data in sorted(payload_by_asset.items()):
+            classes = sorted(data.get("classes") or [])
+            from_dates = [d for d in (data.get("from_dates") or []) if d is not None]
+            if not classes or not from_dates:
+                continue
+            out.append(
+                {
+                    "asset_classes": classes,
+                    "affected_assets": [asset],
+                    "from_date": min(from_dates).isoformat(),
+                    "reason": "price_catchup",
+                    "mode": "asset_incremental",
+                }
+            )
+        return out
 
     def _get_assets_by_type(self, db_path: str, asset_type: str) -> list[str]:
         conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
