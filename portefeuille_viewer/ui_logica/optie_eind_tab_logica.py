@@ -150,6 +150,70 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
 
         volgende_zaterdag = next_saturday()
         self.dateTransactie.setDate(QDate(volgende_zaterdag.year, volgende_zaterdag.month, volgende_zaterdag.day))
+
+    @staticmethod
+    def _state_classes_from_asset_types(asset_types) -> list[str]:
+        mapping = {
+            "aandeel": "aandelen",
+            "optie": "opties",
+            "sprinter": "sprinters",
+            "future": "aandelen",
+        }
+        out = sorted(
+            {
+                mapping.get(str(t).strip().lower())
+                for t in (asset_types or [])
+                if t is not None and mapping.get(str(t).strip().lower())
+            }
+        )
+        return out
+
+    def _emit_state_rebuild(self, asset_rollups, from_date, asset_types, reason: str) -> None:
+        assets = sorted({str(a).strip() for a in (asset_rollups or []) if a is not None and str(a).strip()})
+        if not assets:
+            return
+        classes = self._state_classes_from_asset_types(asset_types)
+        if not classes:
+            classes = ["aandelen", "opties", "sprinters"]
+        dt_val = pd.to_datetime(from_date, errors="coerce")
+        if pd.isna(dt_val):
+            return
+        payload = {
+            "asset_classes": classes,
+            "affected_assets": assets,
+            "from_date": dt_val.date().isoformat(),
+            "reason": reason,
+            "mode": "asset_incremental",
+        }
+        print(f"[optie-eind] stateRebuildRequested payload: {payload}")
+        signals.queued_emit_stateRebuildRequested(payload)
+
+    def _collect_test_account_scope(self):
+        from portefeuille_viewer.data.repository import conn_str
+        import pyodbc
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            rows = cur.execute(
+                """
+                SELECT asset_rollup, asset_type, MIN(datum) AS min_datum
+                FROM transacties_bron_data_test_accounts
+                GROUP BY asset_rollup, asset_type
+                """
+            ).fetchall()
+        if not rows:
+            return [], None, []
+        assets = sorted({str(r[0]).strip() for r in rows if r[0] is not None and str(r[0]).strip()})
+        types = sorted({str(r[1]).strip().lower() for r in rows if r[1] is not None and str(r[1]).strip()})
+        min_dates = []
+        for r in rows:
+            d = r[2]
+            if d is None:
+                continue
+            d = pd.to_datetime(d, errors="coerce")
+            if pd.notna(d):
+                min_dates.append(d.date())
+        min_date = min(min_dates) if min_dates else None
+        return assets, min_date, types
         
     def move_records_to_productie(self):
         QMessageBox.information(self, "Move to productie", "Deze functionaliteit is nog niet geïmplementeerd.")
@@ -157,12 +221,20 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
     def clear_test_account(self):
         from portefeuille_viewer.data.repository import conn_str
         import pyodbc
+        assets, min_date, types = self._collect_test_account_scope()
         with pyodbc.connect(conn_str) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM transacties_bron_data_test_accounts")
             conn.commit()
         QMessageBox.information(self, "Test account", "Alle records zijn verwijderd uit transacties_bron_data_test_accounts.")
         signals.databaseChanged.emit(self.active_db_name)
+        if assets and min_date is not None:
+            self._emit_state_rebuild(
+                asset_rollups=assets,
+                from_date=min_date,
+                asset_types=types,
+                reason="optie_eind_clear_test_account",
+            )
         self.reload_table()
 
     def open_broker_popup(self):
@@ -584,6 +656,19 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
             conn.commit()
         QMessageBox.information(self, "Toevoegen", f"{len(df_db)} records toegevoegd aan transacties_bron_data_test_accounts.")
         signals.databaseChanged.emit(self.active_db_name)
+        try:
+            assets = sorted({str(x).strip() for x in df_db["asset_rollup"].dropna().tolist() if str(x).strip()})
+            min_date = pd.to_datetime(df_db["datum"], errors="coerce").min()
+            types = sorted({str(x).strip().lower() for x in df_db["asset_type"].dropna().tolist() if str(x).strip()})
+            if assets and pd.notna(min_date):
+                self._emit_state_rebuild(
+                    asset_rollups=assets,
+                    from_date=min_date,
+                    asset_types=types,
+                    reason="optie_eind_add_records",
+                )
+        except Exception as exc:
+            print(f"[optie-eind] state rebuild payload opbouwen mislukt: {exc}")
 
     def _on_table_clicked(self, index):
         if not index.isValid() or not self.model or not hasattr(self.model, "_df"):

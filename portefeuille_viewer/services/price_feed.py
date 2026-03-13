@@ -49,6 +49,7 @@ class PriceFeedIB(QObject):
         self._subscribed = set()
         self._tid_next = 5200
         self._tid_by_key: Dict[int, Tuple[str, str]] = {}
+        self._sub_meta: Dict[int, dict] = {}
         self._app = None
         self._prices: Dict[Tuple[str,str], Dict[str, float]] = {}
         self.host, self.port, self.client_id = host, port, client_id
@@ -120,6 +121,14 @@ class PriceFeedIB(QObject):
                         feed.log.emit(f"IB ERROR {errorCode} for {sym} ({cur}): {errorString}")
                     else:
                         feed.log.emit(f"IB ERROR {errorCode}: {errorString}")
+
+                # Fallback: retry STK/IND once with conId when sec-def lookup fails.
+                try:
+                    err_code_i = int(errorCode)
+                except Exception:
+                    err_code_i = None
+                if err_code_i == 200:
+                    feed._retry_with_conid_if_needed(reqId)
 
             def tickPrice(self, reqId, tickType, price, attrib):
                 with feed._lock:
@@ -281,6 +290,7 @@ class PriceFeedIB(QObject):
         exchange: Optional[str],
         primary_exchange: Optional[str],
         contract_id: Optional[int] = None,
+        use_conid: bool = False,
     ):
         t = (asset_type or "").strip().lower()
         if t == "index":
@@ -293,9 +303,43 @@ class PriceFeedIB(QObject):
             cid = int(contract_id) if contract_id is not None and str(contract_id).strip() != "" else 0
         except Exception:
             cid = 0
-        if cid > 0:
+        # For STK/IND: prefer symbol-based resolution; use conId only as fallback.
+        # For FUT: conId remains primary when present.
+        if cid > 0 and (t in {"future", "fut"} or use_conid):
             c.conId = cid
         return c
+
+    def _retry_with_conid_if_needed(self, req_id: int) -> None:
+        if not self._app:
+            return
+        with self._lock:
+            meta = dict(self._sub_meta.get(req_id) or {})
+        if not meta:
+            return
+        if bool(meta.get("retried_with_conid")):
+            return
+        try:
+            cid = int(meta.get("cid") or 0)
+        except Exception:
+            cid = 0
+        if cid <= 0:
+            return
+        asset_type = str(meta.get("asset_type") or "").strip().lower()
+        if asset_type in {"future", "fut"}:
+            return
+        sym = str(meta.get("sym") or "")
+        cur = str(meta.get("cur") or "")
+        exch = meta.get("exch")
+        pex = meta.get("pex")
+        contract = self._build_contract(sym, cur, asset_type, exch, pex, cid, use_conid=True)
+        with self._lock:
+            new_tid = self._tid_next
+            self._tid_next += 1
+            self._tid_by_key[new_tid] = (sym, cur)
+            meta["retried_with_conid"] = True
+            self._sub_meta[new_tid] = meta
+        self.log.emit(f"Retry with conId for {sym} ({cur}) after sec-def error.")
+        self._app.reqMktData(new_tid, contract, "", False, False, [])
 
     @Slot(list)
     def ensure_subscriptions(self, rows: List[Tuple]):
@@ -330,7 +374,16 @@ class PriceFeedIB(QObject):
             tid = self._tid_next
             self._tid_next += 1
             self._tid_by_key[tid] = (sym, cur)
-            contract = self._build_contract(sym, cur, asset_type, exch, pex, cid)
+            self._sub_meta[tid] = {
+                "sym": sym,
+                "cur": cur,
+                "asset_type": (asset_type or "").strip().lower(),
+                "exch": exch,
+                "pex": pex,
+                "cid": cid,
+                "retried_with_conid": False,
+            }
+            contract = self._build_contract(sym, cur, asset_type, exch, pex, cid, use_conid=False)
             self._app.reqMktData(tid, contract, "", False, False, [])
             self._subscribed.add(label)
             time.sleep(0.01)
