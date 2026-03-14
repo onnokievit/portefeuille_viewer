@@ -317,19 +317,6 @@
          </property>
         </widget>
        </item>
-       <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>200</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
       </layout>
      </widget>
      <widget class="QTableWidget" name="payoff_table">
@@ -658,7 +645,7 @@
        <rect>
         <x>840</x>
         <y>310</y>
-        <width>1081</width>
+        <width>541</width>
         <height>61</height>
        </rect>
       </property>
@@ -668,9 +655,9 @@
       <widget class="QPushButton" name="buttonDeleteTestOrder">
        <property name="geometry">
         <rect>
-         <x>450</x>
+         <x>418</x>
          <y>14</y>
-         <width>121</width>
+         <width>111</width>
          <height>31</height>
         </rect>
        </property>
@@ -684,7 +671,7 @@
       <widget class="QCheckBox" name="checkBoxEnableTestOrders">
        <property name="geometry">
         <rect>
-         <x>22</x>
+         <x>10</x>
          <y>20</y>
          <width>121</width>
          <height>20</height>
@@ -700,9 +687,9 @@
       <widget class="QPushButton" name="buttonAddTestOrder">
        <property name="geometry">
         <rect>
-         <x>320</x>
+         <x>299</x>
          <y>14</y>
-         <width>121</width>
+         <width>111</width>
          <height>31</height>
         </rect>
        </property>
@@ -716,7 +703,7 @@
       <widget class="QCheckBox" name="checkBoxAssetOrdersOnly">
        <property name="geometry">
         <rect>
-         <x>162</x>
+         <x>138</x>
          <y>20</y>
          <width>151</width>
          <height>20</height>
@@ -807,6 +794,67 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
       <property name="text">
        <string>Sprinters</string>
       </property>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_4">
+      <property name="geometry">
+       <rect>
+        <x>1410</x>
+        <y>310</y>
+        <width>511</width>
+        <height>61</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <widget class="QPushButton" name="buttonRunStateEngineNow">
+       <property name="geometry">
+        <rect>
+         <x>340</x>
+         <y>14</y>
+         <width>141</width>
+         <height>31</height>
+        </rect>
+       </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
+       <property name="text">
+        <string>Run State Engine</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="checkBoxAutoStateEngineOrders">
+       <property name="geometry">
+        <rect>
+         <x>160</x>
+         <y>20</y>
+         <width>151</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
+       <property name="text">
+        <string>State Engine Aan/Uit</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="checkBoxMarketDaysOnly">
+       <property name="geometry">
+        <rect>
+         <x>30</x>
+         <y>20</y>
+         <width>151</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
+       <property name="text">
+        <string>Marktday only</string>
+       </property>
+      </widget>
      </widget>
     </widget>
    </item>

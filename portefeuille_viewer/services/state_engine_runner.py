@@ -23,16 +23,63 @@ class StateEngineRunner(QObject):
         self._queue: deque[dict] = deque()
         self._current_payload: dict | None = None
         self._process: QProcess | None = None
+        self._auto_order_rebuild_enabled = False
+        self._pending_order_asset_classes: set[str] = set()
+        self._pending_order_assets: set[str] = set()
+        self._pending_order_from_date: date | None = None
+        self._pending_order_reasons: set[str] = set()
 
     def handle_rebuild_requested(self, payload: dict) -> None:
         normalized = self._normalize_payload(payload)
         if not normalized:
             print(f"[state-engine-runner] ignored payload (empty/invalid): {payload}")
             return
+        if self._should_defer_order_rebuild(normalized):
+            self._accumulate_pending_order_payload(normalized)
+            print(f"[state-engine-runner] auto order rebuild disabled -> deferred payload: {normalized}")
+            return
         self._queue.append(normalized)
         print(f"[state-engine-runner] queued payload: {normalized}")
         if self._process is None:
             self._start_next()
+
+    def set_auto_order_rebuild(self, enabled: bool) -> None:
+        self._auto_order_rebuild_enabled = bool(enabled)
+        print(f"[state-engine-runner] auto order rebuild set to: {self._auto_order_rebuild_enabled}")
+
+    def is_auto_order_rebuild_enabled(self) -> bool:
+        return self._auto_order_rebuild_enabled
+
+    def run_pending_order_rebuild_now(self) -> bool:
+        summary = self.get_pending_order_rebuild_summary()
+        if summary["pending_assets"] <= 0:
+            print("[state-engine-runner] no pending order-driven rebuild payloads")
+            return False
+
+        from_date_value = self._pending_order_from_date.isoformat() if self._pending_order_from_date else None
+        payload = {
+            "asset_classes": sorted(self._pending_order_asset_classes),
+            "affected_assets": sorted(self._pending_order_assets),
+            "from_date": from_date_value,
+            "reason": "manual_pending_orders_rebuild",
+            "mode": "asset_incremental",
+        }
+
+        self._pending_order_asset_classes.clear()
+        self._pending_order_assets.clear()
+        self._pending_order_from_date = None
+        self._pending_order_reasons.clear()
+
+        self.handle_rebuild_requested(payload)
+        return True
+
+    def get_pending_order_rebuild_summary(self) -> dict:
+        return {
+            "pending_assets": len(self._pending_order_assets),
+            "pending_classes": sorted(self._pending_order_asset_classes),
+            "from_date": self._pending_order_from_date.isoformat() if self._pending_order_from_date else None,
+            "reasons": sorted(self._pending_order_reasons),
+        }
 
     def handle_orders_committed(self) -> None:
         payload = {
@@ -69,6 +116,46 @@ class StateEngineRunner(QObject):
         if not normalized["asset_classes"] and not normalized["affected_assets"]:
             return None
         return normalized
+
+    def _is_order_driven_reason(self, reason: str) -> bool:
+        value = (reason or "").strip().lower()
+        if value.startswith("order_"):
+            return True
+        if value.startswith("optie_eind_"):
+            return True
+        return value in {"legacy_orders_committed"}
+
+    def _should_defer_order_rebuild(self, payload: dict) -> bool:
+        if self._auto_order_rebuild_enabled:
+            return False
+        reason = str(payload.get("reason") or "").strip().lower()
+        if reason == "price_catchup":
+            return False
+        if reason == "manual_pending_orders_rebuild":
+            return False
+        return self._is_order_driven_reason(reason)
+
+    def _parse_iso_date(self, value) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        try:
+            return datetime.strptime(str(value), "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    def _accumulate_pending_order_payload(self, payload: dict) -> None:
+        self._pending_order_asset_classes.update(payload.get("asset_classes") or [])
+        self._pending_order_assets.update(payload.get("affected_assets") or [])
+        self._pending_order_reasons.add(str(payload.get("reason") or "unknown"))
+        candidate = self._parse_iso_date(payload.get("from_date"))
+        if candidate is None:
+            return
+        if self._pending_order_from_date is None or candidate < self._pending_order_from_date:
+            self._pending_order_from_date = candidate
 
     def request_catchup_for_active_db(self, fetch_start_date: str | None = None) -> None:
         payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date)

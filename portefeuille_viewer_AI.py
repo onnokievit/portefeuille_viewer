@@ -104,6 +104,7 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
 def main():
     refresh_everything()
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
+    SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
     
     # Koppel signalen aan orchestrator:
