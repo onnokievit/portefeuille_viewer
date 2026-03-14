@@ -114,11 +114,26 @@ def main():
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
     signals.databaseChanged.connect(lambda db_name: refresh_everything())
     signals.databaseChanged.connect(state_engine_runner.handle_database_changed)
-    signals.stateRebuildFinished.connect(
-        lambda payload: refresh_transaction_derived_snapshots(payload)
-        if (payload or {}).get("status") == "ok"
-        else None
-    )
+    # Debounce snapshot refreshes: bij een wave van price_catchup jobs
+    # willen we niet na elke asset-run opnieuw alle snapshots/aggregators herladen.
+    pending_refresh_payload: dict = {"reason": "unknown"}
+    refresh_timer = QTimer()
+    refresh_timer.setSingleShot(True)
+    refresh_timer.setInterval(1200)
+
+    def _run_debounced_refresh():
+        refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
+
+    def _schedule_snapshot_refresh(payload):
+        if (payload or {}).get("status") != "ok":
+            return
+        pending_refresh_payload.clear()
+        pending_refresh_payload.update(payload or {})
+        # Restart timer so bursts collapse into one refresh.
+        refresh_timer.start()
+
+    refresh_timer.timeout.connect(_run_debounced_refresh)
+    signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
     signals.stateRebuildFinished.connect(
         lambda payload: print(f"[state-engine] rebuild finished: {payload}")
     )

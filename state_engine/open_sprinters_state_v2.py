@@ -232,6 +232,15 @@ def build_state_intervals(df_tx: pl.DataFrame, scope: RebuildScope) -> pl.DataFr
             tx_eur_cum += day_eur
             tx_fee_cum += day_fee
 
+            # Open-sprinters tabel moet alleen echt open posities bevatten.
+            # Zodra de serie sluit (qty ~ 0), resetten we cumulatieven en
+            # schrijven we geen dagelijkse open-intervalregels meer weg.
+            if abs(tx_qty_cum) < 1e-12:
+                tx_qty_cum = 0.0
+                tx_eur_cum = 0.0
+                tx_fee_cum = 0.0
+                continue
+
             next_event_date = event_dates[idx + 1] if idx + 1 < len(event_dates) else None
             interval_end = scope.to_date if next_event_date is None else min(scope.to_date, next_event_date - timedelta(days=1))
             if interval_end < event_date:
@@ -333,8 +342,19 @@ def delete_target_range(conn, scope: RebuildScope) -> None:
 
     cursor = conn.cursor()
     if scope.assets is None:
-        cursor.execute("DELETE FROM per_dag_open_sprinters_opgerold_v2")
-        conn.commit()
+        # Vermijd Access MaxLocksPerFile door full-delete in dagbatches uit te voeren.
+        batch_days = 30
+        batch_start = scope.from_date
+        while batch_start <= scope.to_date:
+            batch_end = min(batch_start + timedelta(days=batch_days - 1), scope.to_date)
+            sql = (
+                "DELETE FROM per_dag_open_sprinters_opgerold_v2 "
+                f"WHERE datum >= {_to_access_date_literal(batch_start)} "
+                f"AND datum <= {_to_access_date_literal(batch_end)}"
+            )
+            cursor.execute(sql)
+            conn.commit()
+            batch_start = batch_end + timedelta(days=1)
         return
 
     batch_days = 30
