@@ -170,11 +170,18 @@ class StateEngineRunner(QObject):
             return []
 
         option_assets = self._get_assets_by_type(db_path, "optie")
+        open_option_assets = self._get_open_assets_by_type(db_path, "optie")
+        option_assets = sorted(set(option_assets) & open_option_assets)
+
         equity_assets_aandeel = self._get_assets_by_type(db_path, "aandeel")
         equity_assets_future = self._get_assets_by_type(db_path, "future")
         equity_assets = sorted(set(equity_assets_aandeel) | set(equity_assets_future))
+        open_equity_assets = self._get_open_assets_by_type(db_path, "aandeel") | self._get_open_assets_by_type(db_path, "future")
+        equity_assets = sorted(set(equity_assets) & open_equity_assets)
         future_assets_set = set(equity_assets_future)
         sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
+        open_sprinter_assets = self._get_open_assets_by_type(db_path, "sprinter")
+        sprinter_assets = sorted(set(sprinter_assets) & open_sprinter_assets)
         all_assets = sorted(set(option_assets) | set(equity_assets) | set(sprinter_assets))
         if not all_assets:
             return []
@@ -216,55 +223,45 @@ class StateEngineRunner(QObject):
         # Aandelen catchup
         if equity_assets:
             local_status_eq = self._get_local_state_status(db_path, equity_assets, engine_name="open_aandelen_v2")
-            local_v2_eq = self._get_local_v2_max_dates(db_path, equity_assets, table_name="per_dag_aandelen_state_v2")
             for asset in equity_assets:
                 shared_last = shared_last_dates.get(asset)
                 if shared_last is None:
                     continue
                 local_last = local_status_eq.get(asset)
-                local_v2_last = local_v2_eq.get(asset)
                 needs_price_catchup = (local_last is None or shared_last > local_last)
-                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
-                if needs_price_catchup or needs_calendar_extend:
+                if needs_price_catchup:
                     payload = ensure_asset_payload(asset)
                     payload["classes"].add("aandelen")
-                    if fetch_start is not None and needs_price_catchup:
+                    if fetch_start is not None:
                         payload["from_dates"].append(fetch_start)
-                    elif needs_price_catchup and local_last is not None:
+                    elif local_last is not None:
                         payload["from_dates"].append(local_last)
-                    elif needs_price_catchup:
+                    else:
                         tx_type = "future" if asset in future_assets_set else "aandeel"
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type=tx_type)
                         if first_tx_date:
                             payload["from_dates"].append(first_tx_date)
-                    elif needs_calendar_extend:
-                        payload["from_dates"].append(today)
 
         # Sprinters catchup
         if sprinter_assets:
             local_status_sp = self._get_local_state_status(db_path, sprinter_assets, engine_name="open_sprinters_v2")
-            local_v2_sp = self._get_local_v2_max_dates(db_path, sprinter_assets, table_name="per_dag_open_sprinters_opgerold_v2")
             for asset in sprinter_assets:
                 shared_last = shared_last_dates.get(asset)
                 if shared_last is None:
                     continue
                 local_last = local_status_sp.get(asset)
-                local_v2_last = local_v2_sp.get(asset)
                 needs_price_catchup = (local_last is None or shared_last > local_last)
-                needs_calendar_extend = (local_v2_last is not None and local_v2_last < today)
-                if needs_price_catchup or needs_calendar_extend:
+                if needs_price_catchup:
                     payload = ensure_asset_payload(asset)
                     payload["classes"].add("sprinters")
-                    if fetch_start is not None and needs_price_catchup:
+                    if fetch_start is not None:
                         payload["from_dates"].append(fetch_start)
-                    elif needs_price_catchup and local_last is not None:
+                    elif local_last is not None:
                         payload["from_dates"].append(local_last)
-                    elif needs_price_catchup:
+                    else:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="sprinter")
                         if first_tx_date:
                             payload["from_dates"].append(first_tx_date)
-                    elif needs_calendar_extend:
-                        payload["from_dates"].append(today)
 
         out: list[dict] = []
         for asset, data in sorted(payload_by_asset.items()):
@@ -295,6 +292,35 @@ class StateEngineRunner(QObject):
             cur = conn.cursor()
             rows = cur.execute(query, asset_type).fetchall()
         return sorted({str(row[0]).strip() for row in rows if row[0] is not None and str(row[0]).strip()})
+
+    def _get_open_assets_by_type(self, db_path: str, asset_type: str) -> set[str]:
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        if asset_type == "optie":
+            query = """
+                SELECT asset_rollup
+                FROM transacties_bron_data
+                WHERE asset_type='optie'
+                  AND optie_exp_date >= Date()
+                  AND asset_rollup IS NOT NULL
+                GROUP BY asset_rollup
+                HAVING Sum(transactie_aantal) <> 0
+            """
+        else:
+            query = """
+                SELECT asset_rollup
+                FROM transacties_bron_data
+                WHERE asset_type=?
+                  AND asset_rollup IS NOT NULL
+                GROUP BY asset_rollup
+                HAVING Sum(transactie_aantal) <> 0
+            """
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            if asset_type == "optie":
+                rows = cur.execute(query).fetchall()
+            else:
+                rows = cur.execute(query, asset_type).fetchall()
+        return {str(row[0]).strip() for row in rows if row[0] is not None and str(row[0]).strip()}
 
     def _get_shared_last_price_dates(self, assets: list[str]) -> dict[str, date]:
         if not assets:

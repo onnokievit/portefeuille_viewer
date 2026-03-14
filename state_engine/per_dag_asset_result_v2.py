@@ -731,26 +731,151 @@ def load_opties_component(conn, scope: RebuildScope) -> pl.DataFrame:
 
 def load_sprinters_component(conn, scope: RebuildScope) -> pl.DataFrame:
     asset_filter, asset_params = _asset_filter_sql(scope)
-    sql = f"""
+    sql_tx = f"""
         SELECT
             datum,
             asset_rollup,
-            SUM(sprinter_resultaat) AS sprinter_resultaat_v2,
-            SUM(IIF(transactie_aantal = 0, transactie_euro_totaal, 0)) AS gesloten_sprinters,
-            SUM(transactie_fee) AS sprinter_fee_v2
+            uniek_id,
+            transactie_aantal,
+            transactie_euro_totaal,
+            transactie_fee
+        FROM transacties_bron_data
+        WHERE asset_type='sprinter'
+          AND datum <= ?
+          {asset_filter}
+        ORDER BY asset_rollup, uniek_id, datum, Id
+    """
+    params_tx = [scope.to_date, *asset_params]
+    df_tx = (
+        pl.read_database(sql_tx, conn, execute_options={"parameters": params_tx})
+        .with_columns(
+            pl.col("datum").cast(pl.Date),
+            pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
+            pl.col("uniek_id").cast(pl.Utf8).str.strip_chars(),
+            pl.col("transactie_aantal").fill_null(0.0),
+            pl.col("transactie_euro_totaal").fill_null(0.0),
+            pl.col("transactie_fee").fill_null(0.0),
+        )
+    )
+    if df_tx.is_empty():
+        return pl.DataFrame(
+            schema={
+                "datum": pl.Date,
+                "asset_rollup": pl.Utf8,
+                "sprinter_resultaat_v2": pl.Float64,
+                "gesloten_sprinters": pl.Float64,
+                "sprinter_fee_v2": pl.Float64,
+            }
+        )
+
+    # Open mark-to-market component uit open-sprinters v2 state (na open-only fix).
+    sql_open = f"""
+        SELECT
+            datum,
+            asset_rollup,
+            SUM(sprinter_resultaat) AS open_sprinter_result
         FROM per_dag_open_sprinters_opgerold_v2
         WHERE datum >= ? AND datum <= ?
         {asset_filter}
         GROUP BY datum, asset_rollup
     """
-    params = [scope.from_date, scope.to_date, *asset_params]
-    return pl.read_database(sql, conn, execute_options={"parameters": params}).with_columns(
-        pl.col("datum").cast(pl.Date),
-        pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
-        pl.col("sprinter_resultaat_v2").fill_null(0.0),
-        pl.col("gesloten_sprinters").fill_null(0.0),
-        pl.col("sprinter_fee_v2").fill_null(0.0),
+    params_open = [scope.from_date, scope.to_date, *asset_params]
+    df_open = (
+        pl.read_database(sql_open, conn, execute_options={"parameters": params_open})
+        .with_columns(
+            pl.col("datum").cast(pl.Date),
+            pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
+            pl.col("open_sprinter_result").fill_null(0.0),
+        )
     )
+
+    # Dagelijkse transactiedelta per serie.
+    df_day = (
+        df_tx.group_by(["asset_rollup", "uniek_id", "datum"])
+        .agg(
+            pl.col("transactie_aantal").sum().alias("qty_dag"),
+            pl.col("transactie_euro_totaal").sum().alias("eur_dag"),
+            pl.col("transactie_fee").sum().alias("fee_dag"),
+        )
+        .sort(["asset_rollup", "uniek_id", "datum"])
+    )
+
+    intervals: list[dict] = []
+    for part in df_day.partition_by(["asset_rollup", "uniek_id"], maintain_order=True):
+        rows = part.to_dicts()
+        asset = str(rows[0]["asset_rollup"]).strip()
+        uid = str(rows[0]["uniek_id"]).strip()
+        cum_qty = 0.0
+        cum_eur = 0.0
+        cum_fee = 0.0
+        event_dates = [r["datum"] if not isinstance(r["datum"], datetime) else r["datum"].date() for r in rows]
+        for idx, row in enumerate(rows):
+            event_date = row["datum"] if not isinstance(row["datum"], datetime) else row["datum"].date()
+            cum_qty += float(row.get("qty_dag") or 0.0)
+            cum_eur += float(row.get("eur_dag") or 0.0)
+            cum_fee += float(row.get("fee_dag") or 0.0)
+            next_event = event_dates[idx + 1] if idx + 1 < len(event_dates) else None
+            end_date = scope.to_date if next_event is None else min(scope.to_date, next_event - timedelta(days=1))
+            if end_date < event_date:
+                continue
+            intervals.append(
+                {
+                    "asset_rollup": asset,
+                    "uniek_id": uid,
+                    "datum_start": event_date,
+                    "datum_end": end_date,
+                    "cum_qty": cum_qty,
+                    "cum_eur": cum_eur,
+                    "cum_fee": cum_fee,
+                }
+            )
+
+    if not intervals:
+        return pl.DataFrame(
+            schema={
+                "datum": pl.Date,
+                "asset_rollup": pl.Utf8,
+                "sprinter_resultaat_v2": pl.Float64,
+                "gesloten_sprinters": pl.Float64,
+                "sprinter_fee_v2": pl.Float64,
+            }
+        )
+
+    df_int = pl.DataFrame(intervals)
+    df_daily = (
+        df_int.with_columns(
+            pl.max_horizontal("datum_start", pl.lit(scope.from_date, dtype=pl.Date)).alias("effective_start"),
+            pl.min_horizontal("datum_end", pl.lit(scope.to_date, dtype=pl.Date)).alias("effective_end"),
+        )
+        .filter(pl.col("effective_end") >= pl.col("effective_start"))
+        .with_columns(
+            pl.date_ranges("effective_start", "effective_end", interval="1d", closed="both").alias("datum")
+        )
+        .explode("datum")
+        .drop(["datum_start", "datum_end", "effective_start", "effective_end"])
+    )
+
+    df_closed = (
+        df_daily.group_by(["datum", "asset_rollup"])
+        .agg(
+            pl.when(pl.col("cum_qty") == 0).then(pl.col("cum_eur")).otherwise(0.0).sum().alias("gesloten_sprinters"),
+            pl.when(pl.col("cum_qty") == 0).then(pl.col("cum_fee")).otherwise(0.0).sum().alias("sprinter_fee_closed_v2"),
+            pl.when(pl.col("cum_qty") != 0).then(pl.col("cum_fee")).otherwise(0.0).sum().alias("sprinter_fee_open_v2"),
+        )
+        .join(df_open, on=["datum", "asset_rollup"], how="left")
+        .with_columns(
+            pl.col("open_sprinter_result").fill_null(0.0),
+            pl.col("gesloten_sprinters").fill_null(0.0),
+            pl.col("sprinter_fee_closed_v2").fill_null(0.0),
+            pl.col("sprinter_fee_open_v2").fill_null(0.0),
+        )
+        .with_columns(
+            (pl.col("open_sprinter_result") + pl.col("gesloten_sprinters")).alias("sprinter_resultaat_v2"),
+            (pl.col("sprinter_fee_closed_v2") + pl.col("sprinter_fee_open_v2")).alias("sprinter_fee_v2"),
+        )
+        .select(["datum", "asset_rollup", "sprinter_resultaat_v2", "gesloten_sprinters", "sprinter_fee_v2"])
+    )
+    return df_closed
 
 
 def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
