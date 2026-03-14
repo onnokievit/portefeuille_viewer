@@ -154,10 +154,6 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout_2.addWidget(self.buttonClearFiltersOptiesOpen, 0, Qt.AlignmentFlag.AlignRight)
 
-        self.horizontalSpacer = QSpacerItem(200, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.horizontalLayout_2.addItem(self.horizontalSpacer)
-
         self.payoff_table = QTableWidget(self.widget)
         self.payoff_table.setObjectName(u"payoff_table")
         self.payoff_table.setGeometry(QRect(6, 46, 811, 257))
@@ -246,22 +242,22 @@ class Ui_SingleAssetAnalyseTab(object):
         self.asset_selector.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.groupBox_2 = QGroupBox(self.widget)
         self.groupBox_2.setObjectName(u"groupBox_2")
-        self.groupBox_2.setGeometry(QRect(840, 310, 1081, 61))
+        self.groupBox_2.setGeometry(QRect(840, 310, 541, 61))
         self.buttonDeleteTestOrder = QPushButton(self.groupBox_2)
         self.buttonDeleteTestOrder.setObjectName(u"buttonDeleteTestOrder")
-        self.buttonDeleteTestOrder.setGeometry(QRect(450, 14, 121, 31))
+        self.buttonDeleteTestOrder.setGeometry(QRect(418, 14, 111, 31))
         self.buttonDeleteTestOrder.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.checkBoxEnableTestOrders = QCheckBox(self.groupBox_2)
         self.checkBoxEnableTestOrders.setObjectName(u"checkBoxEnableTestOrders")
-        self.checkBoxEnableTestOrders.setGeometry(QRect(22, 20, 121, 20))
+        self.checkBoxEnableTestOrders.setGeometry(QRect(10, 20, 121, 20))
         self.checkBoxEnableTestOrders.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.buttonAddTestOrder = QPushButton(self.groupBox_2)
         self.buttonAddTestOrder.setObjectName(u"buttonAddTestOrder")
-        self.buttonAddTestOrder.setGeometry(QRect(320, 14, 121, 31))
+        self.buttonAddTestOrder.setGeometry(QRect(299, 14, 111, 31))
         self.buttonAddTestOrder.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.checkBoxAssetOrdersOnly = QCheckBox(self.groupBox_2)
         self.checkBoxAssetOrdersOnly.setObjectName(u"checkBoxAssetOrdersOnly")
-        self.checkBoxAssetOrdersOnly.setGeometry(QRect(162, 20, 151, 20))
+        self.checkBoxAssetOrdersOnly.setGeometry(QRect(138, 20, 151, 20))
         self.checkBoxAssetOrdersOnly.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.label_15 = QLabel(self.widget)
         self.label_15.setObjectName(u"label_15")
@@ -293,6 +289,21 @@ class Ui_SingleAssetAnalyseTab(object):
 "border: 1px solid #34495e;\n"
 "border-radius: 6px;\n"
 "margin-top: 0px;  /* ruimte voor de titel */")
+        self.groupBox_4 = QGroupBox(self.widget)
+        self.groupBox_4.setObjectName(u"groupBox_4")
+        self.groupBox_4.setGeometry(QRect(1410, 310, 511, 61))
+        self.buttonRunStateEngineNow = QPushButton(self.groupBox_4)
+        self.buttonRunStateEngineNow.setObjectName(u"buttonRunStateEngineNow")
+        self.buttonRunStateEngineNow.setGeometry(QRect(340, 14, 141, 31))
+        self.buttonRunStateEngineNow.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.checkBoxAutoStateEngineOrders = QCheckBox(self.groupBox_4)
+        self.checkBoxAutoStateEngineOrders.setObjectName(u"checkBoxAutoStateEngineOrders")
+        self.checkBoxAutoStateEngineOrders.setGeometry(QRect(160, 20, 151, 20))
+        self.checkBoxAutoStateEngineOrders.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.checkBoxMarketDaysOnly = QCheckBox(self.groupBox_4)
+        self.checkBoxMarketDaysOnly.setObjectName(u"checkBoxMarketDaysOnly")
+        self.checkBoxMarketDaysOnly.setGeometry(QRect(30, 20, 151, 20))
+        self.checkBoxMarketDaysOnly.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.verticalLayout_2.addWidget(self.widget)
 
@@ -343,5 +354,9 @@ class Ui_SingleAssetAnalyseTab(object):
         self.label_16.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Calls", None))
         self.label_17.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Aandelen", None))
         self.label_18.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Sprinters", None))
+        self.groupBox_4.setTitle("")
+        self.buttonRunStateEngineNow.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Run State Engine", None))
+        self.checkBoxAutoStateEngineOrders.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"State Engine Aan/Uit", None))
+        self.checkBoxMarketDaysOnly.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Marktday only", None))
     # retranslateUi
 

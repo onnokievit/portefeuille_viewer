@@ -5,7 +5,7 @@ from datetime import datetime
 import polars as pl
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QCheckBox
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
 
@@ -310,6 +310,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         # init logic
         self.logic = SingleAssetAnalyseLogic()
+        self._state_engine_runner = None
+        self._state_engine_controls_bound = False
+        self._allow_inactive_asset_in_selector = False
+        self._state_engine_button_base_text = "Run State Engine"
 
         # init flags op basis van de checkboxen
         self.show_all_test_orders = not self.checkBoxAssetOrdersOnly.isChecked()
@@ -405,9 +409,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if start_date_str:
             self.startDate.setDate(QDate.fromString(start_date_str, 'yyyy-MM-dd'))
         self.endDate.setDate(QDate.currentDate())
-        self.checkBoxMarketDaysOnly = QCheckBox("Marktdagen only", self.horizontalLayoutWidget)
-        self.checkBoxMarketDaysOnly.setChecked(True)
-        self.horizontalLayout.addWidget(self.checkBoxMarketDaysOnly, 0, Qt.AlignmentFlag.AlignLeft)
+        if hasattr(self, "checkBoxMarketDaysOnly"):
+            self.checkBoxMarketDaysOnly.setChecked(True)
 
         # self.gridLayout_2.setColumnStretch(0, 10)
         # self.gridLayout_2.setColumnStretch(1, 6)
@@ -512,11 +515,61 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpenPut.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenPut, pos))
         self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
+        QTimer.singleShot(0, self._bind_state_engine_controls)
+        signals.stateRebuildFinished.connect(lambda _payload: self._refresh_state_engine_controls())
 
     def set_active(self, active: bool):
         self._active = active
         if active:
             self._schedule_summary_reload()
+            self._bind_state_engine_controls()
+            self._refresh_state_engine_controls()
+
+    def _bind_state_engine_controls(self):
+        runner = getattr(SNAPSHOT_STORE, "state_engine_runner", None)
+        if runner is None:
+            return
+        self._state_engine_runner = runner
+        if self._state_engine_controls_bound:
+            return
+
+        if hasattr(self, "buttonRunStateEngineNow"):
+            try:
+                base = (self.buttonRunStateEngineNow.text() or "").strip()
+                if base:
+                    self._state_engine_button_base_text = base
+            except Exception:
+                pass
+            self.buttonRunStateEngineNow.clicked.connect(self._on_run_state_engine_now_clicked)
+        if hasattr(self, "checkBoxAutoStateEngineOrders"):
+            self.checkBoxAutoStateEngineOrders.setChecked(runner.is_auto_order_rebuild_enabled())
+            self.checkBoxAutoStateEngineOrders.toggled.connect(runner.set_auto_order_rebuild)
+        self._state_engine_controls_bound = True
+
+    def _refresh_state_engine_controls(self):
+        runner = self._state_engine_runner or getattr(SNAPSHOT_STORE, "state_engine_runner", None)
+        if runner is None:
+            return
+        summary = runner.get_pending_order_rebuild_summary()
+        if hasattr(self, "buttonRunStateEngineNow"):
+            self.buttonRunStateEngineNow.setText(
+                f"{self._state_engine_button_base_text} ({summary['pending_assets']})"
+            )
+        if hasattr(self, "labelStateEngineQueue"):
+            from_date = summary.get("from_date") or "-"
+            self.labelStateEngineQueue.setText(
+                f"Pending assets: {summary['pending_assets']} | from: {from_date}"
+            )
+
+    def _on_run_state_engine_now_clicked(self):
+        runner = self._state_engine_runner or getattr(SNAPSHOT_STORE, "state_engine_runner", None)
+        if runner is None:
+            print("[single-asset] state_engine_runner not available")
+            return
+        started = runner.run_pending_order_rebuild_now()
+        if not started:
+            print("[single-asset] no pending order-driven assets to rebuild")
+        self._refresh_state_engine_controls()
 
     def _schedule_summary_reload(self):
         self._summary_dirty = True
@@ -1204,7 +1257,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.asset_selector.addItems(assets)
         if current_asset and current_asset in assets:
             self.asset_selector.setCurrentText(current_asset)
-        elif current_asset:
+        elif current_asset and self._allow_inactive_asset_in_selector:
             self._ensure_asset_in_selector_and_select(current_asset)
         elif assets:
             self.asset_selector.setCurrentIndex(0)
@@ -1376,6 +1429,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         value = (item.text() or "").strip()
         if not value:
             return
+        self._allow_inactive_asset_in_selector = True
         self._ensure_asset_in_selector_and_select(value)
 
     def _ensure_asset_in_selector_and_select(self, asset_rollup: str) -> None:
@@ -1396,6 +1450,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             exists = False
         if not exists:
             return
+        self._allow_inactive_asset_in_selector = True
         self.asset_selector.addItem(asset_rollup)
         self.asset_selector.setCurrentText(asset_rollup)
 
