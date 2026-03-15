@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime
 
 from PySide6.QtWidgets import QWidget, QMessageBox, QAbstractItemView, QLineEdit, QHeaderView
-from PySide6.QtCore import Qt, Signal, QDate
+from PySide6.QtCore import Qt, Signal, QDate, QTimer
 from PySide6.QtGui import QColor
 
 from portefeuille_viewer.signals import signals
@@ -236,8 +236,19 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.comboOorsprong1.setFocus()
         self.dateEditOrder1.setDate(QDate.currentDate())
         self.dateEditOrder2.setDate(QDate.currentDate())
+        # Herlaad Orders-tab pas wanneer transactiesnapshot echt vernieuwd is.
+        # Dit voorkomt race-issues met lokale append/update/delete t.o.v. centrale refresh.
+        self._orders_reload_timer = QTimer(self)
+        self._orders_reload_timer.setSingleShot(True)
+        self._orders_reload_timer.setInterval(120)
+        self._orders_reload_timer.timeout.connect(self._load_initial_records)
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
         # ...koppel overige events indien nodig
         # self.load_table_data()
+
+    def _on_snapshot_updated(self, snapshot_key: str):
+        if snapshot_key == "repository_snapshot_alle_transacties":
+            self._orders_reload_timer.start()
 
     def auto_fill_year(self, line_edit: QLineEdit):
         s = (line_edit.text() or "").strip()
@@ -753,8 +764,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         if tweede_id:
             msg += f" (en gekoppeld aan {tweede_id})"
         QMessageBox.information(self, "Succes", msg)
-        self._append_transactions_to_snapshot_by_ids([x for x in [eerste_id, tweede_id] if x is not None])
-        self._load_initial_records()
+        # Geen lokale snapshot-append hier; centrale ordersCommitted-refresh
+        # schrijft de nieuwe transactiesnapshot en triggert _on_snapshot_updated.
         self._emit_state_rebuild_payload(
             old_rows=[],
             new_rows=[eerste_order] + ([tweede_order] if tweede_order else []),
@@ -776,11 +787,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
                 record_id1=int(self.EDIT_ID), data1=data_update_1,
                 record_id2=(int(self.EDIT_ID2) if self.EDIT_ID2 is not None else None), data2=data_update_2
             )
-            # Sync met snapshot: update eerste record
-            self._update_transaction_in_snapshot(int(self.EDIT_ID), data_update_1)
-            # Sync met snapshot: update tweede record (indien gekoppeld)
-            if self.EDIT_ID2 is not None and data_update_2 is not None:
-                self._update_transaction_in_snapshot(int(self.EDIT_ID2), data_update_2)
+            # Geen lokale snapshot-update; centrale ordersCommitted-refresh regelt dit.
             # Refresh afgeleide snapshots na UPDATE
             # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates
         except pyodbc.Error as e:
@@ -1001,8 +1008,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             deleted_count = delete_transactions_by_ids(ids_to_delete)
             # print(f"🗑️ {deleted_count} record(s) verwijderd uit database")
             
-            # Delete from snapshot
-            self._delete_transactions_from_snapshot_by_ids(ids_to_delete)
+            # Geen lokale snapshot-delete; centrale ordersCommitted-refresh regelt dit.
             
             # Refresh afgeleide snapshots
             # self._refresh_derived_snapshots()  # VERWIJDERD: centrale signalen regelen nu updates

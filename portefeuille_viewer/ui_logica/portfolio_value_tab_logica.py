@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QTimer
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
 import contextlib
@@ -250,20 +250,36 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         # Initial load
         self.reload_snapshot()
 
+        # Debounced reload on relevant snapshot updates, so we refresh after
+        # transaction-derived rebuild has actually written the new snapshots.
+        self._snapshot_reload_timer = QTimer(self)
+        self._snapshot_reload_timer.setSingleShot(True)
+        self._snapshot_reload_timer.setInterval(150)
+        self._snapshot_reload_timer.timeout.connect(self.reload_snapshot)
+        self._watched_snapshot_keys = {
+            "repository_snapshot_portfolio_value_total_combined_put",
+            "repository_snapshot_portfolio_value_aandelen",
+            "repository_snapshot_portfolio_value_optie",
+            "repository_snapshot_portfolio_value_optie_call_put_detailed",
+            "repository_snapshot_portfolio_value_sprinters",
+        }
+
         # React to central signals: reload when DB changes or orders commit
         def _on_db_changed(_name: str):
             with contextlib.suppress(Exception):
                 print("🔄 PortfolioValueTab: databaseChanged signal ontvangen, herladen snapshot...")
                 self.reload_snapshot()
-        def _on_orders_committed():
+        def _on_snapshot_updated(snapshot_key: str):
             with contextlib.suppress(Exception):
-                self.reload_snapshot()
+                if snapshot_key in self._watched_snapshot_keys:
+                    # Collapse bursts of writes into one UI reload.
+                    self._snapshot_reload_timer.start()
         def _on_state_rebuild_finished(payload: dict | None):
             with contextlib.suppress(Exception):
                 if (payload or {}).get("status") == "ok":
                     self.reload_snapshot()
         signals.databaseChanged.connect(_on_db_changed)
-        signals.ordersCommitted.connect(_on_orders_committed)
+        signals.snapshotUpdated.connect(_on_snapshot_updated)
         signals.stateRebuildFinished.connect(_on_state_rebuild_finished)
         signals.uiStyleChanged.connect(self._on_ui_style_changed)
 

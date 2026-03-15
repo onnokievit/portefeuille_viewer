@@ -1,4 +1,4 @@
-import sys
+import sys  
 import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
@@ -76,6 +76,9 @@ def refresh_everything():
 def refresh_transaction_derived_snapshots(payload: dict | None = None):
     start_time = time.time()
     try:
+        # Zorg dat afgeleide snapshots altijd vanaf de gecommitte DB-waarheid worden opgebouwd.
+        # Dit voorkomt race-gedrag waarbij ordersCommitted eerder komt dan lokale snapshot-sync in de UI.
+        repository.load_alle_transacties()
         repository.load_aandelen_from_tx()
         repository.load_open_opties_from_tx()
         repository.load_gesloten_opties_from_tx()
@@ -120,9 +123,20 @@ def main():
     refresh_timer = QTimer()
     refresh_timer.setSingleShot(True)
     refresh_timer.setInterval(1200)
+    orders_refresh_timer = QTimer()
+    orders_refresh_timer.setSingleShot(True)
+    orders_refresh_timer.setInterval(250)
 
     def _run_debounced_refresh():
         refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
+
+    def _run_orders_refresh():
+        refresh_transaction_derived_snapshots({"reason": "orders_committed"})
+
+    def _schedule_orders_refresh():
+        # Herstel oud gedrag: na order-write direct transaction-derived snapshots verversen.
+        # Debounced om korte bursts (bijv. gekoppelde writes) samen te nemen.
+        orders_refresh_timer.start()
 
     def _schedule_snapshot_refresh(payload):
         if (payload or {}).get("status") != "ok":
@@ -139,6 +153,8 @@ def main():
         refresh_timer.start()
 
     refresh_timer.timeout.connect(_run_debounced_refresh)
+    orders_refresh_timer.timeout.connect(_run_orders_refresh)
+    signals.ordersCommitted.connect(_schedule_orders_refresh)
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
     signals.stateRebuildFinished.connect(
         lambda payload: print(f"[state-engine] rebuild finished: {payload}")
