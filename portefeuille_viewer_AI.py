@@ -127,6 +127,12 @@ def main():
     def _schedule_snapshot_refresh(payload):
         if (payload or {}).get("status") != "ok":
             return
+        # Refresh pas na aggregate-stap om dubbele UI-herlaadgolven te voorkomen.
+        # Basis-engines (aandelen/opties/sprinters) worden direct gevolgd door
+        # asset_result_v2; tussentijds refreshen is overbodig en kost UI-performance.
+        engine_class = str((payload or {}).get("engine_class") or "").strip().lower()
+        if engine_class != "asset_result_v2":
+            return
         pending_refresh_payload.clear()
         pending_refresh_payload.update(payload or {})
         # Restart timer so bursts collapse into one refresh.

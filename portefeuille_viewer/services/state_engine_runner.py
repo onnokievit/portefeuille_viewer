@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+import uuid
 from collections import deque
 from datetime import date, datetime
 from pathlib import Path
@@ -24,10 +26,9 @@ class StateEngineRunner(QObject):
         self._current_payload: dict | None = None
         self._process: QProcess | None = None
         self._auto_order_rebuild_enabled = False
-        self._pending_order_asset_classes: set[str] = set()
-        self._pending_order_assets: set[str] = set()
-        self._pending_order_from_date: date | None = None
-        self._pending_order_reasons: set[str] = set()
+        self._queue_schema_checked_db: str | None = None
+        self._runs_schema_checked_db: str | None = None
+        self._recover_state_from_db()
 
     def handle_rebuild_requested(self, payload: dict) -> None:
         normalized = self._normalize_payload(payload)
@@ -35,7 +36,7 @@ class StateEngineRunner(QObject):
             print(f"[state-engine-runner] ignored payload (empty/invalid): {payload}")
             return
         if self._should_defer_order_rebuild(normalized):
-            self._accumulate_pending_order_payload(normalized)
+            self._enqueue_order_rebuild_payload(normalized)
             print(f"[state-engine-runner] auto order rebuild disabled -> deferred payload: {normalized}")
             return
         self._queue.append(normalized)
@@ -56,29 +57,64 @@ class StateEngineRunner(QObject):
             print("[state-engine-runner] no pending order-driven rebuild payloads")
             return False
 
-        from_date_value = self._pending_order_from_date.isoformat() if self._pending_order_from_date else None
+        bundle = self._claim_pending_order_rebuild_bundle()
+        if not bundle:
+            print("[state-engine-runner] no pending order-driven rebuild payloads after drain")
+            return False
+
+        from_date_value = bundle["from_date"].isoformat() if bundle["from_date"] else None
         payload = {
-            "asset_classes": sorted(self._pending_order_asset_classes),
-            "affected_assets": sorted(self._pending_order_assets),
+            "asset_classes": sorted(bundle["asset_classes"]),
+            "affected_assets": sorted(bundle["affected_assets"]),
             "from_date": from_date_value,
             "reason": "manual_pending_orders_rebuild",
             "mode": "asset_incremental",
+            "_queue_run_id": bundle.get("queue_run_id"),
         }
-
-        self._pending_order_asset_classes.clear()
-        self._pending_order_assets.clear()
-        self._pending_order_from_date = None
-        self._pending_order_reasons.clear()
 
         self.handle_rebuild_requested(payload)
         return True
 
     def get_pending_order_rebuild_summary(self) -> dict:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return {"pending_assets": 0, "pending_classes": [], "from_date": None, "reasons": []}
+        try:
+            self._ensure_state_rebuild_queue_table(db_path)
+            conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                rows = cur.execute(
+                    """
+                    SELECT asset_rollup, asset_class, from_date, reason
+                    FROM state_rebuild_queue
+                    WHERE status='pending'
+                    """
+                ).fetchall()
+        except Exception as exc:
+            print(f"[state-engine-runner] pending summary failed: {exc}")
+            return {"pending_assets": 0, "pending_classes": [], "from_date": None, "reasons": []}
+
+        assets = set()
+        classes = set()
+        reasons = set()
+        min_date: date | None = None
+        for asset_rollup, asset_class, from_date_value, reason in rows:
+            if asset_rollup:
+                assets.add(str(asset_rollup).strip())
+            if asset_class:
+                classes.add(str(asset_class).strip().lower())
+            if reason:
+                reasons.add(str(reason).strip())
+            parsed = self._parse_iso_date(from_date_value)
+            if parsed is not None and (min_date is None or parsed < min_date):
+                min_date = parsed
+
         return {
-            "pending_assets": len(self._pending_order_assets),
-            "pending_classes": sorted(self._pending_order_asset_classes),
-            "from_date": self._pending_order_from_date.isoformat() if self._pending_order_from_date else None,
-            "reasons": sorted(self._pending_order_reasons),
+            "pending_assets": len(assets),
+            "pending_classes": sorted(classes),
+            "from_date": min_date.isoformat() if min_date else None,
+            "reasons": sorted(reasons),
         }
 
     def handle_orders_committed(self) -> None:
@@ -147,15 +183,213 @@ class StateEngineRunner(QObject):
         except Exception:
             return None
 
-    def _accumulate_pending_order_payload(self, payload: dict) -> None:
-        self._pending_order_asset_classes.update(payload.get("asset_classes") or [])
-        self._pending_order_assets.update(payload.get("affected_assets") or [])
-        self._pending_order_reasons.add(str(payload.get("reason") or "unknown"))
-        candidate = self._parse_iso_date(payload.get("from_date"))
-        if candidate is None:
+    def _ensure_state_rebuild_queue_table(self, db_path: str) -> None:
+        if self._queue_schema_checked_db == db_path:
             return
-        if self._pending_order_from_date is None or candidate < self._pending_order_from_date:
-            self._pending_order_from_date = candidate
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            exists = any(row.table_name == "state_rebuild_queue" for row in cur.tables(table="state_rebuild_queue"))
+            if not exists:
+                cur.execute(
+                    """
+                    CREATE TABLE state_rebuild_queue (
+                        Id AUTOINCREMENT PRIMARY KEY,
+                        created_at DATETIME,
+                        asset_rollup TEXT(64),
+                        asset_class TEXT(20),
+                        from_date DATETIME,
+                        reason TEXT(64),
+                        status TEXT(20),
+                        run_id TEXT(64),
+                        updated_at DATETIME
+                    )
+                    """
+                )
+                conn.commit()
+            try:
+                cols = {row.column_name.lower() for row in cur.columns(table="state_rebuild_queue")}
+            except Exception:
+                cols = set()
+            for col_name, ddl in [
+                ("run_id", "ALTER TABLE state_rebuild_queue ADD COLUMN run_id TEXT(64)"),
+                ("updated_at", "ALTER TABLE state_rebuild_queue ADD COLUMN updated_at DATETIME"),
+                ("status", "ALTER TABLE state_rebuild_queue ADD COLUMN status TEXT(20)"),
+            ]:
+                if col_name not in cols:
+                    try:
+                        cur.execute(ddl)
+                        conn.commit()
+                    except pyodbc.Error:
+                        conn.rollback()
+            # Best effort index-creation.
+            for stmt in [
+                "CREATE INDEX idx_state_rebuild_queue_status ON state_rebuild_queue (status)",
+                "CREATE INDEX idx_state_rebuild_queue_asset_class ON state_rebuild_queue (asset_rollup, asset_class)",
+                "CREATE INDEX idx_state_rebuild_queue_run_id ON state_rebuild_queue (run_id)",
+            ]:
+                try:
+                    cur.execute(stmt)
+                    conn.commit()
+                except pyodbc.Error:
+                    conn.rollback()
+        self._queue_schema_checked_db = db_path
+
+    def _ensure_state_runs_table(self, db_path: str) -> None:
+        if self._runs_schema_checked_db == db_path:
+            return
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            exists = any(row.table_name == "state_runs" for row in cur.tables(table="state_runs"))
+            if not exists:
+                cur.execute(
+                    """
+                    CREATE TABLE state_runs (
+                        Id AUTOINCREMENT PRIMARY KEY,
+                        run_id TEXT(64),
+                        created_at DATETIME,
+                        started_at DATETIME,
+                        finished_at DATETIME,
+                        status TEXT(24),
+                        engine_class TEXT(24),
+                        reason TEXT(64),
+                        mode TEXT(32),
+                        from_date DATETIME,
+                        affected_assets LONGTEXT,
+                        payload_json LONGTEXT,
+                        exit_code LONG,
+                        error_text LONGTEXT
+                    )
+                    """
+                )
+                conn.commit()
+            for stmt in [
+                "CREATE INDEX idx_state_runs_run_id ON state_runs (run_id)",
+                "CREATE INDEX idx_state_runs_status ON state_runs (status)",
+            ]:
+                try:
+                    cur.execute(stmt)
+                    conn.commit()
+                except pyodbc.Error:
+                    conn.rollback()
+        self._runs_schema_checked_db = db_path
+
+    def _enqueue_order_rebuild_payload(self, payload: dict) -> None:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return
+        self._ensure_state_rebuild_queue_table(db_path)
+        assets = payload.get("affected_assets") or []
+        classes = payload.get("asset_classes") or []
+        from_date_value = self._parse_iso_date(payload.get("from_date")) or date.today()
+        reason = str(payload.get("reason") or "unknown")
+        now = datetime.now()
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            inserted = 0
+            now = datetime.now()
+            for asset in assets:
+                for asset_class in classes:
+                    cur.execute(
+                        """
+                        INSERT INTO state_rebuild_queue
+                            (created_at, asset_rollup, asset_class, from_date, reason, status, run_id, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 'pending', Null, ?)
+                        """,
+                        now,
+                        str(asset).strip(),
+                        str(asset_class).strip().lower(),
+                        from_date_value,
+                        reason,
+                        now,
+                    )
+                    inserted += 1
+            conn.commit()
+        print(f"[state-engine-runner] queued pending order rebuild rows: {inserted}")
+
+    def _claim_pending_order_rebuild_bundle(self) -> dict | None:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return None
+        self._ensure_state_rebuild_queue_table(db_path)
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        queue_run_id = str(uuid.uuid4())
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            rows = cur.execute(
+                """
+                SELECT Id, asset_rollup, asset_class, from_date, reason
+                FROM state_rebuild_queue
+                WHERE status='pending'
+                """
+            ).fetchall()
+            if not rows:
+                return None
+
+            ids = [int(r[0]) for r in rows if r[0] is not None]
+            placeholders = ",".join("?" for _ in ids)
+            cur.execute(
+                f"UPDATE state_rebuild_queue SET status='running', run_id=?, updated_at=? WHERE Id IN ({placeholders})",
+                [queue_run_id, datetime.now(), *ids],
+            )
+            conn.commit()
+
+        assets: set[str] = set()
+        classes: set[str] = set()
+        reasons: set[str] = set()
+        min_date: date | None = None
+        for _, asset_rollup, asset_class, from_date_value, reason in rows:
+            if asset_rollup:
+                assets.add(str(asset_rollup).strip())
+            if asset_class:
+                classes.add(str(asset_class).strip().lower())
+            if reason:
+                reasons.add(str(reason).strip())
+            parsed = self._parse_iso_date(from_date_value)
+            if parsed is not None and (min_date is None or parsed < min_date):
+                min_date = parsed
+
+        return {
+            "affected_assets": sorted(assets),
+            "asset_classes": sorted(classes),
+            "from_date": min_date,
+            "reasons": sorted(reasons),
+            "queue_run_id": queue_run_id,
+        }
+
+    def _recover_state_from_db(self) -> None:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return
+        try:
+            self._ensure_state_rebuild_queue_table(db_path)
+            self._ensure_state_runs_table(db_path)
+            conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                # Queue recovery: put dangling running rows back to pending.
+                cur.execute(
+                    """
+                    UPDATE state_rebuild_queue
+                    SET status='pending', run_id=Null, updated_at=?
+                    WHERE status='running'
+                    """,
+                    datetime.now(),
+                )
+                # Journal recovery: mark hanging runs as recovered-aborted.
+                cur.execute(
+                    """
+                    UPDATE state_runs
+                    SET status='aborted_recovered', finished_at=?
+                    WHERE status='running'
+                    """,
+                    datetime.now(),
+                )
+                conn.commit()
+        except Exception as exc:
+            print(f"[state-engine-runner] recovery skipped: {exc}")
 
     def request_catchup_for_active_db(self, fetch_start_date: str | None = None) -> None:
         payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date)
@@ -448,11 +682,14 @@ class StateEngineRunner(QObject):
             active_payload["_aggregate_scheduled"] = True
 
         self._current_payload = active_payload
+        self._start_run_journal(active_payload)
         signals.stateRebuildStarted.emit(active_payload)
 
         command = self._build_command(active_payload)
         if command is None:
             signals.stateRebuildFailed.emit(f"Kon {active_class} state-engine commando niet opbouwen.")
+            self._finish_run_journal(active_payload, status="failed_build_command", exit_code=-1, error_text="build_command_failed")
+            self._finalize_queue_after_run(active_payload, success=False)
             self._current_payload = None
             self._start_next()
             return
@@ -592,6 +829,8 @@ class StateEngineRunner(QObject):
         self._current_payload = None
 
         if exit_code == 0:
+            self._finish_run_journal(payload, status="ok", exit_code=exit_code, error_text=(stderr.strip() or None))
+            self._finalize_queue_after_run(payload, success=True)
             signals.stateRebuildFinished.emit(
                 {
                     **payload,
@@ -602,13 +841,103 @@ class StateEngineRunner(QObject):
                 }
             )
         else:
+            self._finish_run_journal(
+                payload,
+                status="failed",
+                exit_code=exit_code,
+                error_text=(stderr.strip() or stdout.strip() or "unknown state-engine failure"),
+            )
+            self._finalize_queue_after_run(payload, success=False)
             message = f"State-engine faalde met exit_code={exit_code}. {stderr.strip() or stdout.strip()}".strip()
             signals.stateRebuildFailed.emit(message)
         self._start_next()
 
     def _on_process_error(self, process_error) -> None:
         payload = dict(self._current_payload or {})
+        self._finish_run_journal(payload, status="process_error", exit_code=-1, error_text=str(process_error))
+        self._finalize_queue_after_run(payload, success=False)
         self._process = None
         self._current_payload = None
         signals.stateRebuildFailed.emit(f"State-engine procesfout: {process_error}. payload={payload}")
         self._start_next()
+
+    def _start_run_journal(self, payload: dict) -> None:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return
+        self._ensure_state_runs_table(db_path)
+        run_id = str(payload.get("_queue_run_id") or uuid.uuid4())
+        payload["_state_run_id"] = run_id
+        safe_payload = {k: v for k, v in payload.items() if not str(k).startswith("_")}
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO state_runs
+                    (run_id, created_at, started_at, status, engine_class, reason, mode, from_date, affected_assets, payload_json)
+                VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)
+                """,
+                run_id,
+                datetime.now(),
+                datetime.now(),
+                str(payload.get("engine_class") or ""),
+                str(payload.get("reason") or ""),
+                str(payload.get("mode") or ""),
+                self._parse_iso_date(payload.get("from_date")),
+                ",".join(payload.get("affected_assets") or []),
+                json.dumps(safe_payload, default=str),
+            )
+            conn.commit()
+
+    def _finish_run_journal(self, payload: dict, status: str, exit_code: int, error_text: str | None = None) -> None:
+        db_path = getattr(repository, "db_path", None)
+        run_id = payload.get("_state_run_id")
+        if not db_path or not run_id:
+            return
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE state_runs
+                SET status=?, finished_at=?, exit_code=?, error_text=?
+                WHERE run_id=? AND status='running'
+                """,
+                str(status),
+                datetime.now(),
+                int(exit_code),
+                (str(error_text) if error_text else None),
+                str(run_id),
+            )
+            conn.commit()
+
+    def _finalize_queue_after_run(self, payload: dict, success: bool) -> None:
+        queue_run_id = payload.get("_queue_run_id")
+        db_path = getattr(repository, "db_path", None)
+        if not queue_run_id or not db_path:
+            return
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+        with pyodbc.connect(conn_str) as conn:
+            cur = conn.cursor()
+            if success:
+                cur.execute(
+                    """
+                    UPDATE state_rebuild_queue
+                    SET status='done', updated_at=?
+                    WHERE run_id=? AND status='running'
+                    """,
+                    datetime.now(),
+                    str(queue_run_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE state_rebuild_queue
+                    SET status='pending', run_id=Null, updated_at=?
+                    WHERE run_id=? AND status='running'
+                    """,
+                    datetime.now(),
+                    str(queue_run_id),
+                )
+            conn.commit()

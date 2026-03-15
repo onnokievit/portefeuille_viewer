@@ -67,6 +67,37 @@ TABLE_DEFINITIONS = {
             status TEXT(20)
         )
     """,
+    "state_rebuild_queue": """
+        CREATE TABLE state_rebuild_queue (
+            Id AUTOINCREMENT PRIMARY KEY,
+            created_at DATETIME,
+            asset_rollup TEXT(64),
+            asset_class TEXT(20),
+            from_date DATETIME,
+            reason TEXT(64),
+            status TEXT(20),
+            run_id TEXT(64),
+            updated_at DATETIME
+        )
+    """,
+    "state_runs": """
+        CREATE TABLE state_runs (
+            Id AUTOINCREMENT PRIMARY KEY,
+            run_id TEXT(64),
+            created_at DATETIME,
+            started_at DATETIME,
+            finished_at DATETIME,
+            status TEXT(24),
+            engine_class TEXT(24),
+            reason TEXT(64),
+            mode TEXT(32),
+            from_date DATETIME,
+            affected_assets LONGTEXT,
+            payload_json LONGTEXT,
+            exit_code LONG,
+            error_text LONGTEXT
+        )
+    """,
     "per_dag_aandelen_state_v2": """
         CREATE TABLE per_dag_aandelen_state_v2 (
             Id AUTOINCREMENT PRIMARY KEY,
@@ -161,6 +192,11 @@ INDEX_STATEMENTS = [
     "CREATE INDEX idx_stock_splits_asset_date ON stock_splits (asset_rollup, effective_date)",
     "CREATE INDEX idx_option_factor_override_uid_date ON option_price_factor_overrides (uniek_id, effective_from_date)",
     "CREATE INDEX idx_state_engine_status_engine_asset ON state_engine_status (engine_name, asset_rollup)",
+    "CREATE INDEX idx_state_rebuild_queue_status ON state_rebuild_queue (status)",
+    "CREATE INDEX idx_state_rebuild_queue_asset_class ON state_rebuild_queue (asset_rollup, asset_class)",
+    "CREATE INDEX idx_state_rebuild_queue_run_id ON state_rebuild_queue (run_id)",
+    "CREATE INDEX idx_state_runs_run_id ON state_runs (run_id)",
+    "CREATE INDEX idx_state_runs_status ON state_runs (status)",
     "CREATE INDEX idx_aandelen_state_v2_datum_asset_broker ON per_dag_aandelen_state_v2 (datum, asset_rollup, broker)",
     "CREATE INDEX idx_aandelen_state_v2_asset ON per_dag_aandelen_state_v2 (asset_rollup)",
     "CREATE INDEX idx_sprinters_v2_datum_asset_broker ON per_dag_open_sprinters_opgerold_v2 (datum, asset_rollup, broker)",
