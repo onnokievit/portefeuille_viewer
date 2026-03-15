@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView
-from PySide6.QtCore import QSortFilterProxyModel
+from PySide6.QtCore import QSortFilterProxyModel, QTimer
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QPen
@@ -39,9 +39,19 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._value_grow_color_map = {}
         self._value_grow_chart_data = {}
         self._put_otm_ratio_value_grow = 1.0
+        self._snapshot_reload_timer = QTimer(self)
+        self._snapshot_reload_timer.setSingleShot(True)
+        self._snapshot_reload_timer.setInterval(150)
+        self._snapshot_reload_timer.timeout.connect(self.reload_data)
+        self._watched_snapshot_keys = {
+            "repository_snapshot_portfolio_value_optie_call_put_detailed",
+            "repository_snapshot_portfolio_value_aandelen",
+            "repository_snapshot_portfolio_value_sprinters",
+            "repository_snapshot_portfolio_value_total_combined_put",
+        }
         self.reload_data()
         signals.databaseChanged.connect(self._on_db_changed)
-        signals.ordersCommitted.connect(self.reload_data)
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.stateRebuildFinished.connect(self._on_state_rebuild_finished)
         if hasattr(self, "putOTMRatio"):
             try:
@@ -199,6 +209,10 @@ class SectorAnalysisTab(QWidget, Ui_Form):
 
     def _on_db_changed(self, _db_name: str):
         self.reload_data()
+
+    def _on_snapshot_updated(self, snapshot_key: str):
+        if snapshot_key in self._watched_snapshot_keys:
+            self._snapshot_reload_timer.start()
 
     def _on_state_rebuild_finished(self, payload: dict | None):
         if (payload or {}).get("status") == "ok":

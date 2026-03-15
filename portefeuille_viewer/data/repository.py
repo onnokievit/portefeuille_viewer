@@ -1489,7 +1489,7 @@ def portfolio_value_asset_rollup_opties_put():
         pl.col("aantal_ITM_call").fill_null(0).alias("aantal_ITM_call"),
         pl.col("aantal_OTM_call").fill_null(0).alias("aantal_OTM_call"),
     ])
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie = df_opties_waarde_2
+    SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_optie", df_opties_waarde_2)
     #return df_opties_waarde_2
     
     df_opties_waarde_4 = df_opties_waarde_3.with_columns([
@@ -1503,7 +1503,7 @@ def portfolio_value_asset_rollup_opties_put():
     # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE # sourcery skip
     SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df_opties_waarde_4  # sourcery skip # of df_sum als je de gesumde versie wilt zien
     # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_call_put_detailed = df_opties_waarde_4
+    SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_optie_call_put_detailed", df_opties_waarde_4)
 
 
 def estimate_delta(option_type: str, spot: float, strike: float) -> float:
@@ -1590,13 +1590,13 @@ def portfolio_value_asset_rollup_aandelen():
         ])
     df_aandelen_waarde = df_aandelen_waarde.drop(["aantal_koop", "aantal_verkoop", "euro_koop", "euro_verkoop", "eq_total_fee", "total_result"])
     
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen = df_aandelen_waarde
+    SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_aandelen", df_aandelen_waarde)
     #return df_aandelen_waarde
 
 def portfolio_value_asset_rollup_sprinters():
     df_assets = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
     if df_assets is None or df_assets.height == 0:
-        SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = pl.DataFrame({})
+        SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_sprinters", pl.DataFrame({}))
         return
 
     # Prefer repository snapshot (tx-derived, always available after load_open_sprinters_from_tx).
@@ -1605,7 +1605,7 @@ def portfolio_value_asset_rollup_sprinters():
     if df_sprinters is None or df_sprinters.height == 0:
         df_sprinters = SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live
     if df_sprinters is None or df_sprinters.height == 0:
-        SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = pl.DataFrame({})
+        SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_sprinters", pl.DataFrame({}))
         return
 
     df_sprinters_waarde = df_sprinters.with_columns(
@@ -1634,7 +1634,7 @@ def portfolio_value_asset_rollup_sprinters():
         ]
     )
 
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters = df_sprinters_waarde
+    SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_sprinters", df_sprinters_waarde)
 
 def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -1740,7 +1740,7 @@ def portfolio_value_asset_rollup_combined():
         (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
     ])
 
-    SNAPSHOT_STORE.repository_snapshot_portfolio_value_total_combined_put = df_combined
+    SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_total_combined_put", df_combined)
     #return df_combined
 
 def refresh_all_snapshots():

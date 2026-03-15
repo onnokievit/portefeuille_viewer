@@ -4,7 +4,7 @@ import json
 import sys
 import uuid
 from collections import deque
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -398,6 +398,7 @@ class StateEngineRunner(QObject):
 
     def _build_price_catchup_payloads(self, fetch_start_date: str | None = None) -> list[dict]:
         today = date.today()
+        lookback_floor = today - timedelta(days=5)
         fetch_start = datetime.strptime(fetch_start_date, "%Y-%m-%d").date() if fetch_start_date else None
         db_path = getattr(repository, "db_path", None)
         if not db_path:
@@ -424,15 +425,22 @@ class StateEngineRunner(QObject):
         if not shared_last_dates:
             return []
 
-        # Opties catchup
-        payload_by_asset: dict[str, dict] = {}
-        def ensure_asset_payload(asset: str) -> dict:
-            p = payload_by_asset.get(asset)
-            if p is None:
-                p = {"classes": set(), "from_dates": []}
-                payload_by_asset[asset] = p
-            return p
+        class_assets: dict[str, set[str]] = {"opties": set(), "aandelen": set(), "sprinters": set()}
+        class_from_dates: dict[str, list[date]] = {"opties": [], "aandelen": [], "sprinters": []}
 
+        def add_class_scope(asset_class: str, asset: str, candidate_date: date | None) -> None:
+            class_assets[asset_class].add(asset)
+            if candidate_date is not None:
+                class_from_dates[asset_class].append(candidate_date)
+
+        def finalize_from_date(dates: list[date]) -> date | None:
+            if not dates:
+                return None
+            # Gebruik oudste benodigde datum, met minstens 5 dagen overlap.
+            # Voorbeeld: min(oudste_nodig, today-5).
+            return min(min(dates), lookback_floor)
+
+        # Opties catchup (batch)
         if option_assets:
             local_status_opt = self._get_local_state_status(db_path, option_assets, engine_name="open_opties_v2")
             for asset in option_assets:
@@ -443,18 +451,16 @@ class StateEngineRunner(QObject):
                 # Opties: local_v2 kan oud zijn zodra series gesloten zijn; gebruik status als primaire waarheid.
                 needs_price_catchup = (local_last is None or shared_last > local_last)
                 if needs_price_catchup:
-                    payload = ensure_asset_payload(asset)
-                    payload["classes"].add("opties")
                     if fetch_start is not None:
-                        payload["from_dates"].append(fetch_start)
+                        candidate = fetch_start
                     elif local_last is not None:
-                        payload["from_dates"].append(local_last)
+                        candidate = local_last
                     else:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="optie")
-                        if first_tx_date:
-                            payload["from_dates"].append(first_tx_date)
+                        candidate = first_tx_date
+                    add_class_scope("opties", asset, candidate)
 
-        # Aandelen catchup
+        # Aandelen catchup (batch)
         if equity_assets:
             local_status_eq = self._get_local_state_status(db_path, equity_assets, engine_name="open_aandelen_v2")
             for asset in equity_assets:
@@ -464,19 +470,17 @@ class StateEngineRunner(QObject):
                 local_last = local_status_eq.get(asset)
                 needs_price_catchup = (local_last is None or shared_last > local_last)
                 if needs_price_catchup:
-                    payload = ensure_asset_payload(asset)
-                    payload["classes"].add("aandelen")
                     if fetch_start is not None:
-                        payload["from_dates"].append(fetch_start)
+                        candidate = fetch_start
                     elif local_last is not None:
-                        payload["from_dates"].append(local_last)
+                        candidate = local_last
                     else:
                         tx_type = "future" if asset in future_assets_set else "aandeel"
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type=tx_type)
-                        if first_tx_date:
-                            payload["from_dates"].append(first_tx_date)
+                        candidate = first_tx_date
+                    add_class_scope("aandelen", asset, candidate)
 
-        # Sprinters catchup
+        # Sprinters catchup (batch)
         if sprinter_assets:
             local_status_sp = self._get_local_state_status(db_path, sprinter_assets, engine_name="open_sprinters_v2")
             for asset in sprinter_assets:
@@ -486,30 +490,49 @@ class StateEngineRunner(QObject):
                 local_last = local_status_sp.get(asset)
                 needs_price_catchup = (local_last is None or shared_last > local_last)
                 if needs_price_catchup:
-                    payload = ensure_asset_payload(asset)
-                    payload["classes"].add("sprinters")
                     if fetch_start is not None:
-                        payload["from_dates"].append(fetch_start)
+                        candidate = fetch_start
                     elif local_last is not None:
-                        payload["from_dates"].append(local_last)
+                        candidate = local_last
                     else:
                         first_tx_date = self._get_first_tx_date(db_path, asset, asset_type="sprinter")
-                        if first_tx_date:
-                            payload["from_dates"].append(first_tx_date)
+                        candidate = first_tx_date
+                    add_class_scope("sprinters", asset, candidate)
 
         out: list[dict] = []
-        for asset, data in sorted(payload_by_asset.items()):
-            classes = sorted(data.get("classes") or [])
-            from_dates = [d for d in (data.get("from_dates") or []) if d is not None]
-            if not classes or not from_dates:
+        aggregate_assets: set[str] = set()
+        aggregate_from_dates: list[date] = []
+
+        for cls in ("aandelen", "opties", "sprinters"):
+            assets_cls = sorted(class_assets.get(cls) or [])
+            if not assets_cls:
                 continue
+            from_date_cls = finalize_from_date(class_from_dates.get(cls) or [])
+            if from_date_cls is None:
+                continue
+            aggregate_assets.update(assets_cls)
+            aggregate_from_dates.append(from_date_cls)
             out.append(
                 {
-                    "asset_classes": classes,
-                    "affected_assets": [asset],
-                    "from_date": min(from_dates).isoformat(),
+                    "asset_classes": [cls],
+                    "affected_assets": assets_cls,
+                    "from_date": from_date_cls.isoformat(),
                     "reason": "price_catchup",
                     "mode": "asset_incremental",
+                    # Eén gecombineerde aggregate-run volgt aan het einde.
+                    "_aggregate_scheduled": True,
+                }
+            )
+
+        if aggregate_assets and aggregate_from_dates:
+            out.append(
+                {
+                    "asset_classes": ["asset_result_v2"],
+                    "affected_assets": sorted(aggregate_assets),
+                    "from_date": min(aggregate_from_dates).isoformat(),
+                    "reason": "price_catchup",
+                    "mode": "asset_incremental",
+                    "_aggregate_scheduled": True,
                 }
             )
         return out
