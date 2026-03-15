@@ -16,6 +16,10 @@ def connect_access(db_path: str) -> pyodbc.Connection:
     return pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
 
 
+def format_nl_3(value: float) -> str:
+    return f"{float(value):.3f}".replace(".", ",")
+
+
 def load_open_option_positions(onno_conn: pyodbc.Connection) -> pd.DataFrame:
     max_datum = onno_conn.cursor().execute("SELECT MAX(datum) FROM per_dag_open_opties_opgerold_v2").fetchone()[0]
     if max_datum is None:
@@ -210,7 +214,7 @@ def main() -> int:
     print(f"rows_with_underlying_close={int(merged['underlying_close'].notna().sum())}")
     print(f"rows_calculated={len(calc)}")
     print("\nPer currency:")
-    print(by_ccy.to_string(float_format=lambda x: f"{x:,.2f}"))
+    print(by_ccy.to_string(float_format=lambda x: format_nl_3(x)))
 
     if args.fx_usd_eur > 0:
         usd_signed = float(by_ccy.loc["USD", "time_value_signed"]) if "USD" in by_ccy.index else 0.0
@@ -221,8 +225,8 @@ def main() -> int:
         eur_total_abs = eur_abs + usd_abs * float(args.fx_usd_eur)
         print("\nEUR-estimate:")
         print(f"fx_usd_eur={args.fx_usd_eur}")
-        print(f"time_value_signed_eur_est={eur_total_signed:,.2f}")
-        print(f"time_value_abs_eur_est={eur_total_abs:,.2f}")
+        print(f"time_value_signed_eur_est={format_nl_3(eur_total_signed)}")
+        print(f"time_value_abs_eur_est={format_nl_3(eur_total_abs)}")
 
     if args.save_csv:
         out = Path(__file__).resolve().parent / "option_time_value_detail.csv"
@@ -256,7 +260,7 @@ def main() -> int:
         ]
         for c in round_cols:
             if c in to_save.columns:
-                to_save[c] = pd.to_numeric(to_save[c], errors="coerce").round(2)
+                to_save[c] = pd.to_numeric(to_save[c], errors="coerce").round(3)
         try:
             to_save.to_csv(
                 out,
