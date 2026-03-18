@@ -10,6 +10,7 @@ from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
+from portefeuille_viewer.ui_logica.optie_tijdswaarde_tab_logica import OptieTijdswaardeTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
@@ -32,19 +33,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # Hier kun je later echte tab-klassen toevoegen
         self.orders_tab = OrdersTabWidget() 
         self.tabWidget.addTab(self.orders_tab, "Orders")
+
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
-        
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+        self.optie_tijdswaarde_tab = OptieTijdswaardeTab()
+        self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
+
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
         self.sector_analysis_tab = SectorAnalysisTab()
         self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
-        
-
 
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
@@ -126,6 +129,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if hasattr(self, 'portfolio_engine'):
             with contextlib.suppress(Exception):
                 self.portfolio_engine.shutdown()
+        if hasattr(self, "option_timevalue_service"):
+            with contextlib.suppress(Exception):
+                self.option_timevalue_service.shutdown()
         if hasattr(self, 'live_price_updater_stop_event'):
             self.live_price_updater_stop_event.set()
 

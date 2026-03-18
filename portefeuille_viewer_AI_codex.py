@@ -12,7 +12,9 @@ from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.services.historical_price_update_runner import HistoricalPriceUpdateRunner
+from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
+from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
@@ -189,7 +191,9 @@ def main():
     )
     stop_event, thread = start_live_price_updater(price_feed)
     portfolio_engine = PortfolioEngine(price_feed)
+    option_timevalue_service = OptionTimevalueService(price_feed, STOCKDATA_DB_PATH)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
+    w.option_timevalue_service = option_timevalue_service
     w.show()
     # Start price-update pas nadat UI volledig staat en event-loop idle is.
     QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)

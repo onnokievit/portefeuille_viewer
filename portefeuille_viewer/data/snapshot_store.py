@@ -40,6 +40,9 @@ class SnapshotStore:
         self.repository_dirty_test_orders_assets: set = set()
         self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
         self.repository_dirty_open_optie_comments: list = []
+        self.snapshot_optie_timevalue_live: pl.DataFrame | None = None
+        self.snapshot_optie_timevalue_summary: pl.DataFrame | None = None
+        self.snapshot_optie_timevalue_meta: pl.DataFrame | None = None
         self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
@@ -79,6 +82,9 @@ class SnapshotStore:
         self.repository_dirty_test_orders_assets = set()
         self.repository_snapshot_open_optie_comments = None
         self.repository_dirty_open_optie_comments = []
+        self.snapshot_optie_timevalue_live = None
+        self.snapshot_optie_timevalue_summary = None
+        self.snapshot_optie_timevalue_meta = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -110,6 +116,7 @@ class SnapshotStore:
             self.live_prices is not None,
             self.repository_snapshot_test_orders_cache is not None,
             self.repository_dirty_test_orders_assets is not None,
+            self.snapshot_optie_timevalue_live is not None,
         ])
 
     def snapshot_store_summary(self) -> str:
@@ -173,6 +180,8 @@ class SnapshotStore:
             parts.append(f"Dirty Test Orders Assets: {len(self.repository_dirty_test_orders_assets)} items")
         if self.repository_snapshot_test_orders_cache:
             parts.append(f"Test Orders Cache: {len(self.repository_snapshot_test_orders_cache)} items")
+        if self.snapshot_optie_timevalue_live is not None:
+            parts.append(f"Optie Timevalue Live: {len(self.snapshot_optie_timevalue_live)} rijen")
 
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
