@@ -1,3 +1,11 @@
+migratie roadmap release checklist (engine + ui modernisatie)
+- [ ] feature flags gezet: USE_AANDELEN_PROJECTION_V2 / UI_AANDELEN_WEB_V1 / ENABLE_DUAL_RUN_DIFF_REPORT
+- [ ] parity rapport oud vs nieuw engine bekeken (dagelijks)
+- [ ] p95 performance check gedaan (build/publish/ui_apply)
+- [ ] alle user db's gemigreerd via DbMigrationService
+- [ ] legacy Access/Excel contracttests groen
+- [ ] fallback pad getest (flags terug naar oud)
+
 mijn endgame doel is:
 - een recent en accuraat optie waarde overzicht te hebben, zodat ik zie welke tijdswaarde vrijvalt (bij welke serie en expiry
 - een systeem gaan maken om voor een open positie het beste doorrol moment en candidaat te vinden, met een strategie gericht op maximalisering time value harvesting, maar ook ruimte laten voor groei van het asset, als die ruimte er binnen het asset te verwachten is, of juist niet, als dat niet te verwachten is. 
