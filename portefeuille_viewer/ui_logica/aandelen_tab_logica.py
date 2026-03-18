@@ -94,6 +94,11 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self._reload_timer.setInterval(500)
 		self._reload_timer.setSingleShot(True)
 		self._reload_timer.timeout.connect(self._reload_if_needed)
+		# Losse throttle voor optie-timevalue updates zodat deze tab niet continu herlaadt.
+		self._option_tv_reload_timer = QTimer(self)
+		self._option_tv_reload_timer.setInterval(5000)  # vaste update-cadans
+		self._option_tv_reload_timer.setSingleShot(True)
+		self._option_tv_reload_timer.timeout.connect(self._reload_if_needed)
 
 		# Engine en pricefeed
 		if portfolio_engine is not None:
@@ -176,6 +181,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		# Koppel live update: alleen via PortfolioEngine
 		if hasattr(self.engine, 'dataUpdated'):
 			self.engine.dataUpdated.connect(self.on_engine_data_update)
+		signals.snapshotUpdated.connect(self._on_snapshot_updated)
 		# print("[DEBUG] self.pricefeed in tab bij connect:", self.pricefeed, id(self.pricefeed) if self.pricefeed else None)
 
 	def clear_all_filters(self):
@@ -218,7 +224,8 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"value_grow",
 			"status",
 			"portfolio_total_waarde_lineair_pct",
-			"portfolio_total_waarde_delta_pct"
+			"portfolio_total_waarde_delta_pct",
+			"optie_tijdswaarde_signed_eur",
 		]
 		totalen = {}
 		if not df_sum.is_empty():
@@ -361,6 +368,16 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			self._dirty = True
 			return
 		self._schedule_reload()
+
+	def _on_snapshot_updated(self, snapshot_key: str):
+		# Optie tijdswaarde heeft eigen feed/service; refresh Aandelen-tab bij update.
+		if snapshot_key == "snapshot_optie_timevalue_live":
+			if not self._active:
+				self._dirty = True
+				return
+			self._dirty = True
+			if not self._option_tv_reload_timer.isActive():
+				self._option_tv_reload_timer.start()
 
 	@Slot(str, str, float)
 	def on_ticker_display(self, sym: str, cur: str, px: float):
