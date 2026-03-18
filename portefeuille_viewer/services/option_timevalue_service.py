@@ -545,9 +545,38 @@ class OptionTimevalueService(QObject):
                 }
             )
 
-        live_df = pl.DataFrame(output).sort(["asset", "exp", "c_p", "strike"])
-        summary_df = pl.DataFrame(
-            [{"ccy": ccy, "time_value_abs": val} for ccy, val in sorted(by_ccy.items())]
+        live_schema = {
+            "broker": pl.Utf8,
+            "asset": pl.Utf8,
+            "exp": pl.Date,
+            "c_p": pl.Utf8,
+            "strike": pl.Float64,
+            "qty_open": pl.Float64,
+            "mult": pl.Float64,
+            "ccy": pl.Utf8,
+            "last_px": pl.Float64,
+            "bid": pl.Float64,
+            "ask": pl.Float64,
+            "und_px": pl.Float64,
+            "intrinsic": pl.Float64,
+            "time_per_unit": pl.Float64,
+            "time_total": pl.Float64,
+            "iv": pl.Float64,
+            "delta": pl.Float64,
+            "gamma": pl.Float64,
+            "theta": pl.Float64,
+            "series_id": pl.Int64,
+            "conid": pl.Int64,
+        }
+        live_df = pl.from_dicts(
+            output,
+            schema=live_schema,
+            infer_schema_length=None,
+        ).sort(["asset", "exp", "c_p", "strike"])
+        summary_df = pl.from_dicts(
+            [{"ccy": ccy, "time_value_abs": val} for ccy, val in sorted(by_ccy.items())],
+            schema={"ccy": pl.Utf8, "time_value_abs": pl.Float64},
+            infer_schema_length=None,
         )
         SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_live", live_df)
         SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_summary", summary_df)

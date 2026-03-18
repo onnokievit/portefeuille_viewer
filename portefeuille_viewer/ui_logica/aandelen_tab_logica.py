@@ -1,6 +1,6 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QFileDialog, QMessageBox, QStyledItemDelegate, QStyle, QHeaderView, QHBoxLayout, QSizePolicy
-from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer
+from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer, QObject, QThread, Signal
 from PySide6.QtWidgets import QTableWidget
 from PySide6.QtGui import QColor
 
@@ -13,6 +13,31 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 import polars as pl
+
+
+class _AandelenSummaryWorker(QObject):
+	finished = Signal(int, object)
+	failed = Signal(int, str)
+
+	def __init__(self, request_id: int, selected_brokers, col_filters: dict):
+		super().__init__()
+		self.request_id = request_id
+		self.selected_brokers = selected_brokers
+		self.col_filters = col_filters
+
+	@Slot()
+	def run(self):
+		try:
+			df_sum = build_aandelen_tab_summary(self.selected_brokers)
+			for col, filt_dict in (self.col_filters or {}).items():
+				if col not in df_sum.columns:
+					continue
+				if "in" in filt_dict and filt_dict["in"]:
+					df_sum = df_sum.filter(pl.col(col).is_in(list(filt_dict["in"])))
+			self.finished.emit(self.request_id, df_sum)
+		except Exception as e:
+			self.failed.emit(self.request_id, str(e))
+
 
 class CustomSelectionDelegate(QStyledItemDelegate):
 	def paint(self, painter, option, index):
@@ -171,9 +196,17 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.proxy_model = QSortFilterProxyModel(self)
 		self.proxy_model.setSourceModel(self.model)
 		self.proxy_model.setSortRole(Qt.UserRole)
+		self.proxy_model.setDynamicSortFilter(True)
 		self.tblAandelen.setModel(self.proxy_model)
 		# Custom selectie-kleur voor geselecteerde rijen
 		self.tblAandelen.setItemDelegate(CustomSelectionDelegate(self.tblAandelen))
+		self.tblAandelen.horizontalHeader().sortIndicatorChanged.connect(self.on_sort_changed)
+
+		self._reload_request_id = 0
+		self._summary_thread = None
+		self._summary_worker = None
+		self._reload_pending_after_finish = False
+		self.destroyed.connect(lambda *_: self._stop_summary_thread())
 
 		# Initieel laden
 		self.reload_data()
@@ -194,12 +227,34 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 		self.current_sort_order = order
 
 	def reload_data(self):
-		df_sum = build_aandelen_tab_summary(self.selected_brokers)
-		for col, filt_dict in (self.col_filters or {}).items():
-			if col not in df_sum.columns:
-				continue
-			if "in" in filt_dict and filt_dict["in"]:
-				df_sum = df_sum.filter(pl.col(col).is_in(list(filt_dict["in"])))
+		self._reload_request_id += 1
+		request_id = self._reload_request_id
+		selected_brokers = set(self.selected_brokers) if self.selected_brokers is not None else None
+		col_filters = {
+			col: {"in": set(fd.get("in", set()))}
+			for col, fd in (self.col_filters or {}).items()
+		}
+		if self._summary_thread is not None:
+			self._reload_pending_after_finish = True
+			return
+		self._start_summary_worker(request_id, selected_brokers, col_filters)
+
+	def _start_summary_worker(self, request_id: int, selected_brokers, col_filters: dict):
+		self._summary_thread = QThread(self)
+		self._summary_worker = _AandelenSummaryWorker(request_id, selected_brokers, col_filters)
+		self._summary_worker.moveToThread(self._summary_thread)
+		self._summary_thread.started.connect(self._summary_worker.run)
+		self._summary_worker.finished.connect(self._on_summary_ready)
+		self._summary_worker.failed.connect(self._on_summary_failed)
+		self._summary_worker.finished.connect(self._summary_thread.quit)
+		self._summary_worker.failed.connect(self._summary_thread.quit)
+		self._summary_thread.finished.connect(self._cleanup_summary_worker)
+		self._summary_thread.start()
+
+	@Slot(int, object)
+	def _on_summary_ready(self, request_id: int, df_sum):
+		if request_id != self._reload_request_id:
+			return
 
 		kolommen = [
 			"asset_rollup",
@@ -227,102 +282,131 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			"portfolio_total_waarde_delta_pct",
 			"optie_tijdswaarde_signed_eur",
 		]
-		totalen = {}
-		if not df_sum.is_empty():
-			for col in kolommen:
-				if col in ["asset_rollup", "regio", "sector", "value_grow", "status","koers_prev", "koers","pct_change","eq_aantal_bezit","open_sp_aantal"]:
+		self.tblAandelen.setUpdatesEnabled(False)
+		self.tblTotalen.setUpdatesEnabled(False)
+		try:
+			totalen = {}
+			if not df_sum.is_empty():
+				for col in kolommen:
+					if col in ["asset_rollup", "regio", "sector", "value_grow", "status","koers_prev", "koers","pct_change","eq_aantal_bezit","open_sp_aantal"]:
+						totalen[col] = "TOTAAL" if col == "asset_rollup" else ""
+					elif col in df_sum.columns:
+						totalen[col] = df_sum[col].sum()
+					else:
+						totalen[col] = ""
+			else:
+				for col in kolommen:
 					totalen[col] = "TOTAAL" if col == "asset_rollup" else ""
-				elif col in df_sum.columns:
-					totalen[col] = df_sum[col].sum()
+			self.tblTotalen.setColumnCount(len(kolommen))
+			for i, col in enumerate(kolommen):
+				val = totalen[col]
+				if col in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
+					# Format as percentage with 2 decimals, right aligned
+					try:
+						val_str = f"{float(val) * 100:.2f}%"
+					except Exception:
+						val_str = str(val)
+				elif isinstance(val, float):
+					if "fee" in col or "totaal" in col or "result" in col or "euro" in col:
+						val_str = f"{val:,.2f}"
+					else:
+						val_str = f"{int(val)}"
 				else:
-					totalen[col] = ""
-		else:
-			for col in kolommen:
-				totalen[col] = "TOTAAL" if col == "asset_rollup" else ""
-		self.tblTotalen.setColumnCount(len(kolommen))
-		for i, col in enumerate(kolommen):
-			val = totalen[col]
-			if col in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
-				# Format as percentage with 2 decimals, right aligned
-				try:
-					val_str = f"{float(val) * 100:.2f}%"
-				except Exception:
 					val_str = str(val)
-			elif isinstance(val, float):
-				if "fee" in col or "totaal" in col or "result" in col or "euro" in col:
-					val_str = f"{val:,.2f}"
+				item = QTableWidgetItem(val_str)
+				if col == "asset_rollup":
+					item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 				else:
-					val_str = f"{int(val)}"
-			else:
-				val_str = str(val)
-			item = QTableWidgetItem(val_str)
-			if col == "asset_rollup":
-				item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-			else:
-				item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-			item.setBackground(QColor(self._total_bg_color))
-			self.tblTotalen.setItem(0, i, item)
+					item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+				item.setBackground(QColor(self._total_bg_color))
+				self.tblTotalen.setItem(0, i, item)
 
-		# Cache voor display-strings en kleuren op basis van pct_change
-		self._display_cache = {}
-		self._pct_change_bg_cache = []
-		display_cols = ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change", "koers_prev"]
-		for colname in display_cols:
-			if colname in df_sum.columns:
-				values = df_sum[colname].to_list()
-				if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
-					self._display_cache[colname] = [
-						(f"{float(v) * 100:.2f}%") if v is not None else "" for v in values
-					]
-				elif colname == "koers_prev":
-					self._display_cache[colname] = [
-						(f"{float(v):.2f}") if v is not None else "" for v in values
-					]
-		def interpolate_color(val, min_val, mid_val, max_val, color_min, color_mid, color_max):
-			if val <= min_val:
-				return QColor(*color_min)
-			elif val >= max_val:
-				return QColor(*color_max)
-			elif val < mid_val:
-				ratio = (val - min_val) / (mid_val - min_val)
-				r = color_min[0] + ratio * (color_mid[0] - color_min[0])
-				g = color_min[1] + ratio * (color_mid[1] - color_min[1])
-				b = color_min[2] + ratio * (color_mid[2] - color_min[2])
-				return QColor(int(r), int(g), int(b))
-			else:
-				ratio = (val - mid_val) / (max_val - mid_val)
-				r = color_mid[0] + ratio * (color_max[0] - color_mid[0])
-				g = color_mid[1] + ratio * (color_max[1] - color_mid[1])
-				b = color_mid[2] + ratio * (color_max[2] - color_mid[2])
-				return QColor(int(r), int(g), int(b))
+			# Cache voor display-strings en kleuren op basis van pct_change
+			self._display_cache = {}
+			self._pct_change_bg_cache = []
+			display_cols = ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change", "koers_prev"]
+			for colname in display_cols:
+				if colname in df_sum.columns:
+					values = df_sum[colname].to_list()
+					if colname in ["portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct", "pct_change"]:
+						self._display_cache[colname] = [
+							(f"{float(v) * 100:.2f}%") if v is not None else "" for v in values
+						]
+					elif colname == "koers_prev":
+						self._display_cache[colname] = [
+							(f"{float(v):.2f}") if v is not None else "" for v in values
+						]
+			def interpolate_color(val, min_val, mid_val, max_val, color_min, color_mid, color_max):
+				if val <= min_val:
+					return QColor(*color_min)
+				elif val >= max_val:
+					return QColor(*color_max)
+				elif val < mid_val:
+					ratio = (val - min_val) / (mid_val - min_val)
+					r = color_min[0] + ratio * (color_mid[0] - color_min[0])
+					g = color_min[1] + ratio * (color_mid[1] - color_min[1])
+					b = color_min[2] + ratio * (color_mid[2] - color_min[2])
+					return QColor(int(r), int(g), int(b))
+				else:
+					ratio = (val - mid_val) / (max_val - mid_val)
+					r = color_mid[0] + ratio * (color_max[0] - color_mid[0])
+					g = color_mid[1] + ratio * (color_max[1] - color_mid[1])
+					b = color_mid[2] + ratio * (color_max[2] - color_mid[2])
+					return QColor(int(r), int(g), int(b))
 
-		if "pct_change" in df_sum.columns and not df_sum.is_empty():
-			for v in df_sum["pct_change"].to_list():
-				try:
-					val = float(v)
-				except Exception:
-					self._pct_change_bg_cache.append(None)
-					continue
-				self._pct_change_bg_cache.append(
-					interpolate_color(
-						val, -0.02, 0, 0.02,
-						(255, 102, 102),  # rood
-						(255, 255, 255),  # wit
-						(153, 255, 153)   # groen
+			if "pct_change" in df_sum.columns and not df_sum.is_empty():
+				for v in df_sum["pct_change"].to_list():
+					try:
+						val = float(v)
+					except Exception:
+						self._pct_change_bg_cache.append(None)
+						continue
+					self._pct_change_bg_cache.append(
+						interpolate_color(
+							val, -0.02, 0, 0.02,
+							(255, 102, 102),  # rood
+							(255, 255, 255),  # wit
+							(153, 255, 153)   # groen
+						)
 					)
-				)
 
-		self.model.set_df(df_sum)
-		if self.current_sort_column < 0:
-			try:
-				self.current_sort_column = df_sum.columns.index("asset_rollup")
-				self.current_sort_order = Qt.AscendingOrder
-			except Exception:
-				self.current_sort_column = 0
-				self.current_sort_order = Qt.AscendingOrder
-		self.tblAandelen.sortByColumn(self.current_sort_column, self.current_sort_order)
-		self._sync_footer_section_sizes()
-		self._sync_footer_scrollbar_gap()
+			self.model.set_df(df_sum)
+			if self.current_sort_column < 0:
+				try:
+					self.current_sort_column = df_sum.columns.index("asset_rollup")
+					self.current_sort_order = Qt.AscendingOrder
+				except Exception:
+					self.current_sort_column = 0
+					self.current_sort_order = Qt.AscendingOrder
+			self.proxy_model.sort(self.current_sort_column, self.current_sort_order)
+			self._sync_footer_section_sizes()
+			self._sync_footer_scrollbar_gap()
+		finally:
+			self.tblTotalen.setUpdatesEnabled(True)
+			self.tblAandelen.setUpdatesEnabled(True)
+
+	@Slot(int, str)
+	def _on_summary_failed(self, request_id: int, error_msg: str):
+		if request_id != self._reload_request_id:
+			return
+		QMessageBox.warning(self, "Aandelen refresh fout", f"Kon Aandelen-tab niet updaten:\n{error_msg}")
+
+	@Slot()
+	def _cleanup_summary_worker(self):
+		if self._summary_worker is not None:
+			self._summary_worker.deleteLater()
+		if self._summary_thread is not None:
+			self._summary_thread.deleteLater()
+		self._summary_worker = None
+		self._summary_thread = None
+		if self._reload_pending_after_finish:
+			self._reload_pending_after_finish = False
+			self.reload_data()
+
+	def _stop_summary_thread(self):
+		if self._summary_thread is not None and self._summary_thread.isRunning():
+			self._summary_thread.quit()
+			self._summary_thread.wait(1500)
 
 	def set_active(self, active: bool):
 		self._active = active
