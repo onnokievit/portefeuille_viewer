@@ -40,6 +40,7 @@ class PriceStore:
 # ------------------------------------------------------------
 class PriceFeedIB(QObject):
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
+    optionTickUpdated = Signal(dict)  # option tick payload for one series_id
     log = Signal(str)
     ready = Signal()
 
@@ -50,6 +51,8 @@ class PriceFeedIB(QObject):
         self._tid_next = 5200
         self._tid_by_key: Dict[int, Tuple[str, str]] = {}
         self._sub_meta: Dict[int, dict] = {}
+        self._option_subscribed = set()
+        self._option_tid_meta: Dict[int, dict] = {}
         self._app = None
         self._prices: Dict[Tuple[str,str], Dict[str, float]] = {}
         self.host, self.port, self.client_id = host, port, client_id
@@ -128,9 +131,39 @@ class PriceFeedIB(QObject):
                 except Exception:
                     err_code_i = None
                 if err_code_i == 200:
+                    if reqId in feed._option_tid_meta:
+                        feed._retry_option_as_fop(reqId)
+                        return
                     feed._retry_with_conid_if_needed(reqId)
 
             def tickPrice(self, reqId, tickType, price, attrib):
+                with feed._lock:
+                    option_meta = feed._option_tid_meta.get(reqId)
+                if option_meta:
+                    px = float(price)
+                    if px > 0:
+                        name = {
+                            1: "bid",
+                            2: "ask",
+                            4: "last",
+                            9: "close",
+                            66: "delayed_bid",
+                            67: "delayed_ask",
+                            68: "delayed_last",
+                            75: "delayed_close",
+                        }.get(int(tickType))
+                        if name:
+                            payload = {
+                                "series_id": int(option_meta.get("series_id")),
+                                "req_id": int(reqId),
+                                "tick_type": int(tickType),
+                                "field": name,
+                                "value": px,
+                                "ts": time.time(),
+                            }
+                            feed.optionTickUpdated.emit(payload)
+                    return
+
                 with feed._lock:
                     key = feed._tid_by_key.get(reqId)
                 if not key:
@@ -176,6 +209,39 @@ class PriceFeedIB(QObject):
                     if last is None and bid is not None and ask is not None:
                         mid = (bid + ask) / 2.0
                         feed.priceUpdated.emit(sym, cur, mid)
+
+            def tickOptionComputation(  # noqa: N802
+                self,
+                reqId,
+                tickType,
+                tickAttrib,
+                impliedVol,
+                delta,
+                optPrice,
+                pvDividend,
+                gamma,
+                vega,
+                theta,
+                undPrice,
+            ):
+                with feed._lock:
+                    option_meta = feed._option_tid_meta.get(reqId)
+                if not option_meta:
+                    return
+                payload = {
+                    "series_id": int(option_meta.get("series_id")),
+                    "req_id": int(reqId),
+                    "tick_type": int(tickType),
+                    "iv": None if impliedVol is None else float(impliedVol),
+                    "delta": None if delta is None else float(delta),
+                    "gamma": None if gamma is None else float(gamma),
+                    "theta": None if theta is None else float(theta),
+                    "vega": None if vega is None else float(vega),
+                    "model_price": None if optPrice is None else float(optPrice),
+                    "underlying_price": None if undPrice is None else float(undPrice),
+                    "ts": time.time(),
+                }
+                feed.optionTickUpdated.emit(payload)
 
             # Dispatcher for contractDetails
             def contractDetails(self, reqId, contractDetails):
@@ -341,6 +407,40 @@ class PriceFeedIB(QObject):
         self.log.emit(f"Retry with conId for {sym} ({cur}) after sec-def error.")
         self._app.reqMktData(new_tid, contract, "", False, False, [])
 
+    def _retry_option_as_fop(self, req_id: int) -> None:
+        if not self._app:
+            return
+        with self._lock:
+            meta = dict(self._option_tid_meta.get(req_id) or {})
+        if not meta:
+            return
+        if bool(meta.get("retried_fop")):
+            return
+        try:
+            conid = int(meta.get("conid") or 0)
+            series_id = int(meta.get("series_id") or 0)
+        except Exception:
+            return
+        if conid <= 0 or series_id <= 0:
+            return
+
+        contract = self._Contract()
+        contract.secType = "FOP"
+        contract.conId = conid
+        contract.exchange = str(meta.get("exchange") or "SMART")
+        currency = str(meta.get("currency") or "")
+        if currency:
+            contract.currency = currency
+
+        with self._lock:
+            new_tid = self._tid_next
+            self._tid_next += 1
+            meta["retried_fop"] = True
+            self._option_tid_meta[new_tid] = meta
+            self._option_tid_meta.pop(req_id, None)
+        self.log.emit(f"Retry option as FOP for series_id={series_id} conId={conid}")
+        self._app.reqMktData(new_tid, contract, "", False, False, [])
+
     @Slot(list)
     def ensure_subscriptions(self, rows: List[Tuple]):
         """Vraag marktdata aan voor subscriptions.
@@ -388,6 +488,54 @@ class PriceFeedIB(QObject):
             self._subscribed.add(label)
             time.sleep(0.01)
 
+    @Slot(list)
+    def ensure_option_subscriptions(self, rows: List[Tuple]):
+        """Start option market-data subscriptions.
+
+        rows format: (series_id, conid, exchange_code, ib_currency)
+        """
+        if not self._app:
+            return
+        for row in rows:
+            if not isinstance(row, (list, tuple)) or len(row) < 2:
+                continue
+            series_id = row[0]
+            conid = row[1]
+            exchange_code = row[2] if len(row) > 2 else "SMART"
+            ib_currency = row[3] if len(row) > 3 else ""
+            try:
+                series_id_i = int(series_id)
+                conid_i = int(conid)
+            except Exception:
+                continue
+            if conid_i <= 0:
+                continue
+            label = (series_id_i, conid_i, str(exchange_code or "").upper(), str(ib_currency or "").upper())
+            if label in self._option_subscribed:
+                continue
+
+            contract = self._Contract()
+            contract.secType = "OPT"
+            contract.conId = conid_i
+            contract.exchange = str(exchange_code or "SMART").upper()
+            if ib_currency:
+                contract.currency = str(ib_currency).upper()
+
+            with self._lock:
+                tid = self._tid_next
+                self._tid_next += 1
+                self._option_tid_meta[tid] = {
+                    "series_id": series_id_i,
+                    "conid": conid_i,
+                    "exchange": contract.exchange,
+                    "currency": contract.currency if hasattr(contract, "currency") else "",
+                    "retried_fop": False,
+                }
+
+            self._app.reqMktData(tid, contract, "", False, False, [])
+            self._option_subscribed.add(label)
+            time.sleep(0.01)
+
     def snapshot_prices(self) -> Dict[Tuple[str,str], Dict[str,float]]:
         with self._lock:
             return {k: v.copy() for k, v in self._prices.items()}
@@ -414,6 +562,7 @@ class PriceFeedService(QObject):
     Deze gebruik je in je UI.
     """
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
+    optionTickUpdated = Signal(dict)
 
     def __init__(self, host, port, client_id, parent=None):
         # print("[DEBUG] PriceFeedService aangemaakt:", id(self))
@@ -421,6 +570,7 @@ class PriceFeedService(QObject):
         self.store = PriceStore()
         self._feed = PriceFeedIB(host, port, client_id)
         self._feed.priceUpdated.connect(self._on_price)
+        self._feed.optionTickUpdated.connect(self._on_option_tick)
 
         # Timer voor periodiek opslaan
         from PySide6.QtCore import QTimer
@@ -453,6 +603,10 @@ class PriceFeedService(QObject):
         self.store.set(sym, cur, px)
         self.priceUpdated.emit(sym, cur, px)
 
+    @Slot(dict)
+    def _on_option_tick(self, payload: dict):
+        self.optionTickUpdated.emit(payload)
+
     # convenience-methodes
     def get(self, sym: str, cur: str) -> Optional[float]:
         return self.store.get(sym, cur)
@@ -468,6 +622,9 @@ class PriceFeedService(QObject):
 
     def ensure_subscriptions(self, rows: List[tuple]):
         self._feed.ensure_subscriptions(rows)
+
+    def ensure_option_subscriptions(self, rows: List[tuple]):
+        self._feed.ensure_option_subscriptions(rows)
 
     def shutdown(self):
         self._feed.shutdown()
