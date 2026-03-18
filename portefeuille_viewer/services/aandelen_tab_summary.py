@@ -91,6 +91,34 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 	else:
 		df_open_sp_sum = df_open_sprinters if df_open_sprinters is not None else pl.DataFrame()
 
+	# Optie live tijdswaarde (signed) per asset, omgerekend naar EUR.
+	df_opt_time_live = _safe_df(SNAPSHOT_STORE.snapshot_optie_timevalue_live)
+	if not df_opt_time_live.is_empty():
+		if asset_rollup:
+			df_opt_time_live = df_opt_time_live.filter(pl.col("asset") == asset_rollup)
+		EURUSD = get_settings().get_eurusd()
+		df_opt_time_sum = (
+			df_opt_time_live
+			.select([
+				pl.col("asset").cast(pl.Utf8).alias("asset_rollup"),
+				pl.col("ccy").cast(pl.Utf8).alias("ccy"),
+				pl.col("time_total").cast(pl.Float64).alias("time_total"),
+			])
+			.filter(pl.col("time_total").is_not_null())
+			.group_by(["asset_rollup", "ccy"])
+			.agg(pl.col("time_total").sum().alias("time_total_signed"))
+			.with_columns(
+				pl.when(pl.col("ccy") == "USD")
+				.then(pl.col("time_total_signed") / EURUSD)
+				.otherwise(pl.col("time_total_signed"))
+				.alias("time_total_signed_eur")
+			)
+			.group_by("asset_rollup")
+			.agg(pl.col("time_total_signed_eur").sum().alias("optie_tijdswaarde_signed_eur"))
+		)
+	else:
+		df_opt_time_sum = pl.DataFrame()
+
 	df_dividend = _apply_filters(_safe_df(SNAPSHOT_STORE.repository_portfolio_dividend), selected_brokers, asset_rollup)
 	if not df_dividend.is_empty():
 		df_div_bel = df_dividend.group_by("asset_rollup").agg([
@@ -203,6 +231,8 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		df_final = df_final.join(df_aset_result_latest.select(["asset_rollup", "totaal"]), on=["asset_rollup"], how="left")
 	if not df_close_latest.is_empty():
 		df_final = df_final.join(df_close_latest.select(["asset_rollup", "close_price"]), on=["asset_rollup"], how="left")
+	if not df_opt_time_sum.is_empty():
+		df_final = df_final.join(df_opt_time_sum, on=["asset_rollup"], how="left")
 
 	required_columns = {
 		"open_sp_aantal": 0,
@@ -224,6 +254,7 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		"koers": 0,
 		"status": "",
 		"asset_rollup": "",
+		"optie_tijdswaarde_signed_eur": 0,
 	}
 	for col, default in required_columns.items():
 		if col not in df_final.columns:
@@ -278,6 +309,7 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 			pl.col("open_sp_transactie_fee").sum().alias("open_sp_transactie_fee"),
 			pl.col("div_en_bel").sum().alias("div_en_bel"),
 			pl.col("totaal").sum().alias("totaal"),
+			pl.col("optie_tijdswaarde_signed_eur").sum().alias("optie_tijdswaarde_signed_eur"),
 		]).with_columns([
 			(
 				pl.col("eq_total_result")
@@ -336,5 +368,6 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 		"status",
 		"portfolio_total_waarde_lineair_pct",
 		"portfolio_total_waarde_delta_pct",
+		"optie_tijdswaarde_signed_eur",
 	])
 	return df_sum
