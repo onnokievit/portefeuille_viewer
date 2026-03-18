@@ -43,13 +43,68 @@ def get_oldest_last_price_date() -> date | None:
     return value.date()
 
 
-def build_payload() -> dict | None:
+def _connect():
+    conn_str = (
+        r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
+        rf"DBQ={STOCKDATA_DB_PATH}"
+    )
+    return pyodbc.connect(conn_str)
+
+
+def has_successful_run_today(run_reason: str) -> bool:
+    today = date.today()
+    with _connect() as conn:
+        cur = conn.cursor()
+        row = cur.execute(
+            """
+            SELECT COUNT(*) 
+            FROM price_update_runs
+            WHERE run_reason = ?
+              AND status = 'ok'
+              AND DateValue(run_day) = ?
+            """,
+            run_reason,
+            today,
+        ).fetchone()
+    return bool(row and row[0] and int(row[0]) > 0)
+
+
+def log_price_update_run(payload: dict, status: str, message: str = "") -> None:
+    now = datetime.now()
+    target_date_value = payload.get("target_date")
+    fetch_start_value = payload.get("fetch_start_date")
+    target_date = datetime.strptime(target_date_value, "%Y-%m-%d").date() if target_date_value else None
+    fetch_start = datetime.strptime(fetch_start_value, "%Y-%m-%d").date() if fetch_start_value else None
+    with _connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO price_update_runs
+                (run_reason, run_day, started_at, finished_at, status, target_date, fetch_start_date, days_range, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            payload.get("reason", "startup_price_update"),
+            date.today(),
+            now,
+            now,
+            status,
+            target_date,
+            fetch_start,
+            int(payload.get("days_range", OVERLAP_DAYS)),
+            message[:32000] if message else "",
+        )
+        conn.commit()
+
+
+def build_payload() -> dict:
     target_date = date.today() - timedelta(days=1)
     oldest_last_date = get_oldest_last_price_date()
-    if oldest_last_date and oldest_last_date >= target_date:
-        return None
 
     if oldest_last_date is None:
+        fetch_start = target_date - timedelta(days=OVERLAP_DAYS)
+    elif oldest_last_date >= target_date:
+        # Als gisteren al aanwezig is, toch overlap draaien om intraday-data van gisteren
+        # te overschrijven met definitieve close bars.
         fetch_start = target_date - timedelta(days=OVERLAP_DAYS)
     else:
         fetch_start = oldest_last_date - timedelta(days=OVERLAP_DAYS)
@@ -78,8 +133,8 @@ def run_script(script_dir: Path, script_name: str, extra_args: list[str]) -> tup
 
 def main() -> int:
     payload = build_payload()
-    if payload is None:
-        print(json.dumps({"status": "skipped", "reason": "startup_price_update"}))
+    if has_successful_run_today("startup_price_update"):
+        print(json.dumps({"status": "skipped", "reason": "startup_price_update_already_ran_today"}))
         return 0
 
     script_dir = Path(__file__).resolve().parent
@@ -97,26 +152,40 @@ def main() -> int:
         stdout_parts.append(stdout)
         stderr_parts.append(stderr)
         if exit_code != 0:
+            merged_stdout = "".join(stdout_parts)
+            merged_stderr = "".join(stderr_parts)
+            log_price_update_run(
+                payload=payload,
+                status="failed",
+                message=(merged_stderr or merged_stdout or f"exit_code={exit_code}"),
+            )
             print(
                 json.dumps(
                     {
                         **payload,
                         "status": "failed",
                         "exit_code": exit_code,
-                        "stdout": "".join(stdout_parts),
-                        "stderr": "".join(stderr_parts),
+                        "stdout": merged_stdout,
+                        "stderr": merged_stderr,
                     }
                 )
             )
             return exit_code
 
+    merged_stdout = "".join(stdout_parts)
+    merged_stderr = "".join(stderr_parts)
+    log_price_update_run(
+        payload=payload,
+        status="ok",
+        message=(merged_stderr or "ok"),
+    )
     print(
         json.dumps(
             {
                 **payload,
                 "status": "ok",
-                "stdout": "".join(stdout_parts),
-                "stderr": "".join(stderr_parts),
+                "stdout": merged_stdout,
+                "stderr": merged_stderr,
             }
         )
     )
