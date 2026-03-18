@@ -1,3 +1,37 @@
+mijn endgame doel is:
+- een recent en accuraat optie waarde overzicht te hebben, zodat ik zie welke tijdswaarde vrijvalt (bij welke serie en expiry
+- een systeem gaan maken om voor een open positie het beste doorrol moment en candidaat te vinden, met een strategie gericht op maximalisering time value harvesting, maar ook ruimte laten voor groei van het asset, als die ruimte er binnen het asset te verwachten is, of juist niet, als dat niet te verwachten is. 
+- met ML leren over de assets vs de markt (asset koers / vola etc tegen index / vix / rente etc), en historische optie waarde verloop tegen asset verloop en markt kenmerken. 
+- leren hoe goed historisch gedrag (mijn doorrol momenten) is geweest  en een syteem dat geleerd heeft wat optimaal is en adviseert over een beslissing. 
+------------------------------------
+
+Duidelijk einddoel. Dan is de juiste volgorde:
+
+Datafundament eerst
+betrouwbare optie live snapshot (option_last_price)
+rijke historie (option_price_history)
+consistente series-identiteit (option_series_master + conid)
+Feature-laag
+intrinsic/time value per serie
+time-value decay metrics per dag/week
+moneyness, DTE, IV-rank/percentile, Greeks
+koppeling met marktfeatures (index, VIX, rente, beta/regime)
+Beslislaag (regels)
+eerst rule-based roll score (transparant)
+candidate ranking per open positie
+explainable output (waarom kandidaat A > B)
+ML-laag
+supervised model op historische roll-uitkomsten
+objective: time value harvest + risicoprofiel + onderliggende groei-kans
+out-of-sample evaluatie per asset/regime
+Advisor in app
+per positie: “nu houden / rollen / sluiten”
+top 3 roll candidates + expected outcome band
+confidence + regime-flag
+Pragmatisch: als je stap 1-2 goed neerzet, wordt 3-5 veel sneller en beter.
+Als je wilt, maak ik hierna een concreet v1-implementatieplan met tabellen + jobs + minimale KPI’s voor de eerste iteratie.
+---------------------------------------
+
 1.2 later, delta's ophalen uit IBKR, en een delta overzicht maken
 
 1.3 uitbreiden single assset analyse 
@@ -36,6 +70,7 @@ herzien van price_catchup run, van losse runs op individuele assets, met tussent
 
 16) 
 option price feed verbetern en automatiseren
+opbouw master obv snapshot aggregator_snapshot_load_open_opties_from_tx_live of aggregator_snapshot_load_open_opties
 
 17) 
 Optie pricing setup afronden
@@ -45,6 +80,24 @@ universe/export/subscribe flow harden,
 daarna inhoudelijke keuzes (wat in pricingrapport wel/niet meenemen).
 (toevoeging) Refresh-policy centraliseren
 Andere opzet van option live details. opbouw master obv snapshot aggregator_snapshot_load_open_opties_from_tx_live of aggregator_snapshot_load_open_opties
+
+19) 
+Ja, klopt: punt 1 is al gedaan in basis.
+
+Wat al staat:
+
+price_catchup draait nu in batch i.p.v. asset-voor-asset.
+Kort overlap-venster (today-5) + oudste benodigde datum-logica.
+Daardoor veel minder losse runs en minder UI-druk dan eerst.
+Wat nog eventueel “extra” kan (optioneel):
+
+progress/indicator in UI
+nog strakker limiteren wanneer catchup helemaal wordt overgeslagen
+fine-tuning van debounce/refresh timing.
+
+20) 
+
+
 
 
 we zijn nu met te veel dingen tegelijk bezig.

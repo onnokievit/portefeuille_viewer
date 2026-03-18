@@ -16,6 +16,9 @@ from portefeuille_viewer.signals import signals
 from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 
+STARTUP_DAILY_CATCHUP_REASON = "startup_daily_catchup"
+
+
 class StateEngineRunner(QObject):
     """Run state-engine rebuilds asynchronously from central app signals."""
 
@@ -135,10 +138,16 @@ class StateEngineRunner(QObject):
             # Bij 'skipped' zijn er geen nieuwe close-prices; een price_catchup-run
             # is dan onnodig en kan bij grote scopes startup-freezes geven.
             return
-        self.request_catchup_for_active_db(fetch_start_date=payload.get("fetch_start_date"))
+        if self._has_successful_startup_daily_catchup_today():
+            print("[state-engine-runner] startup daily catchup already ran today -> skip")
+            return
+        self.request_catchup_for_active_db(
+            fetch_start_date=payload.get("fetch_start_date"),
+            reason=STARTUP_DAILY_CATCHUP_REASON,
+        )
 
     def handle_database_changed(self, db_name: str) -> None:
-        self.request_catchup_for_active_db()
+        self.request_catchup_for_active_db(reason="price_catchup")
 
     def _normalize_payload(self, payload: dict | None) -> dict | None:
         if not payload:
@@ -391,12 +400,12 @@ class StateEngineRunner(QObject):
         except Exception as exc:
             print(f"[state-engine-runner] recovery skipped: {exc}")
 
-    def request_catchup_for_active_db(self, fetch_start_date: str | None = None) -> None:
-        payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date)
+    def request_catchup_for_active_db(self, fetch_start_date: str | None = None, reason: str = "price_catchup") -> None:
+        payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date, reason=reason)
         for payload in payloads:
             self.handle_rebuild_requested(payload)
 
-    def _build_price_catchup_payloads(self, fetch_start_date: str | None = None) -> list[dict]:
+    def _build_price_catchup_payloads(self, fetch_start_date: str | None = None, reason: str = "price_catchup") -> list[dict]:
         today = date.today()
         lookback_floor = today - timedelta(days=5)
         fetch_start = datetime.strptime(fetch_start_date, "%Y-%m-%d").date() if fetch_start_date else None
@@ -405,18 +414,27 @@ class StateEngineRunner(QObject):
             return []
 
         option_assets = self._get_assets_by_type(db_path, "optie")
-        open_option_assets = self._get_open_assets_by_type(db_path, "optie")
-        option_assets = sorted(set(option_assets) & open_option_assets)
+        if reason != STARTUP_DAILY_CATCHUP_REASON:
+            open_option_assets = self._get_open_assets_by_type(db_path, "optie")
+            option_assets = sorted(set(option_assets) & open_option_assets)
+        else:
+            option_assets = sorted(set(option_assets))
 
         equity_assets_aandeel = self._get_assets_by_type(db_path, "aandeel")
         equity_assets_future = self._get_assets_by_type(db_path, "future")
         equity_assets = sorted(set(equity_assets_aandeel) | set(equity_assets_future))
-        open_equity_assets = self._get_open_assets_by_type(db_path, "aandeel") | self._get_open_assets_by_type(db_path, "future")
-        equity_assets = sorted(set(equity_assets) & open_equity_assets)
+        if reason != STARTUP_DAILY_CATCHUP_REASON:
+            open_equity_assets = self._get_open_assets_by_type(db_path, "aandeel") | self._get_open_assets_by_type(db_path, "future")
+            equity_assets = sorted(set(equity_assets) & open_equity_assets)
+        else:
+            equity_assets = sorted(set(equity_assets))
         future_assets_set = set(equity_assets_future)
         sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
-        open_sprinter_assets = self._get_open_assets_by_type(db_path, "sprinter")
-        sprinter_assets = sorted(set(sprinter_assets) & open_sprinter_assets)
+        if reason != STARTUP_DAILY_CATCHUP_REASON:
+            open_sprinter_assets = self._get_open_assets_by_type(db_path, "sprinter")
+            sprinter_assets = sorted(set(sprinter_assets) & open_sprinter_assets)
+        else:
+            sprinter_assets = sorted(set(sprinter_assets))
         all_assets = sorted(set(option_assets) | set(equity_assets) | set(sprinter_assets))
         if not all_assets:
             return []
@@ -517,7 +535,7 @@ class StateEngineRunner(QObject):
                     "asset_classes": [cls],
                     "affected_assets": assets_cls,
                     "from_date": from_date_cls.isoformat(),
-                    "reason": "price_catchup",
+                    "reason": reason,
                     "mode": "asset_incremental",
                     # Eén gecombineerde aggregate-run volgt aan het einde.
                     "_aggregate_scheduled": True,
@@ -530,12 +548,38 @@ class StateEngineRunner(QObject):
                     "asset_classes": ["asset_result_v2"],
                     "affected_assets": sorted(aggregate_assets),
                     "from_date": min(aggregate_from_dates).isoformat(),
-                    "reason": "price_catchup",
+                    "reason": reason,
                     "mode": "asset_incremental",
                     "_aggregate_scheduled": True,
                 }
             )
         return out
+
+    def _has_successful_startup_daily_catchup_today(self) -> bool:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return False
+        try:
+            self._ensure_state_runs_table(db_path)
+            conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                row = cur.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM state_runs
+                    WHERE reason=?
+                      AND engine_class='asset_result_v2'
+                      AND status='ok'
+                      AND DateValue(started_at)=?
+                    """,
+                    STARTUP_DAILY_CATCHUP_REASON,
+                    date.today(),
+                ).fetchone()
+            return bool(row and row[0] and int(row[0]) > 0)
+        except Exception as exc:
+            print(f"[state-engine-runner] startup daily catchup check failed: {exc}")
+            return False
 
     def _get_assets_by_type(self, db_path: str, asset_type: str) -> list[str]:
         conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"

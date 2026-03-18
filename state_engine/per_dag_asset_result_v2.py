@@ -901,12 +901,13 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
         SELECT f.datum, f.asset AS asset_rollup, f.fee_type, SUM(f.amount) AS amount
         FROM fees_dividend AS f
         WHERE LCase(f.fee_type) IN ({fee_types_placeholders})
+          AND f.datum >= ?
           AND f.datum <= ?
           {asset_filter}
         GROUP BY f.datum, f.asset, f.fee_type
         ORDER BY f.asset, f.fee_type, f.datum
     """
-    params = [*DIVIDEND_FEE_SQL_FILTER_VALUES, scope.to_date, *asset_params]
+    params = [*DIVIDEND_FEE_SQL_FILTER_VALUES, scope.from_date, scope.to_date, *asset_params]
     df = pl.read_database(sql, conn, execute_options={"parameters": params})
     if df.is_empty():
         return empty_result
