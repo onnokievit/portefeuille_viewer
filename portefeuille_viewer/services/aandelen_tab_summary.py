@@ -1,9 +1,12 @@
 from collections import OrderedDict
 from datetime import date
+import time
 
 import polars as pl
 
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.price_utils import build_prices_df
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
 
@@ -18,6 +21,9 @@ _STATIC_SNAPSHOT_KEYS = (
 	"repository_snapshot_historical_close",
 )
 _STATIC_SUMMARY_CACHE: OrderedDict[tuple, pl.DataFrame] = OrderedDict()
+_LAST_PRICES_CACHE: dict[tuple[str, str], float] | None = None
+_LAST_PRICES_CACHE_TS: float = 0.0
+_LAST_PRICES_TTL_SEC = 60.0
 
 
 def _safe_df(df: pl.DataFrame | None) -> pl.DataFrame:
@@ -242,6 +248,70 @@ def _build_static_summary(selected_brokers=None, asset_rollup: str | None = None
 	return df_static
 
 
+def _get_last_prices_cached() -> dict[tuple[str, str], float]:
+	global _LAST_PRICES_CACHE, _LAST_PRICES_CACHE_TS
+	now = time.time()
+	if _LAST_PRICES_CACHE is not None and (now - _LAST_PRICES_CACHE_TS) < _LAST_PRICES_TTL_SEC:
+		return _LAST_PRICES_CACHE
+	try:
+		_LAST_PRICES_CACHE = load_last_prices_dict() or {}
+	except Exception:
+		_LAST_PRICES_CACHE = {}
+	_LAST_PRICES_CACHE_TS = now
+	return _LAST_PRICES_CACHE
+
+
+def _asset_price_fallback_df(asset_rollup: str | None = None) -> pl.DataFrame:
+	df_assets = _safe_df(SNAPSHOT_STORE.repository_snapshot_asset_rollup_data)
+	if df_assets.is_empty():
+		return _empty_df({"asset_rollup": pl.Utf8, "koers_fallback": pl.Float64})
+	if "asset_rollup" not in df_assets.columns or "ib_symbol" not in df_assets.columns or "ib_currency" not in df_assets.columns:
+		return _empty_df({"asset_rollup": pl.Utf8, "koers_fallback": pl.Float64})
+	if asset_rollup:
+		df_assets = _normalize_asset_rollup(df_assets)
+		df_assets = df_assets.filter(pl.col("asset_rollup") == str(asset_rollup).strip().upper())
+	prices_df = build_prices_df(SNAPSHOT_STORE.live_prices, _get_last_prices_cached())
+	if prices_df.is_empty():
+		return _empty_df({"asset_rollup": pl.Utf8, "koers_fallback": pl.Float64})
+	return (
+		df_assets
+		.select(["asset_rollup", "ib_symbol", "ib_currency"])
+		.join(prices_df, on=["ib_symbol", "ib_currency"], how="left")
+		.select(
+			[
+				pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars().str.to_uppercase().alias("asset_rollup"),
+				pl.col("price").cast(pl.Float64, strict=False).alias("koers_fallback"),
+			]
+		)
+		.group_by("asset_rollup")
+		.agg(pl.col("koers_fallback").max().alias("koers_fallback"))
+	)
+
+
+def _broker_scope_assets(selected_brokers, asset_rollup: str | None = None) -> set[str]:
+	if selected_brokers is None:
+		return set()
+	frames = [
+		_apply_filters(_safe_df(SNAPSHOT_STORE.aggregator_snapshot_aandelen_live), selected_brokers, asset_rollup),
+		_apply_filters(_safe_df(SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live), selected_brokers, asset_rollup),
+		_apply_filters(_safe_df(SNAPSHOT_STORE.aggregator_snapshot_open_sprinters_live), selected_brokers, asset_rollup),
+		_apply_filters(_safe_df(SNAPSHOT_STORE.repository_snapshot_gesloten_opties), selected_brokers, asset_rollup),
+		_apply_filters(_safe_df(SNAPSHOT_STORE.repository_snapshot_gesloten_sprinters_no_asset_detail), selected_brokers, asset_rollup),
+		_apply_filters(_safe_df(SNAPSHOT_STORE.repository_portfolio_dividend), selected_brokers, asset_rollup),
+	]
+	assets: set[str] = set()
+	for df in frames:
+		if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+			continue
+		for a in df["asset_rollup"].to_list():
+			if a is None:
+				continue
+			s = str(a).strip().upper()
+			if s:
+				assets.add(s)
+	return assets
+
+
 def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None = None) -> pl.DataFrame:
 	"""
 	Build the same summary DataFrame as AandelenTab, optionally filtered to a single asset.
@@ -315,6 +385,10 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 
 	df_opt_time_live = _safe_df(SNAPSHOT_STORE.snapshot_optie_timevalue_live)
 	if not df_opt_time_live.is_empty():
+		if selected_brokers is not None and "broker" in df_opt_time_live.columns:
+			df_opt_time_live = df_opt_time_live.filter(
+				pl.col("broker").cast(pl.Utf8).str.to_lowercase().is_in([str(b).strip().lower() for b in selected_brokers])
+			)
 		if asset_rollup:
 			df_opt_time_live = df_opt_time_live.filter(
 				pl.col("asset").cast(pl.Utf8).str.strip_chars().str.to_uppercase() == str(asset_rollup).strip().upper()
@@ -356,6 +430,16 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 	df_static = _cached_static_summary(selected_brokers=selected_brokers, asset_rollup=asset_rollup)
 	df_final = df_live.join(df_static, on=["asset_rollup"], how="full", suffix="_static")
 	df_final = _coalesce_asset_rollup(df_final, "asset_rollup_static")
+	if selected_brokers is not None and "asset_rollup" in df_final.columns:
+		scope_assets = _broker_scope_assets(selected_brokers, asset_rollup)
+		if scope_assets:
+			df_final = _normalize_asset_rollup(df_final)
+			df_final = df_final.filter(pl.col("asset_rollup").is_in(list(scope_assets)))
+		else:
+			df_final = _empty_df({"asset_rollup": pl.Utf8})
+	df_price_fallback = _asset_price_fallback_df(asset_rollup=asset_rollup)
+	if not df_price_fallback.is_empty():
+		df_final = df_final.join(df_price_fallback, on=["asset_rollup"], how="left")
 
 	required_columns = {
 		"open_sp_aantal": 0,
@@ -388,6 +472,14 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 	for col, default in required_columns.items():
 		if col not in df_final.columns:
 			df_final = df_final.with_columns(pl.lit(default).alias(col))
+
+	if "koers_fallback" in df_final.columns:
+		df_final = df_final.with_columns(
+			pl.when(pl.col("koers").is_null() | (pl.col("koers") <= 0))
+			.then(pl.col("koers_fallback"))
+			.otherwise(pl.col("koers"))
+			.alias("koers")
+		)
 
 	EURUSD = get_settings().get_eurusd()
 	df_final = df_final.with_columns(

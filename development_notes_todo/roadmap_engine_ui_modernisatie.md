@@ -170,6 +170,10 @@ Exit criteria:
 Regel:
 - nooit tegelijk alle flags hard aanzetten op alle db's.
 - gefaseerd per user db, met rollback pad.
+- huidige implementatie publiceert bij `USE_AANDELEN_PROJECTION_V2=1`:
+- `snapshot_aandelen_projection_v2`
+- `snapshot_aandelen_projection_v2_patch`
+- `snapshot_aandelen_projection_v2_meta`
 
 ---
 

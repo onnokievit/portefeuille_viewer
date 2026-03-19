@@ -1,4 +1,5 @@
 import contextlib
+import os
 from PySide6.QtWidgets import QMainWindow, QProxyStyle, QTabBar
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtCore import Qt
@@ -9,6 +10,7 @@ from portefeuille_viewer.ui_logica.sprinters_open_tab_logica import SprintersOpe
 from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
+from portefeuille_viewer.ui_logica.aandelen_web_pilot_tab import AandelenWebPilotTab
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
 from portefeuille_viewer.ui_logica.optie_tijdswaarde_tab_logica import OptieTijdswaardeTab
 
@@ -38,6 +40,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
         self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
         self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+        if os.getenv("PV_UI_AANDELEN_WEB_V1", "0").strip() == "1":
+            self.aandelen_web_pilot_tab = AandelenWebPilotTab()
+            self.tabWidget.addTab(self.aandelen_web_pilot_tab, "Aandelen (Web Pilot)")
 
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")

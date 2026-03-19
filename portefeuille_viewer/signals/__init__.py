@@ -48,6 +48,13 @@ class Signals(QObject):
 
     # Emitted when UI style settings change. Payload: setting key (str)
     uiStyleChanged = Signal(str)
+
+    # Emitted when aandelen projection backend filter changes. Payload: dict
+    aandelenProjectionFilterChanged = Signal(dict)
+
+    # Emitted when a background projection result is ready to publish on main thread.
+    # Payload: projection/view key (str)
+    projectionPublishTick = Signal(str)
     
     # In signals.py
     #liveDataShouldUpdate = Signal()
@@ -82,6 +89,12 @@ class Signals(QObject):
 
     def queued_emit_priceUpdateFailed(self, message: str):
         QTimer.singleShot(0, lambda: self.priceUpdateFailed.emit(message))
+
+    def queued_emit_aandelenProjectionFilterChanged(self, payload: dict):
+        QTimer.singleShot(0, lambda: self.aandelenProjectionFilterChanged.emit(payload))
+
+    def queued_emit_projectionPublishTick(self, view_key: str):
+        QTimer.singleShot(0, lambda: self.projectionPublishTick.emit(view_key))
 
 
 signals = Signals()
