@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from typing import Protocol
+import inspect
+import time
 
 
 class Projection(Protocol):
@@ -18,6 +20,7 @@ class ProjectionRunResult:
     projection_name: str
     changed_keys: int
     success: bool
+    duration_ms: float = 0.0
     error: str | None = None
 
 
@@ -43,13 +46,29 @@ class ProjectionBus:
         for projection in projections:
             if topic and projection.depends_on and topic not in projection.depends_on:
                 continue
+            t0 = time.perf_counter()
             try:
-                projection.recompute(changed_keys)
+                recompute_fn = getattr(projection, "recompute", None)
+                if recompute_fn is None:
+                    raise AttributeError(f"{projection.name} has no recompute()")
+                try:
+                    sig = inspect.signature(recompute_fn)
+                    # Bound methods:
+                    # - recompute() -> 0 params
+                    # - recompute(changed_keys) -> 1 param
+                    if len(sig.parameters) == 0:
+                        recompute_fn()
+                    else:
+                        recompute_fn(changed_keys)
+                except (TypeError, ValueError):
+                    # Fallback: most projections in current codebase accept changed_keys.
+                    recompute_fn(changed_keys)
                 results.append(
                     ProjectionRunResult(
                         projection_name=projection.name,
                         changed_keys=len(changed_keys),
                         success=True,
+                        duration_ms=(time.perf_counter() - t0) * 1000.0,
                     )
                 )
             except Exception as exc:
@@ -58,6 +77,7 @@ class ProjectionBus:
                         projection_name=projection.name,
                         changed_keys=len(changed_keys),
                         success=False,
+                        duration_ms=(time.perf_counter() - t0) * 1000.0,
                         error=str(exc),
                     )
                 )

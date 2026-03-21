@@ -20,10 +20,6 @@ class AandelenProjectionV2:
 
     name = "aandelen_v2"
     depends_on = {
-        "aggregator_snapshot_aandelen_live",
-        "aggregator_snapshot_load_open_opties_from_tx_live",
-        "aggregator_snapshot_open_sprinters_live",
-        "snapshot_optie_timevalue_live",
         "repository_snapshot_historical_close",
         "repository_snapshot_per_dag_asset_result_v2",
     }
@@ -32,10 +28,13 @@ class AandelenProjectionV2:
         self._lock = threading.Lock()
         self._version = 0
         self._snapshot = pl.DataFrame()
+        self._base_snapshot = pl.DataFrame()
+        self._broker_cache: dict[str, pl.DataFrame] = {}
         self._last_patch: list[dict[str, Any]] = []
         self._updated_at: str | None = None
         self._selected_brokers: set[str] | None = None
         self._diag: dict[str, Any] = {}
+        self._pending_broker_only_recompute = False
 
     def set_selected_brokers(self, brokers: set[str] | None) -> None:
         with self._lock:
@@ -43,23 +42,32 @@ class AandelenProjectionV2:
                 self._selected_brokers = {str(b).strip().lower() for b in brokers if str(b).strip()}
             else:
                 self._selected_brokers = None
+            self._pending_broker_only_recompute = True
 
     def recompute(self, changed_keys: set[str]) -> None:
         with self._lock:
             selected_brokers = set(self._selected_brokers) if self._selected_brokers else None
+            broker_only = bool(self._pending_broker_only_recompute)
+            self._pending_broker_only_recompute = False
         incremental = bool(changed_keys)
-        if incremental:
+        if broker_only and self._broker_cache:
+            df_new = self._recompute_from_broker_cache(selected_brokers)
+        elif incremental:
             df_new = self._recompute_incremental(changed_keys, selected_brokers)
         else:
             df_new = build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            self._rebuild_broker_cache(df_new)
         df_new, diag = self._with_price_quality_guard(
             df_new,
             selected_brokers,
-            enable_repair=incremental,
+            enable_repair=incremental and not broker_only,
         )
         patch = self._build_patch(self._snapshot, df_new)
         with self._lock:
             self._version += 1
+            self._base_snapshot = (
+                df_new if selected_brokers is None else self._base_snapshot
+            )
             self._snapshot = df_new
             self._last_patch = patch
             self._updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -108,10 +116,101 @@ class AandelenProjectionV2:
                 "version": self._version,
                 "updated_at": self._updated_at,
                 "rows": self._snapshot.height if self._snapshot is not None else 0,
+                "base_rows": self._base_snapshot.height if self._base_snapshot is not None else 0,
                 "changes": len(self._last_patch),
                 "selected_brokers": sorted(self._selected_brokers) if self._selected_brokers else [],
+                "broker_cache_count": len(self._broker_cache),
                 "diag": dict(self._diag or {}),
             }
+
+    def _recompute_from_broker_cache(self, selected_brokers: set[str] | None) -> pl.DataFrame:
+        if selected_brokers is None:
+            df_all = self._broker_cache.get("__ALL__")
+            if isinstance(df_all, pl.DataFrame):
+                return df_all
+            return build_aandelen_tab_summary(selected_brokers=None)
+
+        frames: list[pl.DataFrame] = []
+        for broker in sorted(selected_brokers):
+            df_b = self._broker_cache.get(str(broker).strip().lower())
+            if isinstance(df_b, pl.DataFrame) and not df_b.is_empty():
+                frames.append(df_b)
+        if not frames:
+            return pl.DataFrame(schema={"asset_rollup": pl.Utf8})
+
+        merged = pl.concat(frames, how="diagonal_relaxed")
+        if merged.is_empty() or "asset_rollup" not in merged.columns:
+            return merged
+
+        dims_first = {
+            "koers": "max",
+            "koers_prev": "max",
+            "pct_change": "max",
+            "regio": "first",
+            "sector": "first",
+            "value_grow": "first",
+            "status": "first",
+            "portfolio_total_waarde_lineair_pct": "max",
+            "portfolio_total_waarde_delta_pct": "max",
+        }
+        agg_exprs: list[pl.Expr] = []
+        for col in merged.columns:
+            if col == "asset_rollup":
+                continue
+            if col in dims_first:
+                if dims_first[col] == "max":
+                    agg_exprs.append(pl.col(col).max().alias(col))
+                else:
+                    agg_exprs.append(pl.col(col).drop_nulls().first().alias(col))
+                continue
+            if merged.schema.get(col) in {pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8, pl.UInt64, pl.UInt32, pl.UInt16, pl.UInt8}:
+                agg_exprs.append(pl.col(col).sum().alias(col))
+            else:
+                agg_exprs.append(pl.col(col).drop_nulls().first().alias(col))
+        return merged.group_by("asset_rollup").agg(agg_exprs)
+
+    def _rebuild_broker_cache(self, df_all: pl.DataFrame) -> None:
+        brokers = self._all_brokers()
+        cache: dict[str, pl.DataFrame] = {"__ALL__": df_all}
+        for broker in brokers:
+            try:
+                cache[broker] = build_aandelen_tab_summary(selected_brokers={broker})
+            except Exception:
+                continue
+        with self._lock:
+            self._broker_cache = cache
+
+    @staticmethod
+    def _all_brokers() -> set[str]:
+        keys = [
+            "aggregator_snapshot_aandelen_live",
+            "aggregator_snapshot_load_open_opties_from_tx_live",
+            "aggregator_snapshot_open_sprinters_live",
+            "repository_snapshot_gesloten_opties",
+            "repository_snapshot_gesloten_sprinters_no_asset_detail",
+            "repository_portfolio_dividend",
+            "snapshot_optie_timevalue_live",
+        ]
+        out: set[str] = set()
+        for key in keys:
+            df = getattr(SNAPSHOT_STORE, key, None)
+            if df is None or df.is_empty() or "broker" not in df.columns:
+                continue
+            try:
+                vals = (
+                    df.select(pl.col("broker").cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias("broker"))
+                    .drop_nulls()
+                    .unique()
+                    .get_column("broker")
+                    .to_list()
+                )
+                for b in vals:
+                    s = str(b).strip().lower()
+                    if s:
+                        out.add(s)
+            except Exception:
+                continue
+        return out
 
     def _with_price_quality_guard(
         self,
