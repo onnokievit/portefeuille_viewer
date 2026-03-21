@@ -32,7 +32,7 @@ class OptieTijdswaardeTab(QWidget):
         super().__init__(parent)
         self.label_ticker = QLabel("starting...")
         self.label_summary = QLabel("")
-        self.table = QTableWidget(0, 19)
+        self.table = QTableWidget(0, 20)
         self.table.setHorizontalHeaderLabels(
             [
                 "broker",
@@ -44,6 +44,7 @@ class OptieTijdswaardeTab(QWidget):
                 "mult",
                 "ccy",
                 "last_px",
+                "px_source",
                 "bid",
                 "ask",
                 "und_px",
@@ -106,6 +107,7 @@ class OptieTijdswaardeTab(QWidget):
                 r.get("mult"),
                 r.get("ccy"),
                 r.get("last_px"),
+                r.get("px_source"),
                 r.get("bid"),
                 r.get("ask"),
                 r.get("und_px"),
@@ -120,16 +122,16 @@ class OptieTijdswaardeTab(QWidget):
             for c, v in enumerate(vals):
                 if c in (4, 5, 6):
                     txt = _fmt_nl(v, 1)
-                elif c in (8, 9, 10, 11, 12, 13, 14):
+                elif c in (8, 10, 11, 12, 13, 14, 15):
                     txt = _fmt_nl(v, 2)
-                elif c in (15, 16, 17, 18):
+                elif c in (16, 17, 18, 19):
                     txt = _fmt_nl(v, 3)
                 elif isinstance(v, datetime):
                     txt = v.strftime("%Y-%m-%d")
                 else:
                     txt = "" if v is None else str(v)
                 item = QTableWidgetItem(txt)
-                if c >= 4:
+                if c >= 4 and c != 9:
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.table.setItem(i, c, item)
 
@@ -144,6 +146,7 @@ class OptieTijdswaardeTab(QWidget):
                 "",
                 "",
                 ccy,
+                "",
                 "",
                 "",
                 "",

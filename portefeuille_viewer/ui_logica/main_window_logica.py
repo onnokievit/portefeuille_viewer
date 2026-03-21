@@ -11,8 +11,11 @@ from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 from portefeuille_viewer.ui_logica.aandelen_web_pilot_tab import AandelenWebPilotTab
+from portefeuille_viewer.ui_logica.opties_open_web_pilot_tab import OptiesOpenWebPilotTab
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
 from portefeuille_viewer.ui_logica.optie_tijdswaarde_tab_logica import OptieTijdswaardeTab
+from portefeuille_viewer.ui_logica.optie_tijdswaarde_web_pilot_tab import OptieTijdswaardeWebPilotTab
+from portefeuille_viewer.ui_logica.sprinters_open_web_pilot_tab import SprintersOpenWebPilotTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
@@ -46,8 +49,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+        if os.getenv("UI_OPTIES_WEB_V1", "0").strip() == "1":
+            self.opties_open_web_pilot_tab = OptiesOpenWebPilotTab()
+            self.tabWidget.addTab(self.opties_open_web_pilot_tab, "Open Opties (Web Pilot)")
         self.optie_tijdswaarde_tab = OptieTijdswaardeTab()
         self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
+        if os.getenv("UI_OPTIE_TIJDSWAARDE_WEB_V1", "0").strip() == "1":
+            self.optie_tijdswaarde_web_pilot_tab = OptieTijdswaardeWebPilotTab()
+            self.tabWidget.addTab(self.optie_tijdswaarde_web_pilot_tab, "Optie Tijdswaarde (Web Pilot)")
 
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
@@ -56,6 +65,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
+        if os.getenv("UI_SPRINTERS_WEB_V1", "0").strip() == "1":
+            self.sprinters_open_web_pilot_tab = SprintersOpenWebPilotTab()
+            self.tabWidget.addTab(self.sprinters_open_web_pilot_tab, "Sprinters Open (Web Pilot)")
         self.optie_eind_tab = OptieEindTab()
         self.tabWidget.addTab(self.optie_eind_tab, "Optie Eind")
         self.settings_tab = SettingsTab()

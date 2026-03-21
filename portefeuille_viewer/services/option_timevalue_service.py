@@ -40,16 +40,16 @@ def _to_float(v: Any) -> float | None:
             return None
 
 
-def _pick_option_price(ticks: dict[str, float]) -> float | None:
-    for k in ("last", "delayed_last", "close", "delayed_close"):
-        v = _to_float(ticks.get(k))
-        if v is not None and v > 0:
-            return v
+def _pick_option_price(ticks: dict[str, float]) -> tuple[float | None, str | None]:
     b = _to_float(ticks.get("bid"))
     a = _to_float(ticks.get("ask"))
     if b is not None and a is not None and b > 0 and a > 0:
-        return (b + a) / 2.0
-    return None
+        return (b + a) / 2.0, "mid"
+    for k in ("last", "delayed_last", "model_price", "close", "delayed_close"):
+        v = _to_float(ticks.get(k))
+        if v is not None and v > 0:
+            return v, k
+    return None, None
 
 
 def _intrinsic(cp: str, strike: float, und: float) -> float:
@@ -500,7 +500,7 @@ class OptionTimevalueService(QObject):
             sid = int(r.series_id or 0)
             with self._lock:
                 tick = dict(self._ticks.get(sid, {}))
-            px = _pick_option_price(tick)
+            px, px_source = _pick_option_price(tick)
             if px is not None:
                 priced += 1
             und = _to_float(tick.get("underlying_price"))
@@ -530,6 +530,7 @@ class OptionTimevalueService(QObject):
                     "mult": float(r.multiplier),
                     "ccy": r.ib_currency,
                     "last_px": px,
+                    "px_source": px_source,
                     "bid": _to_float(tick.get("bid")),
                     "ask": _to_float(tick.get("ask")),
                     "und_px": und,
@@ -555,6 +556,7 @@ class OptionTimevalueService(QObject):
             "mult": pl.Float64,
             "ccy": pl.Utf8,
             "last_px": pl.Float64,
+            "px_source": pl.Utf8,
             "bid": pl.Float64,
             "ask": pl.Float64,
             "und_px": pl.Float64,

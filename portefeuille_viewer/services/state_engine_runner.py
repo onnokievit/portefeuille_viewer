@@ -16,7 +16,7 @@ from portefeuille_viewer.signals import signals
 from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 
-STARTUP_DAILY_CATCHUP_REASON = "startup_daily_catchup"
+STARTUP_DAILY_CATCHUP_REASON = "startup_daily_catchup_fullscope_v1"
 
 
 class StateEngineRunner(QObject):
@@ -134,20 +134,32 @@ class StateEngineRunner(QObject):
 
     def handle_price_update_finished(self, payload: dict) -> None:
         status = (payload or {}).get("status")
-        if status != "ok":
-            # Bij 'skipped' zijn er geen nieuwe close-prices; een price_catchup-run
-            # is dan onnodig en kan bij grote scopes startup-freezes geven.
+        if status not in {"ok", "skipped"}:
             return
-        if self._has_successful_startup_daily_catchup_today():
-            print("[state-engine-runner] startup daily catchup already ran today -> skip")
-            return
-        self.request_catchup_for_active_db(
+        self.request_daily_full_catchup_for_active_db(
             fetch_start_date=payload.get("fetch_start_date"),
             reason=STARTUP_DAILY_CATCHUP_REASON,
         )
 
     def handle_database_changed(self, db_name: str) -> None:
-        self.request_catchup_for_active_db(reason="price_catchup")
+        _ = db_name
+        self.request_daily_full_catchup_for_active_db(reason=STARTUP_DAILY_CATCHUP_REASON)
+
+    def request_daily_full_catchup_for_active_db(
+        self,
+        fetch_start_date: str | None = None,
+        reason: str = STARTUP_DAILY_CATCHUP_REASON,
+    ) -> None:
+        if self._has_successful_startup_daily_catchup_today():
+            print("[state-engine-runner] daily full catchup already ran today -> skip")
+            return
+        effective_fetch_start = self._resolve_daily_fetch_start(fetch_start_date)
+        payloads = self._build_daily_full_catchup_payloads(
+            fetch_start_date=effective_fetch_start,
+            reason=reason,
+        )
+        for payload in payloads:
+            self.handle_rebuild_requested(payload)
 
     def _normalize_payload(self, payload: dict | None) -> dict | None:
         if not payload:
@@ -404,6 +416,96 @@ class StateEngineRunner(QObject):
         payloads = self._build_price_catchup_payloads(fetch_start_date=fetch_start_date, reason=reason)
         for payload in payloads:
             self.handle_rebuild_requested(payload)
+
+    def _build_daily_full_catchup_payloads(
+        self,
+        fetch_start_date: str | None = None,
+        reason: str = STARTUP_DAILY_CATCHUP_REASON,
+    ) -> list[dict]:
+        db_path = getattr(repository, "db_path", None)
+        if not db_path:
+            return []
+
+        from_date = self._parse_iso_date(fetch_start_date)
+        if from_date is None:
+            from_date = date.today() - timedelta(days=5)
+
+        option_assets = self._get_assets_by_type(db_path, "optie")
+        equity_assets_aandeel = self._get_assets_by_type(db_path, "aandeel")
+        equity_assets_future = self._get_assets_by_type(db_path, "future")
+        equity_assets = sorted(set(equity_assets_aandeel) | set(equity_assets_future))
+        sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
+
+        out: list[dict] = []
+        aggregate_assets: set[str] = set()
+        for cls, assets in (
+            ("aandelen", equity_assets),
+            ("opties", option_assets),
+            ("sprinters", sprinter_assets),
+        ):
+            if not assets:
+                continue
+            aggregate_assets.update(assets)
+            out.append(
+                {
+                    "asset_classes": [cls],
+                    "affected_assets": assets,
+                    "from_date": from_date.isoformat(),
+                    "reason": reason,
+                    "mode": "asset_incremental",
+                    "_aggregate_scheduled": True,
+                }
+            )
+
+        if aggregate_assets:
+            out.append(
+                {
+                    "asset_classes": ["asset_result_v2"],
+                    "affected_assets": sorted(aggregate_assets),
+                    "from_date": from_date.isoformat(),
+                    "reason": reason,
+                    "mode": "asset_incremental",
+                    "_aggregate_scheduled": True,
+                }
+            )
+        return out
+
+    def _resolve_daily_fetch_start(self, fetch_start_date: str | None) -> str | None:
+        parsed = self._parse_iso_date(fetch_start_date)
+        if parsed is not None:
+            return parsed.isoformat()
+        fallback = self._get_today_startup_price_fetch_start_date()
+        if fallback is not None:
+            return fallback.isoformat()
+        return None
+
+    def _get_today_startup_price_fetch_start_date(self) -> date | None:
+        try:
+            conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH}"
+            with pyodbc.connect(conn_str) as conn:
+                cur = conn.cursor()
+                row = cur.execute(
+                    """
+                    SELECT TOP 1 fetch_start_date
+                    FROM price_update_runs
+                    WHERE run_reason='startup_price_update'
+                      AND status='ok'
+                      AND DateValue(run_day)=?
+                    ORDER BY started_at DESC
+                    """,
+                    date.today(),
+                ).fetchone()
+            if not row or row[0] is None:
+                return None
+            value = row[0]
+            if isinstance(value, datetime):
+                return value.date()
+            if isinstance(value, date):
+                return value
+            return self._parse_iso_date(value)
+        except Exception as exc:
+            print(f"[state-engine-runner] cannot resolve startup fetch_start_date: {exc}")
+            return None
 
     def _build_price_catchup_payloads(self, fetch_start_date: str | None = None, reason: str = "price_catchup") -> list[dict]:
         today = date.today()

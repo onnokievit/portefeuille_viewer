@@ -909,52 +909,52 @@ def load_dividend_component(conn, scope: RebuildScope) -> pl.DataFrame:
     """
     params = [*DIVIDEND_FEE_SQL_FILTER_VALUES, scope.from_date, scope.to_date, *asset_params]
     df = pl.read_database(sql, conn, execute_options={"parameters": params})
-    if df.is_empty():
-        return empty_result
-
-    df = (
-        df.with_columns(
-            pl.col("datum").cast(pl.Date),
-            pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
-            pl.col("fee_type")
-            .cast(pl.Utf8)
-            .str.strip_chars()
-            .str.to_lowercase()
-            .map_elements(lambda v: DIVIDEND_FEE_TYPE_ALIASES.get(v), return_dtype=pl.Utf8)
-            .alias("fee_type"),
-            pl.col("amount").fill_null(0.0),
+    if not df.is_empty():
+        df = (
+            df.with_columns(
+                pl.col("datum").cast(pl.Date),
+                pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars(),
+                pl.col("fee_type")
+                .cast(pl.Utf8)
+                .str.strip_chars()
+                .str.to_lowercase()
+                .map_elements(lambda v: DIVIDEND_FEE_TYPE_ALIASES.get(v), return_dtype=pl.Utf8)
+                .alias("fee_type"),
+                pl.col("amount").fill_null(0.0),
+            )
+            .filter(pl.col("fee_type").is_not_null())
+            .sort(["asset_rollup", "fee_type", "datum"])
+            .with_columns(
+                pl.col("amount").cum_sum().over(["asset_rollup", "fee_type"]).alias("cum_amount")
+            )
+            .pivot(
+                values="cum_amount",
+                index=["datum", "asset_rollup"],
+                columns="fee_type",
+                aggregate_function="max",
+            )
+            .pipe(_ensure_columns, ["dividend", "div_belasting", "871_fee", "transactiebelasting"])
+            .sort(["asset_rollup", "datum"])
+            .with_columns(
+                pl.col("dividend").fill_null(strategy="forward").over("asset_rollup"),
+                pl.col("div_belasting").fill_null(strategy="forward").over("asset_rollup"),
+                pl.col("871_fee").fill_null(strategy="forward").over("asset_rollup"),
+                pl.col("transactiebelasting").fill_null(strategy="forward").over("asset_rollup"),
+            )
+            .with_columns(
+                pl.col("dividend").fill_null(0.0).alias("dividend_v2"),
+                pl.col("div_belasting").fill_null(0.0).alias("dividend_belasting_v2"),
+                (
+                    pl.col("dividend").fill_null(0.0)
+                    + pl.col("div_belasting").fill_null(0.0)
+                    + pl.col("871_fee").fill_null(0.0)
+                    + pl.col("transactiebelasting").fill_null(0.0)
+                ).alias("fees_dividend_belasting_v2"),
+            )
+            .select(["datum", "asset_rollup", "dividend_v2", "dividend_belasting_v2", "fees_dividend_belasting_v2"])
         )
-        .filter(pl.col("fee_type").is_not_null())
-        .sort(["asset_rollup", "fee_type", "datum"])
-        .with_columns(
-            pl.col("amount").cum_sum().over(["asset_rollup", "fee_type"]).alias("cum_amount")
-        )
-        .pivot(
-            values="cum_amount",
-            index=["datum", "asset_rollup"],
-            columns="fee_type",
-            aggregate_function="max",
-        )
-        .pipe(_ensure_columns, ["dividend", "div_belasting", "871_fee", "transactiebelasting"])
-        .sort(["asset_rollup", "datum"])
-        .with_columns(
-            pl.col("dividend").fill_null(strategy="forward").over("asset_rollup"),
-            pl.col("div_belasting").fill_null(strategy="forward").over("asset_rollup"),
-            pl.col("871_fee").fill_null(strategy="forward").over("asset_rollup"),
-            pl.col("transactiebelasting").fill_null(strategy="forward").over("asset_rollup"),
-        )
-        .with_columns(
-            pl.col("dividend").fill_null(0.0).alias("dividend_v2"),
-            pl.col("div_belasting").fill_null(0.0).alias("dividend_belasting_v2"),
-            (
-                pl.col("dividend").fill_null(0.0)
-                + pl.col("div_belasting").fill_null(0.0)
-                + pl.col("871_fee").fill_null(0.0)
-                + pl.col("transactiebelasting").fill_null(0.0)
-            ).alias("fees_dividend_belasting_v2"),
-        )
-        .select(["datum", "asset_rollup", "dividend_v2", "dividend_belasting_v2", "fees_dividend_belasting_v2"])
-    )
+    else:
+        df = empty_result
 
     base = pl.DataFrame(
         schema={
