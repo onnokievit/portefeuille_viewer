@@ -242,6 +242,14 @@ class AandelenWebPilotTab(QWidget):
         border-radius:6px;
         min-width:120px;
       }
+      .filters select {
+        font-size:12px;
+        padding:4px 6px;
+        border:1px solid #c7d1de;
+        border-radius:6px;
+        min-width:120px;
+        background:#fff;
+      }
       .filters button {
         font-size:12px;
         padding:4px 8px;
@@ -312,9 +320,15 @@ class AandelenWebPilotTab(QWidget):
     <div class="filters">
       <input id="f_global" placeholder="Zoek alle kolommen..." />
       <input id="f_asset" placeholder="Filter asset_rollup" />
-      <input id="f_regio" placeholder="Filter regio" />
-      <input id="f_sector" placeholder="Filter sector" />
-      <input id="f_status" placeholder="Filter status" />
+      <select id="f_regio">
+        <option value="__ALL__">Alle regio's</option>
+      </select>
+      <select id="f_sector">
+        <option value="__ALL__">Alle sectoren</option>
+      </select>
+      <select id="f_status">
+        <option value="__ALL__">Alle assets</option>
+      </select>
       <button id="btn_clear_filters">Wis filters</button>
     </div>
     <div class="table-wrap">
@@ -387,9 +401,9 @@ class AandelenWebPilotTab(QWidget):
         filters: {
           global: "",
           asset_rollup: "",
-          regio: "",
-          sector: "",
-          status: ""
+          regio: "__ALL__",
+          sector: "__ALL__",
+          status: "__ALL__"
         }
       };
 
@@ -615,16 +629,89 @@ class AandelenWebPilotTab(QWidget):
         const rows = Array.from(state.rows.values());
         return rows.filter((r) => {
           if (!contains(r.asset_rollup, state.filters.asset_rollup)) return false;
-          if (!contains(r.regio, state.filters.regio)) return false;
-          if (!contains(r.sector, state.filters.sector)) return false;
-          if (!contains(r.status, state.filters.status)) return false;
+          if (state.filters.regio && state.filters.regio !== "__ALL__") {
+            const rowRegio = String(r.regio ?? "").trim().toLowerCase();
+            const wantedRegio = String(state.filters.regio).trim().toLowerCase();
+            if (rowRegio !== wantedRegio) return false;
+          }
+          if (state.filters.sector && state.filters.sector !== "__ALL__") {
+            const rowSector = String(r.sector ?? "").trim().toLowerCase();
+            const wantedSector = String(state.filters.sector).trim().toLowerCase();
+            if (rowSector !== wantedSector) return false;
+          }
+          if (state.filters.status && state.filters.status !== "__ALL__") {
+            const rowStatus = String(r.status ?? "").trim().toLowerCase();
+            const wanted = String(state.filters.status).trim().toLowerCase();
+            if (rowStatus !== wanted) return false;
+          }
           if (state.filters.global) {
-            const needle = state.filters.global.toLowerCase();
-            const hit = state.cols.some((c) => String(r[c] ?? "").toLowerCase().includes(needle));
-            if (!hit) return false;
+            const terms = String(state.filters.global)
+              .split(",")
+              .map((t) => t.trim().toLowerCase())
+              .filter((t) => t.length > 0);
+            for (const needle of terms) {
+              const hit = state.cols.some((c) =>
+                String(r[c] ?? "").toLowerCase().includes(needle)
+              );
+              if (!hit) return false;
+            }
           }
           return true;
         });
+      }
+
+      function renderStatusOptions() {
+        const sel = document.getElementById("f_status");
+        if (!sel) return;
+        const prev = String(state.filters.status || "__ALL__");
+        const values = new Set();
+        for (const row of state.rows.values()) {
+          const s = String(row?.status ?? "").trim();
+          if (s) values.add(s);
+        }
+        sel.innerHTML = "";
+        const allOpt = document.createElement("option");
+        allOpt.value = "__ALL__";
+        allOpt.textContent = "Alle assets";
+        sel.appendChild(allOpt);
+        Array.from(values)
+          .sort((a, b) => a.localeCompare(b))
+          .forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = v;
+            opt.textContent = v;
+            sel.appendChild(opt);
+          });
+        const hasPrev = Array.from(sel.options).some((o) => o.value === prev);
+        state.filters.status = hasPrev ? prev : "__ALL__";
+        sel.value = state.filters.status;
+      }
+
+      function renderSelectOptions(selectId, key, allLabel) {
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+        const prev = String(state.filters[key] || "__ALL__");
+        const values = new Set();
+        for (const row of state.rows.values()) {
+          const s = String(row?.[key] ?? "").trim();
+          if (s) values.add(s);
+        }
+        sel.innerHTML = "";
+        const allOpt = document.createElement("option");
+        allOpt.value = "__ALL__";
+        allOpt.textContent = allLabel;
+        sel.appendChild(allOpt);
+        Array.from(values)
+          .sort((a, b) => a.localeCompare(b))
+          .forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = v;
+            opt.textContent = v;
+            sel.appendChild(opt);
+          });
+        const hasPrev = Array.from(sel.options).some((o) => o.value === prev);
+        state.filters[key] = hasPrev ? prev : "__ALL__";
+        sel.value = state.filters[key];
       }
 
       function renderFooter(rows) {
@@ -672,16 +759,34 @@ class AandelenWebPilotTab(QWidget):
       function bindFilters() {
         const map = [
           ["f_global", "global"],
-          ["f_asset", "asset_rollup"],
-          ["f_regio", "regio"],
-          ["f_sector", "sector"],
-          ["f_status", "status"]
+          ["f_asset", "asset_rollup"]
         ];
         for (const [id, key] of map) {
           const el = document.getElementById(id);
           if (!el) continue;
           el.addEventListener("input", () => {
             state.filters[key] = el.value || "";
+            renderBody();
+          });
+        }
+        const regioEl = document.getElementById("f_regio");
+        if (regioEl) {
+          regioEl.addEventListener("change", () => {
+            state.filters.regio = regioEl.value || "__ALL__";
+            renderBody();
+          });
+        }
+        const sectorEl = document.getElementById("f_sector");
+        if (sectorEl) {
+          sectorEl.addEventListener("change", () => {
+            state.filters.sector = sectorEl.value || "__ALL__";
+            renderBody();
+          });
+        }
+        const statusEl = document.getElementById("f_status");
+        if (statusEl) {
+          statusEl.addEventListener("change", () => {
+            state.filters.status = statusEl.value || "__ALL__";
             renderBody();
           });
         }
@@ -693,6 +798,12 @@ class AandelenWebPilotTab(QWidget):
               if (el) el.value = "";
               state.filters[key] = "";
             }
+            if (regioEl) regioEl.value = "__ALL__";
+            if (sectorEl) sectorEl.value = "__ALL__";
+            if (statusEl) statusEl.value = "__ALL__";
+            state.filters.regio = "__ALL__";
+            state.filters.sector = "__ALL__";
+            state.filters.status = "__ALL__";
             renderBody();
           });
         }
@@ -757,6 +868,9 @@ class AandelenWebPilotTab(QWidget):
         }
         if (!state.cols.includes(state.sortCol)) state.sortCol = "asset_rollup";
         state.hasSnapshot = true;
+        renderSelectOptions("f_regio", "regio", "Alle regio's");
+        renderSelectOptions("f_sector", "sector", "Alle sectoren");
+        renderStatusOptions();
         renderHeader();
         renderBody();
         updateQualityBadge();
