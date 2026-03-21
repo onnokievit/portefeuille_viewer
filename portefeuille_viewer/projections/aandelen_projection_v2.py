@@ -6,6 +6,7 @@ from typing import Any
 
 import polars as pl
 
+from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 
@@ -49,8 +50,9 @@ class AandelenProjectionV2:
             selected_brokers = set(self._selected_brokers) if self._selected_brokers else None
             broker_only = bool(self._pending_broker_only_recompute)
             self._pending_broker_only_recompute = False
+        overlay_only = "__TIMEVALUE_OVERLAY__" in (changed_keys or set())
         incremental = bool(changed_keys)
-        if broker_only and self._broker_cache:
+        if (broker_only or overlay_only) and self._broker_cache:
             df_new = self._recompute_from_broker_cache(selected_brokers)
         elif incremental:
             df_new = self._recompute_incremental(changed_keys, selected_brokers)
@@ -60,7 +62,7 @@ class AandelenProjectionV2:
         df_new, diag = self._with_price_quality_guard(
             df_new,
             selected_brokers,
-            enable_repair=incremental and not broker_only,
+            enable_repair=incremental and not broker_only and not overlay_only,
         )
         patch = self._build_patch(self._snapshot, df_new)
         with self._lock:
@@ -127,7 +129,7 @@ class AandelenProjectionV2:
         if selected_brokers is None:
             df_all = self._broker_cache.get("__ALL__")
             if isinstance(df_all, pl.DataFrame):
-                return df_all
+                return self._apply_timevalue_overlay(df_all, None)
             return build_aandelen_tab_summary(selected_brokers=None)
 
         frames: list[pl.DataFrame] = []
@@ -167,18 +169,94 @@ class AandelenProjectionV2:
                 agg_exprs.append(pl.col(col).sum().alias(col))
             else:
                 agg_exprs.append(pl.col(col).drop_nulls().first().alias(col))
-        return merged.group_by("asset_rollup").agg(agg_exprs)
+        grouped = merged.group_by("asset_rollup").agg(agg_exprs)
+        return self._apply_timevalue_overlay(grouped, selected_brokers)
 
     def _rebuild_broker_cache(self, df_all: pl.DataFrame) -> None:
         brokers = self._all_brokers()
-        cache: dict[str, pl.DataFrame] = {"__ALL__": df_all}
+        cache: dict[str, pl.DataFrame] = {"__ALL__": self._apply_timevalue_overlay(df_all, None)}
         for broker in brokers:
             try:
-                cache[broker] = build_aandelen_tab_summary(selected_brokers={broker})
+                cache[broker] = self._apply_timevalue_overlay(
+                    build_aandelen_tab_summary(selected_brokers={broker}),
+                    {broker},
+                )
             except Exception:
                 continue
         with self._lock:
             self._broker_cache = cache
+
+    @staticmethod
+    def _apply_timevalue_overlay(df: pl.DataFrame, selected_brokers: set[str] | None) -> pl.DataFrame:
+        if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+            return df
+
+        tv = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+        if tv is None or tv.is_empty():
+            if "optie_tijdswaarde_signed_eur" in df.columns:
+                return df.with_columns(pl.col("optie_tijdswaarde_signed_eur").fill_null(0.0))
+            return df.with_columns(pl.lit(0.0).alias("optie_tijdswaarde_signed_eur"))
+
+        tv_df = tv
+        if selected_brokers is not None and "broker" in tv_df.columns:
+            allowed = [str(b).strip().lower() for b in selected_brokers if str(b).strip()]
+            if allowed:
+                tv_df = tv_df.filter(
+                    pl.col("broker")
+                    .cast(pl.Utf8, strict=False)
+                    .str.strip_chars()
+                    .str.to_lowercase()
+                    .is_in(allowed)
+                )
+
+        if tv_df.is_empty() or "asset" not in tv_df.columns:
+            if "optie_tijdswaarde_signed_eur" in df.columns:
+                return df.with_columns(pl.col("optie_tijdswaarde_signed_eur").fill_null(0.0))
+            return df.with_columns(pl.lit(0.0).alias("optie_tijdswaarde_signed_eur"))
+
+        eurusd = float(get_settings().get_eurusd() or 1.0)
+        if eurusd == 0:
+            eurusd = 1.0
+
+        tv_sum = (
+            tv_df.select(
+                [
+                    pl.col("asset")
+                    .cast(pl.Utf8, strict=False)
+                    .str.strip_chars()
+                    .str.to_uppercase()
+                    .alias("__asset_key"),
+                    pl.col("ccy").cast(pl.Utf8, strict=False).alias("ccy"),
+                    pl.col("time_total").cast(pl.Float64, strict=False).alias("time_total"),
+                ]
+            )
+            .filter(pl.col("__asset_key").is_not_null() & pl.col("time_total").is_not_null())
+            .group_by(["__asset_key", "ccy"])
+            .agg(pl.col("time_total").sum().alias("time_total_signed"))
+            .with_columns(
+                pl.when(pl.col("ccy") == "USD")
+                .then(pl.col("time_total_signed") / eurusd)
+                .otherwise(pl.col("time_total_signed"))
+                .alias("optie_tijdswaarde_signed_eur")
+            )
+            .group_by("__asset_key")
+            .agg(pl.col("optie_tijdswaarde_signed_eur").sum().alias("optie_tijdswaarde_signed_eur"))
+        )
+
+        out = (
+            df.with_columns(
+                pl.col("asset_rollup")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .str.to_uppercase()
+                .alias("__asset_key")
+            )
+            .drop("optie_tijdswaarde_signed_eur", strict=False)
+            .join(tv_sum, on="__asset_key", how="left")
+            .with_columns(pl.col("optie_tijdswaarde_signed_eur").fill_null(0.0))
+            .drop("__asset_key")
+        )
+        return out
 
     @staticmethod
     def _all_brokers() -> set[str]:

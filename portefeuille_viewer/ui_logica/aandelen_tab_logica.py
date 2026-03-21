@@ -1,4 +1,5 @@
 # Logica voor de AandelenTab, gekoppeld aan de Designer UI (Ui_AandelenTab)
+import os
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QFileDialog, QMessageBox, QStyledItemDelegate, QStyle, QHeaderView, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt, QTimer, QObject, QThread, Signal
 from PySide6.QtWidgets import QTableWidget
@@ -174,6 +175,7 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 
 		self._display_cache = {}
 		self._pct_change_bg_cache = []
+		self._use_projection_v2 = os.getenv("UI_AANDELEN_LEGACY_FROM_PROJECTION_V2", "0").strip() == "1"
 		self.model = PolarsTableModel(pl.DataFrame(), self)
 		orig_data_method = self.model.data
 		def patched_data(index, role):
@@ -234,10 +236,26 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 			col: {"in": set(fd.get("in", set()))}
 			for col, fd in (self.col_filters or {}).items()
 		}
+		if self._use_projection_v2:
+			df_sum = self._load_projection_summary(col_filters)
+			self._on_summary_ready(request_id, df_sum)
+			return
 		if self._summary_thread is not None:
 			self._reload_pending_after_finish = True
 			return
 		self._start_summary_worker(request_id, selected_brokers, col_filters)
+
+	def _load_projection_summary(self, col_filters: dict) -> pl.DataFrame:
+		df_sum = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+		if not isinstance(df_sum, pl.DataFrame) or df_sum.is_empty():
+			return pl.DataFrame()
+		out = df_sum
+		for col, filt_dict in (col_filters or {}).items():
+			if col not in out.columns:
+				continue
+			if "in" in filt_dict and filt_dict["in"]:
+				out = out.filter(pl.col(col).is_in(list(filt_dict["in"])))
+		return out
 
 	def _start_summary_worker(self, request_id: int, selected_brokers, col_filters: dict):
 		self._summary_thread = QThread(self)
@@ -441,6 +459,13 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 
 	def set_broker_selection(self, selected: set):
 		self.selected_brokers = selected
+		if self._use_projection_v2:
+			payload = {
+				"selected_brokers": sorted(str(x).strip().lower() for x in (selected or set()) if str(x).strip())
+			}
+			signals.queued_emit_aandelenProjectionFilterChanged(payload)
+			self._schedule_reload()
+			return
 		self.reload_data()
 
 	def on_engine_data_update(self):
@@ -455,6 +480,16 @@ class AandelenTab(QWidget, Ui_AandelenTab):
 
 	def _on_snapshot_updated(self, snapshot_key: str):
 		# Optie tijdswaarde heeft eigen feed/service; refresh Aandelen-tab bij update.
+		if self._use_projection_v2 and snapshot_key in {
+			"snapshot_aandelen_projection_v2",
+			"snapshot_aandelen_projection_v2_patch",
+			"snapshot_aandelen_projection_v2_meta",
+		}:
+			if not self._active:
+				self._dirty = True
+				return
+			self._schedule_reload()
+			return
 		if snapshot_key == "snapshot_optie_timevalue_live":
 			if not self._active:
 				self._dirty = True

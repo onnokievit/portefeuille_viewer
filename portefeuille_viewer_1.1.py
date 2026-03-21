@@ -4,6 +4,7 @@ import json
 import threading
 from collections import deque
 from pathlib import Path
+import polars as pl
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from PySide6.QtCore import QTimer, qInstallMessageHandler
@@ -95,6 +96,14 @@ _AANDELEN_PROJECTION_PENDING_LOCK = threading.Lock()
 _AANDELEN_PROJECTION_INFLIGHT = False
 _AANDELEN_PROJECTION_QUEUED_REQ: dict | None = None
 _AANDELEN_PROJECTION_PENDING_RESULT: dict | None = None
+_AANDELEN_TV_STARTUP_SEEDED = False
+_AANDELEN_TV_LAST_OVERLAY_TS = 0.0
+_AANDELEN_TV_SEED_TS = 0.0
+_AANDELEN_TV_OVERLAY_MIN_INTERVAL_SEC = 60.0
+_AANDELEN_TV_WARMUP_WINDOW_SEC = 60.0
+_AANDELEN_TV_WARMUP_INTERVAL_SEC = 5.0
+_AANDELEN_TV_OVERLAY_LOCKED = False
+_AANDELEN_TV_LOCK_TOL_EUR = 1.0
 
 
 def _p95(values: list[float]) -> float:
@@ -177,6 +186,102 @@ def _append_sprinters_metrics_log(sample: dict) -> None:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+def _reset_aandelen_tv_overlay_regime(reason: str) -> None:
+    global _AANDELEN_TV_STARTUP_SEEDED
+    global _AANDELEN_TV_LAST_OVERLAY_TS
+    global _AANDELEN_TV_SEED_TS
+    global _AANDELEN_TV_OVERLAY_LOCKED
+    _AANDELEN_TV_STARTUP_SEEDED = False
+    _AANDELEN_TV_LAST_OVERLAY_TS = 0.0
+    _AANDELEN_TV_SEED_TS = 0.0
+    _AANDELEN_TV_OVERLAY_LOCKED = False
+    print(f"[projection-v2] timevalue overlay regime reset ({reason})")
+
+
+def _aandelen_tv_totals_in_sync() -> bool:
+    df_aandelen = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+    df_tv = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+    if (
+        df_aandelen is None
+        or df_tv is None
+        or not hasattr(df_aandelen, "is_empty")
+        or not hasattr(df_tv, "is_empty")
+        or df_aandelen.is_empty()
+        or df_tv.is_empty()
+        or "optie_tijdswaarde_signed_eur" not in getattr(df_aandelen, "columns", [])
+        or "time_total" not in getattr(df_tv, "columns", [])
+    ):
+        return False
+
+    selected_brokers: set[str] | None = None
+    meta = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2_meta", None)
+    if isinstance(meta, dict):
+        selected = meta.get("selected_brokers")
+        if isinstance(selected, list) and selected:
+            selected_brokers = {
+                str(x).strip().lower() for x in selected if str(x).strip()
+            } or None
+
+    try:
+        aandelen_total = (
+            df_aandelen.select(
+                pl.col("optie_tijdswaarde_signed_eur")
+                .cast(pl.Float64, strict=False)
+                .fill_null(0.0)
+                .sum()
+                .alias("v")
+            )
+            .item(0, "v")
+        )
+        aandelen_total = float(aandelen_total or 0.0)
+    except Exception:
+        return False
+
+    tv_calc = df_tv
+    if selected_brokers is not None and "broker" in tv_calc.columns:
+        allowed = [str(b).strip().lower() for b in selected_brokers if str(b).strip()]
+        if allowed:
+            tv_calc = tv_calc.filter(
+                pl.col("broker")
+                .cast(pl.Utf8, strict=False)
+                .str.strip_chars()
+                .str.to_lowercase()
+                .is_in(allowed)
+            )
+
+    if tv_calc.is_empty():
+        return abs(aandelen_total) <= _AANDELEN_TV_LOCK_TOL_EUR
+
+    eurusd = float(get_settings().get_eurusd() or 1.0)
+    if eurusd == 0:
+        eurusd = 1.0
+
+    try:
+        tv_sum_df = (
+            tv_calc.select(
+                [
+                    pl.col("ccy").cast(pl.Utf8, strict=False).alias("ccy"),
+                    pl.col("time_total").cast(pl.Float64, strict=False).alias("time_total"),
+                ]
+            )
+            .filter(pl.col("time_total").is_not_null())
+            .group_by("ccy")
+            .agg(pl.col("time_total").sum().alias("time_total_signed"))
+            .with_columns(
+                pl.when(pl.col("ccy") == "USD")
+                .then(pl.col("time_total_signed") / eurusd)
+                .otherwise(pl.col("time_total_signed"))
+                .alias("time_total_eur")
+            )
+            .select(pl.col("time_total_eur").sum().alias("tv_total_eur"))
+        )
+        target_total = float(tv_sum_df.item(0, "tv_total_eur") or 0.0)
+    except Exception:
+        return False
+
+    return abs(aandelen_total - target_total) <= _AANDELEN_TV_LOCK_TOL_EUR
 
 
 def _publish_aandelen_projection_result(result: dict):
@@ -540,6 +645,62 @@ def _runtime_recompute_all(reason: str):
 
 
 def _on_snapshot_updated_engine_core(snapshot_key: str):
+    global _AANDELEN_TV_STARTUP_SEEDED
+    global _AANDELEN_TV_LAST_OVERLAY_TS
+    global _AANDELEN_TV_SEED_TS
+    global _AANDELEN_TV_OVERLAY_LOCKED
+    if (
+        snapshot_key == "snapshot_optie_timevalue_live"
+        and aandelen_projection_v2 is not None
+    ):
+        tv_df = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+        tv_ready = False
+        if tv_df is not None and hasattr(tv_df, "is_empty") and not tv_df.is_empty():
+            try:
+                if "time_total" in getattr(tv_df, "columns", []):
+                    tv_ready = tv_df.filter(pl.col("time_total").is_not_null()).height > 0
+                elif "last_px" in getattr(tv_df, "columns", []):
+                    tv_ready = tv_df.filter(pl.col("last_px").is_not_null()).height > 0
+            except Exception:
+                tv_ready = False
+        now_ts = time.time()
+        if tv_ready and not _AANDELEN_TV_STARTUP_SEEDED:
+            refresh_aandelen_projection(
+                "startup_timevalue_seed",
+                changed_keys={"__TIMEVALUE_OVERLAY__"},
+                force_sync=True,
+            )
+            seeded_df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+            if (
+                seeded_df is not None
+                and hasattr(seeded_df, "is_empty")
+                and not seeded_df.is_empty()
+                and "optie_tijdswaarde_signed_eur" in getattr(seeded_df, "columns", [])
+            ):
+                _AANDELEN_TV_STARTUP_SEEDED = True
+                _AANDELEN_TV_SEED_TS = now_ts
+                _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
+                print("[projection-v2] startup timevalue seed applied")
+        elif tv_ready and _AANDELEN_TV_STARTUP_SEEDED:
+            if not _AANDELEN_TV_OVERLAY_LOCKED and _aandelen_tv_totals_in_sync():
+                _AANDELEN_TV_OVERLAY_LOCKED = True
+                print("[projection-v2] timevalue overlay locked (totals in sync)")
+            if _AANDELEN_TV_OVERLAY_LOCKED:
+                tv_ready = False
+            interval = _AANDELEN_TV_OVERLAY_MIN_INTERVAL_SEC
+            if (now_ts - _AANDELEN_TV_SEED_TS) <= _AANDELEN_TV_WARMUP_WINDOW_SEC:
+                interval = _AANDELEN_TV_WARMUP_INTERVAL_SEC
+            if (now_ts - _AANDELEN_TV_LAST_OVERLAY_TS) < interval:
+                interval = None
+            if interval is None:
+                pass
+            else:
+                refresh_aandelen_projection(
+                    "timevalue_overlay_tick",
+                    changed_keys={"__TIMEVALUE_OVERLAY__"},
+                    force_sync=True,
+                )
+                _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
     if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         allowed_live_topics = {
             "aggregator_snapshot_load_open_opties_from_tx_live",
@@ -653,6 +814,9 @@ def run_startup_db_migrations():
 
 def main():
     global _AANDELEN_PROJECTION_ASYNC_ENABLED
+    global _AANDELEN_TV_STARTUP_SEEDED
+    global _AANDELEN_TV_LAST_OVERLAY_TS
+    global _AANDELEN_TV_SEED_TS
     run_startup_db_migrations()
     if ENABLE_ENGINE_CORE_RUNTIME:
         print("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
@@ -668,7 +832,11 @@ def main():
     # 2) finished(ok) -> daarna afgeleide snapshots verversen
     signals.stateRebuildRequested.connect(state_engine_runner.handle_rebuild_requested)
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
-    signals.databaseChanged.connect(lambda db_name: refresh_everything())
+    def _on_database_changed_refresh(db_name: str):
+        _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
+        refresh_everything()
+
+    signals.databaseChanged.connect(_on_database_changed_refresh)
     signals.databaseChanged.connect(state_engine_runner.handle_database_changed)
     # Debounce snapshot refreshes: bij een wave van price_catchup jobs
     # willen we niet na elke asset-run opnieuw alle snapshots/aggregators herladen.
@@ -743,6 +911,7 @@ def main():
     optie_tijdswaarde_projection_refresh_timer.timeout.connect(_run_optie_tijdswaarde_projection_refresh)
     sprinters_projection_refresh_timer.timeout.connect(_run_sprinters_projection_refresh)
     orders_refresh_timer.timeout.connect(_run_orders_refresh)
+    signals.ordersCommitted.connect(lambda: _reset_aandelen_tv_overlay_regime("orders_committed"))
     signals.ordersCommitted.connect(_schedule_orders_refresh)
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:

@@ -1,5 +1,6 @@
 
 import contextlib
+import os
 import polars as pl
 from datetime import datetime, date
 
@@ -222,6 +223,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     def __init__(self, portfolio_engine=None, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self._use_projection_v2 = os.getenv("UI_OPTIES_LEGACY_FROM_PROJECTION_V2", "0").strip() == "1"
         # self.tableView = self.table  # of self.tableView als dat je QTableView is
         self._table_model = None  # na reload_data()
         self._col_filters = {}
@@ -273,6 +275,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.table.setModel(self.proxy_model)
         self._table_model = self.model
         signals.databaseChanged.connect(self._on_db_changed)
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.uiStyleChanged.connect(self._on_ui_style_changed)
         self.reload_data()
 
@@ -371,6 +374,20 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
 
     def _on_db_changed(self, db_name: str):
         load_open_optie_comments_cache()
+        if not self._active:
+            self._dirty = True
+            return
+        self._schedule_reload()
+
+    def _on_snapshot_updated(self, snapshot_key: str):
+        if not self._use_projection_v2:
+            return
+        if snapshot_key not in {
+            "snapshot_opties_open_projection_v2",
+            "snapshot_opties_open_projection_v2_patch",
+            "snapshot_opties_open_projection_v2_meta",
+        }:
+            return
         if not self._active:
             self._dirty = True
             return
@@ -663,7 +680,12 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._restore_selection_uniek = current_uniek
         self._restore_selection_col = current_col_name
 
-        df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
+        if self._use_projection_v2:
+            df = getattr(SNAPSHOT_STORE, "snapshot_opties_open_projection_v2", None)
+        else:
+            df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
+        if df is None or not isinstance(df, pl.DataFrame):
+            df = pl.DataFrame()
         if "ITM_OTM" in df.columns:
             df = df.with_columns(
                 pl.when(pl.col("ITM_OTM") != 0)

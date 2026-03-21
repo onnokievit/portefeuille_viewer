@@ -48,6 +48,9 @@ class AandelenWebPilotTab(QWidget):
         self.btn_clear_brokers.clicked.connect(self._clear_backend_broker_filter)
         toolbar.addWidget(self.btn_select_brokers)
         toolbar.addWidget(self.btn_clear_brokers)
+        self.btn_reset_widths = QPushButton("Reset kolombreedtes")
+        self.btn_reset_widths.clicked.connect(self._reset_column_widths)
+        toolbar.addWidget(self.btn_reset_widths)
         toolbar.addStretch(1)
         self.btn_export = QPushButton("Export snapshot")
         self.btn_export.clicked.connect(self._export_snapshot)
@@ -174,6 +177,9 @@ class AandelenWebPilotTab(QWidget):
         self.selected_brokers = None
         self._update_broker_button_text()
         signals.queued_emit_aandelenProjectionFilterChanged({"selected_brokers": []})
+
+    def _reset_column_widths(self):
+        self._call_js("resetColumnWidths", {})
 
     def _update_broker_button_text(self):
         if not self.selected_brokers:
@@ -346,6 +352,31 @@ class AandelenWebPilotTab(QWidget):
         "optie_tijdswaarde_signed_eur"
       ];
       const WIDTH_KEY = "pv_aandelen_web_colwidths_v1";
+      const LEGACY_COL_WIDTHS = {
+        asset_rollup: 170,
+        koers_prev: 90,
+        koers: 90,
+        pct_change: 90,
+        eq_aantal_bezit: 110,
+        open_sp_aantal: 100,
+        eq_total_result: 115,
+        clos_opt_transactie_euro_totaal: 130,
+        clos_sp_transactie_euro_totaal: 130,
+        open_opt_total_result: 120,
+        open_sp_result: 110,
+        div_en_bel: 95,
+        totaal_ex_fee: 115,
+        totaal_inc_fee: 115,
+        net_change: 105,
+        totaal_fee: 95,
+        regio: 70,
+        sector: 120,
+        value_grow: 90,
+        status: 90,
+        portfolio_total_waarde_lineair_pct: 120,
+        portfolio_total_waarde_delta_pct: 120,
+        optie_tijdswaarde_signed_eur: 130
+      };
       const state = {
         cols: [],
         rows: new Map(),
@@ -362,10 +393,43 @@ class AandelenWebPilotTab(QWidget):
         }
       };
 
-      function fmt(v) {
+      const PCT_COLS = new Set([
+        "pct_change",
+        "portfolio_total_waarde_lineair_pct",
+        "portfolio_total_waarde_delta_pct"
+      ]);
+      const QTY_COLS = new Set(["eq_aantal_bezit", "open_sp_aantal"]);
+      const MONEY_COLS = new Set([
+        "eq_total_result",
+        "clos_opt_transactie_euro_totaal",
+        "clos_sp_transactie_euro_totaal",
+        "open_opt_total_result",
+        "open_sp_result",
+        "div_en_bel",
+        "totaal_ex_fee",
+        "totaal_inc_fee",
+        "net_change",
+        "totaal_fee",
+        "optie_tijdswaarde_signed_eur",
+        "koers_prev",
+        "koers"
+      ]);
+
+      function fmtNlNumber(v, decimals) {
+        if (!isNum(v)) return "";
+        return Number(v).toLocaleString("nl-NL", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        });
+      }
+
+      function fmtCell(col, v) {
         if (v === null || v === undefined) return "";
-        if (typeof v === "number") return Number.isFinite(v) ? v.toFixed(2) : "";
-        return String(v);
+        if (!isNum(v)) return String(v);
+        if (PCT_COLS.has(col)) return `${fmtNlNumber(v * 100, 2)}%`;
+        if (QTY_COLS.has(col)) return fmtNlNumber(v, 3);
+        if (MONEY_COLS.has(col)) return fmtNlNumber(v, 2);
+        return fmtNlNumber(v, 2);
       }
 
       function isNum(v) {
@@ -405,6 +469,9 @@ class AandelenWebPilotTab(QWidget):
       }
 
       function defaultColWidth(col) {
+        if (Object.prototype.hasOwnProperty.call(LEGACY_COL_WIDTHS, col)) {
+          return LEGACY_COL_WIDTHS[col];
+        }
         if (col === "asset_rollup") return 180;
         if (col === "sector" || col === "status") return 130;
         if (col === "regio" || col === "value_grow") return 90;
@@ -529,7 +596,7 @@ class AandelenWebPilotTab(QWidget):
             const td = document.createElement("td");
             td.id = "c_" + rowId(row.asset_rollup) + "_" + col;
             const v = row[col];
-            td.textContent = fmt(v);
+            td.textContent = fmtCell(col, v);
             if (isNum(v)) td.classList.add("num");
             applyCellStyle(td, col, v);
             tr.appendChild(td);
@@ -577,7 +644,7 @@ class AandelenWebPilotTab(QWidget):
                 hasNum = true;
               }
             }
-            td.textContent = hasNum ? fmt(sum) : "";
+            td.textContent = hasNum ? fmtCell(col, sum) : "";
             if (hasNum) td.classList.add("num");
           }
           tr.appendChild(td);
@@ -683,6 +750,11 @@ class AandelenWebPilotTab(QWidget):
         }
         state.cols = orderedCols(Array.from(colSet));
         state.colWidths = loadColWidths();
+        if (!state.colWidths || Object.keys(state.colWidths).length === 0) {
+          const seeded = {};
+          for (const c of state.cols) seeded[c] = defaultColWidth(c);
+          state.colWidths = seeded;
+        }
         if (!state.cols.includes(state.sortCol)) state.sortCol = "asset_rollup";
         state.hasSnapshot = true;
         renderHeader();
@@ -704,7 +776,7 @@ class AandelenWebPilotTab(QWidget):
         }
         const td = document.getElementById("c_" + rowId(rid) + "_" + field);
         if (td) {
-          td.textContent = fmt(value);
+          td.textContent = fmtCell(field, value);
           if (isNum(value)) td.classList.add("num");
           else td.classList.remove("num");
           applyCellStyle(td, field, value);
@@ -736,6 +808,18 @@ class AandelenWebPilotTab(QWidget):
         if (!delta || !delta.id) return;
         const el = document.getElementById(delta.id);
         if (el) el.textContent = String(delta.value ?? "");
+      };
+
+      window.resetColumnWidths = function(_) {
+        state.colWidths = {};
+        try { localStorage.removeItem(WIDTH_KEY); } catch (_) {}
+        if (state.hasSnapshot) {
+          const seeded = {};
+          for (const c of state.cols) seeded[c] = defaultColWidth(c);
+          state.colWidths = seeded;
+          renderHeader();
+          renderBody();
+        }
       };
 
       bindFilters();
