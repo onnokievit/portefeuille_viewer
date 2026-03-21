@@ -662,26 +662,52 @@ class StateEngineRunner(QObject):
         if not db_path:
             return False
         try:
+            required_classes = self._expected_daily_engine_classes(db_path)
+            if not required_classes:
+                # Geen relevante assets in deze DB: niets te catchuppen.
+                return True
             self._ensure_state_runs_table(db_path)
             conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
             with pyodbc.connect(conn_str) as conn:
                 cur = conn.cursor()
-                row = cur.execute(
+                rows = cur.execute(
                     """
-                    SELECT COUNT(*)
+                    SELECT DISTINCT engine_class
                     FROM state_runs
                     WHERE reason=?
-                      AND engine_class='asset_result_v2'
                       AND status='ok'
                       AND DateValue(started_at)=?
                     """,
                     STARTUP_DAILY_CATCHUP_REASON,
                     date.today(),
-                ).fetchone()
-            return bool(row and row[0] and int(row[0]) > 0)
+                ).fetchall()
+            present_classes = {
+                str(r[0]).strip().lower()
+                for r in rows
+                if r and r[0] is not None and str(r[0]).strip()
+            }
+            return required_classes.issubset(present_classes)
         except Exception as exc:
             print(f"[state-engine-runner] startup daily catchup check failed: {exc}")
             return False
+
+    def _expected_daily_engine_classes(self, db_path: str) -> set[str]:
+        option_assets = self._get_assets_by_type(db_path, "optie")
+        equity_assets = set(self._get_assets_by_type(db_path, "aandeel")) | set(
+            self._get_assets_by_type(db_path, "future")
+        )
+        sprinter_assets = self._get_assets_by_type(db_path, "sprinter")
+
+        classes: set[str] = set()
+        if equity_assets:
+            classes.add("aandelen")
+        if option_assets:
+            classes.add("opties")
+        if sprinter_assets:
+            classes.add("sprinters")
+        if classes:
+            classes.add("asset_result_v2")
+        return classes
 
     def _get_assets_by_type(self, db_path: str, asset_type: str) -> list[str]:
         conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}"
