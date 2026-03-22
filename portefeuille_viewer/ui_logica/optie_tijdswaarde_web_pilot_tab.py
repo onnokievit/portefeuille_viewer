@@ -138,6 +138,20 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       .filters { display:flex; gap:8px; margin:0 0 8px 0; flex-wrap:wrap; }
       .filters input { font-size:12px; padding:4px 6px; border:1px solid #c7d1de; border-radius:6px; min-width:150px; }
       .filters button { font-size:12px; padding:4px 8px; border:1px solid #b8c3d3; background:#f4f7fb; border-radius:6px; cursor:pointer; }
+      .tv-inline { display:flex; align-items:center; gap:6px; margin-left:4px; }
+      .tv-code { font-size:12px; color:#33485f; font-weight:600; min-width:28px; text-align:right; }
+      .tv-mini {
+        font-size:12px;
+        font-weight:700;
+        color:#223247;
+        background:#eef2f7;
+        border:1px solid #c7d1de;
+        border-radius:6px;
+        padding:4px 8px;
+        min-width:110px;
+        text-align:right;
+        line-height:1.2;
+      }
       .table-wrap { border:1px solid #d8dde6; border-radius:8px; overflow:auto; background:#fff; max-height:78vh; }
       table { width:100%; border-collapse:collapse; font-size:12px; table-layout: fixed; }
       thead th { position: sticky; top: 0; z-index: 2; background:#eef2f7; color:#223247; font-weight:700; border-bottom:1px solid #d8dde6; padding:6px 8px; text-align:left; cursor:pointer; white-space:nowrap; }
@@ -155,6 +169,8 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       <input id="f_asset" placeholder="Filter asset" />
       <input id="f_broker" placeholder="Filter broker" />
       <button id="btn_clear_filters">Wis filters</button>
+      <div class="tv-inline"><span class="tv-code">EUR</span><div class="tv-mini" id="tv_total_eur">0,00</div></div>
+      <div class="tv-inline"><span class="tv-code">USD</span><div class="tv-mini" id="tv_total_usd">0,00</div></div>
     </div>
     <div class="table-wrap">
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
@@ -162,19 +178,46 @@ class OptieTijdswaardeWebPilotTab(QWidget):
     <script>
       const state = { cols: [], rows: new Map(), sortCol: "asset", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset:"",broker:""} };
       function fmt(v){ if(v===null||v===undefined) return ""; if(typeof v==="number") return Number.isFinite(v)?v.toFixed(3):""; return String(v); }
+      function fmtNumber(v, d=2){ const n=Number(v??0); if(!Number.isFinite(n)) return ""; return n.toLocaleString("nl-NL",{minimumFractionDigits:d, maximumFractionDigits:d}); }
       function isNum(v){ return typeof v==="number" && Number.isFinite(v); }
       function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); return dir==="asc"?c:-c; }
       function contains(h,n){ if(!n) return true; return String(h??"").toLowerCase().includes(String(n).toLowerCase()); }
-      function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset,state.filters.asset)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(state.filters.global){ const needle=state.filters.global.toLowerCase(); if(!state.cols.some(c=>String(r[c]??"").toLowerCase().includes(needle))) return false; } return true;});}
+      function globalMatch(row, raw){
+        if(!raw) return true;
+        const terms = String(raw)
+          .split(",")
+          .map(t => t.trim().toLowerCase())
+          .filter(Boolean);
+        if(terms.length===0) return true;
+        for(const term of terms){
+          const hit = state.cols.some(c => String(row[c] ?? "").toLowerCase().includes(term));
+          if(!hit) return false; // AND over terms
+        }
+        return true;
+      }
+      function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset,state.filters.asset)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(!globalMatch(r, state.filters.global)) return false; return true;});}
       function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} renderHeader(); renderBody(); }; tr.appendChild(th); }); }
-      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} }
+      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} renderTimevalueSummary(rows); }
+      function renderTimevalueSummary(rows){
+        let eur=0.0, usd=0.0;
+        for(const r of (rows||[])){
+          const ccy = String(r.ccy || "").toUpperCase();
+          const vRaw = Number(r.time_total ?? 0);
+          const v = Number.isFinite(vRaw) ? vRaw : 0.0;
+          if(ccy==="EUR") eur += v;
+          else if(ccy==="USD") usd += v;
+        }
+        const e=document.getElementById("tv_total_eur");
+        const u=document.getElementById("tv_total_usd");
+        if(e) e.textContent = fmtNumber(eur,2);
+        if(u) u.textContent = fmtNumber(usd,2);
+      }
       function bindFilters(){ const map=[["f_global","global"],["f_asset","asset"],["f_broker","broker"]]; for(const [id,key] of map){ const el=document.getElementById(id); if(!el) continue; el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();}); } const clear=document.getElementById("btn_clear_filters"); if(clear){ clear.addEventListener("click",()=>{ for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; } renderBody();});}}
       window.renderMeta = function(meta){ const el=document.getElementById("meta"); if(!el||!meta) return; const v=meta.version??"-"; const r=meta.rows??0; const c=meta.changes??0; const u=meta.updated_at??"-"; const reason=meta.reason??"-"; const m=meta.metrics||{}; const ml=m.last||{}; const ms=m.summary||{}; const txt=`Optie Tijdswaarde Projection v${v} | rows:${r} | changes:${c} | updated:${u} | reason:${reason} | perf rec:${Number(ml.recompute_ms??0).toFixed(1)}ms pub:${Number(ml.publish_ms??0).toFixed(1)}ms tot:${Number(ml.total_ms??0).toFixed(1)}ms p95:${Number(ms.total_ms_p95??0).toFixed(1)}ms`; el.textContent=txt; };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; renderHeader(); renderBody(); return; } const colSet=new Set(); for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); Object.keys(row).forEach(k=>colSet.add(k)); } state.cols=Array.from(colSet); if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset")?"asset":state.cols[0]; state.hasSnapshot=true; renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; renderHeader(); renderBody(); renderTimevalueSummary([]); return; } const colSet=new Set(); for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); Object.keys(row).forEach(k=>colSet.add(k)); } state.cols=Array.from(colSet); if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset")?"asset":state.cols[0]; state.hasSnapshot=true; renderHeader(); renderBody(); };
       window.applyPatch = function(payload){ if(!state.hasSnapshot) return; const changes=(payload&&payload.changes)?payload.changes:[]; for(const ch of changes){ if(!ch||!ch.row_id) continue; const rid=String(ch.row_id); if(ch.field==="__deleted__"){ state.rows.delete(rid); continue; } const row=state.rows.get(rid); if(!row) continue; row[ch.field]=ch.value; } renderBody(); };
       bindFilters();
     </script>
   </body>
 </html>
 """
-
