@@ -237,7 +237,9 @@ class AandelenWebPilotTab(QWidget):
     <meta charset="utf-8"/>
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <style>
-      body { font-family: Segoe UI, Arial, sans-serif; margin: 12px; background:#f5f6f8; }
+      * { box-sizing: border-box; }
+      html, body { height:100%; margin:0; padding:0; overflow:hidden; }
+      body { font-family: Segoe UI, Arial, sans-serif; padding:12px; background:#f5f6f8; display:flex; flex-direction:column; min-height:0; }
       .meta { margin: 0 0 10px 0; color:#44536b; font-size:12px; }
       .filters {
         display:flex;
@@ -268,7 +270,9 @@ class AandelenWebPilotTab(QWidget):
         border-radius:6px;
         cursor:pointer;
       }
-      .table-wrap { border:1px solid #d8dde6; border-radius:8px; overflow:auto; background:#fff; max-height:78vh; }
+      .table-shell { border:1px solid #d8dde6; border-radius:8px; background:#fff; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+      .table-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; }
+      .footer-wrap { flex:0 0 auto; overflow-x:auto; overflow-y:hidden; border-top:1px solid #c8d2df; padding-right:0; }
       table { width:max-content; min-width:0; border-collapse:collapse; font-size:12px; table-layout: fixed; }
       col { width: 110px; }
       thead th {
@@ -306,11 +310,7 @@ class AandelenWebPilotTab(QWidget):
       td.total-neg { background:#f7c6c6; }
       td.total-zero { background:#ffffff; }
       tfoot td {
-        position: sticky;
-        bottom: 0;
-        z-index: 3;
         background:#e6ebf2;
-        border-top:1px solid #c8d2df;
         padding:5px 8px;
         font-weight:700;
       }
@@ -346,13 +346,20 @@ class AandelenWebPilotTab(QWidget):
       <button id="btn_clear_filters">Wis filters</button>
       <button id="btn_export_snapshot">Export snapshot</button>
     </div>
-    <div class="table-wrap">
-      <table id="tbl">
-        <colgroup id="colgroup"></colgroup>
-        <thead><tr id="thead-row"></tr></thead>
-        <tbody id="tbody"></tbody>
-        <tfoot><tr id="tfoot-row"></tr></tfoot>
-      </table>
+    <div class="table-shell">
+      <div class="table-scroll" id="table-scroll">
+        <table id="tbl-main">
+          <colgroup id="colgroup-main"></colgroup>
+          <thead><tr id="thead-row"></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="footer-wrap" id="footer-wrap">
+        <table id="tbl-footer">
+          <colgroup id="colgroup-footer"></colgroup>
+          <tfoot><tr id="tfoot-row-footer"></tr></tfoot>
+        </table>
+      </div>
     </div>
     <script>
       const PREFERRED_ORDER = [
@@ -506,13 +513,16 @@ class AandelenWebPilotTab(QWidget):
       }
 
       function applyColWidths() {
-        const cg = document.getElementById("colgroup");
-        if (!cg) return;
-        cg.innerHTML = "";
-        for (const col of state.cols) {
-          const c = document.createElement("col");
-          c.style.width = `${colWidth(col)}px`;
-          cg.appendChild(c);
+        const ids = ["colgroup-main", "colgroup-footer"];
+        for (const id of ids) {
+          const cg = document.getElementById(id);
+          if (!cg) continue;
+          cg.innerHTML = "";
+          for (const col of state.cols) {
+            const c = document.createElement("col");
+            c.style.width = `${colWidth(col)}px`;
+            cg.appendChild(c);
+          }
         }
       }
 
@@ -602,7 +612,7 @@ class AandelenWebPilotTab(QWidget):
             th.style.minWidth = `${w}px`;
             th.style.maxWidth = `${w}px`;
           }
-          const trf = document.getElementById("tfoot-row");
+          const trf = document.getElementById("tfoot-row-footer");
           const tf = trf?.children?.[idx];
           if (tf) {
             tf.style.width = `${w}px`;
@@ -651,6 +661,12 @@ class AandelenWebPilotTab(QWidget):
           body.appendChild(tr);
         }
         renderFooter(rows);
+        const bodyWrap = document.getElementById("table-scroll");
+        const footWrap = document.getElementById("footer-wrap");
+        if (bodyWrap && footWrap) {
+          const sw = Math.max(0, bodyWrap.offsetWidth - bodyWrap.clientWidth);
+          footWrap.style.paddingRight = `${sw}px`;
+        }
       }
 
       function contains(hay, needle) {
@@ -748,7 +764,7 @@ class AandelenWebPilotTab(QWidget):
       }
 
       function renderFooter(rows) {
-        const tr = document.getElementById("tfoot-row");
+        const tr = document.getElementById("tfoot-row-footer");
         tr.innerHTML = "";
         for (const col of state.cols) {
           const td = document.createElement("td");
@@ -1028,6 +1044,31 @@ class AandelenWebPilotTab(QWidget):
           state.bridge = channel.objects.aandelenBridge || null;
         });
       }
+
+      (function syncHorizontalScroll(){
+        const body = document.getElementById("table-scroll");
+        const foot = document.getElementById("footer-wrap");
+        if (!body || !foot) return;
+        function syncFooterCompensation(){
+          const sw = Math.max(0, body.offsetWidth - body.clientWidth);
+          foot.style.paddingRight = `${sw}px`;
+        }
+        let lock = false;
+        body.addEventListener("scroll", () => {
+          if (lock) return;
+          lock = true;
+          foot.scrollLeft = body.scrollLeft;
+          lock = false;
+        });
+        foot.addEventListener("scroll", () => {
+          if (lock) return;
+          lock = true;
+          body.scrollLeft = foot.scrollLeft;
+          lock = false;
+        });
+        window.addEventListener("resize", syncFooterCompensation);
+        syncFooterCompensation();
+      })();
 
       bindFilters();
     </script>
