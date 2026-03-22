@@ -4,7 +4,8 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import QObject, Slot
+from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
@@ -23,12 +24,6 @@ class SprintersOpenWebPilotTab(QWidget):
         self._js_ready = False
         self._pending_js_calls: list[tuple[str, object]] = []
         layout = QVBoxLayout(self)
-        toolbar = QHBoxLayout()
-        self.btn_export = QPushButton("Export snapshot")
-        self.btn_export.clicked.connect(self._export_snapshot)
-        toolbar.addStretch(1)
-        toolbar.addWidget(self.btn_export)
-        layout.addLayout(toolbar)
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
             return
@@ -36,6 +31,8 @@ class SprintersOpenWebPilotTab(QWidget):
         layout.addWidget(self.web)
         if QWebChannel is not None:
             self.channel = QWebChannel(self.web.page())
+            self.bridge = _SprintersOpenWebBridge(self)
+            self.channel.registerObject("sprintersBridge", self.bridge)
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_web_loaded)
         self.web.setHtml(self._html_template())
@@ -132,6 +129,7 @@ class SprintersOpenWebPilotTab(QWidget):
 <html>
   <head>
     <meta charset="utf-8"/>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <style>
       body { font-family: Segoe UI, Arial, sans-serif; margin: 12px; background:#f5f6f8; }
       .meta { margin: 0 0 10px 0; color:#44536b; font-size:12px; }
@@ -155,12 +153,13 @@ class SprintersOpenWebPilotTab(QWidget):
       <input id="f_asset" placeholder="Filter asset_rollup" />
       <input id="f_broker" placeholder="Filter broker" />
       <button id="btn_clear_filters">Wis filters</button>
+      <button id="btn_export_snapshot">Export snapshot</button>
     </div>
     <div class="table-wrap">
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <script>
-      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""} };
+      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, bridge:null };
       function fmt(v){ if(v===null||v===undefined) return ""; if(typeof v==="number") return Number.isFinite(v)?v.toFixed(2):""; return String(v); }
       function isNum(v){ return typeof v==="number" && Number.isFinite(v); }
       function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); return dir==="asc"?c:-c; }
@@ -169,12 +168,33 @@ class SprintersOpenWebPilotTab(QWidget):
       function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} renderHeader(); renderBody(); }; tr.appendChild(th); }); }
       function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} }
       function bindFilters(){ const map=[["f_global","global"],["f_asset","asset_rollup"],["f_broker","broker"]]; for(const [id,key] of map){ const el=document.getElementById(id); if(!el) continue; el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();}); } const clear=document.getElementById("btn_clear_filters"); if(clear){ clear.addEventListener("click",()=>{ for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; } renderBody();});}}
+      function bindActions(){
+        const btn=document.getElementById("btn_export_snapshot");
+        if(btn && state.bridge && state.bridge.exportSnapshot){
+          btn.addEventListener("click",()=>state.bridge.exportSnapshot());
+        }
+      }
       window.renderMeta = function(meta){ const el=document.getElementById("meta"); if(!el||!meta) return; const v=meta.version??"-"; const r=meta.rows??0; const c=meta.changes??0; const u=meta.updated_at??"-"; const reason=meta.reason??"-"; const m=meta.metrics||{}; const ml=m.last||{}; const ms=m.summary||{}; const txt=`Sprinters Projection v${v} | rows:${r} | changes:${c} | updated:${u} | reason:${reason} | perf rec:${Number(ml.recompute_ms??0).toFixed(1)}ms pub:${Number(ml.publish_ms??0).toFixed(1)}ms tot:${Number(ml.total_ms??0).toFixed(1)}ms p95:${Number(ms.total_ms_p95??0).toFixed(1)}ms`; el.textContent=txt; };
       window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; renderHeader(); renderBody(); return; } const colSet=new Set(); for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); Object.keys(row).forEach(k=>colSet.add(k)); } state.cols=Array.from(colSet); if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; state.hasSnapshot=true; renderHeader(); renderBody(); };
       window.applyPatch = function(payload){ if(!state.hasSnapshot) return; const changes=(payload&&payload.changes)?payload.changes:[]; for(const ch of changes){ if(!ch||!ch.row_id) continue; const rid=String(ch.row_id); if(ch.field==="__deleted__"){ state.rows.delete(rid); continue; } const row=state.rows.get(rid); if(!row) continue; row[ch.field]=ch.value; } renderBody(); };
+      if (window.qt && window.QWebChannel) {
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+          state.bridge = channel.objects.sprintersBridge || null;
+          bindActions();
+        });
+      }
       bindFilters();
     </script>
   </body>
 </html>
 """
 
+
+class _SprintersOpenWebBridge(QObject):
+    def __init__(self, tab: SprintersOpenWebPilotTab):
+        super().__init__(tab)
+        self._tab = tab
+
+    @Slot()
+    def exportSnapshot(self) -> None:
+        self._tab._export_snapshot()
