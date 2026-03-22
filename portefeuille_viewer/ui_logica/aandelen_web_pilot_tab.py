@@ -7,10 +7,8 @@ from decimal import Decimal
 from PySide6.QtCore import QObject, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
-    QHBoxLayout,
     QLabel,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -42,21 +40,6 @@ class AandelenWebPilotTab(QWidget):
         self._pending_js_calls: list[tuple[str, object]] = []
         self.selected_brokers: set[str] | None = None
         layout = QVBoxLayout(self)
-        toolbar = QHBoxLayout()
-        self.btn_select_brokers = QPushButton("Selecteer brokers (ALL)")
-        self.btn_select_brokers.clicked.connect(self._open_broker_popup)
-        self.btn_clear_brokers = QPushButton("Wis brokers")
-        self.btn_clear_brokers.clicked.connect(self._clear_backend_broker_filter)
-        toolbar.addWidget(self.btn_select_brokers)
-        toolbar.addWidget(self.btn_clear_brokers)
-        self.btn_reset_widths = QPushButton("Reset kolombreedtes")
-        self.btn_reset_widths.clicked.connect(self._reset_column_widths)
-        toolbar.addWidget(self.btn_reset_widths)
-        toolbar.addStretch(1)
-        self.btn_export = QPushButton("Export snapshot")
-        self.btn_export.clicked.connect(self._export_snapshot)
-        toolbar.addWidget(self.btn_export)
-        layout.addLayout(toolbar)
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
             return
@@ -120,7 +103,6 @@ class AandelenWebPilotTab(QWidget):
         if isinstance(selected, list):
             normalized = {str(x).strip().lower() for x in selected if str(x).strip()}
             self.selected_brokers = normalized if normalized else None
-            self._update_broker_button_text()
         self._call_js("renderMeta", meta)
 
     def _call_js(self, func_name: str, payload: object):
@@ -172,24 +154,16 @@ class AandelenWebPilotTab(QWidget):
     def _set_broker_selection(self, selected: set):
         normalized = {str(x).strip().lower() for x in selected if str(x).strip()}
         self.selected_brokers = normalized if normalized else None
-        self._update_broker_button_text()
         signals.queued_emit_aandelenProjectionFilterChanged(
             {"selected_brokers": sorted(self.selected_brokers) if self.selected_brokers else []}
         )
 
     def _clear_backend_broker_filter(self):
         self.selected_brokers = None
-        self._update_broker_button_text()
         signals.queued_emit_aandelenProjectionFilterChanged({"selected_brokers": []})
 
     def _reset_column_widths(self):
         self._call_js("resetColumnWidths", {})
-
-    def _update_broker_button_text(self):
-        if not self.selected_brokers:
-            self.btn_select_brokers.setText("Selecteer brokers (ALL)")
-            return
-        self.btn_select_brokers.setText(f"Selecteer brokers ({len(self.selected_brokers)})")
 
     def _publish_saved_column_widths(self):
         widths = {}
@@ -356,6 +330,8 @@ class AandelenWebPilotTab(QWidget):
   <body>
     <div class="meta" id="meta">Projection v- | rows: 0 | changes: 0</div>
     <div class="filters">
+      <button id="btn_select_brokers">Selecteer brokers</button>
+      <button id="btn_clear_brokers">Wis brokers</button>
       <input id="f_global" placeholder="Zoek alle kolommen..." />
       <input id="f_asset" placeholder="Filter asset_rollup" />
       <select id="f_regio">
@@ -368,6 +344,7 @@ class AandelenWebPilotTab(QWidget):
         <option value="__ALL__">Alle assets</option>
       </select>
       <button id="btn_clear_filters">Wis filters</button>
+      <button id="btn_export_snapshot">Export snapshot</button>
     </div>
     <div class="table-wrap">
       <table id="tbl">
@@ -867,6 +844,30 @@ class AandelenWebPilotTab(QWidget):
             renderBody();
           });
         }
+        const btnSelectBrokers = document.getElementById("btn_select_brokers");
+        if (btnSelectBrokers) {
+          btnSelectBrokers.addEventListener("click", () => {
+            if (state.bridge && state.bridge.selectBrokers) {
+              try { state.bridge.selectBrokers(); } catch (_) {}
+            }
+          });
+        }
+        const btnClearBrokers = document.getElementById("btn_clear_brokers");
+        if (btnClearBrokers) {
+          btnClearBrokers.addEventListener("click", () => {
+            if (state.bridge && state.bridge.clearBrokers) {
+              try { state.bridge.clearBrokers(); } catch (_) {}
+            }
+          });
+        }
+        const btnExport = document.getElementById("btn_export_snapshot");
+        if (btnExport) {
+          btnExport.addEventListener("click", () => {
+            if (state.bridge && state.bridge.exportSnapshot) {
+              try { state.bridge.exportSnapshot(); } catch (_) {}
+            }
+          });
+        }
       }
 
       window.renderMeta = function(meta) {
@@ -1043,3 +1044,15 @@ class _AandelenWebBridge(QObject):
     @Slot(str)
     def saveColumnWidths(self, payload_json: str) -> None:
         self._tab._save_column_widths(payload_json)
+
+    @Slot()
+    def selectBrokers(self) -> None:
+        self._tab._open_broker_popup()
+
+    @Slot()
+    def clearBrokers(self) -> None:
+        self._tab._clear_backend_broker_filter()
+
+    @Slot()
+    def exportSnapshot(self) -> None:
+        self._tab._export_snapshot()
