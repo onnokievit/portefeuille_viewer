@@ -53,11 +53,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.aandelen_web_pilot_tab = AandelenWebPilotTab()
                 self.tabWidget.addTab(self.aandelen_web_pilot_tab, "Aandelen (Web Pilot)")
 
-        self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
-        self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
-        if os.getenv("UI_OPTIES_WEB_V1", "0").strip() == "1":
-            self.opties_open_web_pilot_tab = OptiesOpenWebPilotTab()
-            self.tabWidget.addTab(self.opties_open_web_pilot_tab, "Open Opties (Web Pilot)")
+        use_opties_web_v1 = os.getenv("UI_OPTIES_WEB_V1", "0").strip() == "1"
+        promote_opties_web_v1 = os.getenv("UI_OPTIES_PROMOTED_V1", "1").strip() == "1"
+        if use_opties_web_v1 and promote_opties_web_v1:
+            self.opties_open_tab = OptiesOpenWebPilotTab()
+            self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+        else:
+            self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
+            self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+            if use_opties_web_v1:
+                self.opties_open_web_pilot_tab = OptiesOpenWebPilotTab()
+                self.tabWidget.addTab(self.opties_open_web_pilot_tab, "Open Opties (Web Pilot)")
         self.optie_tijdswaarde_tab = OptieTijdswaardeTab()
         self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
         if os.getenv("UI_OPTIE_TIJDSWAARDE_WEB_V1", "0").strip() == "1":
