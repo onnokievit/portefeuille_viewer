@@ -41,11 +41,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
-        self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
-        self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
-        if os.getenv("PV_UI_AANDELEN_WEB_V1", "0").strip() == "1":
-            self.aandelen_web_pilot_tab = AandelenWebPilotTab()
-            self.tabWidget.addTab(self.aandelen_web_pilot_tab, "Aandelen (Web Pilot)")
+        use_aandelen_web_v1 = os.getenv("PV_UI_AANDELEN_WEB_V1", "0").strip() == "1"
+        promote_aandelen_web_v1 = os.getenv("UI_AANDELEN_PROMOTED_V1", "1").strip() == "1"
+        if use_aandelen_web_v1 and promote_aandelen_web_v1:
+            self.aandelen_tab = AandelenWebPilotTab()
+            self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+        else:
+            self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
+            self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
+            if use_aandelen_web_v1:
+                self.aandelen_web_pilot_tab = AandelenWebPilotTab()
+                self.tabWidget.addTab(self.aandelen_web_pilot_tab, "Aandelen (Web Pilot)")
 
         self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
         self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")

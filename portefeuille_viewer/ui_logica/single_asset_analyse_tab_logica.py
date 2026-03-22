@@ -1,5 +1,6 @@
 import contextlib
 import math
+import os
 import re
 from datetime import datetime
 import polars as pl
@@ -314,6 +315,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._state_engine_controls_bound = False
         self._allow_inactive_asset_in_selector = False
         self._state_engine_button_base_text = "Run State Engine"
+        self._use_projection_v2_for_summary = (
+            os.getenv("UI_SINGLE_ASSET_FROM_PROJECTION_V2", "1").strip() == "1"
+        )
 
         # init flags op basis van de checkboxen
         self.show_all_test_orders = not self.checkBoxAssetOrdersOnly.isChecked()
@@ -1287,7 +1291,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not sort_key or sort_key.lower() in {"alfabetisch", "alphabetisch"}:
             return sorted(assets, reverse=desc)
 
-        df_sum = build_aandelen_tab_summary()
+        df_sum = self._get_summary_source_df()
         if df_sum is None or df_sum.is_empty() or sort_key not in df_sum.columns:
             return sorted(assets, reverse=desc)
 
@@ -1674,11 +1678,35 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             and self._live_summary_row is not None
         ):
             return self._live_summary_row
-        df_sum = build_aandelen_tab_summary(asset_rollup=asset)
-        row = df_sum.row(0, named=True) if df_sum is not None and not df_sum.is_empty() else None
+        row = self._get_summary_row_for_asset(asset)
         self._live_summary_asset = asset
         self._live_summary_row = row
         return row
+
+    def _get_summary_source_df(self):
+        if self._use_projection_v2_for_summary:
+            df_proj = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+            if isinstance(df_proj, pl.DataFrame) and not df_proj.is_empty():
+                return df_proj
+        return build_aandelen_tab_summary()
+
+    def _get_summary_row_for_asset(self, asset: str):
+        if not asset:
+            return None
+        if self._use_projection_v2_for_summary:
+            df_proj = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+            if (
+                isinstance(df_proj, pl.DataFrame)
+                and not df_proj.is_empty()
+                and "asset_rollup" in df_proj.columns
+            ):
+                row_df = df_proj.filter(pl.col("asset_rollup") == asset)
+                if not row_df.is_empty():
+                    return row_df.row(0, named=True)
+        df_sum = build_aandelen_tab_summary(asset_rollup=asset)
+        if df_sum is None or df_sum.is_empty():
+            return None
+        return df_sum.row(0, named=True)
 
     @staticmethod
     def _as_finite_float(value):
