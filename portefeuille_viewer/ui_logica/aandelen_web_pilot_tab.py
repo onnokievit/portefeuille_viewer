@@ -271,7 +271,9 @@ class AandelenWebPilotTab(QWidget):
         cursor:pointer;
       }
       .table-shell { border:1px solid #d8dde6; border-radius:8px; background:#fff; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-      .table-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; }
+      .table-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:auto; }
+      .table-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+      .table-scroll::-webkit-scrollbar { width:0px; height:0px; }
       .footer-wrap { flex:0 0 auto; overflow-x:auto; overflow-y:hidden; border-top:1px solid #c8d2df; padding-right:0; }
       table { width:max-content; min-width:0; border-collapse:collapse; font-size:12px; table-layout: fixed; }
       col { width: 110px; }
@@ -313,6 +315,13 @@ class AandelenWebPilotTab(QWidget):
         background:#e6ebf2;
         padding:5px 8px;
         font-weight:700;
+      }
+      tfoot td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        background:#e6ebf2;
+        box-shadow: 1px 0 0 #c8d2df;
       }
       tfoot td.num { text-align:right; }
       th .resize-handle {
@@ -449,6 +458,13 @@ class AandelenWebPilotTab(QWidget):
         "optie_tijdswaarde_signed_eur",
         "koers_prev",
         "koers"
+      ]);
+      const FOOTER_BLANK_COLS = new Set([
+        "koers_prev",
+        "koers",
+        "pct_change",
+        "eq_aantal_bezit",
+        "open_sp_aantal"
       ]);
 
       function fmtNlNumber(v, decimals) {
@@ -773,7 +789,9 @@ class AandelenWebPilotTab(QWidget):
           td.style.minWidth = `${cw}px`;
           td.style.maxWidth = `${cw}px`;
           if (col === "asset_rollup") {
-            td.textContent = `TOTAAL (${rows.length})`;
+            td.textContent = `total: ${rows.length}`;
+          } else if (FOOTER_BLANK_COLS.has(col)) {
+            td.textContent = "";
           } else {
             let sum = 0;
             let hasNum = false;
@@ -1066,6 +1084,15 @@ class AandelenWebPilotTab(QWidget):
           body.scrollLeft = foot.scrollLeft;
           lock = false;
         });
+        body.addEventListener("wheel", (ev) => {
+          const dx = (Math.abs(Number(ev.deltaX || 0)) > 0)
+            ? Number(ev.deltaX || 0)
+            : (ev.shiftKey ? Number(ev.deltaY || 0) : 0);
+          if (!dx) return;
+          ev.preventDefault();
+          foot.scrollLeft += dx;
+          body.scrollLeft = foot.scrollLeft;
+        }, { passive: false });
         window.addEventListener("resize", syncFooterCompensation);
         syncFooterCompensation();
       })();
