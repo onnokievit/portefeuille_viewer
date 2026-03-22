@@ -80,6 +80,12 @@ ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE = (
     and os.getenv("ENGINE_CORE_RUNTIME_EXCLUSIVE_V1", "0").strip() == "1"
 )
 ENGINE_CORE_LOG_TOPICS = os.getenv("ENGINE_CORE_LOG_TOPICS", "0").strip() == "1"
+PROJECTION_METRICS_LOG_CONSOLE = (
+    os.getenv("PROJECTION_METRICS_LOG_CONSOLE", "0").strip() == "1"
+)
+PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC = (
+    os.getenv("PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC", "0").strip() == "1"
+)
 
 
 def _engine_core_logger(message: str) -> None:
@@ -342,11 +348,16 @@ def _publish_aandelen_projection_result(result: dict):
             "summary": metrics_payload["summary"],
         }
         SNAPSHOT_STORE.safe_write("snapshot_aandelen_projection_v2_meta", meta)
-        print(
-            f"[projection-v2-metrics] reason={sample['reason']} queue_wait_ms={sample['queue_wait_ms']:.1f} "
-            f"recompute_ms={sample['recompute_ms']:.1f} publish_ms={publish_ms:.1f} "
-            f"total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']} inflight={sample['inflight']}"
-        )
+        reason_text = str(sample.get("reason", ""))
+        is_timevalue_topic = reason_text == "snapshot:snapshot_optie_timevalue_live"
+        if PROJECTION_METRICS_LOG_CONSOLE and (
+            PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC or not is_timevalue_topic
+        ):
+            print(
+                f"[projection-v2-metrics] reason={sample['reason']} queue_wait_ms={sample['queue_wait_ms']:.1f} "
+                f"recompute_ms={sample['recompute_ms']:.1f} publish_ms={publish_ms:.1f} "
+                f"total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']} inflight={sample['inflight']}"
+            )
     except Exception as exc:
         print(f"[projection-v2] aandelen refresh failed: {exc}")
 
@@ -457,10 +468,11 @@ def refresh_opties_open_projection(reason: str):
         meta["reason"] = reason
         meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
         SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_meta", meta)
-        print(
-            f"[opties-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-            f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-        )
+        if PROJECTION_METRICS_LOG_CONSOLE:
+            print(
+                f"[opties-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
+                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
+            )
     except Exception as exc:
         print(f"[opties-projection-v2] refresh failed: {exc}")
 
@@ -499,10 +511,11 @@ def refresh_optie_tijdswaarde_projection(reason: str):
         meta["reason"] = reason
         meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
         SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_meta", meta)
-        print(
-            f"[optie-tijdswaarde-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-            f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-        )
+        if PROJECTION_METRICS_LOG_CONSOLE:
+            print(
+                f"[optie-tijdswaarde-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
+                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
+            )
     except Exception as exc:
         print(f"[optie-tijdswaarde-projection-v2] refresh failed: {exc}")
 
@@ -541,10 +554,11 @@ def refresh_sprinters_open_projection(reason: str):
         meta["reason"] = reason
         meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
         SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_meta", meta)
-        print(
-            f"[sprinters-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-            f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-        )
+        if PROJECTION_METRICS_LOG_CONSOLE:
+            print(
+                f"[sprinters-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
+                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
+            )
     except Exception as exc:
         print(f"[sprinters-projection-v2] refresh failed: {exc}")
 

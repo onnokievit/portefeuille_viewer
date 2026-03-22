@@ -21,8 +21,21 @@ class AandelenProjectionV2:
 
     name = "aandelen_v2"
     depends_on = {
-        "repository_snapshot_historical_close",
+        # Live aggregators used in build_aandelen_tab_summary
+        "aggregator_snapshot_aandelen_live",
+        "aggregator_snapshot_load_open_opties_from_tx_live",
+        "aggregator_snapshot_open_sprinters_live",
+        # Repository snapshots used by static summary and fallbacks
+        "repository_snapshot_gesloten_opties",
+        "repository_snapshot_gesloten_sprinters_no_asset_detail",
+        "repository_portfolio_dividend",
+        "repository_snapshot_active_asset_rollup_data",
+        "repository_snapshot_portfolio_value_total_combined_put",
         "repository_snapshot_per_dag_asset_result_v2",
+        "repository_snapshot_historical_close",
+        "repository_snapshot_asset_rollup_data",
+        # Overlay source
+        "snapshot_optie_timevalue_live",
     }
 
     def __init__(self):
@@ -50,12 +63,22 @@ class AandelenProjectionV2:
             selected_brokers = set(self._selected_brokers) if self._selected_brokers else None
             broker_only = bool(self._pending_broker_only_recompute)
             self._pending_broker_only_recompute = False
-        overlay_only = "__TIMEVALUE_OVERLAY__" in (changed_keys or set())
-        incremental = bool(changed_keys)
-        if (broker_only or overlay_only) and self._broker_cache:
+        changed_raw = {str(k).strip().upper() for k in (changed_keys or set()) if str(k).strip()}
+        overlay_only = "__TIMEVALUE_OVERLAY__" in changed_raw
+        technical_keys = self._has_technical_keys(changed_raw)
+        changed_assets = self._normalize_changed_assets(changed_raw)
+        incremental = bool(changed_assets)
+
+        # Snapshot/topic-driven updates (AGGREGATOR_*/SNAPSHOT_*/REPOSITORY_*)
+        # must refresh from source and rebuild broker cache, otherwise overlay-only
+        # recomputes may keep stale open_sp_* values.
+        if technical_keys:
+            df_new = build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            self._rebuild_broker_cache(df_new)
+        elif (broker_only or overlay_only) and self._broker_cache:
             df_new = self._recompute_from_broker_cache(selected_brokers)
         elif incremental:
-            df_new = self._recompute_incremental(changed_keys, selected_brokers)
+            df_new = self._recompute_incremental(changed_assets, selected_brokers)
         else:
             df_new = build_aandelen_tab_summary(selected_brokers=selected_brokers)
             self._rebuild_broker_cache(df_new)
@@ -75,8 +98,7 @@ class AandelenProjectionV2:
             self._updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._diag = diag
 
-    def _recompute_incremental(self, changed_keys: set[str], selected_brokers: set[str] | None) -> pl.DataFrame:
-        changed = {str(k).strip().upper() for k in (changed_keys or set()) if str(k).strip()}
+    def _recompute_incremental(self, changed: set[str], selected_brokers: set[str] | None) -> pl.DataFrame:
         if not changed:
             return build_aandelen_tab_summary(selected_brokers=selected_brokers)
 
@@ -98,6 +120,45 @@ class AandelenProjectionV2:
         if not frames:
             return build_aandelen_tab_summary(selected_brokers=selected_brokers)
         return pl.concat(frames, how="diagonal_relaxed").unique(subset=["asset_rollup"], keep="last")
+
+    @staticmethod
+    def _normalize_changed_assets(changed_keys: set[str]) -> set[str]:
+        if not changed_keys:
+            return set()
+        out: set[str] = set()
+        for key in changed_keys:
+            k = str(key or "").strip().upper()
+            if not k:
+                continue
+            if k.startswith("__"):
+                continue
+            if (
+                k.startswith("SNAPSHOT_")
+                or k.startswith("AGGREGATOR_")
+                or k.startswith("REPOSITORY_")
+            ):
+                continue
+            # Row ids / composite keys are not valid asset_rollup values.
+            if "|" in k or "/" in k:
+                continue
+            out.add(k)
+        return out
+
+    @staticmethod
+    def _has_technical_keys(changed_keys: set[str]) -> bool:
+        if not changed_keys:
+            return False
+        for key in changed_keys:
+            k = str(key or "").strip().upper()
+            if not k:
+                continue
+            if (
+                k.startswith("SNAPSHOT_")
+                or k.startswith("AGGREGATOR_")
+                or k.startswith("REPOSITORY_")
+            ):
+                return True
+        return False
 
     def snapshot(self) -> pl.DataFrame:
         with self._lock:
