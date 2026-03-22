@@ -56,7 +56,7 @@ print("✅ Repository geladen uit:", repository.__file__)
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
 live_aggregator_opties = LiveAggregatorOpties()
-ENABLE_AANDELEN_PROJECTION_V2 = os.getenv("USE_AANDELEN_PROJECTION_V2", "0").strip() == "1"
+ENABLE_AANDELEN_PROJECTION_V2 = os.getenv("USE_AANDELEN_PROJECTION_V2", "1").strip() == "1"
 aandelen_projection_v2 = AandelenProjectionV2() if ENABLE_AANDELEN_PROJECTION_V2 else None
 ENABLE_OPTIES_OPEN_PROJECTION_V2 = os.getenv("USE_OPTIES_OPEN_PROJECTION_V2", "1").strip() == "1"
 opties_open_projection_v2 = OptiesOpenProjectionV2() if ENABLE_OPTIES_OPEN_PROJECTION_V2 else None
@@ -79,7 +79,20 @@ ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE = (
     ENABLE_ENGINE_CORE_RUNTIME
     and os.getenv("ENGINE_CORE_RUNTIME_EXCLUSIVE_V1", "0").strip() == "1"
 )
-engine_core_runtime = EngineCoreRuntime(enabled=ENABLE_ENGINE_CORE_RUNTIME)
+ENGINE_CORE_LOG_TOPICS = os.getenv("ENGINE_CORE_LOG_TOPICS", "0").strip() == "1"
+
+
+def _engine_core_logger(message: str) -> None:
+    msg = str(message or "")
+    if "[engine-core] topic=" in msg and not ENGINE_CORE_LOG_TOPICS:
+        return
+    print(msg)
+
+
+engine_core_runtime = EngineCoreRuntime(
+    enabled=ENABLE_ENGINE_CORE_RUNTIME,
+    logger=_engine_core_logger,
+)
 for _projection in (
     aandelen_projection_v2,
     opties_open_projection_v2,

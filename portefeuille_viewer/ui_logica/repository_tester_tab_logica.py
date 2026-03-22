@@ -1,4 +1,4 @@
-
+import json
 from PySide6.QtWidgets import QWidget, QHeaderView, QMessageBox, QFileDialog
 from PySide6.QtCore import Slot, QSortFilterProxyModel, Qt
 from portefeuille_viewer.ui.repository_tester_ui import Ui_Form
@@ -77,6 +77,14 @@ class RepositoryTesterTab(QWidget):
         self._set_table_model(df)
 
     def _display_snapshot_key(self, key):
+        def _to_cell(v):
+            if v is None or isinstance(v, (str, int, float, bool)):
+                return v
+            try:
+                return json.dumps(v, ensure_ascii=False, default=str)
+            except Exception:
+                return str(v)
+
         data = getattr(SNAPSHOT_STORE, key, None)
         self.current_snapshot_key = key
         # Lege DataFrame als data None is
@@ -97,13 +105,13 @@ class RepositoryTesterTab(QWidget):
             for k, v in zip(keys, data.values()):
                 # Vul aan met None als de tuple korter is
                 k_full = k + (None,) * (max_len - len(k))
-                row = dict(zip(colnames, k_full))
-                row["value"] = v
+                row = dict(zip(colnames, [_to_cell(x) for x in k_full]))
+                row["value"] = _to_cell(v)
                 rows.append(row)
             df = pl.DataFrame(rows)
         # Dict met niet-tuple keys
         elif isinstance(data, dict):
-            df = pl.DataFrame([{"key": k, "value": v} for k, v in data.items()])
+            df = pl.DataFrame([{"key": _to_cell(k), "value": _to_cell(v)} for k, v in data.items()])
         # Al een DataFrame
         elif isinstance(data, pl.DataFrame):
             df = data

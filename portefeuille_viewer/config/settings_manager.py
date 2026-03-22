@@ -3,6 +3,7 @@
 Centraal beheer voor alle applicatie settings via settings.ini.
 """
 import configparser
+import json
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -218,6 +219,44 @@ class SettingsManager:
         if not self.config.has_section('ui'):
             self.config.add_section('ui')
         self.config.set('ui', 'tab_hover_bg', color)
+        self.save()
+
+    def get_aandelen_web_col_widths(self) -> Dict[str, int]:
+        raw = self.config.get('ui', 'aandelen_web_col_widths', fallback='{}')
+        try:
+            obj = json.loads(raw)
+            if not isinstance(obj, dict):
+                return {}
+            out: Dict[str, int] = {}
+            for k, v in obj.items():
+                key = str(k).strip()
+                if not key:
+                    continue
+                try:
+                    iv = int(v)
+                except Exception:
+                    continue
+                if iv > 0:
+                    out[key] = iv
+            return out
+        except Exception:
+            return {}
+
+    def set_aandelen_web_col_widths(self, widths: Dict[str, int]):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean: Dict[str, int] = {}
+        for k, v in (widths or {}).items():
+            key = str(k).strip()
+            if not key:
+                continue
+            try:
+                iv = int(v)
+            except Exception:
+                continue
+            if iv > 0:
+                clean[key] = iv
+        self.config.set('ui', 'aandelen_web_col_widths', json.dumps(clean, ensure_ascii=False))
         self.save()
 
     

@@ -756,21 +756,27 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     if col in df.columns:
                         df = df.drop(col)
 
-            # Voeg koers_prev toe vanuit per_dag_asset_result + pct_change_prev (Koers vs koers_prev)
+            # Voeg koers_prev toe vanuit v2-compatibele bron (historical_close snapshot)
             try:
-                df_asset_result = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
-                if df_asset_result is not None and not df_asset_result.is_empty():
+                df_hc = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+                if df_hc is not None and not df_hc.is_empty():
                     today = date.today()
-                    df_asset_result = df_asset_result.filter(pl.col("datum") < today)
-                    if "datum" in df_asset_result.columns and df_asset_result["datum"].dtype == pl.String:
-                        df_asset_result = df_asset_result.with_columns(
-                            pl.col("datum").str.strptime(pl.Date, "%d/%m/%Y", strict=False)
+                    if "datum" in df_hc.columns:
+                        df_hc = df_hc.with_columns(
+                            pl.coalesce(
+                                [
+                                    pl.col("datum").cast(pl.Date, strict=False),
+                                    pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                                    pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+                                ]
+                            ).alias("datum")
                         )
+                    df_hc = df_hc.filter(pl.col("datum") < today)
                     df_latest = (
-                        df_asset_result
+                        df_hc
                         .sort(["asset_rollup", "datum"])
                         .group_by("asset_rollup")
-                        .agg([pl.col("close_price").last().alias("koers_prev")])
+                        .agg([pl.col("close_price").drop_nulls().last().alias("koers_prev")])
                     )
                     df = df.join(df_latest, on="asset_rollup", how="left")
                 else:
