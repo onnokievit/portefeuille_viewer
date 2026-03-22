@@ -4,6 +4,7 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 
+from PySide6.QtCore import QObject, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -63,6 +64,8 @@ class AandelenWebPilotTab(QWidget):
         layout.addWidget(self.web)
         if QWebChannel is not None:
             self.channel = QWebChannel(self.web.page())
+            self.bridge = _AandelenWebBridge(self)
+            self.channel.registerObject("aandelenBridge", self.bridge)
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_web_loaded)
         self.web.setHtml(self._html_template())
@@ -81,6 +84,7 @@ class AandelenWebPilotTab(QWidget):
         for func_name, payload in self._pending_js_calls:
             self._run_js(func_name, payload)
         self._pending_js_calls.clear()
+        self._publish_saved_column_widths()
         self._publish_full_snapshot()
         self._publish_meta()
 
@@ -187,6 +191,37 @@ class AandelenWebPilotTab(QWidget):
             return
         self.btn_select_brokers.setText(f"Selecteer brokers ({len(self.selected_brokers)})")
 
+    def _publish_saved_column_widths(self):
+        widths = {}
+        try:
+            widths = get_settings().get_aandelen_web_col_widths() or {}
+        except Exception:
+            widths = {}
+        self._call_js("applySavedColumnWidths", {"widths": widths})
+
+    def _save_column_widths(self, payload_json: str):
+        try:
+            raw = json.loads(payload_json or "{}")
+        except Exception:
+            raw = {}
+        if not isinstance(raw, dict):
+            raw = {}
+        clean: dict[str, int] = {}
+        for k, v in raw.items():
+            key = str(k).strip()
+            if not key:
+                continue
+            try:
+                iv = int(v)
+            except Exception:
+                continue
+            if iv > 0:
+                clean[key] = iv
+        try:
+            get_settings().set_aandelen_web_col_widths(clean)
+        except Exception as exc:
+            print(f"[aandelen-web] save column widths failed: {exc}")
+
     def _export_snapshot(self):
         df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
@@ -226,6 +261,7 @@ class AandelenWebPilotTab(QWidget):
 <html>
   <head>
     <meta charset="utf-8"/>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <style>
       body { font-family: Segoe UI, Arial, sans-serif; margin: 12px; background:#f5f6f8; }
       .meta { margin: 0 0 10px 0; color:#44536b; font-size:12px; }
@@ -259,7 +295,7 @@ class AandelenWebPilotTab(QWidget):
         cursor:pointer;
       }
       .table-wrap { border:1px solid #d8dde6; border-radius:8px; overflow:auto; background:#fff; max-height:78vh; }
-      table { width:100%; border-collapse:collapse; font-size:12px; table-layout: fixed; }
+      table { width:max-content; min-width:0; border-collapse:collapse; font-size:12px; table-layout: fixed; }
       col { width: 110px; }
       thead th {
         position: sticky; top: 0; z-index: 2;
@@ -267,6 +303,8 @@ class AandelenWebPilotTab(QWidget):
         border-bottom:1px solid #d8dde6;
         padding:6px 8px; text-align:left; cursor:pointer; white-space:nowrap;
         user-select: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       thead th:first-child {
         left: 0;
@@ -365,7 +403,6 @@ class AandelenWebPilotTab(QWidget):
         "portfolio_total_waarde_delta_pct",
         "optie_tijdswaarde_signed_eur"
       ];
-      const WIDTH_KEY = "pv_aandelen_web_colwidths_v1";
       const LEGACY_COL_WIDTHS = {
         asset_rollup: 170,
         koers_prev: 90,
@@ -397,6 +434,7 @@ class AandelenWebPilotTab(QWidget):
         sortCol: "asset_rollup",
         sortDir: "asc",
         colWidths: {},
+        savedWidths: {},
         hasSnapshot: false,
         filters: {
           global: "",
@@ -465,21 +503,13 @@ class AandelenWebPilotTab(QWidget):
         return left.concat(rest);
       }
 
-      function loadColWidths() {
-        try {
-          const raw = localStorage.getItem(WIDTH_KEY);
-          if (!raw) return {};
-          const parsed = JSON.parse(raw);
-          return parsed && typeof parsed === "object" ? parsed : {};
-        } catch (_) {
-          return {};
-        }
-      }
-
       function saveColWidths() {
-        try {
-          localStorage.setItem(WIDTH_KEY, JSON.stringify(state.colWidths || {}));
-        } catch (_) {}
+        state.savedWidths = Object.assign({}, state.colWidths || {});
+        if (state.bridge && state.bridge.saveColumnWidths) {
+          try {
+            state.bridge.saveColumnWidths(JSON.stringify(state.colWidths || {}));
+          } catch (_) {}
+        }
       }
 
       function defaultColWidth(col) {
@@ -494,7 +524,7 @@ class AandelenWebPilotTab(QWidget):
 
       function colWidth(col) {
         const w = Number(state.colWidths[col]);
-        if (Number.isFinite(w) && w >= 70) return w;
+        if (Number.isFinite(w) && w >= 28) return w;
         return defaultColWidth(col);
       }
 
@@ -553,7 +583,10 @@ class AandelenWebPilotTab(QWidget):
         state.cols.forEach((col, idx) => {
           const th = document.createElement("th");
           th.style.position = "sticky";
-          th.style.width = `${colWidth(col)}px`;
+          const cw = colWidth(col);
+          th.style.width = `${cw}px`;
+          th.style.minWidth = `${cw}px`;
+          th.style.maxWidth = `${cw}px`;
           th.textContent = col;
           if (col === state.sortCol) th.className = state.sortDir === "asc" ? "sorted-asc" : "sorted-desc";
           th.onclick = () => {
@@ -582,12 +615,31 @@ class AandelenWebPilotTab(QWidget):
         const startW = colWidth(col);
         const onMove = (mv) => {
           const delta = mv.clientX - startX;
-          const w = Math.max(70, startW + delta);
+          const w = Math.max(28, startW + delta);
           state.colWidths[col] = w;
           const cg = document.getElementById("colgroup");
           if (cg && cg.children[idx]) cg.children[idx].style.width = `${w}px`;
           const th = document.getElementById("thead-row")?.children?.[idx];
-          if (th) th.style.width = `${w}px`;
+          if (th) {
+            th.style.width = `${w}px`;
+            th.style.minWidth = `${w}px`;
+            th.style.maxWidth = `${w}px`;
+          }
+          const trf = document.getElementById("tfoot-row");
+          const tf = trf?.children?.[idx];
+          if (tf) {
+            tf.style.width = `${w}px`;
+            tf.style.minWidth = `${w}px`;
+            tf.style.maxWidth = `${w}px`;
+          }
+          const rows = document.querySelectorAll("#tbody tr");
+          for (const row of rows) {
+            const td = row.children?.[idx];
+            if (!td) continue;
+            td.style.width = `${w}px`;
+            td.style.minWidth = `${w}px`;
+            td.style.maxWidth = `${w}px`;
+          }
         };
         const onUp = () => {
           saveColWidths();
@@ -609,6 +661,10 @@ class AandelenWebPilotTab(QWidget):
           for (const col of state.cols) {
             const td = document.createElement("td");
             td.id = "c_" + rowId(row.asset_rollup) + "_" + col;
+            const cw = colWidth(col);
+            td.style.width = `${cw}px`;
+            td.style.minWidth = `${cw}px`;
+            td.style.maxWidth = `${cw}px`;
             const v = row[col];
             td.textContent = fmtCell(col, v);
             if (isNum(v)) td.classList.add("num");
@@ -719,6 +775,10 @@ class AandelenWebPilotTab(QWidget):
         tr.innerHTML = "";
         for (const col of state.cols) {
           const td = document.createElement("td");
+          const cw = colWidth(col);
+          td.style.width = `${cw}px`;
+          td.style.minWidth = `${cw}px`;
+          td.style.maxWidth = `${cw}px`;
           if (col === "asset_rollup") {
             td.textContent = `TOTAAL (${rows.length})`;
           } else {
@@ -860,11 +920,19 @@ class AandelenWebPilotTab(QWidget):
           Object.keys(row).forEach(k => colSet.add(k));
         }
         state.cols = orderedCols(Array.from(colSet));
-        state.colWidths = loadColWidths();
+        if (state.savedWidths && Object.keys(state.savedWidths).length > 0) {
+          state.colWidths = Object.assign({}, state.savedWidths);
+        }
         if (!state.colWidths || Object.keys(state.colWidths).length === 0) {
           const seeded = {};
           for (const c of state.cols) seeded[c] = defaultColWidth(c);
           state.colWidths = seeded;
+        } else {
+          for (const c of state.cols) {
+            if (!Object.prototype.hasOwnProperty.call(state.colWidths, c)) {
+              state.colWidths[c] = defaultColWidth(c);
+            }
+          }
         }
         if (!state.cols.includes(state.sortCol)) state.sortCol = "asset_rollup";
         state.hasSnapshot = true;
@@ -926,18 +994,52 @@ class AandelenWebPilotTab(QWidget):
 
       window.resetColumnWidths = function(_) {
         state.colWidths = {};
-        try { localStorage.removeItem(WIDTH_KEY); } catch (_) {}
         if (state.hasSnapshot) {
           const seeded = {};
           for (const c of state.cols) seeded[c] = defaultColWidth(c);
           state.colWidths = seeded;
+          saveColWidths();
           renderHeader();
           renderBody();
         }
       };
+
+      window.applySavedColumnWidths = function(payload) {
+        const w = payload && payload.widths;
+        if (!w || typeof w !== "object") return;
+        const parsed = {};
+        for (const [k, v] of Object.entries(w)) {
+          const key = String(k || "").trim();
+          const iv = Number(v);
+          if (!key || !Number.isFinite(iv) || iv <= 0) continue;
+          parsed[key] = Math.round(iv);
+        }
+        state.savedWidths = parsed;
+        state.colWidths = Object.assign({}, parsed);
+        if (state.hasSnapshot) {
+          renderHeader();
+          renderBody();
+        }
+      };
+
+      if (window.qt && window.QWebChannel) {
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+          state.bridge = channel.objects.aandelenBridge || null;
+        });
+      }
 
       bindFilters();
     </script>
   </body>
 </html>
 """
+
+
+class _AandelenWebBridge(QObject):
+    def __init__(self, tab: AandelenWebPilotTab):
+        super().__init__(tab)
+        self._tab = tab
+
+    @Slot(str)
+    def saveColumnWidths(self, payload_json: str) -> None:
+        self._tab._save_column_widths(payload_json)
