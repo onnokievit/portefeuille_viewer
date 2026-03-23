@@ -17,6 +17,7 @@ venv_test/
 
 # Log / tijdelijke bestanden
 *.log
+logs/
 development.txt
 
 portefeuille_viewer/config/.user_settings/
