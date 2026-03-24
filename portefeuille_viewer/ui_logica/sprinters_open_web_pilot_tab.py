@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime
 from decimal import Decimal
 
-from PySide6.QtCore import QObject, Slot
+from PySide6.QtCore import QObject, QTimer, Slot
 from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -22,7 +23,16 @@ class SprintersOpenWebPilotTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._js_ready = False
+        self._is_active = False
         self._pending_js_calls: list[tuple[str, object]] = []
+        self._needs_snapshot = False
+        self._needs_patch = False
+        self._needs_meta = False
+        self._active_render_ms = max(100, int(os.getenv("UI_WEB_ACTIVE_RENDER_MS", "1000")))
+        self._render_timer = QTimer(self)
+        self._render_timer.setSingleShot(True)
+        self._render_timer.setInterval(self._active_render_ms)
+        self._render_timer.timeout.connect(self._flush_scheduled_render)
         layout = QVBoxLayout(self)
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
@@ -47,14 +57,54 @@ class SprintersOpenWebPilotTab(QWidget):
         self._pending_js_calls.clear()
         self._publish_full_snapshot()
         self._publish_meta()
+        self._needs_snapshot = False
+        self._needs_patch = False
+        self._needs_meta = False
 
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key == "snapshot_sprinters_open_projection_v2":
-            self._publish_full_snapshot()
+            self._needs_snapshot = True
+            self._needs_patch = False
+            self._schedule_render()
         elif snapshot_key == "snapshot_sprinters_open_projection_v2_patch":
-            self._publish_patch()
+            self._needs_patch = True
+            self._schedule_render()
         elif snapshot_key == "snapshot_sprinters_open_projection_v2_meta":
+            self._needs_meta = True
+            self._schedule_render()
+
+    def set_active(self, active: bool):
+        self._is_active = bool(active)
+        if not self._is_active:
+            self._render_timer.stop()
+            return
+        if not self._js_ready:
+            return
+        self._needs_snapshot = True
+        self._needs_patch = False
+        self._needs_meta = True
+        self._render_timer.stop()
+        self._flush_scheduled_render()
+
+    def _schedule_render(self):
+        if not self._is_active or not self._js_ready:
+            return
+        if not self._render_timer.isActive():
+            self._render_timer.start()
+
+    def _flush_scheduled_render(self):
+        if not self._is_active or not self._js_ready:
+            return
+        if self._needs_snapshot:
+            self._publish_full_snapshot()
+            self._needs_snapshot = False
+            self._needs_patch = False
+        elif self._needs_patch:
+            self._publish_patch()
+            self._needs_patch = False
+        if self._needs_meta:
             self._publish_meta()
+            self._needs_meta = False
 
     def _publish_full_snapshot(self):
         df = getattr(SNAPSHOT_STORE, "snapshot_sprinters_open_projection_v2", None)

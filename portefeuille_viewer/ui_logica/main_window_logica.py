@@ -129,6 +129,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.aandelen_tab.set_active(index == self.tabWidget.indexOf(self.aandelen_tab))
         if hasattr(self, "opties_open_tab") and hasattr(self.opties_open_tab, "set_active"):
             self.opties_open_tab.set_active(index == self.tabWidget.indexOf(self.opties_open_tab))
+        if hasattr(self, "optie_tijdswaarde_tab") and hasattr(self.optie_tijdswaarde_tab, "set_active"):
+            self.optie_tijdswaarde_tab.set_active(index == self.tabWidget.indexOf(self.optie_tijdswaarde_tab))
         if hasattr(self, "sprinters_open_tab") and hasattr(self.sprinters_open_tab, "set_active"):
             self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
 

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -40,7 +41,16 @@ class OptiesOpenWebPilotTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._js_ready = False
+        self._is_active = False
         self._pending_js_calls: list[tuple[str, object]] = []
+        self._needs_snapshot = False
+        self._needs_patch = False
+        self._needs_meta = False
+        self._active_render_ms = max(100, int(os.getenv("UI_WEB_ACTIVE_RENDER_MS", "1000")))
+        self._render_timer = QTimer(self)
+        self._render_timer.setSingleShot(True)
+        self._render_timer.setInterval(self._active_render_ms)
+        self._render_timer.timeout.connect(self._flush_scheduled_render)
         self._row_id_to_uniek_id: dict[str, str] = {}
         self._legacy_cols = [
             "itm",
@@ -86,15 +96,55 @@ class OptiesOpenWebPilotTab(QWidget):
         self._pending_js_calls.clear()
         self._publish_full_snapshot()
         self._publish_meta()
+        self._needs_snapshot = False
+        self._needs_patch = False
+        self._needs_meta = False
 
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key == "snapshot_opties_open_projection_v2":
-            self._publish_full_snapshot()
+            self._needs_snapshot = True
+            self._needs_patch = False
+            self._schedule_render()
         elif snapshot_key == "snapshot_opties_open_projection_v2_patch":
+            self._needs_patch = True
+            self._schedule_render()
+        elif snapshot_key == "snapshot_opties_open_projection_v2_meta":
+            self._needs_meta = True
+            self._schedule_render()
+
+    def set_active(self, active: bool):
+        self._is_active = bool(active)
+        if not self._is_active:
+            self._render_timer.stop()
+            return
+        if not self._js_ready:
+            return
+        self._needs_snapshot = True
+        self._needs_patch = False
+        self._needs_meta = True
+        self._render_timer.stop()
+        self._flush_scheduled_render()
+
+    def _schedule_render(self):
+        if not self._is_active or not self._js_ready:
+            return
+        if not self._render_timer.isActive():
+            self._render_timer.start()
+
+    def _flush_scheduled_render(self):
+        if not self._is_active or not self._js_ready:
+            return
+        if self._needs_snapshot:
+            self._publish_full_snapshot()
+            self._needs_snapshot = False
+            self._needs_patch = False
+        elif self._needs_patch:
             # Re-render full because web view uses a legacy-shaped transformed rowset.
             self._publish_full_snapshot()
-        elif snapshot_key == "snapshot_opties_open_projection_v2_meta":
+            self._needs_patch = False
+        if self._needs_meta:
             self._publish_meta()
+            self._needs_meta = False
 
     def _publish_full_snapshot(self):
         df = getattr(SNAPSHOT_STORE, "snapshot_opties_open_projection_v2", None)
@@ -111,7 +161,25 @@ class OptiesOpenWebPilotTab(QWidget):
         meta = getattr(SNAPSHOT_STORE, "snapshot_opties_open_projection_v2_meta", None)
         if not isinstance(meta, dict):
             return
-        self._call_js("renderMeta", meta)
+        out = dict(meta)
+        tv_meta = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_meta", None)
+        unresolved_count = 0
+        unresolved_series = []
+        try:
+            if hasattr(tv_meta, "is_empty") and not tv_meta.is_empty():
+                row = tv_meta.to_dicts()[0]
+                unresolved_count = int(row.get("unresolved_count") or 0)
+                raw = row.get("unresolved_series")
+                if isinstance(raw, str) and raw.strip():
+                    unresolved_series = json.loads(raw)
+                elif isinstance(raw, list):
+                    unresolved_series = raw
+        except Exception:
+            unresolved_count = 0
+            unresolved_series = []
+        out["unresolved_count"] = unresolved_count
+        out["unresolved_series"] = unresolved_series
+        self._call_js("renderMeta", out)
 
     def _build_legacy_rows(self, df: pl.DataFrame) -> tuple[list[dict], list[str]]:
         if df is None or df.is_empty():
@@ -522,6 +590,19 @@ class OptiesOpenWebPilotTab(QWidget):
         white-space:nowrap;
       }
       .filters label.chk input[type="checkbox"] { margin:0; }
+      .unresolved {
+        display:none;
+        margin: 0 0 8px 0;
+        border:1px solid #e1b66b;
+        background:#fff8eb;
+        border-radius:6px;
+        padding:6px 8px;
+        font-size:12px;
+        color:#6a4a14;
+      }
+      .unresolved summary { cursor:pointer; font-weight:600; }
+      .unresolved ul { margin:6px 0 0 14px; padding:0; }
+      .unresolved li { margin:2px 0; }
       .dropdown { position:relative; display:inline-block; }
       .drop-panel { position:absolute; top:30px; left:0; z-index:20; background:#fff; border:1px solid #c7d1de; border-radius:8px; padding:10px; min-width:380px; box-shadow:0 6px 18px rgba(0,0,0,.14); display:none; }
       .drop-panel.open { display:block; }
@@ -576,6 +657,10 @@ class OptiesOpenWebPilotTab(QWidget):
       <div class="tv-inline"><span class="tv-code">USD</span><div class="tv-mini" id="tv_total_usd">0,00</div></div>
       <button id="btn_export_snapshot">Export snapshot</button>
     </div>
+    <details class="unresolved" id="unresolved_box">
+      <summary id="unresolved_summary">Unresolved: 0</summary>
+      <ul id="unresolved_list"></ul>
+    </details>
     <div class="table-wrap" id="table_wrap" tabindex="0">
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
@@ -920,7 +1005,35 @@ class OptiesOpenWebPilotTab(QWidget):
         }
         document.getElementById("table_wrap")?.addEventListener("keydown", _onTableKeyDown);
       }
-      window.renderMeta = function(meta){ const el=document.getElementById("meta"); if(!el||!meta) return; const v=meta.version??"-"; const r=meta.rows??0; const c=meta.changes??0; const u=meta.updated_at??"-"; const reason=meta.reason??"-"; const m=meta.metrics||{}; const ml=m.last||{}; const ms=m.summary||{}; const txt=`Opties Projection v${v} | rows:${r} | changes:${c} | updated:${u} | reason:${reason} | perf rec:${Number(ml.recompute_ms??0).toFixed(1)}ms pub:${Number(ml.publish_ms??0).toFixed(1)}ms tot:${Number(ml.total_ms??0).toFixed(1)}ms p95:${Number(ms.total_ms_p95??0).toFixed(1)}ms`; el.textContent=txt; };
+      window.renderMeta = function(meta){
+        const el=document.getElementById("meta"); if(!el||!meta) return;
+        const v=meta.version??"-"; const r=meta.rows??0; const c=meta.changes??0; const u=meta.updated_at??"-"; const reason=meta.reason??"-";
+        const m=meta.metrics||{}; const ml=m.last||{}; const ms=m.summary||{};
+        const txt=`Opties Projection v${v} | rows:${r} | changes:${c} | updated:${u} | reason:${reason} | perf rec:${Number(ml.recompute_ms??0).toFixed(1)}ms pub:${Number(ml.publish_ms??0).toFixed(1)}ms tot:${Number(ml.total_ms??0).toFixed(1)}ms p95:${Number(ms.total_ms_p95??0).toFixed(1)}ms`;
+        el.textContent=txt;
+        const box=document.getElementById("unresolved_box");
+        const sum=document.getElementById("unresolved_summary");
+        const list=document.getElementById("unresolved_list");
+        const items=Array.isArray(meta.unresolved_series)?meta.unresolved_series:[];
+        const cnt=Number(meta.unresolved_count??items.length??0);
+        if(!box||!sum||!list){ return; }
+        if(cnt<=0){ box.style.display="none"; list.innerHTML=""; return; }
+        box.style.display="block";
+        sum.textContent=`Unresolved optie series: ${cnt}`;
+        list.innerHTML="";
+        for(const it of items){
+          const li=document.createElement("li");
+          const asset=String(it.asset||"");
+          const exp=String(it.exp||"");
+          const cp=String(it.c_p||"");
+          const strike=String(it.strike??"");
+          const ccy=String(it.ccy||"");
+          const reasonTxt=String(it.reason||"");
+          const hint=String(it.hint||"");
+          li.textContent = `${asset} ${exp} ${cp} ${strike} ${ccy} | ${reasonTxt}${hint ? " | "+hint : ""}`;
+          list.appendChild(li);
+        }
+      };
       window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
       window.applyPatch = function(payload){};
       if (window.qt && window.QWebChannel) { new QWebChannel(qt.webChannelTransport, function(channel) { state.bridge = channel.objects.optiesBridge || null; }); }

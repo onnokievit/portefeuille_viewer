@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import json
+import os
 import threading
 import time
 from collections import defaultdict
@@ -10,7 +12,7 @@ from typing import Any
 
 import polars as pl
 import pyodbc
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, QTimer, QMetaObject, Qt, Slot
 from ibapi.contract import Contract
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -83,6 +85,8 @@ class OpenSeriesRow:
     multiplier: float
     series_id: int | None = None
     conid: int | None = None
+    ref_mapping_found: bool = True
+    ref_week: int = 0
 
 
 class OptionTimevalueService(QObject):
@@ -93,9 +97,17 @@ class OptionTimevalueService(QObject):
         self.price_feed = price_feed
         self.stock_db_path = stock_db_path
         self._lock = threading.Lock()
+        self._state_lock = threading.Lock()
         self._rows: list[OpenSeriesRow] = []
         self._underlying_close: dict[str, float] = {}
         self._ticks: dict[int, dict[str, float]] = {}
+        self._unresolved_series: dict[tuple[str, str, float, str, str], dict[str, Any]] = {}
+        self._rebuild_inflight = False
+        self._rebuild_queued = False
+        self._pending_rebuild_result: dict[str, Any] | None = None
+        self._resolve_wait_sec = max(
+            0.1, float(os.getenv("OPTION_TIMEVALUE_RESOLVE_WAIT_SEC", "1.0"))
+        )
         self._rebuild_timer = QTimer(self)
         self._rebuild_timer.setSingleShot(True)
         self._rebuild_timer.setInterval(350)
@@ -112,12 +124,16 @@ class OptionTimevalueService(QObject):
         with contextlib.suppress(Exception):
             self.price_feed.optionTickUpdated.connect(self._on_option_tick)
         signals.ordersCommitted.connect(self.schedule_rebuild)
-        signals.databaseChanged.connect(lambda _db: self.schedule_rebuild())
+        signals.databaseChanged.connect(self._on_database_changed)
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
 
         QTimer.singleShot(1500, self.schedule_rebuild)
 
     def schedule_rebuild(self):
+        with self._state_lock:
+            if self._rebuild_inflight:
+                self._rebuild_queued = True
+                return
         self._rebuild_timer.start()
 
     def shutdown(self):
@@ -136,7 +152,50 @@ class OptionTimevalueService(QObject):
             "repository_snapshot_asset_rollup_data",
             "repository_snapshot_optie_referentie_data",
         }:
+            if snapshot_key in {
+                "repository_snapshot_optie_referentie_data",
+                "repository_snapshot_load_open_opties",
+                "aggregator_snapshot_load_open_opties_from_tx_live",
+            }:
+                self._clear_unresolved("snapshot_update")
             self.schedule_rebuild()
+
+    def _on_database_changed(self, _db: str):
+        self._clear_unresolved("database_changed")
+        self.schedule_rebuild()
+
+    def _clear_unresolved(self, reason: str):
+        if self._unresolved_series:
+            self._unresolved_series.clear()
+            print(f"[option-timevalue] unresolved cache cleared ({reason})")
+
+    @staticmethod
+    def _series_key(r: OpenSeriesRow) -> tuple[str, str, float, str, str]:
+        return (
+            _clean(r.asset_rollup).upper(),
+            r.expiry.isoformat() if isinstance(r.expiry, date) else _clean(r.expiry),
+            round(float(r.strike), 6),
+            _clean(r.optie_call_put).lower(),
+            _clean(r.ib_currency).upper(),
+        )
+
+    def _set_unresolved(self, r: OpenSeriesRow, reason: str, hint: str = ""):
+        key = self._series_key(r)
+        self._unresolved_series[key] = {
+            "asset": key[0],
+            "exp": key[1],
+            "strike": key[2],
+            "c_p": key[3],
+            "ccy": key[4],
+            "reason": reason,
+            "hint": hint,
+            "updated_at": _now_ts(),
+        }
+
+    def _clear_unresolved_for_resolved_rows(self, rows: list[OpenSeriesRow]):
+        for r in rows:
+            if r.conid and int(r.conid) > 0:
+                self._unresolved_series.pop(self._series_key(r), None)
 
     def _on_option_tick(self, payload: dict):
         try:
@@ -208,7 +267,10 @@ class OptionTimevalueService(QObject):
                 continue
             asset_rollup = _clean(r.get("asset_rollup"))
             week = _option_week(expiry)
-            ref = ref_map.get((asset_rollup, week)) or ref_map.get((asset_rollup, 0)) or {}
+            exact = ref_map.get((asset_rollup, week))
+            fallback = ref_map.get((asset_rollup, 0))
+            ref = exact or fallback or {}
+            ref_found = bool(exact or fallback)
             mult = _to_float(ref.get("opt_multiplier"))
             out.append(
                 OpenSeriesRow(
@@ -223,6 +285,8 @@ class OptionTimevalueService(QObject):
                     exchange_code=_clean(ref.get("opt_exchange")).upper() or "SMART",
                     trading_class=_clean(ref.get("opt_tradingclass")).upper(),
                     multiplier=float(mult) if mult is not None else 100.0,
+                    ref_mapping_found=ref_found,
+                    ref_week=int(week),
                 )
             )
         return out
@@ -337,9 +401,32 @@ class OptionTimevalueService(QObject):
                     r.trading_class = _clean(rec[5]).upper()
                 db_rows.append(r)
 
-            unresolved = [r for r in db_rows if not r.conid]
-            if unresolved:
-                self._resolve_contracts(unresolved)
+            resolve_candidates: list[OpenSeriesRow] = []
+            for r in db_rows:
+                if r.conid and int(r.conid) > 0:
+                    continue
+                key = self._series_key(r)
+                if not r.ref_mapping_found:
+                    self._set_unresolved(
+                        r,
+                        "missing_reference_mapping",
+                        f"Voeg optie_referentie_data mapping toe voor asset={r.asset_rollup}, opt_week={r.ref_week}",
+                    )
+                    continue
+                # Stop met opnieuw proberen totdat relevante referentie/universe snapshot wijzigt.
+                if key in self._unresolved_series:
+                    continue
+                resolve_candidates.append(r)
+            if resolve_candidates:
+                failed = self._resolve_contracts(resolve_candidates)
+                for r in resolve_candidates:
+                    reason = failed.get(self._series_key(r))
+                    if reason:
+                        self._set_unresolved(
+                            r,
+                            reason,
+                            "Controleer optie_referentie_data (trading class/exchange) of IB contractdetails",
+                        )
                 conn.commit()
 
             # Reload after resolve
@@ -362,13 +449,17 @@ class OptionTimevalueService(QObject):
                 if _clean(rec[3]):
                     r.exchange_code = _clean(rec[3]).upper()
                 final_rows.append(r)
+            self._clear_unresolved_for_resolved_rows(final_rows)
         return final_rows
 
-    def _resolve_contracts(self, rows: list[OpenSeriesRow]):
+    def _resolve_contracts(self, rows: list[OpenSeriesRow]) -> dict[tuple[str, str, float, str, str], str]:
+        failed: dict[tuple[str, str, float, str, str], str] = {}
         if not rows:
-            return
+            return failed
         if not hasattr(self.price_feed, "_feed") or self.price_feed._feed is None:
-            return
+            for r in rows:
+                failed[self._series_key(r)] = "no_contract_details"
+            return failed
         ib = self.price_feed._feed
         with self._connect_stockdb() as conn:
             cur = conn.cursor()
@@ -407,16 +498,18 @@ class OptionTimevalueService(QObject):
                     done.clear()
                     with contextlib.suppress(Exception):
                         ib.request_contract_details(c, on_detail, on_end)
-                    done.wait(timeout=5.0)
+                    done.wait(timeout=self._resolve_wait_sec)
                     if details_holder:
                         break
 
                 if not details_holder:
+                    failed[self._series_key(r)] = "timeout" if not done.is_set() else "no_contract_details"
                     continue
                 det = details_holder[0]
                 con = det.contract
                 conid = int(getattr(con, "conId", 0) or 0)
                 if conid <= 0:
+                    failed[self._series_key(r)] = "no_contract_details"
                     continue
                 local_symbol = _clean(getattr(con, "localSymbol", ""))
                 tc = _clean(getattr(con, "tradingClass", ""))
@@ -441,6 +534,7 @@ class OptionTimevalueService(QObject):
                     ),
                 )
             conn.commit()
+        return failed
 
     def _load_underlying_close_map(self) -> dict[str, float]:
         h = SNAPSHOT_STORE.repository_snapshot_historical_close
@@ -466,31 +560,95 @@ class OptionTimevalueService(QObject):
             return {}
 
     def _rebuild_universe(self):
+        with self._state_lock:
+            if self._rebuild_inflight:
+                self._rebuild_queued = True
+                return
+            self._rebuild_inflight = True
+        th = threading.Thread(target=self._rebuild_universe_worker, daemon=True)
+        th.start()
+
+    def _rebuild_universe_worker(self):
         try:
             rows = self._extract_open_series()
             rows = self._upsert_master_and_resolve(rows)
-            self._underlying_close = self._load_underlying_close_map()
-            self._rows = rows
             subs = [
                 (int(r.series_id), int(r.conid), r.exchange_code, r.ib_currency)
                 for r in rows
                 if r.series_id and r.conid and int(r.conid) > 0
             ]
+            close_map = self._load_underlying_close_map()
+            with self._state_lock:
+                self._pending_rebuild_result = {
+                    "rows": rows,
+                    "subs": subs,
+                    "close_map": close_map,
+                    "error": None,
+                }
+        except Exception as exc:
+            with self._state_lock:
+                self._pending_rebuild_result = {
+                    "rows": [],
+                    "subs": [],
+                    "close_map": {},
+                    "error": str(exc),
+                }
+        with contextlib.suppress(Exception):
+            QMetaObject.invokeMethod(self, "_apply_rebuild_result", Qt.QueuedConnection)
+
+    @Slot()
+    def _apply_rebuild_result(self):
+        with self._state_lock:
+            result = self._pending_rebuild_result
+            self._pending_rebuild_result = None
+        if not result:
+            with self._state_lock:
+                self._rebuild_inflight = False
+            return
+
+        err = result.get("error")
+        if err:
+            print(f"[option-timevalue] rebuild failed: {err}")
+        else:
+            self._underlying_close = result.get("close_map") or {}
+            self._rows = result.get("rows") or []
+            subs = result.get("subs") or []
             if subs:
-                self.price_feed.ensure_option_subscriptions(subs)
+                with contextlib.suppress(Exception):
+                    self.price_feed.ensure_option_subscriptions(subs)
             self._publish_snapshot()
             print(
-                f"[option-timevalue] universe refreshed: open_series={len(rows)} "
+                f"[option-timevalue] universe refreshed: open_series={len(self._rows)} "
                 f"subscribed={len(subs)} @ {_now_ts()}"
             )
-        except Exception as exc:
-            print(f"[option-timevalue] rebuild failed: {exc}")
+
+        queued = False
+        with self._state_lock:
+            self._rebuild_inflight = False
+            queued = self._rebuild_queued
+            self._rebuild_queued = False
+        if queued:
+            self._rebuild_timer.start()
 
     def _publish_snapshot(self):
         rows = self._rows or []
         if not rows:
             SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_live", pl.DataFrame())
             SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_summary", pl.DataFrame())
+            SNAPSHOT_STORE.safe_write(
+                "snapshot_optie_timevalue_meta",
+                pl.DataFrame(
+                    [
+                        {
+                            "ts": _now_ts(),
+                            "priced": 0,
+                            "total": 0,
+                            "unresolved_count": len(self._unresolved_series),
+                            "unresolved_series": json.dumps(list(self._unresolved_series.values()), ensure_ascii=False),
+                        }
+                    ]
+                ),
+            )
             return
 
         output = []
@@ -590,6 +748,8 @@ class OptionTimevalueService(QObject):
                         "ts": _now_ts(),
                         "priced": priced,
                         "total": len(output),
+                        "unresolved_count": len(self._unresolved_series),
+                        "unresolved_series": json.dumps(list(self._unresolved_series.values()), ensure_ascii=False),
                     }
                 ]
             ),

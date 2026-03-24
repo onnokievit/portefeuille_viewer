@@ -79,6 +79,9 @@ ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE = (
     ENABLE_ENGINE_CORE_RUNTIME
     and os.getenv("ENGINE_CORE_RUNTIME_EXCLUSIVE_V1", "0").strip() == "1"
 )
+ENABLE_ORDERS_COMMIT_FULL_REFRESH = (
+    os.getenv("ORDERS_COMMIT_FULL_REFRESH_V1", "1").strip() == "1"
+)
 ENGINE_CORE_LOG_TOPICS = os.getenv("ENGINE_CORE_LOG_TOPICS", "0").strip() == "1"
 PROJECTION_METRICS_LOG_CONSOLE = (
     os.getenv("PROJECTION_METRICS_LOG_CONSOLE", "0").strip() == "1"
@@ -873,22 +876,15 @@ def main():
     refresh_timer.setInterval(1200)
     opties_projection_refresh_timer = QTimer()
     opties_projection_refresh_timer.setSingleShot(True)
-    opties_projection_refresh_timer.setInterval(300)
+    opties_projection_refresh_timer.setInterval(500)
     optie_tijdswaarde_projection_refresh_timer = QTimer()
     optie_tijdswaarde_projection_refresh_timer.setSingleShot(True)
-    optie_tijdswaarde_projection_refresh_timer.setInterval(300)
+    optie_tijdswaarde_projection_refresh_timer.setInterval(500)
     sprinters_projection_refresh_timer = QTimer()
     sprinters_projection_refresh_timer.setSingleShot(True)
-    sprinters_projection_refresh_timer.setInterval(300)
-    orders_refresh_timer = QTimer()
-    orders_refresh_timer.setSingleShot(True)
-    orders_refresh_timer.setInterval(250)
-
+    sprinters_projection_refresh_timer.setInterval(500)
     def _run_debounced_refresh():
         refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
-
-    def _run_orders_refresh():
-        refresh_transaction_derived_snapshots({"reason": "orders_committed"})
 
     def _run_opties_projection_refresh():
         refresh_opties_open_projection("live_opties_snapshot")
@@ -898,11 +894,6 @@ def main():
 
     def _run_sprinters_projection_refresh():
         refresh_sprinters_open_projection("live_sprinters_snapshot")
-
-    def _schedule_orders_refresh():
-        # Herstel oud gedrag: na order-write direct transaction-derived snapshots verversen.
-        # Debounced om korte bursts (bijv. gekoppelde writes) samen te nemen.
-        orders_refresh_timer.start()
 
     def _schedule_snapshot_refresh(payload):
         if (payload or {}).get("status") != "ok":
@@ -937,9 +928,18 @@ def main():
     opties_projection_refresh_timer.timeout.connect(_run_opties_projection_refresh)
     optie_tijdswaarde_projection_refresh_timer.timeout.connect(_run_optie_tijdswaarde_projection_refresh)
     sprinters_projection_refresh_timer.timeout.connect(_run_sprinters_projection_refresh)
-    orders_refresh_timer.timeout.connect(_run_orders_refresh)
     signals.ordersCommitted.connect(lambda: _reset_aandelen_tv_overlay_regime("orders_committed"))
-    signals.ordersCommitted.connect(_schedule_orders_refresh)
+    if ENABLE_ORDERS_COMMIT_FULL_REFRESH:
+        def _run_orders_refresh():
+            refresh_transaction_derived_snapshots({"reason": "orders_committed"})
+        orders_refresh_timer = QTimer()
+        orders_refresh_timer.setSingleShot(True)
+        orders_refresh_timer.setInterval(250)
+        orders_refresh_timer.timeout.connect(_run_orders_refresh)
+        signals.ordersCommitted.connect(lambda: orders_refresh_timer.start())
+        print("[orders-refresh] enabled via ORDERS_COMMIT_FULL_REFRESH_V1=1")
+    else:
+        print("[orders-refresh] disabled (no full refresh on ordersCommitted)")
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         signals.snapshotUpdated.connect(_on_snapshot_updated_for_opties_projection)

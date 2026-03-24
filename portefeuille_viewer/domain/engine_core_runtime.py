@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from datetime import datetime
 from typing import Callable
 
@@ -25,6 +27,10 @@ class EngineCoreRuntime:
         self.state_store = StateStore()
         self.projection_bus = ProjectionBus()
         self._log = logger or (lambda msg: print(msg))
+        self._snapshot_min_interval_ms = max(
+            0, int(os.getenv("ENGINE_CORE_SNAPSHOT_THROTTLE_MS", "500"))
+        )
+        self._last_snapshot_publish_by_key: dict[str, float] = {}
 
     def register_projection(self, projection) -> None:
         self.projection_bus.register(projection)
@@ -43,6 +49,14 @@ class EngineCoreRuntime:
         return self.projection_bus.run(changed_keys, topic=topic)
 
     def publish_snapshot_update(self, snapshot_key: str, source: str = "snapshot_store") -> list[ProjectionRunResult]:
+        if self.enabled and self._snapshot_min_interval_ms > 0:
+            now = time.monotonic()
+            key = str(snapshot_key or "")
+            last = self._last_snapshot_publish_by_key.get(key, 0.0)
+            if (now - last) * 1000.0 < self._snapshot_min_interval_ms:
+                return []
+            self._last_snapshot_publish_by_key[key] = now
+
         event = Event(
             ts=datetime.now(),
             event_type=EventType.SNAPSHOT_REFRESH,
