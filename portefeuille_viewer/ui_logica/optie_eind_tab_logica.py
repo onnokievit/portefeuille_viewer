@@ -240,14 +240,22 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         assets, min_date, types = self._collect_test_account_scope()
         conn = None
 
+        def _to_int(value):
+            try:
+                if value is None:
+                    return None
+                return int(value)
+            except Exception:
+                return None
+
         try:
             conn = pyodbc.connect(conn_str)
             conn.autocommit = False
             cursor = conn.cursor()
 
             select_sql = f"SELECT {','.join(upload_cols)} FROM transacties_bron_data_test_accounts"
-            rows = cursor.execute(select_sql).fetchall()
-            if not rows:
+            raw_rows = cursor.execute(select_sql).fetchall()
+            if not raw_rows:
                 QMessageBox.information(
                     self,
                     "Move to productie",
@@ -255,21 +263,102 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
                 )
                 return
 
+            # Snapshot van org/test ids voor conflictcontrole + remap-baseline.
+            max_org_row = cursor.execute("SELECT MAX(order_id) FROM transacties_bron_data_org").fetchone()
+            max_test_row = cursor.execute("SELECT MAX(order_id) FROM transacties_bron_data_test_accounts").fetchone()
+            max_org = _to_int(max_org_row[0] if max_org_row else None) or 0
+            max_test = _to_int(max_test_row[0] if max_test_row else None) or 0
+            union_max = max(max_org, max_test)
+
+            org_ids = {
+                _to_int(r[0])
+                for r in cursor.execute(
+                    "SELECT DISTINCT order_id FROM transacties_bron_data_org WHERE order_id IS NOT NULL"
+                ).fetchall()
+            }
+            org_ids.discard(None)
+
+            org_pairs = set()
+            for r in cursor.execute(
+                """
+                SELECT order_id, order_id_number
+                FROM transacties_bron_data_org
+                WHERE order_id IS NOT NULL AND order_id_number IS NOT NULL
+                """
+            ).fetchall():
+                oid = _to_int(r[0])
+                oid_num = _to_int(r[1])
+                if oid is not None and oid_num is not None:
+                    org_pairs.add((oid, oid_num))
+
+            col_idx = {c: i for i, c in enumerate(upload_cols)}
+            test_rows = [list(row) for row in raw_rows]
+
+            # Bepaal welke order_id's moeten worden geremapt.
+            conflicting_oids = set()
+            invalid_oid_rows = []
+            for idx, row in enumerate(test_rows):
+                oid = _to_int(row[col_idx["order_id"]])
+                oid_num = _to_int(row[col_idx["order_id_number"]])
+                if oid is None:
+                    invalid_oid_rows.append(idx)
+                    continue
+                pair_conflict = oid_num is not None and (oid, oid_num) in org_pairs
+                if oid <= max_org or oid in org_ids or pair_conflict:
+                    conflicting_oids.add(oid)
+
+            next_oid = union_max + 1
+            remap = {}
+            for old_oid in sorted(conflicting_oids):
+                remap[old_oid] = next_oid
+                next_oid += 1
+
+            # Invalid/missende order_id krijgt altijd nieuw uniek id.
+            for row_idx in invalid_oid_rows:
+                remap[(None, row_idx)] = next_oid
+                next_oid += 1
+
+            remapped_rows = 0
+            for idx, row in enumerate(test_rows):
+                oid = _to_int(row[col_idx["order_id"]])
+                if oid is None:
+                    new_oid = remap[(None, idx)]
+                    row[col_idx["order_id"]] = new_oid
+                    remapped_rows += 1
+                    continue
+                if oid in remap:
+                    row[col_idx["order_id"]] = remap[oid]
+                    remapped_rows += 1
+
             placeholders = ",".join(["?"] * len(upload_cols))
             insert_sql = (
                 f"INSERT INTO transacties_bron_data_org ({','.join(upload_cols)}) "
                 f"VALUES ({placeholders})"
             )
-            for row in rows:
+            for row in test_rows:
                 cursor.execute(insert_sql, tuple(row))
 
             cursor.execute("DELETE FROM transacties_bron_data_test_accounts")
             conn.commit()
 
+            moved_count = len(test_rows)
+            remap_orders = len(remap)
+            print(
+                "[optie-eind] move_to_productie "
+                f"moved={moved_count} max_org={max_org} max_test={max_test} "
+                f"union_max={union_max} remap_orders={remap_orders} remapped_rows={remapped_rows}"
+            )
+            if remap_orders:
+                sample = list(remap.items())[:10]
+                print(f"[optie-eind] remap sample (max 10): {sample}")
+
             QMessageBox.information(
                 self,
                 "Move to productie",
-                f"{len(rows)} records verplaatst naar transacties_bron_data_org.",
+                (
+                    f"{moved_count} records verplaatst naar transacties_bron_data_org.\n"
+                    f"Remapped orders: {remap_orders} | Remapped rows: {remapped_rows}"
+                ),
             )
             signals.databaseChanged.emit(self.active_db_name)
 
