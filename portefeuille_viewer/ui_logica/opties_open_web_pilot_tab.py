@@ -66,6 +66,7 @@ class OptiesOpenWebPilotTab(QWidget):
             "aantal_bezit",
             "premie",
             "totaal_resultaat_optie",
+            "time_per_unit",
             "time_value",
             "optie_comment",
             "optie_comment_updated_at",
@@ -318,11 +319,11 @@ class OptiesOpenWebPilotTab(QWidget):
             except Exception:
                 return 0.0
 
-        tv_lookup: dict[tuple[str, str, str, str, float], tuple[str, float]] = {}
+        tv_lookup: dict[tuple[str, str, str, str, float], tuple[str, float, float]] = {}
         try:
             tv = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
             if isinstance(tv, pl.DataFrame) and not tv.is_empty():
-                req = {"broker", "asset", "c_p", "exp", "strike", "ccy", "time_total"}
+                req = {"broker", "asset", "c_p", "exp", "strike", "ccy", "time_total", "time_per_unit"}
                 if req.issubset(set(tv.columns)):
                     for tr in tv.to_dicts():
                         key = (
@@ -337,7 +338,11 @@ class OptiesOpenWebPilotTab(QWidget):
                             ttot = float(tr.get("time_total") or 0.0)
                         except Exception:
                             ttot = 0.0
-                        tv_lookup[key] = (ccy, ttot)
+                        try:
+                            tpu = float(tr.get("time_per_unit") or 0.0)
+                        except Exception:
+                            tpu = 0.0
+                        tv_lookup[key] = (ccy, ttot, tpu)
         except Exception:
             tv_lookup = {}
 
@@ -385,9 +390,10 @@ class OptiesOpenWebPilotTab(QWidget):
                 _norm_exp(r.get("optie_exp_date")),
                 _norm_strike(r.get("optie_strike")),
             )
-            ccy, ttot = tv_lookup.get(key, ("", 0.0))
+            ccy, ttot, tpu = tv_lookup.get(key, ("", 0.0, 0.0))
             r["timevalue_ccy"] = ccy
             r["timevalue_total_signed"] = ttot
+            r["time_per_unit"] = tpu
             r["time_value"] = ttot
         self._row_id_to_uniek_id = row_map
         return rows, list(self._legacy_cols)
@@ -791,7 +797,7 @@ class OptiesOpenWebPilotTab(QWidget):
       const WIDTHS = {
         itm:52, broker:85, asset_rollup:95, optie_call_put:48, optie_exp_date:95,
         optie_strike:70, Koers:70, koers_prev:70, pct_change_prev:82, afwijking_pct:82,
-        aantal_bezit:78, premie:88, totaal_resultaat_optie:100, optie_comment_updated_at:170
+        aantal_bezit:78, premie:88, totaal_resultaat_optie:100, time_per_unit:88, optie_comment_updated_at:170
       };
       function _calcWidths(){
         const wrap=document.querySelector('.table-wrap');
@@ -1034,7 +1040,7 @@ class OptiesOpenWebPilotTab(QWidget):
           list.appendChild(li);
         }
       };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
       window.applyPatch = function(payload){};
       if (window.qt && window.QWebChannel) { new QWebChannel(qt.webChannelTransport, function(channel) { state.bridge = channel.objects.optiesBridge || null; }); }
       window.addEventListener("resize", () => { if(state.hasSnapshot){ renderHeader(); renderBody(); }});

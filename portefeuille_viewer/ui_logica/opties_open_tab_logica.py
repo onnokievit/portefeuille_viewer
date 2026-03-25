@@ -300,6 +300,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "afwijking_pct": 80,
             "aantal_bezit": 80,
             "premie": 100,
+            "time_per_unit": 90,
             "totaal_resultaat_optie": 100,
             "optie_comment": 600,
             "optie_comment_updated_at": 100,
@@ -341,6 +342,7 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             
             "aantal_bezit",
             "premie",
+            "time_per_unit",
             
             "totaal_resultaat_optie",
             "itm_otm",
@@ -713,6 +715,41 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             df = df.with_columns(
                 ( (pl.col("Koers") - pl.col("optie_strike")) / pl.col("optie_strike") * 100 ).alias("afwijking_pct")
             )
+        # Voeg time_per_unit toe vanuit optie-tijdswaarde snapshot op optie-identiteit.
+        # Join-key: broker + asset + exp + c_p + strike
+        try:
+            tv_df = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+            if isinstance(tv_df, pl.DataFrame) and not tv_df.is_empty():
+                tv_sel = tv_df.select([
+                    pl.col("broker").cast(pl.Utf8),
+                    pl.col("asset").cast(pl.Utf8).alias("asset_rollup"),
+                    pl.col("exp").cast(pl.Date),
+                    pl.col("c_p").cast(pl.Utf8).alias("optie_call_put"),
+                    pl.col("strike").cast(pl.Float64).alias("optie_strike"),
+                    pl.col("time_per_unit").cast(pl.Float64).alias("time_per_unit"),
+                ])
+                # normaliseer call/put voor robuuste match
+                tv_sel = tv_sel.with_columns([
+                    pl.col("optie_call_put").str.to_lowercase().alias("optie_call_put"),
+                ])
+                df = df.with_columns([
+                    pl.col("optie_exp_date").cast(pl.Date, strict=False).alias("optie_exp_date"),
+                    pl.col("optie_call_put").cast(pl.Utf8).str.to_lowercase().alias("optie_call_put"),
+                    pl.col("optie_strike").cast(pl.Float64, strict=False).alias("optie_strike"),
+                    pl.col("broker").cast(pl.Utf8).alias("broker"),
+                    pl.col("asset_rollup").cast(pl.Utf8).alias("asset_rollup"),
+                ])
+                df = df.join(
+                    tv_sel,
+                    left_on=["broker", "asset_rollup", "optie_exp_date", "optie_call_put", "optie_strike"],
+                    right_on=["broker", "asset_rollup", "exp", "optie_call_put", "optie_strike"],
+                    how="left",
+                )
+            elif "time_per_unit" not in df.columns:
+                df = df.with_columns(pl.lit(None).cast(pl.Float64).alias("time_per_unit"))
+        except Exception:
+            if "time_per_unit" not in df.columns:
+                df = df.with_columns(pl.lit(None).cast(pl.Float64).alias("time_per_unit"))
         if df is None or df.is_empty():
             df = pl.DataFrame()
         else:
@@ -889,6 +926,12 @@ class OptiesOpenTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                     (f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
                     for v in values
                 ]
+        if "time_per_unit" in df.columns:
+            values = df["time_per_unit"].to_list()
+            display_cache["time_per_unit"] = [
+                (f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")) if v is not None else ""
+                for v in values
+            ]
 
         bg_cache = {}
         fg_cache = {}
