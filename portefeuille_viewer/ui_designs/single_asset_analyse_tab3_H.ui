@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1981</width>
+    <width>2500</width>
     <height>4026</height>
    </rect>
   </property>
@@ -238,7 +238,7 @@
        <rect>
         <x>760</x>
         <y>10</y>
-        <width>1161</width>
+        <width>1311</width>
         <height>31</height>
        </rect>
       </property>
@@ -340,7 +340,7 @@
        <rect>
         <x>840</x>
         <y>46</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>257</height>
        </rect>
       </property>
@@ -353,7 +353,7 @@
        <rect>
         <x>840</x>
         <y>380</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>281</height>
        </rect>
       </property>
@@ -369,7 +369,7 @@
        <rect>
         <x>840</x>
         <y>950</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>181</height>
        </rect>
       </property>
@@ -382,7 +382,7 @@
        <rect>
         <x>840</x>
         <y>710</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>181</height>
        </rect>
       </property>
@@ -395,7 +395,7 @@
        <rect>
         <x>840</x>
         <y>1180</y>
-        <width>431</width>
+        <width>471</width>
         <height>77</height>
        </rect>
       </property>
@@ -406,9 +406,9 @@
      <widget class="QTableView" name="tableViewSprinters">
       <property name="geometry">
        <rect>
-        <x>1290</x>
+        <x>1330</x>
         <y>1180</y>
-        <width>631</width>
+        <width>741</width>
         <height>78</height>
        </rect>
       </property>
@@ -722,7 +722,7 @@
        <rect>
         <x>840</x>
         <y>920</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>31</height>
        </rect>
       </property>
@@ -742,7 +742,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
        <rect>
         <x>840</x>
         <y>680</y>
-        <width>1081</width>
+        <width>1231</width>
         <height>31</height>
        </rect>
       </property>
@@ -761,7 +761,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
        <rect>
         <x>840</x>
         <y>1150</y>
-        <width>431</width>
+        <width>471</width>
         <height>31</height>
        </rect>
       </property>
@@ -779,9 +779,9 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
      <widget class="QLabel" name="label_18">
       <property name="geometry">
        <rect>
-        <x>1290</x>
+        <x>1330</x>
         <y>1150</y>
-        <width>631</width>
+        <width>741</width>
         <height>31</height>
        </rect>
       </property>
@@ -798,7 +798,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
      <widget class="QGroupBox" name="groupBox_4">
       <property name="geometry">
        <rect>
-        <x>1410</x>
+        <x>1560</x>
         <y>310</y>
         <width>511</width>
         <height>61</height>

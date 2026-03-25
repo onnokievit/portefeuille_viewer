@@ -27,7 +27,7 @@ class Ui_SingleAssetAnalyseTab(object):
     def setupUi(self, SingleAssetAnalyseTab):
         if not SingleAssetAnalyseTab.objectName():
             SingleAssetAnalyseTab.setObjectName(u"SingleAssetAnalyseTab")
-        SingleAssetAnalyseTab.resize(1981, 4026)
+        SingleAssetAnalyseTab.resize(2500, 4026)
         self.verticalLayout_2 = QVBoxLayout(SingleAssetAnalyseTab)
         self.verticalLayout_2.setSpacing(0)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
@@ -117,7 +117,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 1161, 31))
+        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 1311, 31))
         self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
@@ -161,28 +161,28 @@ class Ui_SingleAssetAnalyseTab(object):
         self.payoff_table.verticalHeader().setMinimumSectionSize(30)
         self.tableViewOptiesOpen = QTableView(self.widget)
         self.tableViewOptiesOpen.setObjectName(u"tableViewOptiesOpen")
-        self.tableViewOptiesOpen.setGeometry(QRect(840, 46, 1081, 257))
+        self.tableViewOptiesOpen.setGeometry(QRect(840, 46, 1231, 257))
         self.tableViewOptiesOpen.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.testOrdersTable = QTableWidget(self.widget)
         self.testOrdersTable.setObjectName(u"testOrdersTable")
-        self.testOrdersTable.setGeometry(QRect(840, 380, 1081, 281))
+        self.testOrdersTable.setGeometry(QRect(840, 380, 1231, 281))
         self.testOrdersTable.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.testOrdersTable.setTabKeyNavigation(False)
         self.tableViewOptiesOpenPut = QTableView(self.widget)
         self.tableViewOptiesOpenPut.setObjectName(u"tableViewOptiesOpenPut")
-        self.tableViewOptiesOpenPut.setGeometry(QRect(840, 950, 1081, 181))
+        self.tableViewOptiesOpenPut.setGeometry(QRect(840, 950, 1231, 181))
         self.tableViewOptiesOpenPut.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewOptiesOpenCall = QTableView(self.widget)
         self.tableViewOptiesOpenCall.setObjectName(u"tableViewOptiesOpenCall")
-        self.tableViewOptiesOpenCall.setGeometry(QRect(840, 710, 1081, 181))
+        self.tableViewOptiesOpenCall.setGeometry(QRect(840, 710, 1231, 181))
         self.tableViewOptiesOpenCall.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewAandelen = QTableView(self.widget)
         self.tableViewAandelen.setObjectName(u"tableViewAandelen")
-        self.tableViewAandelen.setGeometry(QRect(840, 1180, 431, 77))
+        self.tableViewAandelen.setGeometry(QRect(840, 1180, 471, 77))
         self.tableViewAandelen.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.tableViewSprinters = QTableView(self.widget)
         self.tableViewSprinters.setObjectName(u"tableViewSprinters")
-        self.tableViewSprinters.setGeometry(QRect(1290, 1180, 631, 78))
+        self.tableViewSprinters.setGeometry(QRect(1330, 1180, 741, 78))
         self.tableViewSprinters.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.groupBox = QGroupBox(self.widget)
         self.groupBox.setObjectName(u"groupBox")
@@ -261,7 +261,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.checkBoxAssetOrdersOnly.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.label_15 = QLabel(self.widget)
         self.label_15.setObjectName(u"label_15")
-        self.label_15.setGeometry(QRect(840, 920, 1081, 31))
+        self.label_15.setGeometry(QRect(840, 920, 1231, 31))
         self.label_15.setStyleSheet(u"background-color: rgb(198, 239, 206);\n"
 "background-color: rgb(248, 194, 200);\n"
 "border: 1px solid #34495e;\n"
@@ -269,14 +269,14 @@ class Ui_SingleAssetAnalyseTab(object):
 "margin-top: 0px;  /* ruimte voor de titel */")
         self.label_16 = QLabel(self.widget)
         self.label_16.setObjectName(u"label_16")
-        self.label_16.setGeometry(QRect(840, 680, 1081, 31))
+        self.label_16.setGeometry(QRect(840, 680, 1231, 31))
         self.label_16.setStyleSheet(u"background-color: rgb(198, 239, 206);\n"
 "border: 1px solid #34495e;\n"
 "border-radius: 6px;\n"
 "margin-top: 0px;  /* ruimte voor de titel */")
         self.label_17 = QLabel(self.widget)
         self.label_17.setObjectName(u"label_17")
-        self.label_17.setGeometry(QRect(840, 1150, 431, 31))
+        self.label_17.setGeometry(QRect(840, 1150, 471, 31))
         self.label_17.setStyleSheet(u"\n"
 "background-color: rgb(255, 238, 186);\n"
 "border: 1px solid #34495e;\n"
@@ -284,14 +284,14 @@ class Ui_SingleAssetAnalyseTab(object):
 "margin-top: 0px;  /* ruimte voor de titel */")
         self.label_18 = QLabel(self.widget)
         self.label_18.setObjectName(u"label_18")
-        self.label_18.setGeometry(QRect(1290, 1150, 631, 31))
+        self.label_18.setGeometry(QRect(1330, 1150, 741, 31))
         self.label_18.setStyleSheet(u"background-color: rgb(255, 238, 186);\n"
 "border: 1px solid #34495e;\n"
 "border-radius: 6px;\n"
 "margin-top: 0px;  /* ruimte voor de titel */")
         self.groupBox_4 = QGroupBox(self.widget)
         self.groupBox_4.setObjectName(u"groupBox_4")
-        self.groupBox_4.setGeometry(QRect(1410, 310, 511, 61))
+        self.groupBox_4.setGeometry(QRect(1560, 310, 511, 61))
         self.buttonRunStateEngineNow = QPushButton(self.groupBox_4)
         self.buttonRunStateEngineNow.setObjectName(u"buttonRunStateEngineNow")
         self.buttonRunStateEngineNow.setGeometry(QRect(340, 14, 141, 31))

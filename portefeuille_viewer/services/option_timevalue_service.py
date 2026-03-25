@@ -673,8 +673,10 @@ class OptionTimevalueService(QObject):
                 # Signed richting:
                 # - short (qty_open < 0) => positieve "te oogsten" tijdswaarde
                 # - long  (qty_open > 0) => negatieve tijdswaarde-exposure
-                qty_contracts = float(r.qty_open) / 100.0
-                time_total = -time_per * qty_contracts * float(r.multiplier)
+                # qty_open is already in onderliggende eenheden; waarde-exposure is daarom:
+                # time_per_unit * qty_open (multiplier valt algebraisch weg).
+                # Dit werkt ook voor niet-100 multipliers.
+                time_total = -time_per * float(r.qty_open)
                 by_ccy[r.ib_currency] += float(time_total)
 
             output.append(

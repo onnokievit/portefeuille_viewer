@@ -308,6 +308,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._summary_reload_timer.setInterval(300)
         self._summary_reload_timer.setSingleShot(True)
         self._summary_reload_timer.timeout.connect(self._reload_summary_if_needed)
+        self._opties_dirty = False
+        self._opties_reload_timer = QTimer(self)
+        self._opties_reload_timer.setInterval(300)
+        self._opties_reload_timer.setSingleShot(True)
+        self._opties_reload_timer.timeout.connect(self._reload_opties_if_needed)
 
         # init logic
         self.logic = SingleAssetAnalyseLogic()
@@ -401,6 +406,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.resultaatChart.setFocusPolicy(Qt.NoFocus)
         signals.databaseChanged.connect(self.on_database_changed)
         signals.ordersCommitted.connect(self.on_orders_committed)
+        signals.snapshotUpdated.connect(self._on_snapshot_updated)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
@@ -526,6 +532,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._active = active
         if active:
             self._schedule_summary_reload()
+            self._schedule_opties_reload()
             self._bind_state_engine_controls()
             self._refresh_state_engine_controls()
 
@@ -586,6 +593,29 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if self._summary_dirty:
             self._summary_dirty = False
             self.update_aandelen_table()
+
+    def _schedule_opties_reload(self):
+        self._opties_dirty = True
+        if not self._opties_reload_timer.isActive():
+            self._opties_reload_timer.start()
+
+    def _reload_opties_if_needed(self):
+        if not self._active:
+            return
+        if self._opties_dirty:
+            self._opties_dirty = False
+            self.update_opties_open_table()
+
+    def _on_snapshot_updated(self, snapshot_key: str):
+        # Hou opties-tabellen synchroon met live open-opties en live timevalue snapshots.
+        if snapshot_key in {
+            "aggregator_snapshot_load_open_opties_from_tx_live",
+            "snapshot_optie_timevalue_live",
+        }:
+            if self._active:
+                self._schedule_opties_reload()
+            else:
+                self._opties_dirty = True
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -1855,6 +1885,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "afwijking_pct": 60,
             "aantal_bezit": 60,
             "premie": 60,
+            "time_per_unit": 60,
+            "time_value": 70,
             
             "itm_otm": 60,
             "totaal_resultaat_optie": 60,
@@ -1883,6 +1915,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "optie_exp_date": "exp date",
             "optie_strike": "strike",
             "aantal_bezit": "aantal",
+            "time_per_unit": "tv/u",
+            "time_value": "time value",
             "totaal_resultaat_optie": "result",
             "afwijking_pct": "delta",
             "optie_comment": "comment",
@@ -3125,6 +3159,104 @@ class SingleAssetAnalyseLogic:
 
         ])
 
+
+        # Koppel timevalue live data op serie-identiteit voor time_per_unit en signed time_value.
+        # Gebruik genormaliseerde lookup (robuust tegen datum-/typeverschillen).
+        try:
+            tv = SNAPSHOT_STORE.snapshot_optie_timevalue_live
+            tv_lookup = {}
+            if tv is not None and not tv.is_empty():
+                for tr in tv.to_dicts():
+                    try:
+                        broker_k = str(tr.get("broker") or "").strip().lower()
+                        asset_k = str(tr.get("asset") or "").strip().upper()
+                        cp_k = str(tr.get("c_p") or "").strip().lower()
+                        strike_k = round(float(tr.get("strike") or 0.0), 6)
+                        exp_raw = tr.get("exp")
+                        if hasattr(exp_raw, "isoformat"):
+                            exp_k = str(exp_raw.isoformat())[:10]
+                        else:
+                            exp_s = str(exp_raw or "").strip()
+                            if len(exp_s) >= 10 and exp_s[4] == "-" and exp_s[7] == "-":
+                                exp_k = exp_s[:10]
+                            elif len(exp_s) >= 10 and exp_s[2] == "-" and exp_s[5] == "-":
+                                exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                            elif len(exp_s) >= 10 and exp_s[2] == "/" and exp_s[5] == "/":
+                                exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                            else:
+                                exp_k = exp_s[:10]
+                        key = (broker_k, asset_k, exp_k, cp_k, strike_k)
+                        tpu = float(tr.get("time_per_unit") or 0.0)
+                        tval = float(tr.get("time_total") or 0.0)
+                        tv_lookup[key] = (tpu, tval)
+                    except Exception:
+                        continue
+
+            def _lookup_tpu(s):
+                try:
+                    exp_raw = s.get("optie_exp_date")
+                    if hasattr(exp_raw, "isoformat"):
+                        exp_k = str(exp_raw.isoformat())[:10]
+                    else:
+                        exp_s = str(exp_raw or "").strip()
+                        if len(exp_s) >= 10 and exp_s[4] == "-" and exp_s[7] == "-":
+                            exp_k = exp_s[:10]
+                        elif len(exp_s) >= 10 and exp_s[2] == "-" and exp_s[5] == "-":
+                            exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                        elif len(exp_s) >= 10 and exp_s[2] == "/" and exp_s[5] == "/":
+                            exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                        else:
+                            exp_k = exp_s[:10]
+                    key = (
+                        str(s.get("broker") or "").strip().lower(),
+                        str(s.get("asset_rollup") or "").strip().upper(),
+                        exp_k,
+                        str(s.get("optie_call_put") or "").strip().lower(),
+                        round(float(s.get("optie_strike") or 0.0), 6),
+                    )
+                    return float(tv_lookup.get(key, (None, None))[0]) if key in tv_lookup else None
+                except Exception:
+                    return None
+
+            def _lookup_tval(s):
+                try:
+                    exp_raw = s.get("optie_exp_date")
+                    if hasattr(exp_raw, "isoformat"):
+                        exp_k = str(exp_raw.isoformat())[:10]
+                    else:
+                        exp_s = str(exp_raw or "").strip()
+                        if len(exp_s) >= 10 and exp_s[4] == "-" and exp_s[7] == "-":
+                            exp_k = exp_s[:10]
+                        elif len(exp_s) >= 10 and exp_s[2] == "-" and exp_s[5] == "-":
+                            exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                        elif len(exp_s) >= 10 and exp_s[2] == "/" and exp_s[5] == "/":
+                            exp_k = f"{exp_s[6:10]}-{exp_s[3:5]}-{exp_s[0:2]}"
+                        else:
+                            exp_k = exp_s[:10]
+                    key = (
+                        str(s.get("broker") or "").strip().lower(),
+                        str(s.get("asset_rollup") or "").strip().upper(),
+                        exp_k,
+                        str(s.get("optie_call_put") or "").strip().lower(),
+                        round(float(s.get("optie_strike") or 0.0), 6),
+                    )
+                    return float(tv_lookup.get(key, (None, None))[1]) if key in tv_lookup else None
+                except Exception:
+                    return None
+
+            df = df.with_columns([
+                pl.struct(["broker", "asset_rollup", "optie_exp_date", "optie_call_put", "optie_strike"])
+                .map_elements(_lookup_tpu, return_dtype=pl.Float64)
+                .alias("time_per_unit"),
+                pl.struct(["broker", "asset_rollup", "optie_exp_date", "optie_call_put", "optie_strike"])
+                .map_elements(_lookup_tval, return_dtype=pl.Float64)
+                .alias("time_value"),
+            ])
+        except Exception:
+            df = df.with_columns([
+                pl.lit(None).cast(pl.Float64).alias("time_per_unit"),
+                pl.lit(None).cast(pl.Float64).alias("time_value"),
+            ])
 
         if df is None or df.is_empty():
             df = pl.DataFrame()
