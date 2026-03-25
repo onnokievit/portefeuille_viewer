@@ -85,6 +85,7 @@ class OpenSeriesRow:
     multiplier: float
     series_id: int | None = None
     conid: int | None = None
+    resolver_locked: bool = False
     ref_mapping_found: bool = True
     ref_week: int = 0
 
@@ -220,6 +221,17 @@ class OptionTimevalueService(QObject):
             rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={self.stock_db_path}"
         )
 
+    def _ensure_option_series_master_columns(self, cur) -> None:
+        # Additive-only schema hardening for manual resolver workflow.
+        try:
+            cur.execute("ALTER TABLE option_series_master ADD COLUMN resolver_locked YESNO")
+        except Exception:
+            pass
+        try:
+            cur.execute("UPDATE option_series_master SET resolver_locked=False WHERE resolver_locked IS NULL")
+        except Exception:
+            pass
+
     def _extract_open_series(self) -> list[OpenSeriesRow]:
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         if df is None or df.is_empty():
@@ -314,10 +326,11 @@ class OptionTimevalueService(QObject):
         now = datetime.now()
         with self._connect_stockdb() as conn:
             cur = conn.cursor()
+            self._ensure_option_series_master_columns(cur)
             for r in rows:
                 ex = cur.execute(
                     """
-                    SELECT TOP 1 series_id, conid, local_symbol, multiplier
+                    SELECT TOP 1 series_id, conid, local_symbol, multiplier, underlying_symbol, exchange_code, trading_class, resolver_locked
                     FROM option_series_master
                     WHERE asset_rollup=?
                       AND optie_call_put=?
@@ -333,9 +346,9 @@ class OptionTimevalueService(QObject):
                         INSERT INTO option_series_master (
                             asset_rollup, underlying_symbol, strike, expiry,
                             exchange_code, trading_class, multiplier, ib_currency,
-                            optie_call_put, source_tag, active, created_at, updated_at
+                            optie_call_put, source_tag, resolver_locked, active, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             r.asset_rollup,
@@ -347,13 +360,22 @@ class OptionTimevalueService(QObject):
                             r.multiplier,
                             r.ib_currency,
                             r.optie_call_put,
-                            "position",
+                            "resolver_auto",
+                            False,
                             True,
                             now,
                             now,
                         ),
                     )
                 else:
+                    is_locked = bool(ex[7]) if ex[7] is not None else False
+                    if is_locked:
+                        # Respect manual lock: do not overwrite mapping fields.
+                        continue
+                    merged_underlying = r.underlying_symbol or _clean(ex[4]) or None
+                    merged_exchange = r.exchange_code or _clean(ex[5]) or None
+                    merged_trading_class = r.trading_class or _clean(ex[6]) or None
+                    merged_multiplier = r.multiplier if r.multiplier is not None else (_to_float(ex[3]) or 100.0)
                     cur.execute(
                         """
                         UPDATE option_series_master
@@ -362,11 +384,11 @@ class OptionTimevalueService(QObject):
                         WHERE series_id=?
                         """,
                         (
-                            r.underlying_symbol or None,
-                            r.exchange_code or None,
-                            r.trading_class or None,
-                            r.multiplier,
-                            "position",
+                            merged_underlying,
+                            merged_exchange,
+                            merged_trading_class,
+                            merged_multiplier,
+                            "resolver_auto",
                             True,
                             now,
                             int(ex[0]),
@@ -378,7 +400,7 @@ class OptionTimevalueService(QObject):
             for r in rows:
                 rec = cur.execute(
                     """
-                    SELECT TOP 1 series_id, conid, local_symbol, multiplier, exchange_code, trading_class
+                    SELECT TOP 1 series_id, conid, local_symbol, multiplier, exchange_code, trading_class, resolver_locked
                     FROM option_series_master
                     WHERE asset_rollup=?
                       AND optie_call_put=?
@@ -399,11 +421,15 @@ class OptionTimevalueService(QObject):
                     r.exchange_code = _clean(rec[4]).upper()
                 if _clean(rec[5]):
                     r.trading_class = _clean(rec[5]).upper()
+                r.resolver_locked = bool(rec[6]) if rec[6] is not None else False
                 db_rows.append(r)
 
             resolve_candidates: list[OpenSeriesRow] = []
             for r in db_rows:
                 if r.conid and int(r.conid) > 0:
+                    continue
+                if r.resolver_locked:
+                    # Manual lock means resolver should not mutate this row.
                     continue
                 key = self._series_key(r)
                 if not r.ref_mapping_found:
