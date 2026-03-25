@@ -28,6 +28,7 @@ from portefeuille_viewer.data.repository import (
 )
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui_logica.option_manual_resolver_dialog import OptionManualResolverDialog
 
 try:
     from PySide6.QtWebChannel import QWebChannel
@@ -181,6 +182,34 @@ class OptiesOpenWebPilotTab(QWidget):
         out["unresolved_count"] = unresolved_count
         out["unresolved_series"] = unresolved_series
         self._call_js("renderMeta", out)
+
+    def _get_unresolved_series(self) -> list[dict]:
+        tv_meta = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_meta", None)
+        try:
+            if hasattr(tv_meta, "is_empty") and not tv_meta.is_empty():
+                row = tv_meta.to_dicts()[0]
+                raw = row.get("unresolved_series")
+                if isinstance(raw, str) and raw.strip():
+                    parsed = json.loads(raw)
+                    return parsed if isinstance(parsed, list) else []
+                if isinstance(raw, list):
+                    return raw
+        except Exception:
+            return []
+        return []
+
+    def _open_manual_resolver_dialog(self):
+        wnd = self.window()
+        svc = getattr(wnd, "option_timevalue_service", None)
+        if svc is None:
+            QMessageBox.information(self, "Resolver", "Option timevalue service niet beschikbaar.")
+            return
+        unresolved = self._get_unresolved_series()
+        if not unresolved:
+            QMessageBox.information(self, "Resolver", "Geen unresolved series.")
+            return
+        dlg = OptionManualResolverDialog(svc, unresolved, self)
+        dlg.exec()
 
     def _build_legacy_rows(self, df: pl.DataFrame) -> tuple[list[dict], list[str]]:
         if df is None or df.is_empty():
@@ -671,7 +700,7 @@ class OptiesOpenWebPilotTab(QWidget):
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <script>
-      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[] };
+      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[], keyBound:false };
       function _fmtDate(v){
         if(v===null||v===undefined) return "";
         const s=String(v);
@@ -1005,11 +1034,27 @@ class OptiesOpenWebPilotTab(QWidget):
         document.addEventListener("click",(e)=>{ if(!panel) return; const wrap=e.target?.closest(".dropdown"); if(!wrap){ state.expDraft = new Set(Array.from(state.expSelected)); panel.classList.remove("open"); } });
         const clear=document.getElementById("btn_clear_filters"); if(clear){ clear.addEventListener("click",()=>{ for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; } const cb=document.getElementById("f_global_in_comment"); if(cb){ cb.checked=false; } state.includeCommentInGlobal=false; state.expSelected = new Set(); state.expDraft = new Set(); _syncExpButton(); renderBody();});}}
       function bindActions(){
-        const btn=document.getElementById("btn_export_snapshot");
-        if(btn && state.bridge && state.bridge.exportSnapshot){
-          btn.addEventListener("click",()=>state.bridge.exportSnapshot());
+        if(!state.keyBound){
+          document.getElementById("table_wrap")?.addEventListener("keydown", _onTableKeyDown);
+          state.keyBound = true;
         }
-        document.getElementById("table_wrap")?.addEventListener("keydown", _onTableKeyDown);
+        const btn=document.getElementById("btn_export_snapshot");
+        if(btn){
+          btn.onclick = () => {
+            if(state.bridge && state.bridge.exportSnapshot){
+              state.bridge.exportSnapshot();
+            }
+          };
+        }
+        const us=document.getElementById("unresolved_summary");
+        if(us){
+          us.onclick = (e) => {
+            if(state.bridge && state.bridge.openResolverDialog){
+              e.preventDefault();
+              state.bridge.openResolverDialog();
+            }
+          };
+        }
       }
       window.renderMeta = function(meta){
         const el=document.getElementById("meta"); if(!el||!meta) return;
@@ -1042,7 +1087,12 @@ class OptiesOpenWebPilotTab(QWidget):
       };
       window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
       window.applyPatch = function(payload){};
-      if (window.qt && window.QWebChannel) { new QWebChannel(qt.webChannelTransport, function(channel) { state.bridge = channel.objects.optiesBridge || null; }); }
+      if (window.qt && window.QWebChannel) {
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+          state.bridge = channel.objects.optiesBridge || null;
+          bindActions();
+        });
+      }
       window.addEventListener("resize", () => { if(state.hasSnapshot){ renderHeader(); renderBody(); }});
       bindFilters();
       bindActions();
@@ -1068,3 +1118,7 @@ class _OptiesOpenWebBridge(QObject):
     @Slot(str, int, int)
     def openCommentColorMenu(self, row_id: str, x: int, y: int) -> None:
         self._tab._open_comment_color_menu_for_row(row_id, x, y)
+
+    @Slot()
+    def openResolverDialog(self) -> None:
+        self._tab._open_manual_resolver_dialog()

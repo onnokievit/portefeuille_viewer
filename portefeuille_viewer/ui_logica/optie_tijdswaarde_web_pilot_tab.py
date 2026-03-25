@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QFileDialog, QLabel, QMessageBox, QVBoxLayout, QWi
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui_logica.option_manual_resolver_dialog import OptionManualResolverDialog
 
 try:
     from PySide6.QtWebChannel import QWebChannel
@@ -145,6 +146,34 @@ class OptieTijdswaardeWebPilotTab(QWidget):
         out["unresolved_count"] = unresolved_count
         out["unresolved_series"] = unresolved_series
         self._call_js("renderMeta", out)
+
+    def _get_unresolved_series(self) -> list[dict]:
+        tv_meta = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_meta", None)
+        try:
+            if hasattr(tv_meta, "is_empty") and not tv_meta.is_empty():
+                row = tv_meta.to_dicts()[0]
+                raw = row.get("unresolved_series")
+                if isinstance(raw, str) and raw.strip():
+                    parsed = json.loads(raw)
+                    return parsed if isinstance(parsed, list) else []
+                if isinstance(raw, list):
+                    return raw
+        except Exception:
+            return []
+        return []
+
+    def _open_manual_resolver_dialog(self):
+        wnd = self.window()
+        svc = getattr(wnd, "option_timevalue_service", None)
+        if svc is None:
+            QMessageBox.information(self, "Resolver", "Option timevalue service niet beschikbaar.")
+            return
+        unresolved = self._get_unresolved_series()
+        if not unresolved:
+            QMessageBox.information(self, "Resolver", "Geen unresolved series.")
+            return
+        dlg = OptionManualResolverDialog(svc, unresolved, self)
+        dlg.exec()
 
     def _call_js(self, func_name: str, payload: object):
         if not hasattr(self, "web"):
@@ -304,6 +333,10 @@ class OptieTijdswaardeWebPilotTab(QWidget):
         if(btn && state.bridge && state.bridge.exportSnapshot){
           btn.addEventListener("click",()=>state.bridge.exportSnapshot());
         }
+        const us=document.getElementById("unresolved_summary");
+        if(us && state.bridge && state.bridge.openResolverDialog){
+          us.addEventListener("click",(e)=>{ e.preventDefault(); state.bridge.openResolverDialog(); });
+        }
       }
       window.renderMeta = function(meta){
         const el=document.getElementById("meta"); if(!el||!meta) return;
@@ -357,3 +390,7 @@ class _OptieTijdswaardeWebBridge(QObject):
     @Slot()
     def exportSnapshot(self) -> None:
         self._tab._export_snapshot()
+
+    @Slot()
+    def openResolverDialog(self) -> None:
+        self._tab._open_manual_resolver_dialog()

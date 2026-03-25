@@ -232,6 +232,166 @@ class OptionTimevalueService(QObject):
         except Exception:
             pass
 
+    def list_unresolved_series(self) -> list[dict[str, Any]]:
+        try:
+            return list(self._unresolved_series.values())
+        except Exception:
+            return []
+
+    def _asset_symbol_from_snapshot(self, asset_rollup: str) -> str:
+        try:
+            df = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+            if df is None or df.is_empty():
+                return asset_rollup
+            m = (
+                df.filter(pl.col("asset_rollup").cast(pl.Utf8) == asset_rollup)
+                .select(["ib_symbol"])
+                .to_dicts()
+            )
+            if m:
+                return _clean(m[0].get("ib_symbol")) or asset_rollup
+        except Exception:
+            pass
+        return asset_rollup
+
+    def get_manual_resolve_candidates(self, unresolved_item: dict[str, Any]) -> list[dict[str, Any]]:
+        if not hasattr(self.price_feed, "_feed") or self.price_feed._feed is None:
+            return []
+        try:
+            asset = _clean(unresolved_item.get("asset")).upper()
+            cp = _clean(unresolved_item.get("c_p")).lower()
+            ccy = _clean(unresolved_item.get("ccy")).upper()
+            strike = float(unresolved_item.get("strike"))
+            exp = date.fromisoformat(_clean(unresolved_item.get("exp")))
+            right = "C" if cp == "call" else "P"
+        except Exception:
+            return []
+        symbol = self._asset_symbol_from_snapshot(asset) or asset
+        details_holder = []
+        done = threading.Event()
+        ib = self.price_feed._feed
+
+        def on_detail(cd):
+            details_holder.append(cd)
+
+        def on_end():
+            done.set()
+
+        for sec_type, exch in [
+            ("OPT", "SMART"),
+            ("OPT", "FTA"),
+            ("FOP", "SMART"),
+            ("FOP", "FTA"),
+        ]:
+            c = Contract()
+            c.secType = sec_type
+            c.symbol = symbol
+            c.currency = ccy
+            c.exchange = exch
+            c.lastTradeDateOrContractMonth = exp.strftime("%Y%m%d")
+            c.strike = float(strike)
+            c.right = right
+            details_holder.clear()
+            done.clear()
+            with contextlib.suppress(Exception):
+                ib.request_contract_details(c, on_detail, on_end)
+            done.wait(timeout=max(self._resolve_wait_sec, 1.2))
+            if details_holder:
+                break
+
+        out: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for det in details_holder:
+            con = getattr(det, "contract", None)
+            if con is None:
+                continue
+            try:
+                conid = int(getattr(con, "conId", 0) or 0)
+            except Exception:
+                conid = 0
+            if conid <= 0 or conid in seen:
+                continue
+            seen.add(conid)
+            out.append(
+                {
+                    "conid": conid,
+                    "local_symbol": _clean(getattr(con, "localSymbol", "")),
+                    "trading_class": _clean(getattr(con, "tradingClass", "")),
+                    "exchange_code": _clean(getattr(con, "exchange", "")) or "SMART",
+                    "multiplier": _to_float(getattr(con, "multiplier", None)) or 100.0,
+                    "underlying_symbol": _clean(getattr(con, "symbol", "")) or symbol,
+                    "sec_type": _clean(getattr(con, "secType", "")),
+                    "last_trade_date": _clean(getattr(con, "lastTradeDateOrContractMonth", "")),
+                    "currency": _clean(getattr(con, "currency", "")) or ccy,
+                }
+            )
+        return out
+
+    def apply_manual_resolution(self, unresolved_item: dict[str, Any], candidate: dict[str, Any], lock_row: bool = True) -> tuple[bool, str]:
+        try:
+            asset = _clean(unresolved_item.get("asset")).upper()
+            cp = _clean(unresolved_item.get("c_p")).lower()
+            ccy = _clean(unresolved_item.get("ccy")).upper()
+            strike = float(unresolved_item.get("strike"))
+            exp = date.fromisoformat(_clean(unresolved_item.get("exp")))
+            conid = int(candidate.get("conid") or 0)
+            if conid <= 0:
+                return False, "Geen geldige conid geselecteerd."
+            local_symbol = _clean(candidate.get("local_symbol"))
+            trading_class = _clean(candidate.get("trading_class")).upper()
+            exchange_code = _clean(candidate.get("exchange_code")).upper() or "SMART"
+            multiplier = _to_float(candidate.get("multiplier")) or 100.0
+            underlying_symbol = _clean(candidate.get("underlying_symbol")) or self._asset_symbol_from_snapshot(asset)
+        except Exception as exc:
+            return False, f"Ongeldige selectie: {exc}"
+
+        try:
+            now = datetime.now()
+            with self._connect_stockdb() as conn:
+                cur = conn.cursor()
+                self._ensure_option_series_master_columns(cur)
+                rec = cur.execute(
+                    """
+                    SELECT TOP 1 series_id
+                    FROM option_series_master
+                    WHERE asset_rollup=? AND optie_call_put=? AND strike=? AND expiry=? AND ib_currency=?
+                    """,
+                    (asset, cp, strike, exp, ccy),
+                ).fetchone()
+                if not rec:
+                    return False, "Serie niet gevonden in option_series_master."
+                cur.execute(
+                    """
+                    UPDATE option_series_master
+                    SET conid=?, local_symbol=?, trading_class=?, exchange_code=?, multiplier=?,
+                        underlying_symbol=?, source_tag=?, resolver_locked=?, active=?, last_verified_ts=?, updated_at=?
+                    WHERE series_id=?
+                    """,
+                    (
+                        conid,
+                        local_symbol or None,
+                        trading_class or None,
+                        exchange_code or None,
+                        multiplier,
+                        underlying_symbol or None,
+                        "resolver_manual",
+                        bool(lock_row),
+                        True,
+                        now,
+                        now,
+                        int(rec[0]),
+                    ),
+                )
+                conn.commit()
+
+            key = (asset, exp.isoformat(), round(float(strike), 6), cp, ccy)
+            with contextlib.suppress(Exception):
+                self._unresolved_series.pop(key, None)
+            self.schedule_rebuild()
+            return True, "Handmatige resolve opgeslagen."
+        except Exception as exc:
+            return False, f"Opslaan mislukt: {exc}"
+
     def _extract_open_series(self) -> list[OpenSeriesRow]:
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         if df is None or df.is_empty():
