@@ -1051,7 +1051,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     except Exception:
                         continue
             return s
-        num_cols = {...}
+        num_cols = {"transactie_aantal", "transactie_prijs", "optie_strike"}
 
         sorting = self.testOrdersTable.isSortingEnabled()
         self.testOrdersTable.setSortingEnabled(False)
@@ -1255,6 +1255,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def read_test_orders(self):
         cols = self.test_order_columns_db
         rows = []
+        numeric_cols = {"transactie_aantal", "transactie_prijs", "optie_strike"}
         for r in range(self.testOrdersTable.rowCount()):
             row_data = {}
             for c, name in enumerate(cols):
@@ -1262,7 +1263,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 if name == "include":
                     row_data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
                 else:
-                    row_data[name] = item.text() if item else ""
+                    txt = item.text() if item else ""
+                    row_data[name] = txt.replace(",", ".") if name in numeric_cols else txt
             if not self._is_valid_test_order(row_data):
                 continue
             rows.append(row_data)

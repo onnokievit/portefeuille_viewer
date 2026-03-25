@@ -736,7 +736,26 @@ class OptiesOpenWebPilotTab(QWidget):
       function fmt(v,col){
         if(v===null||v===undefined) return "";
         if(col==="optie_exp_date") return _fmtDate(v);
-        if(typeof v==="number") return Number.isFinite(v)?v.toFixed(2):"";
+        const twoDecCols = new Set([
+          "optie_strike",
+          "Koers",
+          "afwijking_pct",
+          "koers_prev",
+          "pct_change_p",
+          "pct_change_prev",
+          "aantal_bezit",
+          "premie",
+          "totaal_resultaat_optie",
+          "time_per_unit",
+          "time_value",
+        ]);
+        if(typeof v==="number"){
+          if(!Number.isFinite(v)) return "";
+          if(twoDecCols.has(col)){
+            return Number(v).toLocaleString("nl-NL",{minimumFractionDigits:2, maximumFractionDigits:2});
+          }
+          return String(v);
+        }
         return String(v);
       }
       function fmtNumber(v, d=2){

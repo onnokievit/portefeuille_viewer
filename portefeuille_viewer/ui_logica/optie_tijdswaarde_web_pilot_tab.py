@@ -292,7 +292,22 @@ class OptieTijdswaardeWebPilotTab(QWidget):
     </div>
     <script>
       const state = { cols: [], rows: new Map(), sortCol: "asset", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset:"",broker:""}, bridge:null };
-      function fmt(v){ if(v===null||v===undefined) return ""; if(typeof v==="number") return Number.isFinite(v)?v.toFixed(3):""; return String(v); }
+      function fmt(v,col){
+        if(v===null||v===undefined) return "";
+        if(typeof v==="number"){
+          if(!Number.isFinite(v)) return "";
+          const twoDecCols = new Set(["strike","qty_open","mult","time_total","last_px","und_px"]);
+          const threeDecCols = new Set(["intrinsic","time_per_unit","iv","delta","gamma","theta"]);
+          if(twoDecCols.has(col)){
+            return Number(v).toLocaleString("nl-NL",{minimumFractionDigits:2, maximumFractionDigits:2});
+          }
+          if(threeDecCols.has(col)){
+            return Number(v).toLocaleString("nl-NL",{minimumFractionDigits:3, maximumFractionDigits:3});
+          }
+          return String(v);
+        }
+        return String(v);
+      }
       function fmtNumber(v, d=2){ const n=Number(v??0); if(!Number.isFinite(n)) return ""; return n.toLocaleString("nl-NL",{minimumFractionDigits:d, maximumFractionDigits:d}); }
       function isNum(v){ return typeof v==="number" && Number.isFinite(v); }
       function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); return dir==="asc"?c:-c; }
@@ -312,7 +327,7 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       }
       function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset,state.filters.asset)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(!globalMatch(r, state.filters.global)) return false; return true;});}
       function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} renderHeader(); renderBody(); }; tr.appendChild(th); }); }
-      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} renderTimevalueSummary(rows); }
+      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v,col); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} renderTimevalueSummary(rows); }
       function renderTimevalueSummary(rows){
         let eur=0.0, usd=0.0;
         for(const r of (rows||[])){
