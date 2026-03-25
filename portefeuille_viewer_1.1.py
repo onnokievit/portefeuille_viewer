@@ -53,6 +53,25 @@ sys.path.insert(0, os.path.dirname(inspect.getfile(inspect.currentframe())))
 print("✅ Repository geladen uit:", repository.__file__)
 
 
+def _apply_env_defaults_from_settings() -> None:
+    """Load env defaults from settings.ini; explicit shell env vars keep precedence."""
+    try:
+        settings = get_settings()
+        cfg = getattr(settings, "config", None)
+        if cfg is None or not cfg.has_section("env_defaults"):
+            return
+        for raw_key, raw_val in cfg.items("env_defaults"):
+            env_key = str(raw_key or "").strip().upper()
+            env_val = str(raw_val or "").strip()
+            if not env_key or env_val == "":
+                continue
+            os.environ.setdefault(env_key, env_val)
+    except Exception as exc:
+        print(f"[env-defaults] could not apply defaults: {exc}")
+
+
+_apply_env_defaults_from_settings()
+
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
 live_aggregator_opties = LiveAggregatorOpties()

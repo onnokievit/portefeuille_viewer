@@ -216,7 +216,84 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         return assets, min_date, types
         
     def move_records_to_productie(self):
-        QMessageBox.information(self, "Move to productie", "Deze functionaliteit is nog niet geïmplementeerd.")
+        from portefeuille_viewer.data.repository import conn_str
+        import pyodbc
+
+        upload_cols = [
+            "datum",
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "asset_type",
+            "transactie_type",
+            "aantal",
+            "transactie_prijs",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put",
+            "transactie_oorsprong",
+            "order_id",
+            "order_id_number",
+            "transactie_oorsprong_detail",
+        ]
+
+        assets, min_date, types = self._collect_test_account_scope()
+        conn = None
+
+        try:
+            conn = pyodbc.connect(conn_str)
+            conn.autocommit = False
+            cursor = conn.cursor()
+
+            select_sql = f"SELECT {','.join(upload_cols)} FROM transacties_bron_data_test_accounts"
+            rows = cursor.execute(select_sql).fetchall()
+            if not rows:
+                QMessageBox.information(
+                    self,
+                    "Move to productie",
+                    "Geen records gevonden in transacties_bron_data_test_accounts.",
+                )
+                return
+
+            placeholders = ",".join(["?"] * len(upload_cols))
+            insert_sql = (
+                f"INSERT INTO transacties_bron_data_org ({','.join(upload_cols)}) "
+                f"VALUES ({placeholders})"
+            )
+            for row in rows:
+                cursor.execute(insert_sql, tuple(row))
+
+            cursor.execute("DELETE FROM transacties_bron_data_test_accounts")
+            conn.commit()
+
+            QMessageBox.information(
+                self,
+                "Move to productie",
+                f"{len(rows)} records verplaatst naar transacties_bron_data_org.",
+            )
+            signals.databaseChanged.emit(self.active_db_name)
+
+            if assets and min_date is not None:
+                self._emit_state_rebuild(
+                    asset_rollups=assets,
+                    from_date=min_date,
+                    asset_types=types,
+                    reason="optie_eind_move_to_productie",
+                )
+            self.reload_table()
+        except Exception as exc:
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            QMessageBox.warning(self, "Move to productie", f"Verplaatsen mislukt: {exc}")
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def clear_test_account(self):
         from portefeuille_viewer.data.repository import conn_str

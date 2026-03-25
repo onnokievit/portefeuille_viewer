@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
-# Pad naar default config (in package)
-DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
+# Legacy/default template config (alleen voor eenmalige backfill van missende keys)
+LEGACY_DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
 
 # Pad naar user config (in home directory)
 USER_CONFIG_DIR = Path(__file__).parent / ".user_settings"
@@ -40,16 +40,45 @@ class SettingsManager:
         self._load_config()
     
     def _load_config(self):
-        """Laad config: eerst default, dan user overwrites."""
-        # Laad default config uit package
-        if DEFAULT_CONFIG_PATH.exists():
-            self.config.read(DEFAULT_CONFIG_PATH, encoding='utf-8')
-            print(f"Default config geladen: {DEFAULT_CONFIG_PATH}")
-        
-        # User config overschrijft defaults (als deze bestaat)
+        """Laad config uitsluitend uit user_settings/settings.ini.
+
+        Eenmalige migratie:
+        - Bestaat user-config nog niet, dan initialiseren vanuit legacy default template.
+        - Bestaat user-config wel, dan worden missende keys uit legacy default toegevoegd.
+        """
+        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
         if USER_CONFIG_PATH.exists():
             self.config.read(USER_CONFIG_PATH, encoding='utf-8')
-            print(f"User config geladen: {USER_CONFIG_PATH}")
+        else:
+            # Eerste init: maak user-config aan vanuit legacy default (indien aanwezig).
+            if LEGACY_DEFAULT_CONFIG_PATH.exists():
+                self.config.read(LEGACY_DEFAULT_CONFIG_PATH, encoding='utf-8')
+            self.save()
+
+        # Backfill: voeg alleen missende keys toe uit legacy default, zonder bestaande waarden te overschrijven.
+        self._backfill_missing_from_legacy_default()
+        print(f"Config geladen: {USER_CONFIG_PATH}")
+
+    def _backfill_missing_from_legacy_default(self):
+        if not LEGACY_DEFAULT_CONFIG_PATH.exists():
+            return
+
+        legacy = configparser.ConfigParser()
+        legacy.read(LEGACY_DEFAULT_CONFIG_PATH, encoding='utf-8')
+        changed = False
+
+        for section in legacy.sections():
+            if not self.config.has_section(section):
+                self.config.add_section(section)
+                changed = True
+            for key, value in legacy.items(section):
+                if not self.config.has_option(section, key):
+                    self.config.set(section, key, value)
+                    changed = True
+
+        if changed:
+            self.save()
     
     def save(self):
         """Sla huidige config op naar user directory."""
