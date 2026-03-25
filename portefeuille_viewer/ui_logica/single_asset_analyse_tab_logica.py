@@ -188,6 +188,12 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                     return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return str(val)
+        if role == Qt.TextAlignmentRole:
+            if not index.isValid() or self._df.is_empty():
+                return None
+            colname = self._df.columns[index.column()]
+            if colname in {"strike", "optie_strike", "premie","aantal_bezit"}:
+                return Qt.AlignRight | Qt.AlignVCenter
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
                 return ""
@@ -288,7 +294,7 @@ class AandelenTableModel(ColoredPolarsTableModel):
             if not index.isValid() or self._df.is_empty():
                 return None
             colname = self._df.columns[index.column()]
-            if colname == "aantal_bezit":
+            if colname in {"aantal_bezit", "optie_strike", "SomVantransactie_aantal", "transactie_aantal"}:
                 val = self._df[index.row(), index.column()]
                 if val is None:
                     return ""
@@ -296,6 +302,12 @@ class AandelenTableModel(ColoredPolarsTableModel):
                     return f"{float(val):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return str(val)
+        if role == Qt.TextAlignmentRole:
+            if not index.isValid() or self._df.is_empty():
+                return None
+            colname = self._df.columns[index.column()]
+            if colname in {"optie_strike", "SomVantransactie_aantal", "transactie_aantal"}:
+                return Qt.AlignRight | Qt.AlignVCenter
         return super().data(index, role)
 
 # Widget-class die UI en logica koppelt
@@ -647,10 +659,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "transactie_aantal": 80,
             "transactie_prijs": 80,
             "optie_exp_date": 75,
-            "optie_strike": 50,
-            "optie_call_put": 35,
+            "optie_strike": 70,
+            "optie_call_put": 55,
             "include": 50,
-            "optie_comment": 305,
+            "optie_comment": 400,
         }
 
         header = self.testOrdersTable.horizontalHeader()
@@ -800,6 +812,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def on_test_orders_changed(self, row, col):
         if self.testOrdersTable.signalsBlocked():
             return
+
+        # Format numerieke test-order velden consistent als 2 decimalen met komma.
+        try:
+            col_name = self.test_order_columns[col]
+            if col_name in {"transactie_aantal", "transactie_prijs", "optie_strike"}:
+                item = self.testOrdersTable.item(row, col)
+                if item is not None:
+                    raw = (item.text() or "").strip()
+                    if raw != "":
+                        try:
+                            v = float(raw.replace(",", "."))
+                            txt = f"{v:.2f}".replace(".", ",")
+                            if item.text() != txt:
+                                self.testOrdersTable.blockSignals(True)
+                                item.setText(txt)
+                                self.testOrdersTable.blockSignals(False)
+                            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
         # Comment hoort niet bij test-order DB; schrijf naar optie-comments via uniek_id.
         try:
@@ -1070,7 +1103,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                         val = fmt_date(val)
                     if name in num_cols and val not in ("", None):
                         try:
-                            val = f"{float(val):.2f}"
+                            val = f"{float(str(val).replace(',', '.')):.2f}".replace(".", ",")
                         except Exception:
                             pass
                     if name == "include":
@@ -1080,6 +1113,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     else:
                         item = QTableWidgetItem(str(val))
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        if name in {"transactie_aantal", "transactie_prijs", "optie_strike"}:
+                            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                         if name == "optie_comment":
                             color_hex = color_by_id.get(row_data.get("_uniek_id", ""), "")
                             text_hex = textcolor_by_id.get(row_data.get("_uniek_id", ""), "")
@@ -1121,6 +1156,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             else:
                 item = QTableWidgetItem("")
                 item.setFlags(item.flags() | Qt.ItemIsEditable)
+                if name in {"transactie_aantal", "transactie_prijs", "optie_strike"}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 if name == "asset_rollup" and not getattr(self, "show_all_test_orders", False):
                     item.setText(self.asset_selector.currentText())
             self.testOrdersTable.setItem(row, c, item)
@@ -1238,23 +1275,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def row_to_dict(self, row: int) -> dict:
         cols = self.test_order_columns
         data = {}
+        numeric_cols = {"transactie_aantal", "transactie_prijs", "optie_strike"}
         for c, name in enumerate(cols):
             item = self.testOrdersTable.item(row, c)
             if name == "include":
                 data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
             else:
-                data[name] = item.text() if item else ""
+                txt = item.text() if item else ""
+                data[name] = txt.replace(",", ".") if name in numeric_cols else txt
         return data
 
     def row_to_dict_db(self, row: int) -> dict:
         cols = self.test_order_columns_db
         data = {}
+        numeric_cols = {"transactie_aantal", "transactie_prijs", "optie_strike"}
         for c, name in enumerate(cols):
             item = self.testOrdersTable.item(row, c)
             if name == "include":
                 data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
             else:
-                data[name] = item.text() if item else ""
+                txt = item.text() if item else ""
+                data[name] = txt.replace(",", ".") if name in numeric_cols else txt
         return data
     
 
@@ -1539,11 +1580,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         kolombreedtes = {
             "broker": 60,
             "asset_rollup": 75,
-            "asset_detail": 90,
-            "optie_exp_date": 60,
-            "optie_strike": 40,
+            "asset_detail": 150,
+            "optie_exp_date": 70,
+            "optie_strike": 60,
             "optie_call_put": 40,
-            "Koers": 40,
+            "Koers": 60,
             "SomVantransactie_aantal": 60,
             "sp_result": 60,
         }
@@ -1897,8 +1938,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "asset_rollup": 75,
             "optie_call_put": 35,
             "optie_exp_date": 75,
-            "optie_strike": 50,
-            "Koers": 50,
+            "optie_strike": 65,
+            "Koers": 65,
             "afwijking_pct": 60,
             "aantal_bezit": 60,
             "premie": 60,

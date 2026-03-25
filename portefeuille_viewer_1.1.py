@@ -65,7 +65,7 @@ optie_tijdswaarde_projection_v2 = (
     OptieTijdswaardeProjectionV2() if ENABLE_OPTIE_TIJDSWAARDE_PROJECTION_V2 else None
 )
 _AANDELEN_PROJECTION_METRICS = deque(maxlen=200)
-_AANDELEN_PROJECTION_METRICS_LOG = Path("logs") / "aandelen_projection_v2_metrics.jsonl"
+_AANDELEN_PROJECTION_METRICS_LOG = Path("logs") / "aandelen_projection_v2_metrics.jsonl"    
 _OPTIES_OPEN_PROJECTION_METRICS = deque(maxlen=200)
 _OPTIES_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "opties_open_projection_v2_metrics.jsonl"
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS = deque(maxlen=200)

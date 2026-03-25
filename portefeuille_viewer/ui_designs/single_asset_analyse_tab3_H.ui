@@ -283,7 +283,7 @@
        <rect>
         <x>1260</x>
         <y>10</y>
-        <width>811</width>
+        <width>821</width>
         <height>31</height>
        </rect>
       </property>
@@ -359,7 +359,7 @@
        <rect>
         <x>840</x>
         <y>46</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>257</height>
        </rect>
       </property>
@@ -372,7 +372,7 @@
        <rect>
         <x>840</x>
         <y>380</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>281</height>
        </rect>
       </property>
@@ -388,7 +388,7 @@
        <rect>
         <x>840</x>
         <y>950</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>181</height>
        </rect>
       </property>
@@ -401,7 +401,7 @@
        <rect>
         <x>840</x>
         <y>710</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>181</height>
        </rect>
       </property>
@@ -427,7 +427,7 @@
        <rect>
         <x>1330</x>
         <y>1180</y>
-        <width>741</width>
+        <width>751</width>
         <height>78</height>
        </rect>
       </property>
@@ -741,7 +741,7 @@
        <rect>
         <x>840</x>
         <y>920</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>31</height>
        </rect>
       </property>
@@ -761,7 +761,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
        <rect>
         <x>840</x>
         <y>680</y>
-        <width>1231</width>
+        <width>1241</width>
         <height>31</height>
        </rect>
       </property>
@@ -800,7 +800,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
        <rect>
         <x>1330</x>
         <y>1150</y>
-        <width>741</width>
+        <width>751</width>
         <height>31</height>
        </rect>
       </property>
@@ -817,7 +817,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
      <widget class="QGroupBox" name="groupBox_4">
       <property name="geometry">
        <rect>
-        <x>1560</x>
+        <x>1570</x>
         <y>310</y>
         <width>511</width>
         <height>61</height>
