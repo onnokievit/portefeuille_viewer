@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 import polars as pl
+import pyodbc
 import pyqtgraph as pg
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
@@ -40,6 +41,7 @@ from portefeuille_viewer.data.test_order_repository import (
     flush_dirty_test_orders_to_db,  # voor later timer/exit
     load_test_orders_cache_from_db,
 )
+from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 class CommentSortProxy(QSortFilterProxyModel):
     """Proxy die op UserRole sorteert en tuples (priority, text) netjes vergelijkt."""
@@ -302,6 +304,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         super().__init__(parent)
         self.setupUi(self)
         self._wrap_in_scroll_area()
+        self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5}
+        self._step_settings_by_asset: dict[str, dict[str, float]] = {}
+        self._step_settings_dirty = False
+        self._step_controls_loading = False
+        self._current_step_asset = ""
+        self._load_step_settings_cache()
         self._active = False
         self._summary_dirty = False
         self._summary_reload_timer = QTimer(self)
@@ -428,9 +436,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.payoff_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
         self.stepSizeBox.setLocale(QLocale(QLocale.C))
-        self.stepSizeBox.setDecimals(1)
-        self.stepSizeBox.setSingleStep(0.5)
-        self.stepSizeBox.setValue(2)
+        self.stepSizeBox.setDecimals(2)
+        self.stepSizeTick.setLocale(QLocale(QLocale.C))
+        self.stepSizeTick.setDecimals(2)
+        self.stepSizeTick.setMinimum(0.01)
+        self.stepSizeTick.setSingleStep(0.05)
+        self._step_controls_loading = True
+        self.stepSizeTick.setValue(float(self._step_defaults["step_size_tick"]))
+        self.stepSizeBox.setSingleStep(float(self._step_defaults["step_size_tick"]))
+        self.stepSizeBox.setValue(float(self._step_defaults["step_size"]))
+        self._step_controls_loading = False
 
         
         font = QFont("Arial", 8)  # Kies je gewenste lettertype en grootte
@@ -487,6 +502,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._opties_open_filter_connections_ready = False
         self.payoff_table.setRowCount(10)
         self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
+        self.stepSizeBox.valueChanged.connect(self._on_step_size_changed)
+        self.stepSizeTick.valueChanged.connect(self._on_step_tick_changed)
                 # Maak de rijhoogte compacter
         self._on_filter_changed()
         self.payoff_table.verticalHeader().setMinimumSectionSize(22)
@@ -2280,6 +2297,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def on_asset_selected(self, asset_rollup):
         self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
         self.logic.set_asset(asset_rollup)
+        self._current_step_asset = str(asset_rollup or "")
+        self._apply_step_settings_for_asset(self._current_step_asset)
         self._get_live_summary_row(asset_rollup, refresh=True)
         # Laad testorders uit DB voor dit asset en vul de tabel
         try:
@@ -2301,6 +2320,140 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_opties_open_table()
         self.update_aandelen_table()
         self.update_sprinters_table()
+
+    def _connect_stockdb(self):
+        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
+        return pyodbc.connect(conn_str)
+
+    def _ensure_step_settings_table(self, cur) -> None:
+        try:
+            cur.execute(
+                """
+                CREATE TABLE single_asset_stepsize_settings (
+                    asset_rollup TEXT(64),
+                    step_size DOUBLE,
+                    step_size_tick DOUBLE,
+                    updated_at DATETIME
+                )
+                """
+            )
+        except Exception:
+            pass
+        try:
+            cur.execute("CREATE UNIQUE INDEX ux_single_asset_stepsize_asset ON single_asset_stepsize_settings (asset_rollup)")
+        except Exception:
+            pass
+
+    def _load_step_settings_cache(self) -> None:
+        self._step_settings_by_asset = {}
+        try:
+            with self._connect_stockdb() as conn:
+                cur = conn.cursor()
+                self._ensure_step_settings_table(cur)
+                rows = cur.execute(
+                    "SELECT asset_rollup, step_size, step_size_tick FROM single_asset_stepsize_settings"
+                ).fetchall()
+            for row in rows:
+                asset = str(row[0] or "").strip()
+                if not asset:
+                    continue
+                step_size = self._safe_step_value(row[1], self._step_defaults["step_size"])
+                step_tick = self._safe_step_tick(row[2], self._step_defaults["step_size_tick"])
+                self._step_settings_by_asset[asset] = {
+                    "step_size": step_size,
+                    "step_size_tick": step_tick,
+                }
+            self._step_settings_dirty = False
+        except Exception as exc:
+            print(f"[single-asset-stepsize] load failed: {exc}")
+            self._step_settings_by_asset = {}
+            self._step_settings_dirty = False
+
+    def _safe_step_value(self, value, default: float) -> float:
+        try:
+            v = float(value)
+            if math.isfinite(v):
+                return round(v, 2)
+        except Exception:
+            pass
+        return round(float(default), 2)
+
+    def _safe_step_tick(self, value, default: float) -> float:
+        v = self._safe_step_value(value, default)
+        return 0.01 if v <= 0 else v
+
+    def _apply_step_settings_for_asset(self, asset_rollup: str) -> None:
+        cfg = self._step_settings_by_asset.get(asset_rollup) or self._step_defaults
+        step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
+        step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
+        self._step_controls_loading = True
+        try:
+            self.stepSizeTick.setValue(step_tick)
+            self.stepSizeBox.setSingleStep(step_tick)
+            self.stepSizeBox.setValue(step_size)
+        finally:
+            self._step_controls_loading = False
+
+    def _store_step_settings_for_current_asset(self) -> None:
+        asset = str(self._current_step_asset or "").strip()
+        if not asset:
+            return
+        step_size = self._safe_step_value(self.stepSizeBox.value(), self._step_defaults["step_size"])
+        step_tick = self._safe_step_tick(self.stepSizeTick.value(), self._step_defaults["step_size_tick"])
+        prev = self._step_settings_by_asset.get(asset)
+        if prev and abs(prev.get("step_size", 0.0) - step_size) < 1e-9 and abs(prev.get("step_size_tick", 0.0) - step_tick) < 1e-9:
+            return
+        self._step_settings_by_asset[asset] = {"step_size": step_size, "step_size_tick": step_tick}
+        self._step_settings_dirty = True
+
+    def _on_step_tick_changed(self, _value: float) -> None:
+        tick = self._safe_step_tick(self.stepSizeTick.value(), self._step_defaults["step_size_tick"])
+        self.stepSizeBox.setSingleStep(tick)
+        if self._step_controls_loading:
+            return
+        self._store_step_settings_for_current_asset()
+
+    def _on_step_size_changed(self, _value: float) -> None:
+        if self._step_controls_loading:
+            return
+        self._store_step_settings_for_current_asset()
+
+    def flush_step_settings_to_db(self) -> None:
+        if not self._step_settings_dirty:
+            return
+        try:
+            now = datetime.now()
+            with self._connect_stockdb() as conn:
+                cur = conn.cursor()
+                self._ensure_step_settings_table(cur)
+                for asset, cfg in self._step_settings_by_asset.items():
+                    step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
+                    step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
+                    exists = cur.execute(
+                        "SELECT TOP 1 asset_rollup FROM single_asset_stepsize_settings WHERE asset_rollup=?",
+                        (asset,),
+                    ).fetchone()
+                    if exists:
+                        cur.execute(
+                            """
+                            UPDATE single_asset_stepsize_settings
+                            SET step_size=?, step_size_tick=?, updated_at=?
+                            WHERE asset_rollup=?
+                            """,
+                            (step_size, step_tick, now, asset),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO single_asset_stepsize_settings (asset_rollup, step_size, step_size_tick, updated_at)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (asset, step_size, step_tick, now),
+                        )
+                conn.commit()
+            self._step_settings_dirty = False
+        except Exception as exc:
+            print(f"[single-asset-stepsize] flush failed: {exc}")
 
     def update_history_charts(self):
         asset = self.asset_selector.currentText()

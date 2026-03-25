@@ -191,6 +191,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             flush_dirty_open_optie_comments_to_db()
             load_open_optie_comments_cache()
+        # Flush single-asset step settings naar stock DB
+        with contextlib.suppress(Exception):
+            if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "flush_step_settings_to_db"):
+                self.single_asset_analyse_tab.flush_step_settings_to_db()
 
         print("closeEvent triggered!")
         super().closeEvent(event)

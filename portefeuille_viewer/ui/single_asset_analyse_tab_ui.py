@@ -58,7 +58,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 721, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1051, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -69,7 +69,16 @@ class Ui_SingleAssetAnalyseTab(object):
         self.stepSizeBox.setDecimals(6)
         self.stepSizeBox.setValue(0.020000000000000)
 
-        self.horizontalLayout.addWidget(self.stepSizeBox, 0, Qt.AlignmentFlag.AlignLeft)
+        self.horizontalLayout.addWidget(self.stepSizeBox)
+
+        self.stepSizeTick = QDoubleSpinBox(self.horizontalLayoutWidget)
+        self.stepSizeTick.setObjectName(u"stepSizeTick")
+        self.stepSizeTick.setMaximumSize(QSize(80, 16777215))
+        self.stepSizeTick.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+        self.stepSizeTick.setDecimals(6)
+        self.stepSizeTick.setValue(0.020000000000000)
+
+        self.horizontalLayout.addWidget(self.stepSizeTick)
 
         self.startDate = QDateEdit(self.horizontalLayoutWidget)
         self.startDate.setObjectName(u"startDate")
@@ -77,7 +86,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.startDate.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.startDate.setCalendarPopup(True)
 
-        self.horizontalLayout.addWidget(self.startDate, 0, Qt.AlignmentFlag.AlignLeft)
+        self.horizontalLayout.addWidget(self.startDate)
 
         self.endDate = QDateEdit(self.horizontalLayoutWidget)
         self.endDate.setObjectName(u"endDate")
@@ -85,7 +94,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.endDate.setStyleSheet(u"background-color: rgb(230, 230, 230);")
         self.endDate.setCalendarPopup(True)
 
-        self.horizontalLayout.addWidget(self.endDate, 0, Qt.AlignmentFlag.AlignLeft)
+        self.horizontalLayout.addWidget(self.endDate)
 
         self.comboBoxStatus = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxStatus.setObjectName(u"comboBoxStatus")
@@ -115,26 +124,26 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addWidget(self.comboBoxRegio)
 
-        self.horizontalLayoutWidget_2 = QWidget(self.widget)
-        self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(760, 10, 1311, 31))
-        self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
-        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.comboBoxSortering = QComboBox(self.horizontalLayoutWidget_2)
+        self.comboBoxSortering = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxSortering.setObjectName(u"comboBoxSortering")
         self.comboBoxSortering.setMaximumSize(QSize(180, 16777215))
         self.comboBoxSortering.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
-        self.horizontalLayout_2.addWidget(self.comboBoxSortering)
+        self.horizontalLayout.addWidget(self.comboBoxSortering)
 
-        self.comboBoxSortDirection = QComboBox(self.horizontalLayoutWidget_2)
+        self.comboBoxSortDirection = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxSortDirection.setObjectName(u"comboBoxSortDirection")
         self.comboBoxSortDirection.setMaximumSize(QSize(60, 16777215))
         self.comboBoxSortDirection.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
-        self.horizontalLayout_2.addWidget(self.comboBoxSortDirection)
+        self.horizontalLayout.addWidget(self.comboBoxSortDirection)
 
+        self.horizontalLayoutWidget_2 = QWidget(self.widget)
+        self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
+        self.horizontalLayoutWidget_2.setGeometry(QRect(1260, 10, 811, 31))
+        self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.horizontalSpacer_2 = QSpacerItem(200, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
@@ -308,7 +317,8 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_2.addWidget(self.widget)
 
         QWidget.setTabOrder(self.asset_selector, self.stepSizeBox)
-        QWidget.setTabOrder(self.stepSizeBox, self.startDate)
+        QWidget.setTabOrder(self.stepSizeBox, self.stepSizeTick)
+        QWidget.setTabOrder(self.stepSizeTick, self.startDate)
         QWidget.setTabOrder(self.startDate, self.endDate)
         QWidget.setTabOrder(self.endDate, self.comboBoxStatus)
         QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)
@@ -318,11 +328,6 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.comboBoxSortering, self.comboBoxSortDirection)
         QWidget.setTabOrder(self.comboBoxSortDirection, self.lineEditFilterOptiesOpen)
         QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
-        QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.buttonAddTestOrder)
-        QWidget.setTabOrder(self.buttonAddTestOrder, self.buttonDeleteTestOrder)
-        QWidget.setTabOrder(self.buttonDeleteTestOrder, self.checkBoxAssetOrdersOnly)
-        QWidget.setTabOrder(self.checkBoxAssetOrdersOnly, self.checkBoxEnableTestOrders)
-        QWidget.setTabOrder(self.checkBoxEnableTestOrders, self.testOrdersTable)
 
         self.retranslateUi(SingleAssetAnalyseTab)
 
