@@ -420,6 +420,19 @@ class OptiesOpenWebPilotTab(QWidget):
         out = out.select(select_cols)
 
         row_map: dict[str, str] = {}
+        color_defs = get_settings().get_comment_colors() or []
+        color_rank: dict[str, int] = {}
+        color_label: dict[str, str] = {}
+        for idx, d in enumerate(color_defs):
+            try:
+                _prio, lbl, bg_hex, _fg_hex = d
+                key = str(bg_hex or "").strip().lower()
+                if key and key not in color_rank:
+                    color_rank[key] = idx
+                if key:
+                    color_label[key] = str(lbl or key)
+            except Exception:
+                continue
         rows = out.to_dicts()
         for r in rows:
             rid = str(r.get("row_id") or "")
@@ -438,6 +451,13 @@ class OptiesOpenWebPilotTab(QWidget):
             r["timevalue_total_signed"] = ttot
             r["time_per_unit"] = tpu
             r["time_value"] = ttot
+            ckey = str(r.get("optie_comment_color") or "").strip().lower()
+            if ckey:
+                r["optie_comment_color_rank"] = int(color_rank.get(ckey, 5000))
+                r["optie_comment_color_label"] = str(color_label.get(ckey, ckey))
+            else:
+                r["optie_comment_color_rank"] = 9000
+                r["optie_comment_color_label"] = "(Lege regels)"
         self._row_id_to_uniek_id = row_map
         return rows, list(self._legacy_cols)
 
@@ -688,6 +708,20 @@ class OptiesOpenWebPilotTab(QWidget):
       <input id="f_asset" placeholder="Filter asset_rollup" />
       <input id="f_broker" placeholder="Filter broker" />
       <div class="dropdown">
+        <button id="btn_comment_color">Comment kleur</button>
+        <div id="comment_color_panel" class="drop-panel">
+          <div class="drop-title">Filter: comment kleur</div>
+          <input id="cc_search" placeholder="Zoek..." style="width:100%;font-size:12px;padding:4px 6px;border:1px solid #c7d1de;border-radius:6px;" />
+          <label class="drop-item" style="margin-top:6px;"><input id="cc_all_cb" type="checkbox" /><span>(Alles selecteren)</span></label>
+          <div class="row">
+            <button id="cc_ok">OK</button>
+            <button id="cc_wissen">Wissen</button>
+            <button id="cc_cancel">Cancel</button>
+          </div>
+          <div id="cc_list" class="drop-list"></div>
+        </div>
+      </div>
+      <div class="dropdown">
         <button id="btn_exp">Expiratie</button>
         <div id="exp_panel" class="drop-panel">
           <div class="drop-title">Filter: optie_exp_date</div>
@@ -715,7 +749,8 @@ class OptiesOpenWebPilotTab(QWidget):
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <script>
-      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", liveSortEnabled:false, frozenOrder:[], frozenPos:{}, hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[], keyBound:false };
+      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", liveSortEnabled:false, frozenOrder:[], frozenPos:{}, hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), commentColorOptions:[], commentColorSelected:new Set(), commentColorDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[], keyBound:false };
+      function _normColor(v){ return String(v??"").trim().toLowerCase(); }
       function _fmtDate(v){
         if(v===null||v===undefined) return "";
         const s=String(v);
@@ -843,7 +878,25 @@ class OptiesOpenWebPilotTab(QWidget):
         input.addEventListener("blur", () => finish(true));
       }
       function cellClasses(row,col,val){ const out=[]; const signCols=new Set(["totaal_resultaat_optie","pct_change_prev","afwijking_pct"]); if(signCols.has(col) && isNum(val)){ if(val>0){ out.push("bg-pos","fg-pos"); } else if(val<0){ out.push("bg-neg","fg-neg"); } } const itmCols=new Set(["itm","broker","asset_rollup","optie_call_put","optie_strike","optie_exp_date"]); if(itmCols.has(col) && isITMRow(row)){ const cp=callPut(row); if(cp==="put") out.push("itm-put"); else if(cp==="call") out.push("itm-call"); } return out.join(" "); }
-      function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); if(c===0){ c=String(rowStableKey(a)).localeCompare(String(rowStableKey(b))); } return dir==="asc"?c:-c; }
+      function compareRows(a,b,col,dir){
+        let c=0;
+        if(col==="optie_comment"){
+          const ra = Number(a?.optie_comment_color_rank ?? (_normColor(a?.optie_comment_color) ? 5000 : 9000));
+          const rb = Number(b?.optie_comment_color_rank ?? (_normColor(b?.optie_comment_color) ? 5000 : 9000));
+          c = ra - rb;
+          if(c===0){
+            c = _normColor(a?.optie_comment_color).localeCompare(_normColor(b?.optie_comment_color));
+          }
+          if(c===0){
+            c = String(a?.optie_comment ?? "").localeCompare(String(b?.optie_comment ?? ""));
+          }
+        } else {
+          const av=a[col], bv=b[col];
+          if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??""));
+        }
+        if(c===0){ c=String(rowStableKey(a)).localeCompare(String(rowStableKey(b))); }
+        return dir==="asc"?c:-c;
+      }
       function rowStableKey(row){ return String(row?.uniek_id ?? row?.row_id ?? ""); }
       function _rebuildFrozenPos(){ const pos={}; state.frozenOrder.forEach((rid, idx)=>{ pos[rid]=idx; }); state.frozenPos=pos; }
       function _seedFrozenOrderFromCurrentSort(){ const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); state.frozenOrder=rows.map(r=>rowStableKey(r)); _rebuildFrozenPos(); }
@@ -866,7 +919,36 @@ class OptiesOpenWebPilotTab(QWidget):
         }
         return true;
       }
-      function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset_rollup,state.filters.asset_rollup)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(state.expSelected.size>0){ const d=_canonExp(r.optie_exp_date); if(!state.expSelected.has(d)) return false; } if(!globalMatch(r,state.filters.global)) return false; return true;});}
+      function visibleRows(){
+        const rows=Array.from(state.rows.values());
+        return rows.filter(r=>{
+          if(!contains(r.asset_rollup,state.filters.asset_rollup)) return false;
+          if(!contains(r.broker,state.filters.broker)) return false;
+          if(state.expSelected.size>0){
+            const d=_canonExp(r.optie_exp_date);
+            if(!state.expSelected.has(d)) return false;
+          }
+          if(state.commentColorSelected.size>0){
+            const cl = _commentColorLabel(r);
+            if(!state.commentColorSelected.has(cl)) return false;
+          }
+          if(!globalMatch(r,state.filters.global)) return false;
+          return true;
+        });
+      }
+      function _refreshCommentColorFilterOptions(){
+        const keep = new Set(Array.from(state.commentColorSelected));
+        state.commentColorOptions = Array.from(new Set(Array.from(state.rows.values()).map(r=>_commentColorLabel(r)).filter(Boolean))).sort();
+        state.commentColorSelected = new Set(Array.from(keep).filter(v=>state.commentColorOptions.includes(v)));
+        const panelOpen = !!document.getElementById("comment_color_panel")?.classList.contains("open");
+        if(panelOpen){
+          state.commentColorDraft = new Set(Array.from(state.commentColorDraft).filter(v=>state.commentColorOptions.includes(v)));
+        } else {
+          state.commentColorDraft = new Set(Array.from(state.commentColorSelected));
+        }
+        _syncCommentColorButton();
+        _renderCommentColorList();
+      }
       const WIDTHS = {
         itm:52, broker:85, asset_rollup:95, optie_call_put:48, optie_exp_date:95,
         optie_strike:70, Koers:70, koers_prev:70, pct_change_prev:82, afwijking_pct:82,
@@ -1066,13 +1148,61 @@ class OptiesOpenWebPilotTab(QWidget):
         if(state.expSelected.size===0) btn.textContent="Expiratie";
         else btn.textContent=`Expiratie (${state.expSelected.size})`;
       }
-      function bindFilters(){ const map=[["f_global","global"],["f_asset","asset_rollup"],["f_broker","broker"]]; for(const [id,key] of map){ const el=document.getElementById(id); if(!el) continue; el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();}); }
+      function _commentColorLabel(row){
+        const lbl = String(row?.optie_comment_color_label ?? "").trim();
+        if(lbl) return lbl;
+        return String(row?.optie_comment_color ?? "").trim() ? String(row.optie_comment_color).trim() : "(Lege regels)";
+      }
+      function _syncCommentColorButton(){
+        const btn=document.getElementById("btn_comment_color");
+        if(!btn) return;
+        if(state.commentColorSelected.size===0) btn.textContent="Comment kleur";
+        else btn.textContent=`Comment kleur (${state.commentColorSelected.size})`;
+      }
+      function _renderCommentColorList(){
+        const q=(document.getElementById("cc_search")?.value||"").toLowerCase();
+        const host=document.getElementById("cc_list");
+        const allCb=document.getElementById("cc_all_cb");
+        if(!host) return;
+        host.innerHTML="";
+        const opts=state.commentColorOptions.filter(x=>!q || x.toLowerCase().includes(q));
+        for(const v of opts){
+          const row=document.createElement("label");
+          row.className="drop-item";
+          const cb=document.createElement("input");
+          cb.type="checkbox";
+          cb.checked=state.commentColorDraft.has(v);
+          cb.addEventListener("change",()=>{ if(cb.checked) state.commentColorDraft.add(v); else state.commentColorDraft.delete(v); _syncCommentColorAllCb(); });
+          const txt=document.createElement("span");
+          txt.textContent=v;
+          row.appendChild(cb); row.appendChild(txt);
+          host.appendChild(row);
+        }
+        if(allCb){
+          allCb.checked = state.commentColorDraft.size>0 && state.commentColorDraft.size===state.commentColorOptions.length;
+          allCb.indeterminate = state.commentColorDraft.size>0 && state.commentColorDraft.size<state.commentColorOptions.length;
+        }
+      }
+      function _syncCommentColorAllCb(){
+        const allCb=document.getElementById("cc_all_cb");
+        if(!allCb) return;
+        allCb.checked = state.commentColorDraft.size>0 && state.commentColorDraft.size===state.commentColorOptions.length;
+        allCb.indeterminate = state.commentColorDraft.size>0 && state.commentColorDraft.size<state.commentColorOptions.length;
+      }
+      function bindFilters(){
+        const map=[["f_global","global"],["f_asset","asset_rollup"],["f_broker","broker"]];
+        for(const [id,key] of map){
+          const el=document.getElementById(id);
+          if(!el) continue;
+          el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();});
+        }
         document.getElementById("f_global_in_comment")?.addEventListener("change",(e)=>{ state.includeCommentInGlobal = !!e.target.checked; renderBody(); });
         const liveCb=document.getElementById("f_table_live_update");
         if(liveCb){
           liveCb.checked = !!state.liveSortEnabled;
           liveCb.addEventListener("change",()=>{ state.liveSortEnabled = !!liveCb.checked; if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderBody(); });
         }
+
         const btn=document.getElementById("btn_exp"), panel=document.getElementById("exp_panel");
         btn?.addEventListener("click",(e)=>{ e.preventDefault(); if(!panel) return; const opening=!panel.classList.contains("open"); panel.classList.toggle("open"); if(opening){ state.expDraft = new Set(Array.from(state.expSelected)); _renderExpList(); } });
         document.getElementById("exp_search")?.addEventListener("input",()=>_renderExpList());
@@ -1080,8 +1210,44 @@ class OptiesOpenWebPilotTab(QWidget):
         document.getElementById("exp_ok")?.addEventListener("click",(e)=>{ e.preventDefault(); state.expSelected = new Set(Array.from(state.expDraft)); panel?.classList.remove("open"); _syncExpButton(); renderBody(); });
         document.getElementById("exp_wissen")?.addEventListener("click",(e)=>{ e.preventDefault(); state.expDraft = new Set(); state.expSelected = new Set(); panel?.classList.remove("open"); _syncExpButton(); renderBody(); });
         document.getElementById("exp_cancel")?.addEventListener("click",(e)=>{ e.preventDefault(); state.expDraft = new Set(Array.from(state.expSelected)); panel?.classList.remove("open"); });
-        document.addEventListener("click",(e)=>{ if(!panel) return; const wrap=e.target?.closest(".dropdown"); if(!wrap){ state.expDraft = new Set(Array.from(state.expSelected)); panel.classList.remove("open"); } });
-        const clear=document.getElementById("btn_clear_filters"); if(clear){ clear.addEventListener("click",()=>{ for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; } const cb=document.getElementById("f_global_in_comment"); if(cb){ cb.checked=false; } state.includeCommentInGlobal=false; state.expSelected = new Set(); state.expDraft = new Set(); _syncExpButton(); renderBody();});}}
+
+        const btnCc=document.getElementById("btn_comment_color"), panelCc=document.getElementById("comment_color_panel");
+        btnCc?.addEventListener("click",(e)=>{ e.preventDefault(); if(!panelCc) return; const opening=!panelCc.classList.contains("open"); panelCc.classList.toggle("open"); if(opening){ state.commentColorDraft = new Set(Array.from(state.commentColorSelected)); _renderCommentColorList(); } });
+        document.getElementById("cc_search")?.addEventListener("input",()=>_renderCommentColorList());
+        document.getElementById("cc_all_cb")?.addEventListener("change",(e)=>{ if(e.target.checked){ state.commentColorDraft = new Set(state.commentColorOptions); } else { state.commentColorDraft = new Set(); } _renderCommentColorList(); });
+        document.getElementById("cc_ok")?.addEventListener("click",(e)=>{ e.preventDefault(); state.commentColorSelected = new Set(Array.from(state.commentColorDraft)); panelCc?.classList.remove("open"); _syncCommentColorButton(); renderBody(); });
+        document.getElementById("cc_wissen")?.addEventListener("click",(e)=>{ e.preventDefault(); state.commentColorDraft = new Set(); state.commentColorSelected = new Set(); panelCc?.classList.remove("open"); _syncCommentColorButton(); renderBody(); });
+        document.getElementById("cc_cancel")?.addEventListener("click",(e)=>{ e.preventDefault(); state.commentColorDraft = new Set(Array.from(state.commentColorSelected)); panelCc?.classList.remove("open"); });
+
+        document.addEventListener("click",(e)=>{
+          const wrap=e.target?.closest(".dropdown");
+          if(!wrap){
+            if(panel){ state.expDraft = new Set(Array.from(state.expSelected)); panel.classList.remove("open"); }
+            if(panelCc){ state.commentColorDraft = new Set(Array.from(state.commentColorSelected)); panelCc.classList.remove("open"); }
+          }
+        });
+
+        const clear=document.getElementById("btn_clear_filters");
+        if(clear){
+          clear.addEventListener("click",()=>{
+            for(const [id,key] of map){
+              const el=document.getElementById(id);
+              if(el) el.value="";
+              state.filters[key]="";
+            }
+            const cb=document.getElementById("f_global_in_comment");
+            if(cb){ cb.checked=false; }
+            state.includeCommentInGlobal=false;
+            state.expSelected = new Set();
+            state.expDraft = new Set();
+            state.commentColorSelected = new Set();
+            state.commentColorDraft = new Set();
+            _syncExpButton();
+            _syncCommentColorButton();
+            renderBody();
+          });
+        }
+      }
       function bindActions(){
         if(!state.keyBound){
           document.getElementById("table_wrap")?.addEventListener("keydown", _onTableKeyDown);
@@ -1134,7 +1300,7 @@ class OptiesOpenWebPilotTab(QWidget):
           list.appendChild(li);
         }
       };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; state.frozenOrder=[]; state.frozenPos={}; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } } const panelOpen = !!document.getElementById("exp_panel")?.classList.contains("open"); const keep=state.expSelected; const keepDraft = panelOpen ? new Set(Array.from(state.expDraft)) : null; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = panelOpen ? new Set(Array.from(keepDraft||[]).filter(v=>state.expOptions.includes(v))) : new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; state.frozenOrder=[]; state.frozenPos={}; _syncExpButton(); _refreshCommentColorFilterOptions(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } } const panelOpen = !!document.getElementById("exp_panel")?.classList.contains("open"); const keep=state.expSelected; const keepDraft = panelOpen ? new Set(Array.from(state.expDraft)) : null; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = panelOpen ? new Set(Array.from(keepDraft||[]).filter(v=>state.expOptions.includes(v))) : new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _refreshCommentColorFilterOptions(); _ensureSelection(); renderHeader(); renderBody(); };
       window.applyPatch = function(payload){};
       if (window.qt && window.QWebChannel) {
         new QWebChannel(qt.webChannelTransport, function(channel) {
