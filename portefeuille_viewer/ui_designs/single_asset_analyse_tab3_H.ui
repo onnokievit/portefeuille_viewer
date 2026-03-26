@@ -309,6 +309,13 @@
         </spacer>
        </item>
        <item>
+        <widget class="QCheckBox" name="commentSearchCheckbox">
+         <property name="text">
+          <string>Zoek in comment</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLineEdit" name="lineEditFilterOptiesOpen">
          <property name="minimumSize">
           <size>
@@ -906,6 +913,8 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
   <tabstop>comboBoxRegio</tabstop>
   <tabstop>comboBoxSortering</tabstop>
   <tabstop>comboBoxSortDirection</tabstop>
+  <tabstop>checkBoxLiveResortOpenOpties</tabstop>
+  <tabstop>commentSearchCheckbox</tabstop>
   <tabstop>lineEditFilterOptiesOpen</tabstop>
   <tabstop>buttonClearFiltersOptiesOpen</tabstop>
  </tabstops>

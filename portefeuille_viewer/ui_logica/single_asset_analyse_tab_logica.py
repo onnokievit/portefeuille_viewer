@@ -8,8 +8,8 @@ import pyodbc
 import pyqtgraph as pg
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
-from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen
-from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer
+from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator
+from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression
 
 # from streamlit import columns
 
@@ -122,18 +122,54 @@ class DateDelegate(QStyledItemDelegate):
 class NumberDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         le = QLineEdit(parent)
-        v = QDoubleValidator(0, 1e12, 2, le)
-        v.setLocale(QLocale(QLocale.C))  # punt als decimaal
-        le.setValidator(v)
+        # Accepteer zowel komma als punt als decimaalscheiding zonder locale-conversie side effects.
+        rx = QRegularExpression(r"^\s*[+-]?\d*(?:[.,]\d{0,6})?\s*$")
+        le.setValidator(QRegularExpressionValidator(rx, le))
         return le
 
+    def setEditorData(self, editor, index):
+        # Laat waarde staan zoals getoond in de cel (bijv. 2,50), forceer geen punt.
+        txt = index.data(Qt.EditRole)
+        if txt is None:
+            txt = index.data(Qt.DisplayRole)
+        txt = "" if txt is None else str(txt).strip()
+        editor.setText(txt)
+
     def setModelData(self, editor, model, index):
-        txt = editor.text().replace(",", ".").strip()
-        try:
-            val = float(txt)
-            model.setData(index, f"{val:.2f}", Qt.EditRole)
-        except Exception:
+        txt = (editor.text() or "").strip()
+        val = _parse_decimal_text(txt)
+        if val is None:
             model.setData(index, txt, Qt.EditRole)
+            return
+        model.setData(index, _format_decimal_comma(val, 2), Qt.EditRole)
+
+
+def _parse_decimal_text(value) -> float | None:
+    if value is None:
+        return None
+    s = str(value).strip().replace(" ", "")
+    if not s:
+        return None
+    if "," in s and "." in s:
+        if s.rfind(",") > s.rfind("."):
+            # 1.234,56 -> 1234.56
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            # 1,234.56 -> 1234.56
+            s = s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return None
+
+
+def _format_decimal_comma(value, decimals: int = 2) -> str:
+    try:
+        return f"{float(value):.{decimals}f}".replace(".", ",")
+    except Exception:
+        return ""
 
 class CommentNoSelectDelegate(QStyledItemDelegate):
     """
@@ -333,6 +369,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             os.getenv("UI_SINGLE_ASSET_LIVE_RESORT_OPEN_OPTIES", "0").strip() == "1"
         )
         self._opties_open_frozen_order_uniek_id: list[str] = []
+        self._opties_open_manual_sort_section: int = -1
+        self._opties_open_manual_sort_order = Qt.AscendingOrder
+        self._updating_opties_open_table = False
         self._opties_reload_timer = QTimer(self)
         self._opties_reload_timer.setInterval(
             max(100, int(os.getenv("UI_SINGLE_ASSET_OPTIES_REFRESH_MS", "500")))
@@ -538,6 +577,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Je kunt hier headers en andere init doen zoals in je oude code
         self.lineEditFilterOptiesOpen.returnPressed.connect(self.apply_filters_opties_open)
         self.buttonClearFiltersOptiesOpen.clicked.connect(self._on_clear_filters_opties_open)
+        if hasattr(self, "commentSearchCheckbox"):
+            self.commentSearchCheckbox.toggled.connect(self.apply_filters_opties_open)
         self._opties_open_filter_connections_ready = True
         load_open_optie_comments_cache()
         self.update_opties_open_table()
@@ -641,8 +682,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not self._active:
             return
         if self._opties_dirty:
+            if self._is_any_opties_editor_active():
+                # Tijdens edit-mode geen model-rebuild: voorkomt uit edit-mode springen.
+                if not self._opties_reload_timer.isActive():
+                    self._opties_reload_timer.start()
+                return
             self._opties_dirty = False
             self.update_opties_open_table()
+
+    def _is_any_opties_editor_active(self) -> bool:
+        views = [
+            getattr(self, "tableViewOptiesOpen", None),
+            getattr(self, "tableViewOptiesOpenPut", None),
+            getattr(self, "tableViewOptiesOpenCall", None),
+        ]
+        for view in views:
+            if view is None:
+                continue
+            with contextlib.suppress(Exception):
+                if view.state() == QAbstractItemView.EditingState:
+                    return True
+        return False
 
     def _on_toggle_live_resort_open_opties(self, checked: bool):
         self._opties_live_resort_enabled = bool(checked)
@@ -897,16 +957,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 if item is not None:
                     raw = (item.text() or "").strip()
                     if raw != "":
-                        try:
-                            v = float(raw.replace(",", "."))
-                            txt = f"{v:.2f}".replace(".", ",")
+                        v = _parse_decimal_text(raw)
+                        if v is not None:
+                            txt = _format_decimal_comma(v, 2)
                             if item.text() != txt:
                                 self.testOrdersTable.blockSignals(True)
                                 item.setText(txt)
                                 self.testOrdersTable.blockSignals(False)
                             item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                        except Exception:
-                            pass
         except Exception:
             pass
 
@@ -1340,7 +1398,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     row_data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
                 else:
                     txt = item.text() if item else ""
-                    row_data[name] = txt.replace(",", ".") if name in numeric_cols else txt
+                    if name in numeric_cols:
+                        v = _parse_decimal_text(txt)
+                        row_data[name] = "" if v is None else f"{v:.2f}"
+                    else:
+                        row_data[name] = txt
             if not self._is_valid_test_order(row_data):
                 continue
             rows.append(row_data)
@@ -1360,7 +1422,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
             else:
                 txt = item.text() if item else ""
-                data[name] = txt.replace(",", ".") if name in numeric_cols else txt
+                if name in numeric_cols:
+                    v = _parse_decimal_text(txt)
+                    data[name] = "" if v is None else f"{v:.2f}"
+                else:
+                    data[name] = txt
         return data
 
     def row_to_dict_db(self, row: int) -> dict:
@@ -1373,7 +1439,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 data[name] = 1 if (item and item.checkState() == Qt.Checked) else 0
             else:
                 txt = item.text() if item else ""
-                data[name] = txt.replace(",", ".") if name in numeric_cols else txt
+                if name in numeric_cols:
+                    v = _parse_decimal_text(txt)
+                    data[name] = "" if v is None else f"{v:.2f}"
+                else:
+                    data[name] = txt
         return data
     
 
@@ -1530,6 +1600,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 df = df.filter(pl.col(col) == value)
             elif key == "q":
                 terms = [t.strip() for t in value.split(",") if t.strip()]
+                include_comment = bool(filters.get("__q_include_comment__", True))
                 for term in terms:
                     mask = None
                     def pad_zero(s):
@@ -1541,6 +1612,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                         ]
                     term_variants = set(pad_zero(term))
                     for c in df.columns:
+                        if (not include_comment) and c == "optie_comment":
+                            continue
                         dtype = df[c].dtype
                         if isinstance(dtype, pl.Date) or isinstance(dtype, pl.Datetime):
                             m = None
@@ -1933,6 +2006,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 
     def update_opties_open_table(self):
+        # Behoud zichtbare rijvolgorde tussen live-updates zolang live resort uit staat.
+        if not self._opties_live_resort_enabled:
+            with contextlib.suppress(Exception):
+                self._capture_open_opties_current_order()
+        self._updating_opties_open_table = True
         df = self.logic.load_option_open_data()
         asset = self.asset_selector.currentText()
         # Voor de eerste tabel géén asset-filtering, volledige tabel tonen
@@ -2065,6 +2143,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         proxy_model = CommentSortProxy(self)
         proxy_model.setSourceModel(model_all)
         proxy_model.setSortRole(Qt.UserRole)
+        proxy_model.setDynamicSortFilter(self._opties_live_resort_enabled)
         #print("Disconnecting click handler, replacing model")
         # self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
         # Behoud huidige sort-indicator alleen als live resort aan staat.
@@ -2073,9 +2152,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         prev_order = header_prev.sortIndicatorOrder() if header_prev is not None else Qt.AscendingOrder
         self.tableViewOptiesOpen.setSortingEnabled(False)
         self.tableViewOptiesOpen.setModel(proxy_model)
-        self.tableViewOptiesOpen.setSortingEnabled(True)
-        if self._opties_live_resort_enabled and prev_section >= 0:
-            self.tableViewOptiesOpen.sortByColumn(prev_section, prev_order)
+        if self._opties_live_resort_enabled:
+            self.tableViewOptiesOpen.setSortingEnabled(True)
+            if prev_section >= 0:
+                self.tableViewOptiesOpen.sortByColumn(prev_section, prev_order)
+        else:
+            # Hard freeze: geen Qt resort op model refreshes.
+            self.tableViewOptiesOpen.setSortingEnabled(False)
         # self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
         # print("Model replaced, click handler reconnected")
 
@@ -2108,6 +2191,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         with contextlib.suppress(Exception):
             header_all.sortIndicatorChanged.disconnect(self._on_open_opties_sort_indicator_changed)
         header_all.sortIndicatorChanged.connect(self._on_open_opties_sort_indicator_changed)
+        with contextlib.suppress(Exception):
+            header_all.sectionClicked.disconnect(self._on_open_opties_header_section_clicked)
+        header_all.sectionClicked.connect(self._on_open_opties_header_section_clicked)
         def apply_widths_all():
             for i, col in enumerate(df_all.columns):
                 if col in kolombreedtes:
@@ -2208,11 +2294,46 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             idx_text = df_call.columns.index("optie_comment_textcolor")
             self.tableViewOptiesOpenCall.setColumnHidden(idx_text, True)
         self._model_opties_call = model_call
+        self._updating_opties_open_table = False
 
     def _on_open_opties_sort_indicator_changed(self, _section: int, _order):
+        if self._updating_opties_open_table:
+            return
         if self._opties_live_resort_enabled:
             return
         QTimer.singleShot(0, self._capture_open_opties_current_order)
+
+    def _on_open_opties_header_section_clicked(self, section: int):
+        if self._updating_opties_open_table:
+            return
+        if self._opties_live_resort_enabled:
+            return
+        view = getattr(self, "tableViewOptiesOpen", None)
+        if view is None:
+            return
+        if section == self._opties_open_manual_sort_section:
+            self._opties_open_manual_sort_order = (
+                Qt.DescendingOrder
+                if self._opties_open_manual_sort_order == Qt.AscendingOrder
+                else Qt.AscendingOrder
+            )
+        else:
+            self._opties_open_manual_sort_section = section
+            self._opties_open_manual_sort_order = Qt.AscendingOrder
+
+        view.setSortingEnabled(True)
+        view.sortByColumn(section, self._opties_open_manual_sort_order)
+        with contextlib.suppress(Exception):
+            view.horizontalHeader().setSortIndicator(section, self._opties_open_manual_sort_order)
+        QTimer.singleShot(0, self._finalize_open_opties_manual_sort)
+
+    def _finalize_open_opties_manual_sort(self):
+        if self._opties_live_resort_enabled:
+            return
+        with contextlib.suppress(Exception):
+            self._capture_open_opties_current_order()
+        with contextlib.suppress(Exception):
+            self.tableViewOptiesOpen.setSortingEnabled(False)
         
 
     def _on_comment_commit(self, row_data: dict):
@@ -2880,6 +3001,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def apply_filters_opties_open(self):
         q = self.lineEditFilterOptiesOpen.text().strip()
         filters = {"q": q} if q else {}
+        include_comment = True
+        if hasattr(self, "commentSearchCheckbox"):
+            include_comment = bool(self.commentSearchCheckbox.isChecked())
+        filters["__q_include_comment__"] = include_comment
 
         # ...en kolomfilters toevoegen...
         for col, spec in (self._col_filters or {}).items():

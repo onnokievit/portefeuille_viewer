@@ -403,6 +403,10 @@ class AandelenWebPilotTab(QWidget):
         <option value="__ALL__">Alle assets</option>
       </select>
       <button id="btn_clear_filters">Wis filters</button>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#33485f;">
+        <input id="f_table_live_update" type="checkbox" />
+        Table live update
+      </label>
       <button id="btn_export_snapshot">Export snapshot</button>
     </div>
     <div class="table-shell">
@@ -476,6 +480,9 @@ class AandelenWebPilotTab(QWidget):
         rows: new Map(),
         sortCol: "asset_rollup",
         sortDir: "asc",
+        liveSortEnabled: false,
+        frozenOrder: [],
+        frozenPos: {},
         colWidths: {},
         savedWidths: {},
         hasSnapshot: false,
@@ -544,7 +551,62 @@ class AandelenWebPilotTab(QWidget):
         let c = 0;
         if (isNum(av) && isNum(bv)) c = av - bv;
         else c = String(av ?? "").localeCompare(String(bv ?? ""));
+        if (c === 0) {
+          c = rowStableKey(a).localeCompare(rowStableKey(b));
+        }
         return dir === "asc" ? c : -c;
+      }
+
+      function rowStableKey(row) {
+        return String(
+          row?.uniek_id
+          ?? row?.asset_rollup
+          ?? row?.row_id
+          ?? ""
+        );
+      }
+
+      function _rebuildFrozenPos() {
+        const pos = {};
+        state.frozenOrder.forEach((rid, idx) => { pos[rid] = idx; });
+        state.frozenPos = pos;
+      }
+
+      function _seedFrozenOrderFromCurrentSort() {
+        const rows = visibleRows();
+        rows.sort((a, b) => compareRows(a, b, state.sortCol, state.sortDir));
+        state.frozenOrder = rows.map((r) => rowStableKey(r));
+        _rebuildFrozenPos();
+      }
+
+      function _syncFrozenOrderWithRows() {
+        const currentKeys = Array.from(state.rows.values()).map((r) => rowStableKey(r));
+        const keySet = new Set(currentKeys);
+        const kept = state.frozenOrder.filter((k) => keySet.has(k));
+        const keptSet = new Set(kept);
+        const added = currentKeys.filter((k) => !keptSet.has(k));
+        state.frozenOrder = kept.concat(added);
+        _rebuildFrozenPos();
+      }
+
+      function _displayRows() {
+        const rows = visibleRows();
+        if (state.liveSortEnabled) {
+          rows.sort((a, b) => compareRows(a, b, state.sortCol, state.sortDir));
+          return rows;
+        }
+        if (!state.frozenOrder.length) {
+          _seedFrozenOrderFromCurrentSort();
+        }
+        rows.sort((a, b) => {
+          const ka = rowStableKey(a);
+          const kb = rowStableKey(b);
+          const pa = Object.prototype.hasOwnProperty.call(state.frozenPos, ka) ? state.frozenPos[ka] : Number.MAX_SAFE_INTEGER;
+          const pb = Object.prototype.hasOwnProperty.call(state.frozenPos, kb) ? state.frozenPos[kb] : Number.MAX_SAFE_INTEGER;
+          if (pa !== pb) return pa - pb;
+          return compareRows(a, b, state.sortCol, state.sortDir);
+        });
+        return rows;
       }
 
       function orderedCols(cols) {
@@ -645,6 +707,9 @@ class AandelenWebPilotTab(QWidget):
           th.onclick = () => {
             if (state.sortCol === col) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
             else { state.sortCol = col; state.sortDir = "asc"; }
+            if (!state.liveSortEnabled) {
+              _seedFrozenOrderFromCurrentSort();
+            }
             renderHeader();
             renderBody();
           };
@@ -706,8 +771,7 @@ class AandelenWebPilotTab(QWidget):
       function renderBody() {
         const body = document.getElementById("tbody");
         body.innerHTML = "";
-        const rows = visibleRows();
-        rows.sort((a, b) => compareRows(a, b, state.sortCol, state.sortDir));
+        const rows = _displayRows();
         for (const row of rows) {
           const tr = document.createElement("tr");
           tr.id = "r_" + rowId(row.asset_rollup);
@@ -911,6 +975,17 @@ class AandelenWebPilotTab(QWidget):
             renderBody();
           });
         }
+        const liveEl = document.getElementById("f_table_live_update");
+        if (liveEl) {
+          liveEl.checked = !!state.liveSortEnabled;
+          liveEl.addEventListener("change", () => {
+            state.liveSortEnabled = !!liveEl.checked;
+            if (!state.liveSortEnabled) {
+              _seedFrozenOrderFromCurrentSort();
+            }
+            renderBody();
+          });
+        }
         const clear = document.getElementById("btn_clear_filters");
         if (clear) {
           clear.addEventListener("click", () => {
@@ -1020,6 +1095,10 @@ class AandelenWebPilotTab(QWidget):
           }
         }
         if (!state.cols.includes(state.sortCol)) state.sortCol = "asset_rollup";
+        if (!state.liveSortEnabled) {
+          if (state.frozenOrder.length > 0) _syncFrozenOrderWithRows();
+          else _seedFrozenOrderFromCurrentSort();
+        }
         state.hasSnapshot = true;
         renderSelectOptions("f_regio", "regio", "Alle regio's");
         renderSelectOptions("f_sector", "sector", "Alle sectoren");
@@ -1062,6 +1141,9 @@ class AandelenWebPilotTab(QWidget):
           if (!ch || !ch.row_id) continue;
           if (ch.field === "__deleted__") {
             state.rows.delete(String(ch.row_id));
+            const rid = String(ch.row_id);
+            state.frozenOrder = state.frozenOrder.filter((x) => x !== rid);
+            _rebuildFrozenPos();
             const tr = document.getElementById("r_" + rowId(ch.row_id));
             if (tr && tr.parentNode) tr.parentNode.removeChild(tr);
             updateQualityBadge();

@@ -47,6 +47,7 @@ class OptiesOpenWebPilotTab(QWidget):
         self._needs_snapshot = False
         self._needs_patch = False
         self._needs_meta = False
+        self._comment_editing = False
         self._active_render_ms = max(100, int(os.getenv("UI_WEB_ACTIVE_RENDER_MS", "1000")))
         self._render_timer = QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -106,13 +107,16 @@ class OptiesOpenWebPilotTab(QWidget):
         if snapshot_key == "snapshot_opties_open_projection_v2":
             self._needs_snapshot = True
             self._needs_patch = False
-            self._schedule_render()
+            if not self._comment_editing:
+                self._schedule_render()
         elif snapshot_key == "snapshot_opties_open_projection_v2_patch":
             self._needs_patch = True
-            self._schedule_render()
+            if not self._comment_editing:
+                self._schedule_render()
         elif snapshot_key == "snapshot_opties_open_projection_v2_meta":
             self._needs_meta = True
-            self._schedule_render()
+            if not self._comment_editing:
+                self._schedule_render()
 
     def set_active(self, active: bool):
         self._is_active = bool(active)
@@ -128,13 +132,13 @@ class OptiesOpenWebPilotTab(QWidget):
         self._flush_scheduled_render()
 
     def _schedule_render(self):
-        if not self._is_active or not self._js_ready:
+        if not self._is_active or not self._js_ready or self._comment_editing:
             return
         if not self._render_timer.isActive():
             self._render_timer.start()
 
     def _flush_scheduled_render(self):
-        if not self._is_active or not self._js_ready:
+        if not self._is_active or not self._js_ready or self._comment_editing:
             return
         if self._needs_snapshot:
             self._publish_full_snapshot()
@@ -147,6 +151,16 @@ class OptiesOpenWebPilotTab(QWidget):
         if self._needs_meta:
             self._publish_meta()
             self._needs_meta = False
+
+    def _on_comment_editing_changed(self, editing: bool) -> None:
+        self._comment_editing = bool(editing)
+        if self._comment_editing:
+            self._render_timer.stop()
+            return
+        if self._is_active and self._js_ready and (
+            self._needs_snapshot or self._needs_patch or self._needs_meta
+        ):
+            self._flush_scheduled_render()
 
     def _publish_full_snapshot(self):
         df = getattr(SNAPSHOT_STORE, "snapshot_opties_open_projection_v2", None)
@@ -690,6 +704,7 @@ class OptiesOpenWebPilotTab(QWidget):
       <button id="btn_clear_filters">Wis filters</button>
       <div class="tv-inline"><span class="tv-code">EUR</span><div class="tv-mini" id="tv_total_eur">0,00</div></div>
       <div class="tv-inline"><span class="tv-code">USD</span><div class="tv-mini" id="tv_total_usd">0,00</div></div>
+      <label class="chk"><input id="f_table_live_update" type="checkbox" />Table live update</label>
       <button id="btn_export_snapshot">Export snapshot</button>
     </div>
     <details class="unresolved" id="unresolved_box">
@@ -700,7 +715,7 @@ class OptiesOpenWebPilotTab(QWidget):
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <script>
-      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[], keyBound:false };
+      const state = { cols: [], rows: new Map(), sortCol: "asset_rollup", sortDir: "asc", liveSortEnabled:false, frozenOrder:[], frozenPos:{}, hasSnapshot:false, filters:{global:"",asset_rollup:"",broker:""}, includeCommentInGlobal:false, bridge:null, expOptions:[], expSelected:new Set(), expDraft:new Set(), selectedRowId:null, selectedColIdx:0, renderedRowIds:[], keyBound:false };
       function _fmtDate(v){
         if(v===null||v===undefined) return "";
         const s=String(v);
@@ -768,6 +783,9 @@ class OptiesOpenWebPilotTab(QWidget):
       function callPut(row){ return String(row.optie_call_put??"").toLowerCase(); }
       function startInlineCommentEdit(td, row, seedText=null){
         if(!td) return;
+        if(state.bridge && state.bridge.commentEditing){
+          state.bridge.commentEditing(true);
+        }
         const original = String(row.optie_comment ?? "");
         const input = document.createElement("input");
         input.type = "text";
@@ -809,6 +827,9 @@ class OptiesOpenWebPilotTab(QWidget):
               _activeCellEl()?.scrollIntoView({block:"nearest", inline:"nearest"});
             }
           }, 0);
+          if(state.bridge && state.bridge.commentEditing){
+            state.bridge.commentEditing(false);
+          }
         };
         input.addEventListener("keydown", (e) => {
           if(e.key === "Enter"){
@@ -822,7 +843,11 @@ class OptiesOpenWebPilotTab(QWidget):
         input.addEventListener("blur", () => finish(true));
       }
       function cellClasses(row,col,val){ const out=[]; const signCols=new Set(["totaal_resultaat_optie","pct_change_prev","afwijking_pct"]); if(signCols.has(col) && isNum(val)){ if(val>0){ out.push("bg-pos","fg-pos"); } else if(val<0){ out.push("bg-neg","fg-neg"); } } const itmCols=new Set(["itm","broker","asset_rollup","optie_call_put","optie_strike","optie_exp_date"]); if(itmCols.has(col) && isITMRow(row)){ const cp=callPut(row); if(cp==="put") out.push("itm-put"); else if(cp==="call") out.push("itm-call"); } return out.join(" "); }
-      function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); return dir==="asc"?c:-c; }
+      function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); if(c===0){ c=String(rowStableKey(a)).localeCompare(String(rowStableKey(b))); } return dir==="asc"?c:-c; }
+      function rowStableKey(row){ return String(row?.uniek_id ?? row?.row_id ?? ""); }
+      function _rebuildFrozenPos(){ const pos={}; state.frozenOrder.forEach((rid, idx)=>{ pos[rid]=idx; }); state.frozenPos=pos; }
+      function _seedFrozenOrderFromCurrentSort(){ const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); state.frozenOrder=rows.map(r=>rowStableKey(r)); _rebuildFrozenPos(); }
+      function _syncFrozenOrderWithRows(){ const currentKeys=Array.from(state.rows.values()).map(r=>rowStableKey(r)); const keySet=new Set(currentKeys); const kept=state.frozenOrder.filter(k=>keySet.has(k)); const keptSet=new Set(kept); const added=currentKeys.filter(k=>!keptSet.has(k)); state.frozenOrder=kept.concat(added); _rebuildFrozenPos(); }
       function contains(h,n){ if(!n) return true; return String(h??"").toLowerCase().includes(String(n).toLowerCase()); }
       function globalMatch(row, raw){
         if(!raw) return true;
@@ -877,8 +902,8 @@ class OptiesOpenWebPilotTab(QWidget):
         out.optie_comment = Math.max(80, comment);
         return out;
       }
-      function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; const W=_calcWidths(); state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; const w=W[col]||90; th.style.width=w+"px"; th.style.minWidth=w+"px"; th.style.maxWidth=w+"px"; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} renderHeader(); renderBody(); }; tr.appendChild(th); }); }
-      function sortedRows(){ const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); return rows; }
+      function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; const W=_calcWidths(); state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; const w=W[col]||90; th.style.width=w+"px"; th.style.minWidth=w+"px"; th.style.maxWidth=w+"px"; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderHeader(); renderBody(); }; tr.appendChild(th); }); }
+      function sortedRows(){ const rows=visibleRows(); if(state.liveSortEnabled){ rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); return rows; } if(!state.frozenOrder.length){ _seedFrozenOrderFromCurrentSort(); } rows.sort((a,b)=>{ const ka=rowStableKey(a), kb=rowStableKey(b); const pa=Object.prototype.hasOwnProperty.call(state.frozenPos, ka)?state.frozenPos[ka]:Number.MAX_SAFE_INTEGER; const pb=Object.prototype.hasOwnProperty.call(state.frozenPos, kb)?state.frozenPos[kb]:Number.MAX_SAFE_INTEGER; if(pa!==pb) return pa-pb; return compareRows(a,b,state.sortCol,state.sortDir); }); return rows; }
       function renderBody(){
         const body=document.getElementById("tbody");
         body.innerHTML="";
@@ -1043,6 +1068,11 @@ class OptiesOpenWebPilotTab(QWidget):
       }
       function bindFilters(){ const map=[["f_global","global"],["f_asset","asset_rollup"],["f_broker","broker"]]; for(const [id,key] of map){ const el=document.getElementById(id); if(!el) continue; el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();}); }
         document.getElementById("f_global_in_comment")?.addEventListener("change",(e)=>{ state.includeCommentInGlobal = !!e.target.checked; renderBody(); });
+        const liveCb=document.getElementById("f_table_live_update");
+        if(liveCb){
+          liveCb.checked = !!state.liveSortEnabled;
+          liveCb.addEventListener("change",()=>{ state.liveSortEnabled = !!liveCb.checked; if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderBody(); });
+        }
         const btn=document.getElementById("btn_exp"), panel=document.getElementById("exp_panel");
         btn?.addEventListener("click",(e)=>{ e.preventDefault(); if(!panel) return; const opening=!panel.classList.contains("open"); panel.classList.toggle("open"); if(opening){ state.expDraft = new Set(Array.from(state.expSelected)); _renderExpList(); } });
         document.getElementById("exp_search")?.addEventListener("input",()=>_renderExpList());
@@ -1104,7 +1134,7 @@ class OptiesOpenWebPilotTab(QWidget):
           list.appendChild(li);
         }
       };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; state.frozenOrder=[]; state.frozenPos={}; _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } } const keep=state.expSelected; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _ensureSelection(); renderHeader(); renderBody(); };
       window.applyPatch = function(payload){};
       if (window.qt && window.QWebChannel) {
         new QWebChannel(qt.webChannelTransport, function(channel) {
@@ -1141,3 +1171,7 @@ class _OptiesOpenWebBridge(QObject):
     @Slot()
     def openResolverDialog(self) -> None:
         self._tab._open_manual_resolver_dialog()
+
+    @Slot(bool)
+    def commentEditing(self, editing: bool) -> None:
+        self._tab._on_comment_editing_changed(editing)

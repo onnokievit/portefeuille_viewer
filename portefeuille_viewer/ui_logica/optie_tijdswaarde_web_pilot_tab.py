@@ -233,8 +233,16 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       body { font-family: Segoe UI, Arial, sans-serif; padding:12px; background:#f5f6f8; display:flex; flex-direction:column; }
       .meta { margin: 0 0 10px 0; color:#44536b; font-size:12px; }
       .filters { display:flex; gap:8px; margin:0 0 8px 0; flex-wrap:wrap; align-items:center; }
-      .filters input { font-size:12px; padding:4px 6px; border:1px solid #c7d1de; border-radius:6px; min-width:150px; }
+      .filters input:not([type="checkbox"]) { font-size:12px; padding:4px 6px; border:1px solid #c7d1de; border-radius:6px; min-width:150px; }
       .filters button { font-size:12px; padding:4px 8px; border:1px solid #b8c3d3; background:#f4f7fb; border-radius:6px; cursor:pointer; }
+      .dropdown { position:relative; display:inline-block; }
+      .drop-panel { position:absolute; top:30px; left:0; z-index:20; background:#fff; border:1px solid #c7d1de; border-radius:8px; padding:10px; min-width:380px; box-shadow:0 6px 18px rgba(0,0,0,.14); display:none; }
+      .drop-panel.open { display:block; }
+      .drop-panel .row { display:flex; gap:6px; margin-top:6px; }
+      .drop-title { font-size:13px; color:#6a778a; margin-bottom:6px; }
+      .drop-list { max-height:240px; overflow:auto; border:1px solid #e2e6ec; border-radius:6px; padding:6px; margin-top:6px; }
+      .drop-item { display:flex; gap:6px; align-items:center; font-size:12px; margin:2px 0; }
+      .drop-item span { white-space:nowrap; }
       .tv-inline { display:flex; align-items:center; gap:6px; margin-left:4px; }
       .tv-code { font-size:12px; color:#33485f; font-weight:600; min-width:28px; text-align:right; }
       .tv-mini {
@@ -278,9 +286,27 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       <input id="f_global" placeholder="Zoek alle kolommen..." />
       <input id="f_asset" placeholder="Filter asset" />
       <input id="f_broker" placeholder="Filter broker" />
+      <div class="dropdown">
+        <button id="btn_exp_filter">Expiratie</button>
+        <div id="exp_panel" class="drop-panel">
+          <div class="drop-title">Filter: optie_exp_date</div>
+          <input id="exp_search" placeholder="Zoek datum..." style="width:100%;font-size:12px;padding:4px 6px;border:1px solid #c7d1de;border-radius:6px;" />
+          <label class="drop-item" style="margin-top:6px;"><input id="exp_all_cb" type="checkbox" /><span>(Alles selecteren)</span></label>
+          <div class="row">
+            <button id="exp_ok">OK</button>
+            <button id="exp_wissen">Wissen</button>
+            <button id="exp_cancel">Cancel</button>
+          </div>
+          <div id="exp_list" class="drop-list"></div>
+        </div>
+      </div>
       <button id="btn_clear_filters">Wis filters</button>
       <div class="tv-inline"><span class="tv-code">EUR</span><div class="tv-mini" id="tv_total_eur">0,00</div></div>
       <div class="tv-inline"><span class="tv-code">USD</span><div class="tv-mini" id="tv_total_usd">0,00</div></div>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#33485f;">
+        <input id="f_table_live_update" type="checkbox" />
+        Table live update
+      </label>
       <button id="btn_export_snapshot">Export snapshot</button>
     </div>
     <details class="unresolved" id="unresolved_box">
@@ -291,9 +317,70 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       <table id="tbl"><thead><tr id="thead-row"></tr></thead><tbody id="tbody"></tbody></table>
     </div>
     <script>
-      const state = { cols: [], rows: new Map(), sortCol: "asset", sortDir: "asc", hasSnapshot:false, filters:{global:"",asset:"",broker:""}, bridge:null };
+      const state = { cols: [], rows: new Map(), sortCol: "asset", sortDir: "asc", liveSortEnabled:false, frozenOrder:[], frozenPos:{}, hasSnapshot:false, filters:{global:"",asset:"",broker:""}, expOptions:[], expSelected:new Set(), expDraft:new Set(), bridge:null };
+      function _canonExp(v){
+        if(v===null||v===undefined) return "";
+        let s=String(v).trim();
+        if(!s) return "";
+        if(s.includes("T")) s=s.split("T")[0];
+        if(s.includes(" ")) s=s.split(" ")[0];
+        if(s.length>=10 && s[4]==="-" && s[7]==="-") return s.slice(0,10);
+        if(s.length>=10 && s[2]==="-" && s[5]==="-") return `${s.slice(6,10)}-${s.slice(3,5)}-${s.slice(0,2)}`;
+        if(s.length>=10 && s[2]==="/" && s[5]==="/") return `${s.slice(6,10)}-${s.slice(3,5)}-${s.slice(0,2)}`;
+        return s;
+      }
+      function _fmtDate(v){
+        const c=_canonExp(v);
+        if(!c) return "";
+        if(c.length>=10 && c[4]==="-" && c[7]==="-"){
+          return `${c.slice(8,10)}-${c.slice(5,7)}-${c.slice(0,4)}`;
+        }
+        return c;
+      }
+      function _syncExpButton(){
+        const btn=document.getElementById("btn_exp_filter");
+        if(!btn) return;
+        const n=state.expSelected.size;
+        btn.textContent = n>0 ? `Expiratie (${n})` : "Expiratie";
+        const allCb=document.getElementById("exp_all_cb");
+        if(allCb){
+          allCb.checked = state.expDraft.size>0 && state.expDraft.size===state.expOptions.length;
+          allCb.indeterminate = state.expDraft.size>0 && state.expDraft.size<state.expOptions.length;
+        }
+      }
+      function _renderExpList(){
+        const q=(document.getElementById("exp_search")?.value||"").toLowerCase();
+        const host=document.getElementById("exp_list");
+        const allCb=document.getElementById("exp_all_cb");
+        if(!host) return;
+        host.innerHTML="";
+        const opts=state.expOptions.filter(x=>!q || x.toLowerCase().includes(q));
+        for(const v of opts){
+          const row=document.createElement("label");
+          row.className="drop-item";
+          const cb=document.createElement("input");
+          cb.type="checkbox";
+          cb.checked=state.expDraft.has(v);
+          cb.addEventListener("change",()=>{ if(cb.checked) state.expDraft.add(v); else state.expDraft.delete(v); _syncAllCb(); });
+          const txt=document.createElement("span");
+          txt.textContent=v;
+          row.appendChild(cb); row.appendChild(txt);
+          host.appendChild(row);
+        }
+        if(allCb){
+          allCb.checked = state.expDraft.size>0 && state.expDraft.size===state.expOptions.length;
+          allCb.indeterminate = state.expDraft.size>0 && state.expDraft.size<state.expOptions.length;
+        }
+      }
+      function _syncAllCb(){
+        const allCb=document.getElementById("exp_all_cb");
+        if(!allCb) return;
+        allCb.checked = state.expDraft.size>0 && state.expDraft.size===state.expOptions.length;
+        allCb.indeterminate = state.expDraft.size>0 && state.expDraft.size<state.expOptions.length;
+      }
       function fmt(v,col){
         if(v===null||v===undefined) return "";
+        if(col==="exp") return _fmtDate(v);
         if(typeof v==="number"){
           if(!Number.isFinite(v)) return "";
           const twoDecCols = new Set(["strike","qty_open","mult","time_total","last_px","und_px"]);
@@ -310,7 +397,11 @@ class OptieTijdswaardeWebPilotTab(QWidget):
       }
       function fmtNumber(v, d=2){ const n=Number(v??0); if(!Number.isFinite(n)) return ""; return n.toLocaleString("nl-NL",{minimumFractionDigits:d, maximumFractionDigits:d}); }
       function isNum(v){ return typeof v==="number" && Number.isFinite(v); }
-      function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); return dir==="asc"?c:-c; }
+      function compareRows(a,b,col,dir){ const av=a[col], bv=b[col]; let c=0; if(isNum(av)&&isNum(bv)) c=av-bv; else c=String(av??"").localeCompare(String(bv??"")); if(c===0){ c=rowStableKey(a).localeCompare(rowStableKey(b)); } return dir==="asc"?c:-c; }
+      function rowStableKey(row){ return String(row?.uniek_id ?? row?.row_id ?? ""); }
+      function _rebuildFrozenPos(){ const pos={}; state.frozenOrder.forEach((rid, idx)=>{ pos[rid]=idx; }); state.frozenPos=pos; }
+      function _seedFrozenOrderFromCurrentSort(){ const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); state.frozenOrder=rows.map(r=>rowStableKey(r)); _rebuildFrozenPos(); }
+      function _syncFrozenOrderWithRows(){ const currentKeys=Array.from(state.rows.values()).map(r=>rowStableKey(r)); const keySet=new Set(currentKeys); const kept=state.frozenOrder.filter(k=>keySet.has(k)); const keptSet=new Set(kept); const added=currentKeys.filter(k=>!keptSet.has(k)); state.frozenOrder=kept.concat(added); _rebuildFrozenPos(); }
       function contains(h,n){ if(!n) return true; return String(h??"").toLowerCase().includes(String(n).toLowerCase()); }
       function globalMatch(row, raw){
         if(!raw) return true;
@@ -325,9 +416,9 @@ class OptieTijdswaardeWebPilotTab(QWidget):
         }
         return true;
       }
-      function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset,state.filters.asset)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(!globalMatch(r, state.filters.global)) return false; return true;});}
-      function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} renderHeader(); renderBody(); }; tr.appendChild(th); }); }
-      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v,col); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} renderTimevalueSummary(rows); }
+      function visibleRows(){ const rows=Array.from(state.rows.values()); return rows.filter(r=>{ if(!contains(r.asset,state.filters.asset)) return false; if(!contains(r.broker,state.filters.broker)) return false; if(!globalMatch(r, state.filters.global)) return false; if(state.expSelected.size>0){ const e=_canonExp(r.exp); if(!state.expSelected.has(e)) return false; } return true;});}
+      function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderHeader(); renderBody(); }; tr.appendChild(th); }); }
+      function renderBody(){ const body=document.getElementById("tbody"); body.innerHTML=""; const rows=visibleRows(); if(state.liveSortEnabled){ rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); } else { if(!state.frozenOrder.length){ _seedFrozenOrderFromCurrentSort(); } rows.sort((a,b)=>{ const ka=rowStableKey(a), kb=rowStableKey(b); const pa=Object.prototype.hasOwnProperty.call(state.frozenPos, ka)?state.frozenPos[ka]:Number.MAX_SAFE_INTEGER; const pb=Object.prototype.hasOwnProperty.call(state.frozenPos, kb)?state.frozenPos[kb]:Number.MAX_SAFE_INTEGER; if(pa!==pb) return pa-pb; return compareRows(a,b,state.sortCol,state.sortDir); }); } for(const row of rows){ const tr=document.createElement("tr"); tr.id="r_"+String(row.row_id??""); for(const col of state.cols){ const td=document.createElement("td"); const v=row[col]; td.textContent=fmt(v,col); if(isNum(v)) td.classList.add("num"); tr.appendChild(td);} body.appendChild(tr);} renderTimevalueSummary(rows); }
       function renderTimevalueSummary(rows){
         let eur=0.0, usd=0.0;
         for(const r of (rows||[])){
@@ -342,7 +433,49 @@ class OptieTijdswaardeWebPilotTab(QWidget):
         if(e) e.textContent = fmtNumber(eur,2);
         if(u) u.textContent = fmtNumber(usd,2);
       }
-      function bindFilters(){ const map=[["f_global","global"],["f_asset","asset"],["f_broker","broker"]]; for(const [id,key] of map){ const el=document.getElementById(id); if(!el) continue; el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();}); } const clear=document.getElementById("btn_clear_filters"); if(clear){ clear.addEventListener("click",()=>{ for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; } renderBody();});}}
+      function bindFilters(){
+        const map=[["f_global","global"],["f_asset","asset"],["f_broker","broker"]];
+        for(const [id,key] of map){
+          const el=document.getElementById(id); if(!el) continue;
+          el.addEventListener("input",()=>{state.filters[key]=el.value||""; renderBody();});
+        }
+        const liveCb=document.getElementById("f_table_live_update");
+        if(liveCb){
+          liveCb.checked=!!state.liveSortEnabled;
+          liveCb.addEventListener("change",()=>{ state.liveSortEnabled=!!liveCb.checked; if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderBody(); });
+        }
+        const clear=document.getElementById("btn_clear_filters");
+        if(clear){
+          clear.addEventListener("click",()=>{
+            for(const [id,key] of map){ const el=document.getElementById(id); if(el) el.value=""; state.filters[key]=""; }
+            state.expSelected=new Set(); state.expDraft=new Set();
+            _syncExpButton(); renderBody();
+          });
+        }
+        const bExp=document.getElementById("btn_exp_filter");
+        const pop=document.getElementById("exp_panel");
+        const es=document.getElementById("exp_search");
+        const eAllCb=document.getElementById("exp_all_cb");
+        const eOk=document.getElementById("exp_ok");
+        const eWissen=document.getElementById("exp_wissen");
+        const eCancel=document.getElementById("exp_cancel");
+        if(bExp && pop){
+          bExp.addEventListener("click",(e)=>{
+            e.preventDefault();
+            if(pop.classList.contains("open")){ pop.classList.remove("open"); return; }
+            state.expDraft = new Set(Array.from(state.expSelected));
+            _renderExpList();
+            pop.classList.add("open");
+            _syncExpButton();
+          });
+        }
+        if(es){ es.addEventListener("input",()=>_renderExpList()); }
+        if(eAllCb){ eAllCb.addEventListener("change",()=>{ if(eAllCb.checked){ state.expDraft=new Set(state.expOptions); } else { state.expDraft=new Set(); } _renderExpList(); _syncExpButton(); }); }
+        if(eOk){ eOk.addEventListener("click",()=>{ state.expSelected=new Set(Array.from(state.expDraft)); _syncExpButton(); renderBody(); if(pop) pop.classList.remove("open"); }); }
+        if(eWissen){ eWissen.addEventListener("click",()=>{ state.expDraft=new Set(); state.expSelected=new Set(); _renderExpList(); _syncExpButton(); renderBody(); if(pop) pop.classList.remove("open"); }); }
+        if(eCancel){ eCancel.addEventListener("click",()=>{ if(pop) pop.classList.remove("open"); }); }
+        document.addEventListener("click",(ev)=>{ if(!pop || !pop.classList.contains("open")) return; if(pop.contains(ev.target)) return; if(bExp && bExp.contains(ev.target)) return; pop.classList.remove("open"); });
+      }
       function bindActions(){
         const btn=document.getElementById("btn_export_snapshot");
         if(btn && state.bridge && state.bridge.exportSnapshot){
@@ -382,7 +515,25 @@ class OptieTijdswaardeWebPilotTab(QWidget):
           list.appendChild(li);
         }
       };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; renderHeader(); renderBody(); renderTimevalueSummary([]); return; } const colSet=new Set(); for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); Object.keys(row).forEach(k=>colSet.add(k)); } state.cols=Array.from(colSet); if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset")?"asset":state.cols[0]; state.hasSnapshot=true; renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){
+        const rows=(payload&&payload.rows)?payload.rows:[];
+        state.rows.clear();
+        if(rows.length===0){
+          state.cols=[]; state.hasSnapshot=false; state.frozenOrder=[]; state.frozenPos={}; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set();
+          _syncExpButton(); renderHeader(); renderBody(); renderTimevalueSummary([]); return;
+        }
+        const colSet=new Set();
+        for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); Object.keys(row).forEach(k=>colSet.add(k)); }
+        state.cols=Array.from(colSet);
+        if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset")?"asset":state.cols[0];
+        if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } }
+        const keep=state.expSelected;
+        state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.exp)).filter(Boolean))).sort();
+        state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v)));
+        state.expDraft=new Set(Array.from(state.expSelected));
+        _syncExpButton(); _renderExpList();
+        state.hasSnapshot=true; renderHeader(); renderBody();
+      };
       window.applyPatch = function(payload){ if(!state.hasSnapshot) return; const changes=(payload&&payload.changes)?payload.changes:[]; for(const ch of changes){ if(!ch||!ch.row_id) continue; const rid=String(ch.row_id); if(ch.field==="__deleted__"){ state.rows.delete(rid); continue; } const row=state.rows.get(rid); if(!row) continue; row[ch.field]=ch.value; } renderBody(); };
       if (window.qt && window.QWebChannel) {
         new QWebChannel(qt.webChannelTransport, function(channel) {

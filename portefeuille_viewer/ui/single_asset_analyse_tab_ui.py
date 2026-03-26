@@ -153,6 +153,11 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
 
+        self.commentSearchCheckbox = QCheckBox(self.horizontalLayoutWidget_2)
+        self.commentSearchCheckbox.setObjectName(u"commentSearchCheckbox")
+
+        self.horizontalLayout_2.addWidget(self.commentSearchCheckbox)
+
         self.lineEditFilterOptiesOpen = QLineEdit(self.horizontalLayoutWidget_2)
         self.lineEditFilterOptiesOpen.setObjectName(u"lineEditFilterOptiesOpen")
         self.lineEditFilterOptiesOpen.setMinimumSize(QSize(220, 24))
@@ -331,7 +336,9 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.comboBoxSector, self.comboBoxRegio)
         QWidget.setTabOrder(self.comboBoxRegio, self.comboBoxSortering)
         QWidget.setTabOrder(self.comboBoxSortering, self.comboBoxSortDirection)
-        QWidget.setTabOrder(self.comboBoxSortDirection, self.lineEditFilterOptiesOpen)
+        QWidget.setTabOrder(self.comboBoxSortDirection, self.checkBoxLiveResortOpenOpties)
+        QWidget.setTabOrder(self.checkBoxLiveResortOpenOpties, self.commentSearchCheckbox)
+        QWidget.setTabOrder(self.commentSearchCheckbox, self.lineEditFilterOptiesOpen)
         QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
 
         self.retranslateUi(SingleAssetAnalyseTab)
@@ -342,6 +349,7 @@ class Ui_SingleAssetAnalyseTab(object):
     def retranslateUi(self, SingleAssetAnalyseTab):
         SingleAssetAnalyseTab.setWindowTitle(QCoreApplication.translate("SingleAssetAnalyseTab", u"Form", None))
         self.checkBoxLiveResortOpenOpties.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Table live update", None))
+        self.commentSearchCheckbox.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Zoek in comment", None))
         self.buttonClearFiltersOptiesOpen.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Clear Filter", None))
         self.groupBox.setTitle("")
         self.lblPctLineair.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"lblPctLineair", None))
