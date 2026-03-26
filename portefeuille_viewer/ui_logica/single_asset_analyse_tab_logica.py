@@ -329,8 +329,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._summary_reload_timer.setSingleShot(True)
         self._summary_reload_timer.timeout.connect(self._reload_summary_if_needed)
         self._opties_dirty = False
+        self._opties_live_resort_enabled = (
+            os.getenv("UI_SINGLE_ASSET_LIVE_RESORT_OPEN_OPTIES", "0").strip() == "1"
+        )
+        self._opties_open_frozen_order_uniek_id: list[str] = []
         self._opties_reload_timer = QTimer(self)
-        self._opties_reload_timer.setInterval(300)
+        self._opties_reload_timer.setInterval(
+            max(100, int(os.getenv("UI_SINGLE_ASSET_OPTIES_REFRESH_MS", "500")))
+        )
         self._opties_reload_timer.setSingleShot(True)
         self._opties_reload_timer.timeout.connect(self._reload_opties_if_needed)
 
@@ -535,6 +541,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._opties_open_filter_connections_ready = True
         load_open_optie_comments_cache()
         self.update_opties_open_table()
+        if hasattr(self, "checkBoxLiveResortOpenOpties"):
+            self.checkBoxLiveResortOpenOpties.setChecked(self._opties_live_resort_enabled)
+            self.checkBoxLiveResortOpenOpties.toggled.connect(self._on_toggle_live_resort_open_opties)
         self.testOrderFlushTimer = QTimer(self)
         self.testOrderFlushTimer.setInterval(60_000)  # 60s
         self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
@@ -634,6 +643,73 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if self._opties_dirty:
             self._opties_dirty = False
             self.update_opties_open_table()
+
+    def _on_toggle_live_resort_open_opties(self, checked: bool):
+        self._opties_live_resort_enabled = bool(checked)
+        if self._opties_live_resort_enabled:
+            self._opties_open_frozen_order_uniek_id = []
+        self._schedule_opties_reload()
+
+    def _capture_open_opties_current_order(self):
+        if self._opties_live_resort_enabled:
+            return
+        view = getattr(self, "tableViewOptiesOpen", None)
+        if view is None:
+            return
+        model = view.model()
+        if model is None or not hasattr(model, "sourceModel"):
+            return
+        source = model.sourceModel()
+        if source is None or not hasattr(source, "_df"):
+            return
+        cols = source._df.columns
+        if "uniek_id" not in cols:
+            return
+        uid_col = cols.index("uniek_id")
+        order = []
+        for r in range(model.rowCount()):
+            try:
+                src_idx = model.mapToSource(model.index(r, 0))
+                uid = source._df[src_idx.row(), uid_col]
+                if uid is None:
+                    continue
+                suid = str(uid)
+                if suid and suid not in order:
+                    order.append(suid)
+            except Exception:
+                continue
+        self._opties_open_frozen_order_uniek_id = order
+
+    def _reorder_df_by_frozen_opties_order(self, df: pl.DataFrame) -> pl.DataFrame:
+        if self._opties_live_resort_enabled:
+            return df
+        if df is None or df.is_empty():
+            return df
+        if "uniek_id" not in df.columns:
+            return df
+        if not self._opties_open_frozen_order_uniek_id:
+            return df
+        try:
+            order_map = {
+                str(uid): i for i, uid in enumerate(self._opties_open_frozen_order_uniek_id)
+            }
+            fallback_rank = len(order_map) + 1
+            out = (
+                df.with_columns(
+                    pl.col("uniek_id")
+                    .cast(pl.Utf8, strict=False)
+                    .map_elements(
+                        lambda u: order_map.get(str(u), fallback_rank),
+                        return_dtype=pl.Int64,
+                    )
+                    .alias("__frozen_order_rank")
+                )
+                .sort(["__frozen_order_rank", "optie_exp_date", "asset_rollup"])
+                .drop("__frozen_order_rank")
+            )
+            return out
+        except Exception:
+            return df
 
     def _on_snapshot_updated(self, snapshot_key: str):
         # Hou opties-tabellen synchroon met live open-opties en live timevalue snapshots.
@@ -1913,6 +1989,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df_all_filtered = df_all
         if hasattr(self, "active_filters_opties_open") and self.active_filters_opties_open:
             df_all_filtered = self._filter_dataframe(df_all_filtered, self.active_filters_opties_open)
+        df_all_filtered = self._reorder_df_by_frozen_opties_order(df_all_filtered)
         # Voor put/call tabellen wél filteren
         df_put = (
             df_all_for_putcall
@@ -1990,8 +2067,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         proxy_model.setSortRole(Qt.UserRole)
         #print("Disconnecting click handler, replacing model")
         # self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
+        # Behoud huidige sort-indicator alleen als live resort aan staat.
+        header_prev = self.tableViewOptiesOpen.horizontalHeader()
+        prev_section = header_prev.sortIndicatorSection() if header_prev is not None else -1
+        prev_order = header_prev.sortIndicatorOrder() if header_prev is not None else Qt.AscendingOrder
+        self.tableViewOptiesOpen.setSortingEnabled(False)
         self.tableViewOptiesOpen.setModel(proxy_model)
         self.tableViewOptiesOpen.setSortingEnabled(True)
+        if self._opties_live_resort_enabled and prev_section >= 0:
+            self.tableViewOptiesOpen.sortByColumn(prev_section, prev_order)
         # self.tableViewOptiesOpen.clicked.connect(self._on_table_cell_clicked)
         # print("Model replaced, click handler reconnected")
 
@@ -2019,6 +2103,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         #self.tableViewOptiesOpen.setStyleSheet("QScrollBar:vertical { width: 18px; }")
         header_all = self.tableViewOptiesOpen.horizontalHeader()
         header_all.setSectionResizeMode(QHeaderView.Interactive)
+        # Bij handmatige sort click sorteren we 1x en bevriezen daarna de rij-volgorde
+        # zolang live-resort uit staat.
+        with contextlib.suppress(Exception):
+            header_all.sortIndicatorChanged.disconnect(self._on_open_opties_sort_indicator_changed)
+        header_all.sortIndicatorChanged.connect(self._on_open_opties_sort_indicator_changed)
         def apply_widths_all():
             for i, col in enumerate(df_all.columns):
                 if col in kolombreedtes:
@@ -2119,6 +2208,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             idx_text = df_call.columns.index("optie_comment_textcolor")
             self.tableViewOptiesOpenCall.setColumnHidden(idx_text, True)
         self._model_opties_call = model_call
+
+    def _on_open_opties_sort_indicator_changed(self, _section: int, _order):
+        if self._opties_live_resort_enabled:
+            return
+        QTimer.singleShot(0, self._capture_open_opties_current_order)
         
 
     def _on_comment_commit(self, row_data: dict):

@@ -123,7 +123,7 @@
        <rect>
         <x>10</x>
         <y>10</y>
-        <width>1051</width>
+        <width>1181</width>
         <height>31</height>
        </rect>
       </property>
@@ -273,6 +273,13 @@
          </property>
          <property name="styleSheet">
           <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="checkBoxLiveResortOpenOpties">
+         <property name="text">
+          <string>Table live update</string>
          </property>
         </widget>
        </item>

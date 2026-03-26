@@ -68,6 +68,10 @@ Status-legenda:
 ## 6. Kwaliteit en Observability
 - `DONE` Projection metrics logging + summarizers aanwezig.
 - `IN_PROGRESS` Handmatige parity checks uitgevoerd op kritieke tabwaarden.
+- `TODO` Analyse + fix van onregelmatige update-frequentie in single-asset open-opties:
+  - huidig pad is event-gedreven (`snapshotUpdated` op meerdere topics),
+  - doelpad: clocked/coalesced render (default `500ms`, overrulable via env),
+  - vastleggen welke event-topics wel/geen UI-refresh mogen triggeren.
 - `TODO` Geautomatiseerde parity-report pipeline (dagelijks).
 - `TODO` Release gate checklist:
   - parity ok

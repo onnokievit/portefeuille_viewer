@@ -58,7 +58,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1051, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1181, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -137,6 +137,11 @@ class Ui_SingleAssetAnalyseTab(object):
         self.comboBoxSortDirection.setStyleSheet(u"background-color: rgb(230, 230, 230);")
 
         self.horizontalLayout.addWidget(self.comboBoxSortDirection)
+
+        self.checkBoxLiveResortOpenOpties = QCheckBox(self.horizontalLayoutWidget)
+        self.checkBoxLiveResortOpenOpties.setObjectName(u"checkBoxLiveResortOpenOpties")
+
+        self.horizontalLayout.addWidget(self.checkBoxLiveResortOpenOpties)
 
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
@@ -336,6 +341,7 @@ class Ui_SingleAssetAnalyseTab(object):
 
     def retranslateUi(self, SingleAssetAnalyseTab):
         SingleAssetAnalyseTab.setWindowTitle(QCoreApplication.translate("SingleAssetAnalyseTab", u"Form", None))
+        self.checkBoxLiveResortOpenOpties.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Table live update", None))
         self.buttonClearFiltersOptiesOpen.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"Clear Filter", None))
         self.groupBox.setTitle("")
         self.lblPctLineair.setText(QCoreApplication.translate("SingleAssetAnalyseTab", u"lblPctLineair", None))
