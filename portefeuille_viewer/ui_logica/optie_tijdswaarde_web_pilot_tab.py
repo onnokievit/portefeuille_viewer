@@ -527,10 +527,14 @@ class OptieTijdswaardeWebPilotTab(QWidget):
         state.cols=Array.from(colSet);
         if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset")?"asset":state.cols[0];
         if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } }
+        const panelOpen = !!document.getElementById("exp_panel")?.classList.contains("open");
         const keep=state.expSelected;
+        const keepDraft = panelOpen ? new Set(Array.from(state.expDraft)) : null;
         state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.exp)).filter(Boolean))).sort();
         state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v)));
-        state.expDraft=new Set(Array.from(state.expSelected));
+        state.expDraft = panelOpen
+          ? new Set(Array.from(keepDraft||[]).filter(v=>state.expOptions.includes(v)))
+          : new Set(Array.from(state.expSelected));
         _syncExpButton(); _renderExpList();
         state.hasSnapshot=true; renderHeader(); renderBody();
       };

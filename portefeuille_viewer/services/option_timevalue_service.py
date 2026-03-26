@@ -109,6 +109,7 @@ class OptionTimevalueService(QObject):
         self._resolve_wait_sec = max(
             0.1, float(os.getenv("OPTION_TIMEVALUE_RESOLVE_WAIT_SEC", "1.0"))
         )
+        self._log_enabled = _clean(os.getenv("OPTION_TIMEVALUE_LOG", "0")) == "1"
         self._rebuild_timer = QTimer(self)
         self._rebuild_timer.setSingleShot(True)
         self._rebuild_timer.setInterval(350)
@@ -129,6 +130,10 @@ class OptionTimevalueService(QObject):
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
 
         QTimer.singleShot(1500, self.schedule_rebuild)
+
+    def _log(self, msg: str):
+        if self._log_enabled:
+            print(msg)
 
     def schedule_rebuild(self):
         with self._state_lock:
@@ -168,7 +173,7 @@ class OptionTimevalueService(QObject):
     def _clear_unresolved(self, reason: str):
         if self._unresolved_series:
             self._unresolved_series.clear()
-            print(f"[option-timevalue] unresolved cache cleared ({reason})")
+            self._log(f"[option-timevalue] unresolved cache cleared ({reason})")
 
     @staticmethod
     def _series_key(r: OpenSeriesRow) -> tuple[str, str, float, str, str]:
@@ -803,7 +808,7 @@ class OptionTimevalueService(QObject):
                 with contextlib.suppress(Exception):
                     self.price_feed.ensure_option_subscriptions(subs)
             self._publish_snapshot()
-            print(
+            self._log(
                 f"[option-timevalue] universe refreshed: open_series={len(self._rows)} "
                 f"subscribed={len(subs)} @ {_now_ts()}"
             )
@@ -840,6 +845,25 @@ class OptionTimevalueService(QObject):
         output = []
         by_ccy = defaultdict(float)
         priced = 0
+        with self._lock:
+            live_prices = dict(getattr(SNAPSHOT_STORE, "live_prices", {}) or {})
+
+        def _live_underlying_px(symbol: str, ccy: str) -> float | None:
+            sym = _clean(symbol).upper()
+            cur = _clean(ccy).upper()
+            if not sym:
+                return None
+            keys = [
+                (sym, cur),
+                (sym, None),
+                sym,
+            ]
+            for k in keys:
+                v = _to_float(live_prices.get(k))
+                if v is not None and v > 0:
+                    return v
+            return None
+
         for r in rows:
             sid = int(r.series_id or 0)
             with self._lock:
@@ -847,7 +871,13 @@ class OptionTimevalueService(QObject):
             px, px_source = _pick_option_price(tick)
             if px is not None:
                 priced += 1
-            und = _to_float(tick.get("underlying_price"))
+            # Onderliggende koers prioriteit:
+            # 1) centrale live_prices (zelfde methodiek als Aandelen-tab)
+            # 2) option tick underlying_price
+            # 3) close-map fallback
+            und = _live_underlying_px(r.underlying_symbol or r.asset_rollup, r.ib_currency)
+            if und is None:
+                und = _to_float(tick.get("underlying_price"))
             if und is None:
                 und = self._underlying_close.get(r.asset_rollup)
             intrinsic = None
