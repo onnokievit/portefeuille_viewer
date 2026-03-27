@@ -1,6 +1,7 @@
 import contextlib
 import time
 import threading
+from datetime import datetime
 from typing import Dict, Tuple, Optional, List
 
 import pandas as pd
@@ -155,6 +156,7 @@ class PriceFeedIB(QObject):
                         if name:
                             payload = {
                                 "series_id": int(option_meta.get("series_id")),
+                                "conid": int(option_meta.get("conid")) if option_meta.get("conid") is not None else None,
                                 "req_id": int(reqId),
                                 "tick_type": int(tickType),
                                 "field": name,
@@ -230,6 +232,7 @@ class PriceFeedIB(QObject):
                     return
                 payload = {
                     "series_id": int(option_meta.get("series_id")),
+                    "conid": int(option_meta.get("conid")) if option_meta.get("conid") is not None else None,
                     "req_id": int(reqId),
                     "tick_type": int(tickType),
                     "iv": None if impliedVol is None else float(impliedVol),
@@ -571,6 +574,9 @@ class PriceFeedService(QObject):
         self._feed = PriceFeedIB(host, port, client_id)
         self._feed.priceUpdated.connect(self._on_price)
         self._feed.optionTickUpdated.connect(self._on_option_tick)
+        self._option_lock = threading.Lock()
+        self._option_prices: Dict[int, dict] = {}
+        self._load_option_last_prices_from_db()
 
         # Timer voor periodiek opslaan
         from PySide6.QtCore import QTimer
@@ -578,6 +584,138 @@ class PriceFeedService(QObject):
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self.save_last_prices_to_db)
         self._save_timer.start(60_000)  # elke 60 sec
+        self._option_save_timer = QTimer(self)
+        self._option_save_timer.timeout.connect(self.save_option_last_prices_to_db)
+        self._option_save_timer.start(300_000)  # elke 5 minuten
+
+    @staticmethod
+    def _table_columns(cursor, table_name: str) -> set[str]:
+        cols: set[str] = set()
+        try:
+            cursor.execute(f"SELECT TOP 1 * FROM {table_name}")
+            cols = {str(d[0]).strip().lower() for d in (cursor.description or [])}
+        except Exception:
+            return set()
+        return cols
+
+    @staticmethod
+    def _connect_option_last_prices_db():
+        # option_last_prices moet in STOCKDATA staan (zelfde DB als option_series_master)
+        from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
+        import pyodbc
+        return pyodbc.connect(
+            rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH}"
+        )
+
+    @staticmethod
+    def _pick_option_price_from_entry(entry: dict) -> tuple[Optional[float], Optional[str]]:
+        bid = entry.get("bid")
+        ask = entry.get("ask")
+        try:
+            bid_f = float(bid) if bid is not None else None
+            ask_f = float(ask) if ask is not None else None
+        except Exception:
+            bid_f = ask_f = None
+        if bid_f is not None and ask_f is not None and bid_f > 0 and ask_f > 0:
+            return (bid_f + ask_f) / 2.0, "mid"
+        for key in ("last", "delayed_last", "model_price", "close", "delayed_close"):
+            try:
+                v = entry.get(key)
+                vf = float(v) if v is not None else None
+            except Exception:
+                vf = None
+            if vf is not None and vf > 0:
+                return vf, key
+        return None, None
+
+    @staticmethod
+    def _ensure_option_last_prices_table(cursor) -> None:
+        cols = PriceFeedService._table_columns(cursor, "option_last_prices")
+        if cols:
+            # Additief uitbreiden: conid kolom indien nog niet aanwezig.
+            if "conid" not in cols:
+                with contextlib.suppress(Exception):
+                    cursor.execute("ALTER TABLE option_last_prices ADD COLUMN conid LONG")
+            return
+        try:
+            cursor.execute(
+                """
+                CREATE TABLE option_last_prices (
+                    series_id LONG,
+                    asset_rollup TEXT(64),
+                    optie_call_put TEXT(8),
+                    optie_strike DOUBLE,
+                    optie_exp_date DATETIME,
+                    conid LONG,
+                    bid DOUBLE,
+                    ask DOUBLE,
+                    last_price DOUBLE,
+                    mid_price DOUBLE,
+                    underlying_price DOUBLE,
+                    iv DOUBLE,
+                    delta_greek DOUBLE,
+                    gamma DOUBLE,
+                    theta DOUBLE,
+                    ts DATETIME
+                )
+                """
+            )
+        except Exception:
+            pass
+
+    def _load_option_last_prices_from_db(self) -> None:
+        loaded: Dict[int, dict] = {}
+        try:
+            with self._connect_option_last_prices_db() as conn:
+                cur = conn.cursor()
+                self._ensure_option_last_prices_table(cur)
+                try:
+                    cur.execute(
+                        """
+                        SELECT * FROM option_last_prices
+                        """
+                    )
+                except Exception:
+                    return
+                col_list = [str(d[0]).strip() for d in (cur.description or [])]
+                for row in cur.fetchall():
+                    rec = {col_list[i].lower(): row[i] for i in range(len(col_list))}
+                    try:
+                        sid = int(rec.get("series_id"))
+                    except Exception:
+                        continue
+                    bid = rec.get("bid")
+                    ask = rec.get("ask")
+                    last_px = rec.get("last_px")
+                    if last_px is None:
+                        last_px = rec.get("last_price")
+                    und_px = rec.get("und_px")
+                    if und_px is None:
+                        und_px = rec.get("underlying_price")
+                    delta = rec.get("delta")
+                    if delta is None:
+                        delta = rec.get("delta_greek")
+                    px_source = rec.get("px_source")
+                    if not px_source:
+                        px_source = "db_last"
+                    loaded[sid] = {
+                        "series_id": sid,
+                        "conid": rec.get("conid"),
+                        "last_px": last_px,
+                        "px_source": px_source,
+                        "bid": bid,
+                        "ask": ask,
+                        "underlying_price": und_px,
+                        "iv": rec.get("iv"),
+                        "delta": delta,
+                        "gamma": rec.get("gamma"),
+                        "theta": rec.get("theta"),
+                        "last_update": rec.get("last_update") or rec.get("ts"),
+                    }
+        except Exception:
+            return
+        with self._option_lock:
+            self._option_prices = loaded
 
     def save_last_prices_to_db(self):
         from portefeuille_viewer.data.repository import get_connection
@@ -598,6 +736,171 @@ class PriceFeedService(QObject):
                     )
             conn.commit()
 
+    def save_option_last_prices_to_db(self):
+        with self._option_lock:
+            rows = [dict(v) for v in self._option_prices.values()]
+        if not rows:
+            return
+        now = datetime.now()
+        with self._connect_option_last_prices_db() as conn:
+            cursor = conn.cursor()
+            self._ensure_option_last_prices_table(cursor)
+            cols = self._table_columns(cursor, "option_last_prices")
+            legacy_mode = {"last_price", "mid_price", "underlying_price", "delta_greek", "ts"}.issubset(cols)
+            # Verrijk met serie-metadata zodat option_last_prices ook sleutelvelden bevat.
+            series_meta: Dict[int, dict] = {}
+            with contextlib.suppress(Exception):
+                cursor.execute(
+                    """
+                    SELECT series_id, asset_rollup, optie_call_put, strike, expiry
+                    FROM option_series_master
+                    """
+                )
+                for rr in cursor.fetchall():
+                    try:
+                        sid = int(rr[0])
+                    except Exception:
+                        continue
+                    series_meta[sid] = {
+                        "asset_rollup": rr[1],
+                        "optie_call_put": rr[2],
+                        "optie_strike": rr[3],
+                        "optie_exp_date": rr[4],
+                    }
+            for r in rows:
+                sid = r.get("series_id")
+                if sid is None:
+                    continue
+                try:
+                    sid_i = int(sid)
+                except Exception:
+                    continue
+                meta = series_meta.get(sid_i, {})
+                asset_rollup = meta.get("asset_rollup")
+                optie_call_put = meta.get("optie_call_put")
+                optie_strike = meta.get("optie_strike")
+                optie_exp_date = meta.get("optie_exp_date")
+                bid = r.get("bid")
+                ask = r.get("ask")
+                last_px = r.get("last_px")
+                mid_px = None
+                try:
+                    if bid is not None and ask is not None:
+                        b = float(bid)
+                        a = float(ask)
+                        if b > 0 and a > 0:
+                            mid_px = (b + a) / 2.0
+                except Exception:
+                    mid_px = None
+
+                if legacy_mode:
+                    cursor.execute(
+                        """
+                        UPDATE option_last_prices
+                        SET asset_rollup=?, optie_call_put=?, optie_strike=?, optie_exp_date=?, conid=?,
+                            bid=?, ask=?, last_price=?, mid_price=?, underlying_price=?, iv=?, delta_greek=?, gamma=?, theta=?, ts=?
+                        WHERE series_id=?
+                        """,
+                        (
+                            asset_rollup,
+                            optie_call_put,
+                            optie_strike,
+                            optie_exp_date,
+                            r.get("conid"),
+                            bid,
+                            ask,
+                            last_px,
+                            mid_px,
+                            r.get("underlying_price"),
+                            r.get("iv"),
+                            r.get("delta"),
+                            r.get("gamma"),
+                            r.get("theta"),
+                            now,
+                            sid,
+                        ),
+                    )
+                    if cursor.rowcount == 0:
+                        cursor.execute(
+                            """
+                            INSERT INTO option_last_prices
+                                (series_id, asset_rollup, optie_call_put, optie_strike, optie_exp_date, conid, bid, ask, last_price, mid_price, underlying_price, iv, delta_greek, gamma, theta, ts)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                sid_i,
+                                asset_rollup,
+                                optie_call_put,
+                                optie_strike,
+                                optie_exp_date,
+                                r.get("conid"),
+                                bid,
+                                ask,
+                                last_px,
+                                mid_px,
+                                r.get("underlying_price"),
+                                r.get("iv"),
+                                r.get("delta"),
+                                r.get("gamma"),
+                                r.get("theta"),
+                                now,
+                            ),
+                        )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE option_last_prices
+                        SET asset_rollup=?, optie_call_put=?, optie_strike=?, optie_exp_date=?, conid=?,
+                            last_px=?, px_source=?, bid=?, ask=?, und_px=?, iv=?, delta=?, gamma=?, theta=?, last_update=?
+                        WHERE series_id=?
+                        """,
+                        (
+                            asset_rollup,
+                            optie_call_put,
+                            optie_strike,
+                            optie_exp_date,
+                            r.get("conid"),
+                            last_px,
+                            r.get("px_source"),
+                            bid,
+                            ask,
+                            r.get("underlying_price"),
+                            r.get("iv"),
+                            r.get("delta"),
+                            r.get("gamma"),
+                            r.get("theta"),
+                            now,
+                            sid,
+                        ),
+                    )
+                    if cursor.rowcount == 0:
+                        cursor.execute(
+                            """
+                            INSERT INTO option_last_prices
+                                (series_id, asset_rollup, optie_call_put, optie_strike, optie_exp_date, conid, last_px, px_source, bid, ask, und_px, iv, delta, gamma, theta, last_update)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                sid_i,
+                                asset_rollup,
+                                optie_call_put,
+                                optie_strike,
+                                optie_exp_date,
+                                r.get("conid"),
+                                last_px,
+                                r.get("px_source"),
+                                bid,
+                                ask,
+                                r.get("underlying_price"),
+                                r.get("iv"),
+                                r.get("delta"),
+                                r.get("gamma"),
+                                r.get("theta"),
+                                now,
+                            ),
+                        )
+            conn.commit()
+
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float):
         self.store.set(sym, cur, px)
@@ -605,7 +908,39 @@ class PriceFeedService(QObject):
 
     @Slot(dict)
     def _on_option_tick(self, payload: dict):
+        try:
+            sid = int(payload.get("series_id"))
+        except Exception:
+            sid = None
+        if sid is not None:
+            with self._option_lock:
+                entry = self._option_prices.get(sid) or {"series_id": sid}
+                conid = payload.get("conid")
+                if conid is not None:
+                    entry["conid"] = conid
+                field = payload.get("field")
+                value = payload.get("value")
+                if field:
+                    entry[str(field)] = value
+                for gk in ("iv", "delta", "gamma", "theta", "model_price", "underlying_price"):
+                    if payload.get(gk) is not None:
+                        entry[gk] = payload.get(gk)
+                last_px, src = self._pick_option_price_from_entry(entry)
+                if last_px is not None:
+                    entry["last_px"] = last_px
+                    entry["px_source"] = src
+                entry["last_update"] = datetime.now()
+                self._option_prices[sid] = entry
         self.optionTickUpdated.emit(payload)
+
+    def get_option_last(self, series_id: int) -> Optional[dict]:
+        try:
+            sid = int(series_id)
+        except Exception:
+            return None
+        with self._option_lock:
+            row = self._option_prices.get(sid)
+            return dict(row) if row else None
 
     # convenience-methodes
     def get(self, sym: str, cur: str) -> Optional[float]:
@@ -627,4 +962,11 @@ class PriceFeedService(QObject):
         self._feed.ensure_option_subscriptions(rows)
 
     def shutdown(self):
+        with contextlib.suppress(Exception):
+            if hasattr(self, "_save_timer") and self._save_timer.isActive():
+                self._save_timer.stop()
+            if hasattr(self, "_option_save_timer") and self._option_save_timer.isActive():
+                self._option_save_timer.stop()
+            self.save_last_prices_to_db()
+            self.save_option_last_prices_to_db()
         self._feed.shutdown()

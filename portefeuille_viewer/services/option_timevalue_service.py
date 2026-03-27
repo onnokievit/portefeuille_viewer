@@ -868,6 +868,25 @@ class OptionTimevalueService(QObject):
             sid = int(r.series_id or 0)
             with self._lock:
                 tick = dict(self._ticks.get(sid, {}))
+            # Fallback op laatst bekende optieprijs uit DB-cache wanneer live tick ontbreekt
+            # of wanneer specifieke velden nog niet gevuld zijn (bijv. buiten markttijd).
+            fallback = None
+            with contextlib.suppress(Exception):
+                fallback = self.price_feed.get_option_last(sid)
+            if fallback:
+                for src_key, dst_key in (
+                    ("bid", "bid"),
+                    ("ask", "ask"),
+                    ("last_px", "last"),
+                    ("px_source", "px_source"),
+                    ("underlying_price", "underlying_price"),
+                    ("iv", "iv"),
+                    ("delta", "delta"),
+                    ("gamma", "gamma"),
+                    ("theta", "theta"),
+                ):
+                    if tick.get(dst_key) is None and fallback.get(src_key) is not None:
+                        tick[dst_key] = fallback.get(src_key)
             px, px_source = _pick_option_price(tick)
             if px is not None:
                 priced += 1
