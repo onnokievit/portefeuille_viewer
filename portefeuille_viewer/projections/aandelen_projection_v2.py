@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import threading
+import time
 from datetime import datetime
 from typing import Any
 
@@ -20,6 +22,7 @@ class AandelenProjectionV2:
     """
 
     name = "aandelen_v2"
+    _DEBUG_RECOMPUTE = os.getenv("AANDELEN_V2_RECOMPUTE_DEBUG", "0").strip() == "1"
     depends_on = {
         # Live aggregators used in build_aandelen_tab_summary
         "aggregator_snapshot_aandelen_live",
@@ -59,67 +62,161 @@ class AandelenProjectionV2:
             self._pending_broker_only_recompute = True
 
     def recompute(self, changed_keys: set[str]) -> None:
+        recompute_started = time.perf_counter()
         with self._lock:
             selected_brokers = set(self._selected_brokers) if self._selected_brokers else None
             broker_only = bool(self._pending_broker_only_recompute)
             self._pending_broker_only_recompute = False
         changed_raw = {str(k).strip().upper() for k in (changed_keys or set()) if str(k).strip()}
-        overlay_only = "__TIMEVALUE_OVERLAY__" in changed_raw
-        technical_keys = self._has_technical_keys(changed_raw)
+        overlay_snapshot_keys = {"__TIMEVALUE_OVERLAY__", "SNAPSHOT_OPTIE_TIMEVALUE_LIVE"}
+        overlay_only = bool(changed_raw) and changed_raw.issubset(overlay_snapshot_keys)
+        technical_keys = self._has_technical_keys(changed_raw - {"SNAPSHOT_OPTIE_TIMEVALUE_LIVE"})
         changed_assets = self._normalize_changed_assets(changed_raw)
         incremental = bool(changed_assets)
+        timings_ms: dict[str, float] = {}
+        path = "full_rebuild"
 
         # Snapshot/topic-driven updates (AGGREGATOR_*/SNAPSHOT_*/REPOSITORY_*)
         # must refresh from source and rebuild broker cache, otherwise overlay-only
         # recomputes may keep stale open_sp_* values.
         if technical_keys:
+            path = "technical_full_rebuild"
+            t0 = time.perf_counter()
             df_new = build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            timings_ms["build_aandelen_tab_summary_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+            t0 = time.perf_counter()
             self._rebuild_broker_cache(df_new)
+            timings_ms["rebuild_broker_cache_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
         elif (broker_only or overlay_only) and self._broker_cache:
+            path = "broker_cache_overlay"
+            t0 = time.perf_counter()
             df_new = self._recompute_from_broker_cache(selected_brokers)
+            timings_ms["recompute_from_broker_cache_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
         elif incremental:
-            df_new = self._recompute_incremental(changed_assets, selected_brokers)
+            path = "incremental"
+            t0 = time.perf_counter()
+            df_new, incremental_diag = self._recompute_incremental(changed_assets, selected_brokers)
+            timings_ms["recompute_incremental_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
         else:
+            path = "fallback_full_rebuild"
+            t0 = time.perf_counter()
             df_new = build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            timings_ms["build_aandelen_tab_summary_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+            t0 = time.perf_counter()
             self._rebuild_broker_cache(df_new)
+            timings_ms["rebuild_broker_cache_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+        incremental_diag = locals().get("incremental_diag", {})
+        t0 = time.perf_counter()
         df_new, diag = self._with_price_quality_guard(
             df_new,
             selected_brokers,
             enable_repair=incremental and not broker_only and not overlay_only,
+            repair_assets=changed_assets if incremental and not broker_only and not overlay_only else None,
         )
+        timings_ms["price_quality_guard_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+        t0 = time.perf_counter()
         patch = self._build_patch(self._snapshot, df_new)
+        timings_ms["build_patch_ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+        timings_ms["total_recompute_ms"] = round((time.perf_counter() - recompute_started) * 1000.0, 3)
+        changed_keys_sorted = sorted(changed_raw)
+        patch_row_ids = sorted({str(item.get("row_id") or "").strip() for item in (patch or []) if str(item.get("row_id") or "").strip()})
+        patch_fields = sorted({str(item.get("field") or "").strip() for item in (patch or []) if str(item.get("field") or "").strip() and str(item.get("field") or "").strip() != "__deleted__"})
+        diag.update(incremental_diag)
+        diag.update(
+            {
+                "patch_size": len(patch or []),
+                "patch_row_ids": patch_row_ids[:20],
+                "patch_fields_sample": patch_fields[:20],
+                "path": path,
+                "technical_keys": technical_keys,
+                "broker_only": broker_only,
+                "overlay_only": overlay_only,
+                "incremental_candidate": incremental,
+                "changed_assets_count": len(changed_assets),
+                "changed_assets_sample": sorted(changed_assets)[:10],
+                "changed_keys_count": len(changed_raw),
+                "changed_keys_sample": changed_keys_sorted[:10],
+                "changed_keys_full": changed_keys_sorted if len(changed_keys_sorted) <= 10 else [],
+                "selected_brokers_count": len(selected_brokers or set()),
+                "timings_ms": timings_ms,
+            }
+        )
         with self._lock:
             self._version += 1
             self._base_snapshot = (
                 df_new if selected_brokers is None else self._base_snapshot
             )
             self._snapshot = df_new
+            if selected_brokers is None:
+                # Keep the unfiltered broker-cache root in sync with incremental
+                # aandelen updates. Without this, a later overlay-only recompute
+                # can overwrite the fresh incremental snapshot with stale cached
+                # rows until a technical full rebuild happens.
+                self._broker_cache["__ALL__"] = df_new
             self._last_patch = patch
             self._updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._diag = diag
+        if self._DEBUG_RECOMPUTE:
+            print(
+                "[aandelen-v2-debug] "
+                f"path={path} "
+                f"technical={technical_keys} broker_only={broker_only} overlay_only={overlay_only} "
+                f"incremental={incremental} changed_assets={sorted(changed_assets)[:10]} "
+                f"changed_keys_count={len(changed_keys_sorted)} changed_keys_sample={changed_keys_sorted[:10]} "
+                f"fallback_assets={diag.get('price_guard_fallback_asset_count', 0)} "
+                f"repairs={diag.get('fallback_row_repairs', 0)} "
+                f"repair_loop_ms={diag.get('price_guard_repair_loop_ms', 0.0)} "
+                f"repair_merge_ms={diag.get('price_guard_repair_merge_ms', 0.0)} "
+                f"incremental_keep_rows={diag.get('incremental_keep_rows', 0)} "
+                f"incremental_rebuilt_rows={diag.get('incremental_rebuilt_rows', 0)} "
+                f"incremental_asset_timings_ms={diag.get('incremental_asset_timings_ms', {})} "
+                f"patch_size={diag.get('patch_size', 0)} patch_row_ids={diag.get('patch_row_ids', [])} "
+                f"patch_fields_sample={diag.get('patch_fields_sample', [])} "
+                f"timings={timings_ms}"
+            )
 
-    def _recompute_incremental(self, changed: set[str], selected_brokers: set[str] | None) -> pl.DataFrame:
+    def _recompute_incremental(self, changed: set[str], selected_brokers: set[str] | None) -> tuple[pl.DataFrame, dict[str, Any]]:
+        diag: dict[str, Any] = {
+            "incremental_assets_count": len(changed or set()),
+            "incremental_assets_sample": sorted(changed or set())[:10],
+            "incremental_keep_rows": 0,
+            "incremental_rebuilt_rows": 0,
+            "incremental_asset_timings_ms": {},
+            "incremental_fallback_reason": None,
+        }
         if not changed:
-            return build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            diag["incremental_fallback_reason"] = "no_changed_assets"
+            return build_aandelen_tab_summary(selected_brokers=selected_brokers), diag
 
         with self._lock:
             current = self._snapshot
         if current is None or current.is_empty() or "asset_rollup" not in current.columns:
-            return build_aandelen_tab_summary(selected_brokers=selected_brokers)
+            diag["incremental_fallback_reason"] = "empty_current_snapshot"
+            return build_aandelen_tab_summary(selected_brokers=selected_brokers), diag
 
         keep_df = current.filter(~pl.col("asset_rollup").cast(pl.Utf8).str.to_uppercase().is_in(list(changed)))
+        diag["incremental_keep_rows"] = int(keep_df.height)
         frames: list[pl.DataFrame] = [keep_df]
+        rebuilt_rows = 0
+        asset_timings: dict[str, float] = {}
         for asset in sorted(changed):
+            asset_t0 = time.perf_counter()
             try:
                 one = build_aandelen_tab_summary(selected_brokers=selected_brokers, asset_rollup=asset)
+                asset_timings[asset] = round((time.perf_counter() - asset_t0) * 1000.0, 3)
                 if one is not None and not one.is_empty():
+                    rebuilt_rows += int(one.height)
                     frames.append(one)
             except Exception:
-                # Safe fallback: if one asset fails, do full recompute.
-                return build_aandelen_tab_summary(selected_brokers=selected_brokers)
+                diag["incremental_fallback_reason"] = f"asset_failed:{asset}"
+                diag["incremental_asset_timings_ms"] = asset_timings
+                return build_aandelen_tab_summary(selected_brokers=selected_brokers), diag
+        diag["incremental_rebuilt_rows"] = rebuilt_rows
+        diag["incremental_asset_timings_ms"] = asset_timings
         if not frames:
-            return build_aandelen_tab_summary(selected_brokers=selected_brokers)
-        return pl.concat(frames, how="diagonal_relaxed").unique(subset=["asset_rollup"], keep="last")
+            diag["incremental_fallback_reason"] = "no_frames"
+            return build_aandelen_tab_summary(selected_brokers=selected_brokers), diag
+        return pl.concat(frames, how="diagonal_relaxed").unique(subset=["asset_rollup"], keep="last"), diag
 
     @staticmethod
     def _normalize_changed_assets(changed_keys: set[str]) -> set[str]:
@@ -356,6 +453,7 @@ class AandelenProjectionV2:
         df_new: pl.DataFrame,
         selected_brokers: set[str] | None,
         enable_repair: bool,
+        repair_assets: set[str] | None = None,
     ) -> tuple[pl.DataFrame, dict[str, Any]]:
         if df_new is None or df_new.is_empty() or "asset_rollup" not in df_new.columns:
             return df_new, {
@@ -373,20 +471,34 @@ class AandelenProjectionV2:
         fallback_assets = sorted(
             set(diag["koers_null_assets"]) | set(diag["koers_prev_null_assets"])
         )
+        repair_target_assets = sorted(
+            set(fallback_assets)
+            if not repair_assets
+            else (set(fallback_assets) & {str(a).strip().upper() for a in repair_assets if str(a).strip()})
+        )
         repairs = 0
-        if enable_repair and fallback_assets:
+        repair_loop_ms = 0.0
+        repair_merge_ms = 0.0
+        repair_asset_timings: dict[str, float] = {}
+        if enable_repair and repair_target_assets:
             repaired_rows: list[pl.DataFrame] = []
-            for asset in fallback_assets:
+            repair_t0 = time.perf_counter()
+            for asset in repair_target_assets:
+                asset_t0 = time.perf_counter()
                 try:
                     row = build_aandelen_tab_summary(
                         selected_brokers=selected_brokers,
                         asset_rollup=asset,
                     )
+                    repair_asset_timings[asset] = round((time.perf_counter() - asset_t0) * 1000.0, 3)
                     if row is not None and not row.is_empty():
                         repaired_rows.append(row)
                 except Exception:
+                    repair_asset_timings[asset] = round((time.perf_counter() - asset_t0) * 1000.0, 3)
                     continue
+            repair_loop_ms = round((time.perf_counter() - repair_t0) * 1000.0, 3)
             if repaired_rows:
+                merge_t0 = time.perf_counter()
                 repaired_df = pl.concat(repaired_rows, how="diagonal_relaxed").unique(
                     subset=["asset_rollup"], keep="last"
                 )
@@ -403,6 +515,7 @@ class AandelenProjectionV2:
                 df_new = pl.concat([keep_df, repaired_df], how="diagonal_relaxed").unique(
                     subset=["asset_rollup"], keep="last"
                 )
+                repair_merge_ms = round((time.perf_counter() - merge_t0) * 1000.0, 3)
                 repairs = len(repaired_assets)
                 diag = self._price_diag(df_new)
 
@@ -415,6 +528,13 @@ class AandelenProjectionV2:
             "koers_prev_null_expected": diag["koers_prev_null_expected"],
             "fallback_row_repairs": repairs,
             "fallback_assets": fallback_assets[:50],
+            "price_guard_enable_repair": bool(enable_repair),
+            "price_guard_fallback_asset_count": len(fallback_assets),
+            "price_guard_repair_target_asset_count": len(repair_target_assets),
+            "price_guard_repair_target_assets": repair_target_assets[:20],
+            "price_guard_repair_loop_ms": repair_loop_ms,
+            "price_guard_repair_merge_ms": repair_merge_ms,
+            "price_guard_repair_asset_timings_ms": repair_asset_timings,
         }
 
     @staticmethod

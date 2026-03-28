@@ -64,7 +64,11 @@ class EngineCoreRuntime:
             payload={"namespace": "snapshots", "value": True},
             source=source,
         )
-        results = self.publish_event(event, topic=str(snapshot_key))
+        changed_keys = self.state_store.apply(event)
+        keys_for_run = changed_keys or {str(snapshot_key)}
+        if not self.enabled:
+            return []
+        results = self.projection_bus.run(keys_for_run, topic=str(snapshot_key))
         if self.enabled and results:
             ok = sum(1 for r in results if r.success)
             fail = len(results) - ok

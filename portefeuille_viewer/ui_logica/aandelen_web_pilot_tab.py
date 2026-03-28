@@ -26,6 +26,9 @@ except Exception:  # pragma: no cover - optional runtime dependency
     QWebEngineView = None
 
 
+AANDELEN_WEB_DEBUG = os.getenv("AANDELEN_WEB_DEBUG", "0").strip() == "1"
+
+
 class AandelenWebPilotTab(QWidget):
     """
     Minimal WebEngine pilot tab.
@@ -85,6 +88,8 @@ class AandelenWebPilotTab(QWidget):
         self._needs_meta = False
 
     def _on_snapshot_updated(self, snapshot_key: str):
+        if AANDELEN_WEB_DEBUG:
+            print(f"[aandelen-web-debug] snapshotUpdated key={snapshot_key} active={self._is_active} js_ready={self._js_ready} needs_snapshot={self._needs_snapshot} needs_patch={self._needs_patch} needs_meta={self._needs_meta}")
         if snapshot_key == "snapshot_aandelen_projection_v2":
             self._needs_snapshot = True
             self._needs_patch = False
@@ -98,6 +103,8 @@ class AandelenWebPilotTab(QWidget):
 
     def set_active(self, active: bool):
         self._is_active = bool(active)
+        if AANDELEN_WEB_DEBUG:
+            print(f"[aandelen-web-debug] set_active active={self._is_active} js_ready={self._js_ready} current_needs_snapshot={self._needs_snapshot} current_needs_patch={self._needs_patch} current_needs_meta={self._needs_meta}")
         if not self._is_active:
             self._render_timer.stop()
             return
@@ -116,6 +123,8 @@ class AandelenWebPilotTab(QWidget):
             self._render_timer.start()
 
     def _flush_scheduled_render(self):
+        if AANDELEN_WEB_DEBUG:
+            print(f"[aandelen-web-debug] flush active={self._is_active} js_ready={self._js_ready} snapshot={self._needs_snapshot} patch={self._needs_patch} meta={self._needs_meta}")
         if not self._is_active or not self._js_ready:
             return
         if self._needs_snapshot:
@@ -133,17 +142,25 @@ class AandelenWebPilotTab(QWidget):
         df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
         if df is None:
             return
+        if AANDELEN_WEB_DEBUG:
+            rows = int(df.height) if hasattr(df, "height") else -1
+            print(f"[aandelen-web-debug] publish_full_snapshot rows={rows}")
         try:
             rows = df.to_dicts() if hasattr(df, "to_dicts") else []
         except Exception:
             rows = []
         self._call_js("renderSnapshot", {"rows": rows})
+        self._debug_probe_js("full")
 
     def _publish_patch(self):
         patch = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2_patch", None)
         if not patch:
             return
+        if AANDELEN_WEB_DEBUG:
+            row_ids = sorted({str(item.get("row_id") or "").strip() for item in list(patch) if str(item.get("row_id") or "").strip()})[:10]
+            print(f"[aandelen-web-debug] publish_patch size={len(list(patch))} row_ids={row_ids}")
         self._call_js("applyPatch", {"changes": list(patch)})
+        self._debug_probe_js("patch")
 
     def _publish_meta(self):
         meta = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2_meta", None)
@@ -165,7 +182,56 @@ class AandelenWebPilotTab(QWidget):
 
     def _run_js(self, func_name: str, payload: object):
         js_payload = json.dumps(payload, ensure_ascii=False, default=self._json_default)
+        if AANDELEN_WEB_DEBUG and func_name in {"renderSnapshot", "applyPatch", "renderMeta"}:
+            script = f"""
+(() => {{
+  try {{
+    window.{func_name}({js_payload});
+    const tbody = document.getElementById("tbody");
+    return JSON.stringify({{
+      ok: true,
+      func: "{func_name}",
+      rows: tbody ? tbody.children.length : -1,
+      abnTotaal: document.getElementById("c_ABN_totaal_inc_fee")?.textContent ?? null,
+      abnStatus: document.getElementById("c_ABN_status")?.textContent ?? null,
+      abnQty: document.getElementById("c_ABN_eq_aantal_bezit")?.textContent ?? null
+    }});
+  }} catch (e) {{
+    return JSON.stringify({{
+      ok: false,
+      func: "{func_name}",
+      error: String(e),
+      stack: (e && e.stack) ? String(e.stack) : null
+    }});
+  }}
+}})()
+"""
+            def _on_result(result):
+                print(f"[aandelen-web-debug] js_call_result result={result}")
+            self.web.page().runJavaScript(script, 0, _on_result)
+            return
         self.web.page().runJavaScript(f"window.{func_name}({js_payload});")
+
+    def _debug_probe_js(self, label: str) -> None:
+        if not AANDELEN_WEB_DEBUG or not hasattr(self, "web") or not self._js_ready:
+            return
+        script = """
+(() => {
+  try {
+    const tbody = document.getElementById("tbody");
+    const rows = tbody ? tbody.children.length : -1;
+    const abnTotaal = document.getElementById("c_ABN_totaal_inc_fee")?.textContent ?? null;
+    const abnStatus = document.getElementById("c_ABN_status")?.textContent ?? null;
+    const abnQty = document.getElementById("c_ABN_eq_aantal_bezit")?.textContent ?? null;
+    return JSON.stringify({ ok: true, rows, abnTotaal, abnStatus, abnQty });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e), stack: (e && e.stack) ? String(e.stack) : null });
+  }
+})()
+"""
+        def _on_result(result):
+            print(f"[aandelen-web-debug] dom_probe label={label} result={result}")
+        self.web.page().runJavaScript(script, 0, _on_result)
 
     def _open_broker_popup(self):
         brokers = self._available_brokers()
