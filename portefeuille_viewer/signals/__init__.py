@@ -16,8 +16,8 @@ class Signals(QObject):
     # Emitted when a snapshot key is updated. Payload: snapshot key (str)
     snapshotUpdated = Signal(str)
 
-    # Emitted when orders are committed (insert/update/delete). No payload
-    ordersCommitted = Signal()
+    # Emitted when orders are committed (insert/update/delete). Payload: dict with affected asset types/assets.
+    ordersCommitted = Signal(dict)
 
     # Emitted when a state-engine rebuild is requested. Payload: dict with scope/context.
     stateRebuildRequested = Signal(dict)

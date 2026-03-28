@@ -1465,7 +1465,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._live_summary_asset = None
         self._live_summary_row = None
         
-    def on_orders_committed(self):
+    def on_orders_committed(self, payload: dict | None = None):
         self._live_summary_asset = None
         self._live_summary_row = None
         self.update_opties_open_table()

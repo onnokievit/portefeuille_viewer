@@ -135,7 +135,7 @@ class OptionTimevalueService(QObject):
         if self._log_enabled:
             print(msg)
 
-    def schedule_rebuild(self):
+    def schedule_rebuild(self, payload: dict | None = None):
         with self._state_lock:
             if self._rebuild_inflight:
                 self._rebuild_queued = True

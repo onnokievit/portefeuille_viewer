@@ -23,6 +23,7 @@ from portefeuille_viewer.services.option_timevalue_service import OptionTimevalu
 from portefeuille_viewer.services.db_migration_service import DbMigrationService
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.domain.engine_core_runtime import EngineCoreRuntime
+from portefeuille_viewer.domain.projection_bus import ProjectionRunResult
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
@@ -693,6 +694,62 @@ def _runtime_recompute_all(reason: str):
     _publish_runtime_projection_results(results, reason=reason)
 
 
+def _runtime_recompute_selected(
+    projection_names: set[str],
+    reason: str,
+    changed_keys: set[str] | None = None,
+):
+    if not ENABLE_ENGINE_CORE_RUNTIME:
+        return
+    selected = {str(name).strip() for name in (projection_names or set()) if str(name).strip()}
+    if not selected:
+        return
+    projection_map = {
+        "aandelen_v2": aandelen_projection_v2,
+        "opties_open_v2": opties_open_projection_v2,
+        "optie_tijdswaarde_v2": optie_tijdswaarde_projection_v2,
+        "sprinters_open_v2": sprinters_open_projection_v2,
+    }
+    keys = set(changed_keys or set())
+    results: list[ProjectionRunResult] = []
+    for projection_name in selected:
+        projection = projection_map.get(projection_name)
+        if projection is None:
+            continue
+        t0 = time.perf_counter()
+        try:
+            recompute_fn = getattr(projection, "recompute", None)
+            if recompute_fn is None:
+                raise AttributeError(f"{projection_name} has no recompute()")
+            try:
+                sig = inspect.signature(recompute_fn)
+                if len(sig.parameters) == 0:
+                    recompute_fn()
+                else:
+                    recompute_fn(keys)
+            except (TypeError, ValueError):
+                recompute_fn(keys)
+            results.append(
+                ProjectionRunResult(
+                    projection_name=projection_name,
+                    changed_keys=len(keys),
+                    success=True,
+                    duration_ms=(time.perf_counter() - t0) * 1000.0,
+                )
+            )
+        except Exception as exc:
+            results.append(
+                ProjectionRunResult(
+                    projection_name=projection_name,
+                    changed_keys=len(keys),
+                    success=False,
+                    duration_ms=(time.perf_counter() - t0) * 1000.0,
+                    error=str(exc),
+                )
+            )
+    _publish_runtime_projection_results(results, reason=reason)
+
+
 def _on_snapshot_updated_engine_core(snapshot_key: str):
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
@@ -804,41 +861,122 @@ def refresh_everything():
 
 
 def refresh_transaction_derived_snapshots(payload: dict | None = None):
-    start_time = time.time()
+    start_time = time.perf_counter()
+    timings: list[tuple[str, float]] = []
+
+    def _mark(stage: str, stage_start: float):
+        timings.append((stage, time.perf_counter() - stage_start))
+
     try:
         # Zorg dat afgeleide snapshots altijd vanaf de gecommitte DB-waarheid worden opgebouwd.
         # Dit voorkomt race-gedrag waarbij ordersCommitted eerder komt dan lokale snapshot-sync in de UI.
+        stage_start = time.perf_counter()
         repository.load_alle_transacties()
-        repository.load_aandelen_from_tx()
-        repository.load_open_opties_from_tx()
-        repository.load_gesloten_opties_from_tx()
-        repository.load_gesloten_opties_no_broker()
-        repository.load_open_sprinters_from_tx()
-        repository.load_gesloten_sprinters_from_tx()
+        _mark("load_alle_transacties", stage_start)
+        raw_asset_types = {
+            str(asset_type).strip().lower()
+            for asset_type in ((payload or {}).get("changed_asset_types") or [])
+            if str(asset_type).strip()
+        }
+        known_asset_types = {"aandeel", "optie", "sprinter"}
+        unknown_asset_types = raw_asset_types - known_asset_types
+        broad_refresh = not raw_asset_types or bool(unknown_asset_types)
+        needs_aandelen = broad_refresh or "aandeel" in raw_asset_types
+        needs_opties = broad_refresh or "optie" in raw_asset_types
+        needs_sprinters = broad_refresh or "sprinter" in raw_asset_types
+
+        if needs_aandelen:
+            stage_start = time.perf_counter()
+            repository.load_aandelen_from_tx()
+            _mark("load_aandelen_from_tx", stage_start)
+        if needs_opties:
+            stage_start = time.perf_counter()
+            repository.load_open_opties_from_tx()
+            _mark("load_open_opties_from_tx", stage_start)
+            stage_start = time.perf_counter()
+            repository.load_gesloten_opties_from_tx()
+            _mark("load_gesloten_opties_from_tx", stage_start)
+            stage_start = time.perf_counter()
+            repository.load_gesloten_opties_no_broker()
+            _mark("load_gesloten_opties_no_broker", stage_start)
+        if needs_sprinters:
+            stage_start = time.perf_counter()
+            repository.load_open_sprinters_from_tx()
+            _mark("load_open_sprinters_from_tx", stage_start)
+            stage_start = time.perf_counter()
+            repository.load_gesloten_sprinters_from_tx()
+            _mark("load_gesloten_sprinters_from_tx", stage_start)
+        stage_start = time.perf_counter()
         repository.build_repository_active_asset_rollup_data()
-        live_aggregator_aandelen.process_live_update()
-        live_aggregator_opties.process_live_update()
-        repository.portfolio_value_asset_rollup_opties_put()
-        repository.portfolio_value_asset_rollup_aandelen()
-        repository.portfolio_value_asset_rollup_sprinters()
+        _mark("build_repository_active_asset_rollup_data", stage_start)
+        if needs_aandelen:
+            stage_start = time.perf_counter()
+            live_aggregator_aandelen.process_live_update()
+            _mark("live_aggregator_aandelen.process_live_update", stage_start)
+        if needs_opties:
+            stage_start = time.perf_counter()
+            live_aggregator_opties.process_live_update()
+            _mark("live_aggregator_opties.process_live_update", stage_start)
+            stage_start = time.perf_counter()
+            repository.portfolio_value_asset_rollup_opties_put()
+            _mark("portfolio_value_asset_rollup_opties_put", stage_start)
+        if needs_aandelen:
+            stage_start = time.perf_counter()
+            repository.portfolio_value_asset_rollup_aandelen()
+            _mark("portfolio_value_asset_rollup_aandelen", stage_start)
+        if needs_sprinters:
+            stage_start = time.perf_counter()
+            repository.portfolio_value_asset_rollup_sprinters()
+            _mark("portfolio_value_asset_rollup_sprinters", stage_start)
+        stage_start = time.perf_counter()
         repository.portfolio_value_asset_rollup_combined()
+        _mark("portfolio_value_asset_rollup_combined", stage_start)
         ck: set[str] = set()
+        for asset_hint in ((payload or {}).get("changed_assets") or []):
+            if asset_hint:
+                ck.add(str(asset_hint))
         asset_hint = (payload or {}).get("asset_rollup")
         if asset_hint:
             ck.add(str(asset_hint))
         if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
-            _runtime_recompute_all("transaction_derived")
+            stage_start = time.perf_counter()
+            runtime_targets: set[str] = set()
+            if needs_aandelen:
+                runtime_targets.add("aandelen_v2")
+            if needs_opties:
+                runtime_targets.update({"opties_open_v2", "optie_tijdswaarde_v2"})
+            if needs_sprinters:
+                runtime_targets.add("sprinters_open_v2")
+            _runtime_recompute_selected(runtime_targets, "transaction_derived", ck)
+            _mark("_runtime_recompute_selected", stage_start)
         else:
-            refresh_aandelen_projection("transaction_derived", ck)
-            refresh_opties_open_projection("transaction_derived")
-            refresh_optie_tijdswaarde_projection("transaction_derived")
-            refresh_sprinters_open_projection("transaction_derived")
+            if needs_aandelen:
+                stage_start = time.perf_counter()
+                refresh_aandelen_projection("transaction_derived", ck)
+                _mark("refresh_aandelen_projection", stage_start)
+            if needs_opties:
+                stage_start = time.perf_counter()
+                refresh_opties_open_projection("transaction_derived")
+                _mark("refresh_opties_open_projection", stage_start)
+                stage_start = time.perf_counter()
+                refresh_optie_tijdswaarde_projection("transaction_derived")
+                _mark("refresh_optie_tijdswaarde_projection", stage_start)
+            if needs_sprinters:
+                stage_start = time.perf_counter()
+                refresh_sprinters_open_projection("transaction_derived")
+                _mark("refresh_sprinters_open_projection", stage_start)
     except Exception as exc:
         print(f"[snapshot-refresh] failed: {exc}")
         raise
-    elapsed_time = time.time() - start_time
+    elapsed_time = time.perf_counter() - start_time
     reason = (payload or {}).get("reason", "unknown")
-    print(f"[snapshot-refresh] transaction-derived snapshots refreshed in {elapsed_time:.2f}s ({reason})")
+    timing_str = ", ".join(f"{name}={duration * 1000:.1f}ms" for name, duration in timings)
+    print(
+        "[snapshot-refresh] transaction-derived snapshots refreshed "
+        f"in {elapsed_time:.2f}s ({reason}) "
+        f"types={sorted(raw_asset_types) if raw_asset_types else ['ALL']} "
+        f"broad={broad_refresh} | {timing_str}"
+    )
 
 
 def run_startup_db_migrations():
@@ -943,15 +1081,22 @@ def main():
     opties_projection_refresh_timer.timeout.connect(_run_opties_projection_refresh)
     optie_tijdswaarde_projection_refresh_timer.timeout.connect(_run_optie_tijdswaarde_projection_refresh)
     sprinters_projection_refresh_timer.timeout.connect(_run_sprinters_projection_refresh)
-    signals.ordersCommitted.connect(lambda: _reset_aandelen_tv_overlay_regime("orders_committed"))
+    signals.ordersCommitted.connect(lambda payload=None: _reset_aandelen_tv_overlay_regime("orders_committed"))
     if ENABLE_ORDERS_COMMIT_FULL_REFRESH:
+        pending_orders_refresh_payload: dict = {"reason": "orders_committed"}
+        def _schedule_orders_refresh(payload: dict | None = None):
+            pending_orders_refresh_payload.clear()
+            pending_orders_refresh_payload.update({"reason": "orders_committed"})
+            if isinstance(payload, dict):
+                pending_orders_refresh_payload.update(payload)
+            orders_refresh_timer.start()
         def _run_orders_refresh():
-            refresh_transaction_derived_snapshots({"reason": "orders_committed"})
+            refresh_transaction_derived_snapshots(dict(pending_orders_refresh_payload))
         orders_refresh_timer = QTimer()
         orders_refresh_timer.setSingleShot(True)
         orders_refresh_timer.setInterval(250)
         orders_refresh_timer.timeout.connect(_run_orders_refresh)
-        signals.ordersCommitted.connect(lambda: orders_refresh_timer.start())
+        signals.ordersCommitted.connect(_schedule_orders_refresh)
         print("[orders-refresh] enabled via ORDERS_COMMIT_FULL_REFRESH_V1=1")
     else:
         print("[orders-refresh] disabled (no full refresh on ordersCommitted)")

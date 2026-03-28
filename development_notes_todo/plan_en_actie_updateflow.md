@@ -669,6 +669,107 @@ Nieuwe status:
 - `per_dag_asset_result_v2` blijft onderdeel van startup en `db switch`
 - vervolgstap later: gerichte reload na echte succesvolle state-engine update
 
+### 20. Uitgevoerde vierde reductie
+
+Uitgevoerd:
+- `ordersCommitted` geeft nu een payload mee met:
+  - `changed_asset_types`
+  - `changed_assets`
+  - `changed_ids`
+  - `row_count`
+  - `reason`
+- directe `ordersCommitted` refresh gebruikt die payload nu om transaction-derived rebuilds te versmallen
+
+Nieuwe directe refresh-regels:
+- `aandeel` order:
+  - wel:
+    - `load_aandelen_from_tx()`
+    - `build_repository_active_asset_rollup_data()`
+    - `live_aggregator_aandelen.process_live_update()`
+    - `portfolio_value_asset_rollup_aandelen()`
+    - `portfolio_value_asset_rollup_combined()`
+    - `refresh_aandelen_projection(...)`
+  - niet:
+    - open/gesloten opties
+    - open/gesloten sprinters
+    - optie tijdswaarde / opties open projections
+    - sprinters projection
+
+- `optie` order:
+  - wel:
+    - `load_open_opties_from_tx()`
+    - `load_gesloten_opties_from_tx()`
+    - `load_gesloten_opties_no_broker()`
+    - `build_repository_active_asset_rollup_data()`
+    - `live_aggregator_opties.process_live_update()`
+    - `portfolio_value_asset_rollup_opties_put()`
+    - `portfolio_value_asset_rollup_combined()`
+    - `refresh_opties_open_projection(...)`
+    - `refresh_optie_tijdswaarde_projection(...)`
+  - niet:
+    - aandelen rebuild pad
+    - sprinter rebuild pad
+
+- `sprinter` order:
+  - wel:
+    - `load_open_sprinters_from_tx()`
+    - `load_gesloten_sprinters_from_tx()`
+    - `build_repository_active_asset_rollup_data()`
+    - `portfolio_value_asset_rollup_sprinters()`
+    - `portfolio_value_asset_rollup_combined()`
+    - `refresh_sprinters_open_projection(...)`
+  - niet:
+    - aandelen rebuild pad
+    - optie rebuild pad
+
+Fallback-regel:
+- als payload ontbreekt of onbekende `asset_type` bevat, blijft de oude brede refresh van kracht
+- dit houdt de eerste snede veilig en voorkomt regressie bij onverwachte transactiesoorten
+
+Belangrijke keuze:
+- `future` wordt nu nog als onbekend behandeld en forceert dus brede refresh
+- dat is bewust conservatief; futures moeten later expliciet geclassificeerd worden in plaats van stilzwijgend onder `aandeel` vallen
+
+Verwachte winst:
+- minder afgeleide snapshot-loads per commit
+- minder `snapshotUpdated` fan-out vanuit niet-relevante domeinen
+- vooral winst bij grote gebruikersdatabases met veel transacties
+
+Testfocus na deze snede:
+- aandeel-order
+- optie-order
+- sprinter-order
+- delete/update van die orders
+- db switch
+- controleren of alleen relevante tabs/snapshots zichtbaar bijwerken
+
+### 21. Uitgevoerde vijfde reductie
+
+Uitgevoerd:
+- in engine-core exclusive mode gebruikt het order-save pad niet langer `_runtime_recompute_all("transaction_derived")`
+- in plaats daarvan wordt nu alleen de relevante projection-set gerecomputed:
+  - `aandeel` order -> `aandelen_v2`
+  - `optie` order -> `opties_open_v2` + `optie_tijdswaarde_v2`
+  - `sprinter` order -> `sprinters_open_v2`
+
+Belangrijk:
+- `refresh_everything()` gebruikt nog steeds full runtime recompute
+- deze snede geldt alleen voor directe `ordersCommitted` / transaction-derived refresh
+- onbekende gevallen blijven via de bestaande brede fallback lopen
+
+Waarom dit relevant is:
+- timingmeting liet zien dat `_runtime_recompute_all` na de eerdere reducties de grootste resterende kostenpost was
+- daardoor zat nog steeds veel order-save latency in irrelevante projection recomputes
+
+Verwachte winst:
+- directe reductie in order-save latency
+- minder onnodige projection publish/persist-paden
+- rustiger updategedrag na save, vooral bij enkelvoudige orders
+
+Nieuwe meetfocus:
+- vergelijk oude `_runtime_recompute_all` timings met nieuwe `_runtime_recompute_selected`
+- kijk per ordertype of runtime nu in lijn ligt met alleen de relevante projection-set
+
 ---
 
 

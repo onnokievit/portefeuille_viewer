@@ -586,6 +586,43 @@ TABLE_COLS = [
 def get_connection():
     return pyodbc.connect(conn_str)
 
+
+def _normalize_orders_committed_payload(rows: list[dict] | None = None, *, reason: str = "unknown") -> dict:
+    rows = list(rows or [])
+    asset_types: set[str] = set()
+    asset_rollups: set[str] = set()
+    ids: list[int] = []
+    for row in rows:
+        at = str(row.get("asset_type") or "").strip().lower()
+        ar = str(row.get("asset_rollup") or "").strip()
+        rid = row.get("Id")
+        if at:
+            asset_types.add(at)
+        if ar:
+            asset_rollups.add(ar)
+        if rid is not None:
+            with contextlib.suppress(Exception):
+                ids.append(int(rid))
+    return {
+        "reason": reason,
+        "changed_asset_types": sorted(asset_types),
+        "changed_assets": sorted(asset_rollups),
+        "changed_ids": ids,
+        "row_count": len(rows),
+    }
+
+
+def _fetch_rows_for_ids(conn, ids_to_fetch: list) -> list[dict]:
+    if not ids_to_fetch:
+        return []
+    placeholders = ",".join("?" * len(ids_to_fetch))
+    sql = (
+        "SELECT Id, asset_type, asset_rollup "
+        f"FROM transacties_bron_data_org WHERE Id IN ({placeholders})"
+    )
+    df = pl.read_database(sql, conn, execute_options={"parameters": ids_to_fetch})
+    return df.to_dicts()
+
 def insert_transaction(data: dict) -> int:
     """Nieuwe transactie invoegen en Id teruggeven."""
     data = dict(data)
@@ -604,7 +641,11 @@ def insert_transaction(data: dict) -> int:
         conn.commit()
     # Emit centraal signaal na insert
     with contextlib.suppress(Exception):
-        signals.ordersCommitted.emit()
+        row = dict(data)
+        row["Id"] = new_id
+        signals.ordersCommitted.emit(
+            _normalize_orders_committed_payload([row], reason="insert_transaction")
+        )
     return new_id
 
 
@@ -633,12 +674,15 @@ def delete_transactions_by_ids(ids_to_delete: list) -> int:
         return 0
 
     with get_connection() as conn:
+        deleted_rows = _fetch_rows_for_ids(conn, ids_to_delete)
         deleted_count = _extracted_from_delete_transactions_by_ids_10(
             conn, ids_to_delete
         )
     # Emit centraal signaal na delete
     with contextlib.suppress(Exception):
-        signals.ordersCommitted.emit()
+        signals.ordersCommitted.emit(
+            _normalize_orders_committed_payload(deleted_rows, reason="delete_transactions_by_ids")
+        )
     return deleted_count
 
 
@@ -871,7 +915,18 @@ def update_transactions_atomic(record_id1: int, data1: dict, record_id2: int | N
             raise
     # Emit centraal signaal na update
     with contextlib.suppress(Exception):
-        signals.ordersCommitted.emit()
+        payload_rows = []
+        if d1:
+            row1 = dict(d1)
+            row1["Id"] = record_id1
+            payload_rows.append(row1)
+        if record_id2 is not None and d2:
+            row2 = dict(d2)
+            row2["Id"] = record_id2
+            payload_rows.append(row2)
+        signals.ordersCommitted.emit(
+            _normalize_orders_committed_payload(payload_rows, reason="update_transactions_atomic")
+        )
 
 def _clean(x): ########################## niet genoemd door chatgpt om te blijven?????? 
     return "" if x is None else str(x).strip()
