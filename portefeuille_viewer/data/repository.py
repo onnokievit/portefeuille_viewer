@@ -623,30 +623,72 @@ def _fetch_rows_for_ids(conn, ids_to_fetch: list) -> list[dict]:
     df = pl.read_database(sql, conn, execute_options={"parameters": ids_to_fetch})
     return df.to_dicts()
 
-def insert_transaction(data: dict) -> int:
-    """Nieuwe transactie invoegen en Id teruggeven."""
-    data = dict(data)
-    data.pop("uniek_id", None)
-    cols = ", ".join(data.keys())
-    placeholders = ", ".join(["?"] * len(data))
-    values = list(data.values())
+
+def _transaction_schema_overrides() -> dict:
+    return {
+        "aantal": pl.Decimal(18, 3),
+        "transactie_aantal": pl.Decimal(18, 3),
+        "transactie_prijs": pl.Decimal(18, 4),
+        "transactie_fee": pl.Decimal(18, 4),
+        "transactie_euro_totaal": pl.Decimal(18, 4),
+        "optie_strike": pl.Decimal(18, 4),
+        "multiplier_close_price": pl.Decimal(18, 6),
+        "order_id": pl.Decimal(18, 0),
+        "order_id_number": pl.Decimal(18, 0),
+    }
+
+
+def _fetch_full_transactions_by_ids(conn, ids_to_fetch: list) -> list[dict]:
+    if not ids_to_fetch:
+        return []
+    placeholders = ",".join("?" * len(ids_to_fetch))
+    sql = f"SELECT * FROM transacties_bron_data_org WHERE Id IN ({placeholders}) ORDER BY Id"
+    df = pl.read_database(
+        sql,
+        conn,
+        schema_overrides=_transaction_schema_overrides(),
+        execute_options={"parameters": ids_to_fetch},
+    )
+    return df.to_dicts()
+
+
+def insert_transactions_atomic(rows: list[dict], *, reason: str = "insert_transactions_atomic") -> list[dict]:
+    """Voeg 1..n transacties atomisch in en geef de committed rows terug."""
+    rows = [dict(row or {}) for row in (rows or [])]
+    if not rows:
+        return []
+    inserted_ids: list[int] = []
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"INSERT INTO transacties_bron_data_org ({cols}) VALUES ({placeholders})",
-            values
-        )
-        cursor.execute("SELECT @@IDENTITY")
-        new_id = cursor.fetchone()[0]
-        conn.commit()
-    # Emit centraal signaal na insert
+        try:
+            for row in rows:
+                row.pop("uniek_id", None)
+                cols = ", ".join(row.keys())
+                placeholders = ", ".join(["?"] * len(row))
+                values = list(row.values())
+                cursor.execute(
+                    f"INSERT INTO transacties_bron_data_org ({cols}) VALUES ({placeholders})",
+                    values,
+                )
+                cursor.execute("SELECT @@IDENTITY")
+                inserted_ids.append(int(cursor.fetchone()[0]))
+            conn.commit()
+            committed_rows = _fetch_full_transactions_by_ids(conn, inserted_ids)
+        except pyodbc.Error:
+            conn.rollback()
+            raise
     with contextlib.suppress(Exception):
-        row = dict(data)
-        row["Id"] = new_id
         signals.ordersCommitted.emit(
-            _normalize_orders_committed_payload([row], reason="insert_transaction")
+            _normalize_orders_committed_payload(committed_rows, reason=reason)
         )
-    return new_id
+    return committed_rows
+
+def insert_transaction(data: dict) -> int:
+    """Nieuwe transactie invoegen en Id teruggeven."""
+    committed_rows = insert_transactions_atomic([data], reason="insert_transaction")
+    if not committed_rows:
+        raise RuntimeError("insert_transaction returned no committed rows")
+    return int(committed_rows[0]["Id"])
 
 
 def delete_transactions_by_order_id(order_id: str) -> int:

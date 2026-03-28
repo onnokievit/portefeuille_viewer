@@ -66,7 +66,7 @@ class OrdersTableModel(HighlightingPandasTableModel):
         return str(section + 1)
 from portefeuille_viewer.data.repository import (
     get_connection, DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
-    load_reference_lists, update_transactions_atomic, insert_transaction,
+    load_reference_lists, update_transactions_atomic, insert_transaction, insert_transactions_atomic,
     get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, parse_float_field,
     build_uniek_id, is_pairable
 )
@@ -750,15 +750,21 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
             new_order_id = get_next_order_id()
             eerste_order["order_id"] = new_order_id
             eerste_order["order_id_number"] = get_next_order_item_no(new_order_id)
-            eerste_id = insert_transaction(eerste_order)
-            tweede_id = None
+            rows_to_insert = [eerste_order]
             if tweede_order:
                 tweede_order["order_id"] = new_order_id
                 tweede_order["order_id_number"] = get_next_order_item_no(new_order_id)
-                tweede_id = insert_transaction(tweede_order)
+                rows_to_insert.append(tweede_order)
+            committed_rows = insert_transactions_atomic(rows_to_insert, reason="insert_transaction")
+            committed_ids = [int(row["Id"]) for row in committed_rows if row.get("Id") is not None]
+            eerste_id = committed_ids[0] if committed_ids else None
+            tweede_id = committed_ids[1] if len(committed_ids) > 1 else None
         #     # TODO: snapshot sync indien nodig
         except pyodbc.Error as e:
             QMessageBox.critical(self, "Databasefout", f"Kon niet opslaan:\n{e}")
+            return
+        except Exception as e:
+            QMessageBox.critical(self, "Opslaan mislukt", f"Kon order niet veilig opslaan:\n{e}")
             return
         msg = f"✅ Order opgeslagen met Id {eerste_id}"
         if tweede_id:
