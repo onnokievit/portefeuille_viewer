@@ -1,7 +1,7 @@
 # Roadmap
 
 ## Doel en gebruik van dit document
-Dit document is de centrale roadmap voor verdere ontwikkeling van `portefeuille_viewer_1.1`.
+Dit document is de centrale roadmap voor verdere ontwikkeling van `portefeuille_viewer_1.2`.
 
 Het document beschrijft alleen werk dat nog relevant is voor de huidige app:
 - uitbreidingen op bestaande functionaliteit,
@@ -12,7 +12,7 @@ Het document beschrijft alleen werk dat nog relevant is voor de huidige app:
 Dit document vervangt de oude losse roadmap-documenten als leidende werklijst.
 
 Bronnen voor deze roadmap:
-- huidige code in `portefeuille_viewer_1.1`,
+- huidige code in `portefeuille_viewer_1.2`,
 - `development_notes.md`,
 - gearchiveerde plan- en notitiedocumenten in `development_notes_todo/archive/`.
 
@@ -63,6 +63,43 @@ Als deze roadmap volledig is uitgevoerd, moet de app in de praktijk het volgende
 - unresolved optie-series zijn niet langer een blokkade maar een beheersbaar workflow-onderdeel,
 - tabwissels en alt-tab terugkeer naar de app blijven responsief,
 - simulatie- en scenariofunctionaliteit kan op de bestaande architectuur worden toegevoegd zonder opnieuw te hoeven verbouwen.
+
+### 1.5 Expliciete hoofdlijnen voor de komende fase
+De eerstvolgende ontwikkelfase bestaat uit twee expliciete werkstromen.
+
+#### Werkstroom A: updateflow en rendergedrag stabiliseren
+Doel:
+- exact begrijpen wat er gebeurt na order save, live ticks, db switch, startup en tabwissel,
+- dubbele of onnodige recompute- en renderpaden verwijderen,
+- de UI rustiger en voorspelbaarder maken zonder informatieverlies,
+- zware work uit de directe interactiepaden halen waar dat kan.
+
+Waarom deze werkstroom eerst:
+- de grootste actuele risico's zitten in onvoorspelbare updateketens,
+- latency en hickups worden momenteel niet alleen door rendering veroorzaakt, maar ook door te veel of te overlappende vervolgacties,
+- zonder deze opschoning is het te riskant om grote codeblokken te verwijderen.
+
+#### Werkstroom B: legacy tabs en legacy-gerelateerde load verwijderen
+Doel:
+- oude tabs die functioneel vervangen zijn uit de app halen,
+- gerelateerde listeners, producers, aggregators en refresh-paden uitschakelen of verwijderen,
+- alleen code laten staan die nog echt nodig is voor de 2.0 architectuur of voor compatibiliteit.
+
+Voorwaarde:
+- deze werkstroom start pas echt na de eerste audit en opschoning van werkstroom A,
+- omdat legacy anders te vroeg wordt verwijderd terwijl sommige runtimepaden nog onvoldoende begrepen zijn.
+
+### 1.6 Uitvoeringsprincipe voor deze fase
+De komende fase wordt niet ad hoc gedaan, maar via twee documenten:
+- `roadmap.md`: strategische richting en prioriteiten,
+- `plan_en_actie_updateflow.md`: concrete aanpak, onderzoeksresultaten, verwijdermatrix en afvinklijst.
+
+De eerste actie in deze fase is daarom niet direct code verwijderen, maar:
+1. feature inventory,
+2. trigger inventory,
+3. meetplan,
+4. updateflow audit,
+5. daarna pas gerichte refactors en legacy-afbouw.
 
 ---
 
@@ -242,6 +279,17 @@ Open werk:
    - timevalue overlay,
    - live aggregator snapshots.
 
+Aanvulling voor de huidige fase:
+- de audit moet expliciet per trigger vastleggen wat er gebeurt na:
+  - app startup,
+  - order save,
+  - live tick/update,
+  - db switch,
+  - tab switch,
+  - alt-tab terug naar de app.
+
+Het order-save pad verdient extra nadruk, omdat daar zowel functionele juistheid als onnodige load kunnen samenkomen.
+
 ### 3.3 PortfolioEngine / aggregators / runtime beter afgrenzen
 De huidige app bevat een mix van:
 - oude orchestratorlogica,
@@ -283,6 +331,14 @@ Open werk:
    - welke blijven Qt-tabellen,
    - welke moeten naar web/grid,
    - welke hebben vooral logische en niet visuele modernisatie nodig.
+
+Aanvulling voor de komende fase:
+1. expliciet vastleggen welke tabs nu officieel zijn,
+2. expliciet vastleggen welke tabs legacy zijn,
+3. per legacy tab vastleggen:
+   - welke code alleen UI-consument is,
+   - welke code nog producer of bridge is,
+   - welke code voor load zorgt ook als de tab niet zichtbaar is.
 
 ### 3.5 Database compatibiliteit expliciet als architectuurlaag
 De oude planbestanden hadden terecht veel aandacht voor DB-compat. Dat blijft relevant.
@@ -354,6 +410,10 @@ Open werk:
    - projection refresh,
    - UI update.
 3. Dubbele of strijdige paden na order commit verder verminderen.
+4. User-/DB-context expliciet respecteren bij state-engine snapshots:
+   - `per_dag_asset_result_v2` hoort niet bij directe transactiemutatie,
+   - maar wel bij startup en `db switch`,
+   - omdat de app bij wissel van database ook moet wisselen naar de state-engine output van die andere user.
 
 ### 4.3 Daily catchup en startup flow aanscherpen
 De startup en daily catchup logica is functioneel aanwezig, maar de guards en betekenis moeten verder worden aangescherpt.
@@ -508,35 +568,60 @@ Deze punten horen in de roadmap thuis omdat ze direct de bruikbaarheid beïnvloe
 
 Onderstaande volgorde is pragmatisch: eerst de basis stabieler en consistenter maken, daarna verder uitbreiden.
 
-### Fase A: Stabiliseren van updateflow en runtimegedrag
-1. Analyse en standaardisering van updatepaden per tab.
-2. Uniform coalescing/throttle beleid formaliseren.
-3. Inactieve-tab render discipline verder afdwingen.
-4. Logging en metrics defaults opschonen.
+### Fase A: Updateflow audit en meetbasis
+1. Feature inventory maken:
+   - officiële tabs,
+   - legacy tabs,
+   - services/processen per tab,
+   - snapshot/projection/event afhankelijkheden per tab.
+2. Trigger inventory opstellen:
+   - startup,
+   - order save,
+   - live tick/update,
+   - db switch,
+   - tab switch,
+   - alt-tab terugkeer.
+3. Meetplan vastzetten:
+   - welk pad wordt gemeten,
+   - welke metrics tellen,
+   - waar logging of tijdelijke instrumentatie nodig is.
 
-### Fase B: Transaction Engine V2 en orderflow
+### Fase B: Stabiliseren van updateflow en runtimegedrag
+1. Analyse en standaardisering van updatepaden per tab.
+2. Order-save flow opschonen en versimpelen.
+3. Uniform coalescing/throttle beleid formaliseren.
+4. Inactieve-tab render discipline verder afdwingen.
+5. Logging en metrics defaults opschonen.
+
+### Fase C: Legacy tabs en load gefaseerd afbouwen
+1. Legacy remove-matrix opstellen.
+2. Eerst legacy consumers verwijderen die geen producerrol meer hebben.
+3. Daarna legacy listeners, timers en aggregators uitschakelen die nog load geven.
+4. Na elke wave parity en smoke-tests uitvoeren.
+
+### Fase D: Transaction Engine V2 en orderflow
 1. Command handlers add/update/delete.
 2. Replay tool.
 3. Test-transactie injectie API.
 4. Verdere integratie met `optie eind`.
 
-### Fase C: Resolver en optiedata hard maken
+### Fase E: Resolver en optiedata hard maken
 1. Unresolved flow volledig uitbouwen.
 2. Candidate picker in relevante tabs uniform.
 3. Master/lock workflow verbeteren.
 4. `option_last_prices` en fallback chain standaardiseren.
 
-### Fase D: UI cutover en parity afronden
+### Fase F: UI cutover en parity afronden
 1. Cutoverstatus per tab expliciet maken.
 2. Parity-checklists aflopen.
 3. Legacy tabs alleen uitzetten na expliciete acceptatie.
 
-### Fase E: DB compat en quality gates
+### Fase G: DB compat en quality gates
 1. DbCompat / contracttests.
 2. Multi-DB migratie checks.
 3. Release gates en parity pipeline operationaliseren.
 
-### Fase F: Nieuwe functionele uitbreidingen
+### Fase H: Nieuwe functionele uitbreidingen
 1. Scenario/beta simulatie.
 2. Rule-based advisor / roll ondersteuning.
 3. Eventuele verdere analysetools boven op de gestabiliseerde architectuur.

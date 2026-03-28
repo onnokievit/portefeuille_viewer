@@ -103,68 +103,6 @@ def load_asset_rollup_data() -> pl.DataFrame:
     SNAPSHOT_STORE.safe_write("repository_snapshot_asset_rollup_data", df)
     return compact_float64(df)
 
-# ------------------------------------------------------------
-# asset_rollup_data referentie tabel ophalen
-# ------------------------------------------------------------
-def load_per_dag_asset_result() -> pl.DataFrame:
-    """
-    Laadt per-dag result voor UI op v2-basis met v1-compatibele kolomnamen.
-    """
-    df_v2 = getattr(SNAPSHOT_STORE, "repository_snapshot_per_dag_asset_result_v2", None)
-    df_close = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
-
-    if df_v2 is not None and df_close is not None and df_v2.height > 0:
-        left = df_v2.select(
-            [
-                pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
-                pl.col("asset_rollup"),
-                pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal"),
-                pl.col("totaal_aantal_bezit_v2").cast(pl.Float64, strict=False).alias("totaal_aantal_bezit"),
-            ]
-        )
-        right = df_close.select(
-            [
-                pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
-                pl.col("asset_rollup"),
-                pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"),
-            ]
-        )
-        df = left.join(right, on=["datum", "asset_rollup"], how="left").select(
-            ["datum", "asset_rollup", "close_price", "totaal_aantal_bezit", "totaal"]
-        )
-    else:
-        sql = """
-            SELECT
-                r.datum,
-                r.asset_rollup,
-                hp.close_price AS close_price,
-                r.totaal_aantal_bezit_v2 AS totaal_aantal_bezit,
-                r.totaal_v2 AS totaal
-            FROM
-                per_dag_asset_result_v2 AS r
-                LEFT JOIN (
-                    SELECT
-                        datum,
-                        asset_rollup,
-                        MAX([close]) AS close_price
-                    FROM
-                        historical_data_correct
-                    GROUP BY
-                        datum,
-                        asset_rollup
-                ) AS hp
-                    ON r.datum = hp.datum
-                    AND r.asset_rollup = hp.asset_rollup
-            ORDER BY
-                r.asset_rollup,
-                r.datum
-        """
-        with get_connection() as conn:
-            df = pl.read_database(sql, conn)
-    SNAPSHOT_STORE.safe_write("repository_per_dag_asset_result", df)
-    return compact_float64(df)
-
-
 def load_historical_close_snapshot() -> pl.DataFrame:
     """
     Laad minimale historical close-data in memory voor snelle chart-opbouw.
@@ -1756,7 +1694,6 @@ def refresh_all_snapshots():
     load_dividend_data()
     load_historical_close_snapshot()
     load_per_dag_asset_result_v2_snapshot()
-    load_per_dag_asset_result()
     load_optie_referentie_data()
         
     build_repository_active_asset_rollup_data()

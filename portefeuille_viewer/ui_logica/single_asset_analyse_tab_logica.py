@@ -3138,7 +3138,7 @@ class SingleAssetAnalyseLogic:
         self.df_aandelen = None
         self.df_gesloten_aandelen = None
         self.currency_factor = 1.0
-        self.snapshot_df = None  # for clarity, but always use repository_per_dag_asset_result
+        self.snapshot_df = None
 
     def load_assets(self, regio=None, status=None, value_grow=None, sector=None):
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
@@ -3428,29 +3428,13 @@ class SingleAssetAnalyseLogic:
         # Prices (calendar source for market days)
         df_prices = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
         if df_prices is None or df_prices.height == 0:
-            # Fallback to legacy merged snapshot if historical-close snapshot is not available.
-            df_legacy = getattr(SNAPSHOT_STORE, "repository_per_dag_asset_result", None)
-            if df_legacy is None or df_legacy.height == 0:
-                return pl.DataFrame({})
-            df_legacy = df_legacy.with_columns(
-                [
-                    pl.coalesce(
-                        [
-                            pl.col("datum").cast(pl.Date, strict=False),
-                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
-                            pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
-                        ]
-                    ).alias("datum")
-                ]
-            )
-            return (
-                df_legacy.filter(
-                    (pl.col("asset_rollup") == asset)
-                    & (pl.col("datum") >= start_date)
-                    & (pl.col("datum") <= end_date)
-                )
-                .sort("datum")
-            )
+            # OBSOLETE-KANDIDAAT:
+            # `repository_per_dag_asset_result` was hier alleen nog legacy fallback wanneer
+            # `repository_snapshot_historical_close` niet beschikbaar was. Tijdens de staged
+            # cleanup van updateflow/legacy paden schakelen we die fallback nu expliciet uit.
+            # Als dit in rooktests problemen geeft, moet de oorzaak in historical-close loading
+            # worden opgelost en niet opnieuw via de oude per_dag_asset_result fallback.
+            return pl.DataFrame({})
 
         df_prices = (
             df_prices.with_columns(

@@ -51,6 +51,6 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"Portefeuille Viewer", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"Portefeuille Viewer 1.2", None))
     # retranslateUi
 

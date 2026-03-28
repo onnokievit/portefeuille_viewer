@@ -1447,9 +1447,6 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         with contextlib.suppress(Exception):
             load_test_orders_cache_from_db()
         self.dbChanged.emit()
-        # Zend centraal signaal uit voor app-brede database-wissel
-        if hasattr(self, 'active_db_name'):
-            signals.databaseChanged.emit(self.active_db_name)
             
     def _apply_db_color(self, name: str):
         style = DB_STYLES.get(name, {"fg": "black", "bg": "white"})
