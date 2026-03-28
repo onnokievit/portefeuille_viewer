@@ -863,16 +863,23 @@ def refresh_everything():
 def refresh_transaction_derived_snapshots(payload: dict | None = None):
     start_time = time.perf_counter()
     timings: list[tuple[str, float]] = []
+    df_tx: pl.DataFrame | None = None
 
     def _mark(stage: str, stage_start: float):
         timings.append((stage, time.perf_counter() - stage_start))
 
     try:
-        # Zorg dat afgeleide snapshots altijd vanaf de gecommitte DB-waarheid worden opgebouwd.
-        # Dit voorkomt race-gedrag waarbij ordersCommitted eerder komt dan lokale snapshot-sync in de UI.
         stage_start = time.perf_counter()
-        repository.load_alle_transacties()
-        _mark("load_alle_transacties", stage_start)
+        df_tx = repository.patch_transactions_snapshot_from_orders_payload(payload)
+        if df_tx is not None:
+            _mark("patch_transactions_snapshot", stage_start)
+        else:
+            # Fallback naar DB-waarheid als er geen veilige lokale patch mogelijk is.
+            repository.load_alle_transacties()
+            df_tx = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+            _mark("load_alle_transacties", stage_start)
+        if df_tx is None:
+            raise ValueError("repository_snapshot_alle_transacties is niet beschikbaar")
         raw_asset_types = {
             str(asset_type).strip().lower()
             for asset_type in ((payload or {}).get("changed_asset_types") or [])
@@ -887,24 +894,24 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
 
         if needs_aandelen:
             stage_start = time.perf_counter()
-            repository.load_aandelen_from_tx()
+            repository.load_aandelen_from_tx(df_tx=df_tx)
             _mark("load_aandelen_from_tx", stage_start)
         if needs_opties:
             stage_start = time.perf_counter()
-            repository.load_open_opties_from_tx()
+            repository.load_open_opties_from_tx(df_tx=df_tx)
             _mark("load_open_opties_from_tx", stage_start)
             stage_start = time.perf_counter()
-            repository.load_gesloten_opties_from_tx()
+            repository.load_gesloten_opties_from_tx(df_tx=df_tx)
             _mark("load_gesloten_opties_from_tx", stage_start)
             stage_start = time.perf_counter()
             repository.load_gesloten_opties_no_broker()
             _mark("load_gesloten_opties_no_broker", stage_start)
         if needs_sprinters:
             stage_start = time.perf_counter()
-            repository.load_open_sprinters_from_tx()
+            repository.load_open_sprinters_from_tx(df_tx=df_tx)
             _mark("load_open_sprinters_from_tx", stage_start)
             stage_start = time.perf_counter()
-            repository.load_gesloten_sprinters_from_tx()
+            repository.load_gesloten_sprinters_from_tx(df_tx=df_tx)
             _mark("load_gesloten_sprinters_from_tx", stage_start)
         stage_start = time.perf_counter()
         repository.build_repository_active_asset_rollup_data()

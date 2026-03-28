@@ -587,7 +587,13 @@ def get_connection():
     return pyodbc.connect(conn_str)
 
 
-def _normalize_orders_committed_payload(rows: list[dict] | None = None, *, reason: str = "unknown") -> dict:
+def _normalize_orders_committed_payload(
+    rows: list[dict] | None = None,
+    *,
+    reason: str = "unknown",
+    operation: str = "upsert",
+    deleted_ids: list[int] | None = None,
+) -> dict:
     rows = list(rows or [])
     asset_types: set[str] = set()
     asset_rollups: set[str] = set()
@@ -603,12 +609,20 @@ def _normalize_orders_committed_payload(rows: list[dict] | None = None, *, reaso
         if rid is not None:
             with contextlib.suppress(Exception):
                 ids.append(int(rid))
+    if deleted_ids:
+        for rid in deleted_ids:
+            with contextlib.suppress(Exception):
+                ids.append(int(rid))
+    ids = sorted(set(ids))
     return {
         "reason": reason,
+        "operation": operation,
         "changed_asset_types": sorted(asset_types),
         "changed_assets": sorted(asset_rollups),
         "changed_ids": ids,
         "row_count": len(rows),
+        "committed_rows": rows,
+        "deleted_ids": sorted(set(int(rid) for rid in (deleted_ids or []) if rid is not None)),
     }
 
 
@@ -652,6 +666,57 @@ def _fetch_full_transactions_by_ids(conn, ids_to_fetch: list) -> list[dict]:
     return df.to_dicts()
 
 
+def _transactions_rows_to_df(rows: list[dict], current_df: pl.DataFrame) -> pl.DataFrame:
+    row_df = pl.from_dicts(rows, schema_overrides=_transaction_schema_overrides())
+    for col_name, dtype in current_df.schema.items():
+        if col_name not in row_df.columns:
+            row_df = row_df.with_columns(pl.lit(None, dtype=dtype).alias(col_name))
+        else:
+            row_df = row_df.with_columns(pl.col(col_name).cast(dtype, strict=False))
+    return row_df.select(current_df.columns)
+
+
+def patch_transactions_snapshot_from_orders_payload(payload: dict | None) -> pl.DataFrame | None:
+    current_df = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+    if current_df is None:
+        return None
+
+    payload = dict(payload or {})
+    operation = str(payload.get("operation") or "").strip().lower()
+    committed_rows = list(payload.get("committed_rows") or [])
+    deleted_ids = []
+    for rid in (payload.get("deleted_ids") or payload.get("changed_ids") or []):
+        with contextlib.suppress(Exception):
+            deleted_ids.append(int(rid))
+    deleted_ids = sorted(set(deleted_ids))
+
+    if operation == "delete":
+        if not deleted_ids or "Id" not in current_df.columns:
+            return None
+        patched_df = current_df.filter(~pl.col("Id").cast(pl.Int64, strict=False).is_in(deleted_ids))
+    else:
+        if not committed_rows or "Id" not in current_df.columns:
+            return None
+        row_df = _transactions_rows_to_df(committed_rows, current_df)
+        upsert_ids = (
+            row_df.select(pl.col("Id").cast(pl.Int64, strict=False).alias("Id"))
+            .drop_nulls()
+            .get_column("Id")
+            .to_list()
+        )
+        if not upsert_ids:
+            return None
+        current_filtered = current_df.filter(
+            ~pl.col("Id").cast(pl.Int64, strict=False).is_in(upsert_ids)
+        )
+        patched_df = pl.concat([current_filtered, row_df], how="vertical_relaxed")
+        if "Id" in patched_df.columns:
+            patched_df = patched_df.sort("Id")
+
+    SNAPSHOT_STORE.safe_write("repository_snapshot_alle_transacties", patched_df)
+    return patched_df
+
+
 def insert_transactions_atomic(rows: list[dict], *, reason: str = "insert_transactions_atomic") -> list[dict]:
     """Voeg 1..n transacties atomisch in en geef de committed rows terug."""
     rows = [dict(row or {}) for row in (rows or [])]
@@ -679,7 +744,11 @@ def insert_transactions_atomic(rows: list[dict], *, reason: str = "insert_transa
             raise
     with contextlib.suppress(Exception):
         signals.ordersCommitted.emit(
-            _normalize_orders_committed_payload(committed_rows, reason=reason)
+            _normalize_orders_committed_payload(
+                committed_rows,
+                reason=reason,
+                operation="insert",
+            )
         )
     return committed_rows
 
@@ -723,7 +792,12 @@ def delete_transactions_by_ids(ids_to_delete: list) -> int:
     # Emit centraal signaal na delete
     with contextlib.suppress(Exception):
         signals.ordersCommitted.emit(
-            _normalize_orders_committed_payload(deleted_rows, reason="delete_transactions_by_ids")
+            _normalize_orders_committed_payload(
+                deleted_rows,
+                reason="delete_transactions_by_ids",
+                operation="delete",
+                deleted_ids=ids_to_delete,
+            )
         )
     return deleted_count
 
@@ -940,6 +1014,7 @@ def update_transactions_atomic(record_id1: int, data1: dict, record_id2: int | N
     d2 = _sanitize_update_dict(data2) if (record_id2 is not None and data2 is not None) else None
     if not d1 and not d2:
         return
+    committed_rows: list[dict] = []
     with get_connection() as conn:
         cur = conn.cursor()
         try:
@@ -952,22 +1027,21 @@ def update_transactions_atomic(record_id1: int, data1: dict, record_id2: int | N
                 cur.execute(f"UPDATE transacties_bron_data_org SET {sets2} WHERE Id = ?", params2 + [record_id2])
 
             conn.commit()
+            ids_to_fetch = [record_id1]
+            if record_id2 is not None:
+                ids_to_fetch.append(record_id2)
+            committed_rows = _fetch_full_transactions_by_ids(conn, ids_to_fetch)
         except pyodbc.Error:
             conn.rollback()
             raise
     # Emit centraal signaal na update
     with contextlib.suppress(Exception):
-        payload_rows = []
-        if d1:
-            row1 = dict(d1)
-            row1["Id"] = record_id1
-            payload_rows.append(row1)
-        if record_id2 is not None and d2:
-            row2 = dict(d2)
-            row2["Id"] = record_id2
-            payload_rows.append(row2)
         signals.ordersCommitted.emit(
-            _normalize_orders_committed_payload(payload_rows, reason="update_transactions_atomic")
+            _normalize_orders_committed_payload(
+                committed_rows,
+                reason="update_transactions_atomic",
+                operation="update",
+            )
         )
 
 def _clean(x): ########################## niet genoemd door chatgpt om te blijven?????? 
