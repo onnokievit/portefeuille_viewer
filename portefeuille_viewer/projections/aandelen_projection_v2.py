@@ -35,7 +35,9 @@ class AandelenProjectionV2:
         "repository_snapshot_active_asset_rollup_data",
         "repository_snapshot_portfolio_value_total_combined_put",
         "repository_snapshot_per_dag_asset_result_v2",
+        "repository_snapshot_per_dag_asset_result_v2_latest",
         "repository_snapshot_historical_close",
+        "repository_snapshot_historical_close_latest",
         "repository_snapshot_asset_rollup_data",
         # Overlay source
         "snapshot_optie_timevalue_live",

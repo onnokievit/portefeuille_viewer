@@ -589,6 +589,13 @@ Onderstaande volgorde is pragmatisch: eerst de basis stabieler en consistenter m
 ### Fase B: Stabiliseren van updateflow en runtimegedrag
 1. Analyse en standaardisering van updatepaden per tab.
 2. Order-save flow opschonen en versimpelen.
+   Status 2026-03-29:
+   - afgerond voor de huidige snede
+   - normale order-save gebruikt nu patch-first transactiesnapshot refresh in plaats van standaard full `load_alle_transacties()`
+   - Aandelen-tab gebruikt voor `net_change` en `koers_prev` kleine latest-per-asset snapshots in plaats van full historische datasets
+   - gemeten resultaat:
+     - aandelen insert terug van ongeveer `1.17s` naar ongeveer `0.26s`
+     - optie insert rond `0.05-0.06s`
 3. Uniform coalescing/throttle beleid formaliseren.
 4. Inactieve-tab render discipline verder afdwingen.
 5. Logging en metrics defaults opschonen.
@@ -598,6 +605,11 @@ Onderstaande volgorde is pragmatisch: eerst de basis stabieler en consistenter m
 2. Eerst legacy consumers verwijderen die geen producerrol meer hebben.
 3. Daarna legacy listeners, timers en aggregators uitschakelen die nog load geven.
 4. Na elke wave parity en smoke-tests uitvoeren.
+
+Status na live tick/update audit 2026-03-29:
+- eerste veilige removal-wave lijkt haalbaar voor legacy tab-UI en fallback-instantiatie
+- nog niet veilig om live aggregators of `OptionTimevalueService` in dezelfde wave te verwijderen
+- reden: deze zitten nog in de actuele live dataflow van de moderne setup
 
 ### Fase D: Transaction Engine V2 en orderflow
 1. Command handlers add/update/delete.
@@ -628,6 +640,16 @@ Onderstaande volgorde is pragmatisch: eerst de basis stabieler en consistenter m
 
 ---
 
+## Korte notitie open performance-kans
+
+Niet meer blokkerend, maar later nog interessant:
+
+- `build_aandelen_tab_summary(asset_rollup=...)` is nu de grootste resterende kostenpost bij aandelenorders
+- volgende mogelijke optimalisatie is daarom niet transactiereload, maar fijnmazige timing van de equity summary zelf
+- als daar nog veel winst zit, kan later gekeken worden naar extra tussen-snapshots, caching of overlay-achtige incrementals voor equity-side berekeningen
+
+---
+
 ## 7. Wat bewust niet meer op deze roadmap staat
 
 De volgende soorten items zijn niet opnieuw opgenomen:
@@ -640,4 +662,4 @@ Deze informatie blijft alleen als archief/context bestaan.
 ---
 
 ## Laatste update
-2026-03-28
+2026-03-29

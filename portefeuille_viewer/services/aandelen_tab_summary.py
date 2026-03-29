@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from datetime import date
 import time
 
 import polars as pl
@@ -17,8 +16,8 @@ _STATIC_SNAPSHOT_KEYS = (
 	"repository_portfolio_dividend",
 	"repository_snapshot_active_asset_rollup_data",
 	"repository_snapshot_portfolio_value_total_combined_put",
-	"repository_snapshot_per_dag_asset_result_v2",
-	"repository_snapshot_historical_close",
+	"repository_snapshot_per_dag_asset_result_v2_latest",
+	"repository_snapshot_historical_close_latest",
 )
 _STATIC_SUMMARY_CACHE: OrderedDict[tuple, pl.DataFrame] = OrderedDict()
 _LAST_PRICES_CACHE: dict[tuple[str, str], float] | None = None
@@ -176,62 +175,25 @@ def _build_static_summary(selected_brokers=None, asset_rollup: str | None = None
 			"portfolio_total_waarde_delta_pct": pl.Float64,
 		})
 
-	df_asset_result = _safe_df(SNAPSHOT_STORE.repository_snapshot_per_dag_asset_result_v2)
-	today = date.today()
-	if not df_asset_result.is_empty():
-		if "datum" in df_asset_result.columns:
-			df_asset_result = df_asset_result.with_columns(
-				pl.coalesce(
-					[
-						pl.col("datum").cast(pl.Date, strict=False),
-						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
-						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
-						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d-%m-%Y", strict=False),
-					]
-				).alias("datum")
-			)
-		df_asset_result = _normalize_asset_rollup(df_asset_result)
-		df_asset_result = df_asset_result.filter(pl.col("datum") < today)
-		if "totaal_v2" in df_asset_result.columns:
-			df_asset_result = df_asset_result.with_columns(
-				pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal")
-			)
-		if asset_rollup:
-			df_asset_result = df_asset_result.filter(pl.col("asset_rollup") == str(asset_rollup).strip().upper())
+	df_asset_result_latest = _apply_filters(
+		_safe_df(SNAPSHOT_STORE.repository_snapshot_per_dag_asset_result_v2_latest),
+		None,
+		asset_rollup,
+	)
+	if df_asset_result_latest.is_empty():
+		df_asset_result_latest = _empty_df({"asset_rollup": pl.Utf8, "totaal": pl.Float64})
+	else:
+		df_asset_result_latest = _normalize_asset_rollup(df_asset_result_latest)
 
-	df_asset_result_latest = (
-		df_asset_result
-		.sort(["asset_rollup", "datum"])
-		.group_by("asset_rollup")
-		.agg([pl.col("totaal").last().alias("totaal")])
-	) if not df_asset_result.is_empty() else _empty_df({"asset_rollup": pl.Utf8, "totaal": pl.Float64})
-	df_asset_result_latest = _normalize_asset_rollup(df_asset_result_latest)
-
-	df_historical_close = _safe_df(SNAPSHOT_STORE.repository_snapshot_historical_close)
-	if not df_historical_close.is_empty():
-		if "datum" in df_historical_close.columns:
-			df_historical_close = df_historical_close.with_columns(
-				pl.coalesce(
-					[
-						pl.col("datum").cast(pl.Date, strict=False),
-						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
-						pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
-					]
-				).alias("datum")
-			)
-		df_historical_close = _normalize_asset_rollup(df_historical_close)
-		df_historical_close = df_historical_close.filter(pl.col("datum") < today)
-		if asset_rollup:
-			df_historical_close = df_historical_close.filter(pl.col("asset_rollup") == str(asset_rollup).strip().upper())
-
-	df_close_latest = (
-		df_historical_close
-		.filter(pl.col("close_price").is_not_null())
-		.sort(["asset_rollup", "datum"])
-		.group_by("asset_rollup")
-		.agg([pl.col("close_price").last().alias("close_price")])
-	) if not df_historical_close.is_empty() else _empty_df({"asset_rollup": pl.Utf8, "close_price": pl.Float64})
-	df_close_latest = _normalize_asset_rollup(df_close_latest)
+	df_close_latest = _apply_filters(
+		_safe_df(SNAPSHOT_STORE.repository_snapshot_historical_close_latest),
+		None,
+		asset_rollup,
+	)
+	if df_close_latest.is_empty():
+		df_close_latest = _empty_df({"asset_rollup": pl.Utf8, "close_price": pl.Float64})
+	else:
+		df_close_latest = _normalize_asset_rollup(df_close_latest)
 
 	df_static = df_clos_opt_sum.join(df_clos_sp_sum, on=["asset_rollup"], how="full", suffix="_sp_gesloten")
 	df_static = _coalesce_asset_rollup(df_static, "asset_rollup_sp_gesloten")

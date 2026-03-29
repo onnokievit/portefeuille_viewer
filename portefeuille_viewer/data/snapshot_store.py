@@ -33,7 +33,9 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_total_combined_put: pl.DataFrame | None = None
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_snapshot_historical_close: pl.DataFrame | None = None
+        self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
         self.repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None = None
+        self.repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None = None
         self.live_prices: dict | None = None
         self.repository_snapshot_test_orders_cache: dict = {}
         self.repository_dirty_test_orders_assets: set = set()
@@ -73,7 +75,9 @@ class SnapshotStore:
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
         self.repository_snapshot_historical_close = None
+        self.repository_snapshot_historical_close_latest = None
         self.repository_snapshot_per_dag_asset_result_v2 = None
+        self.repository_snapshot_per_dag_asset_result_v2_latest = None
         self.active_database_name = None
         self.live_prices = None
         self.repository_snapshot_test_orders_cache = {}
@@ -109,7 +113,9 @@ class SnapshotStore:
             self.repository_snapshot_portfolio_value_total_combined_put is not None,
             self.repository_portfolio_dividend is not None,
             self.repository_snapshot_historical_close is not None,
+            self.repository_snapshot_historical_close_latest is not None,
             self.repository_snapshot_per_dag_asset_result_v2 is not None,
+            self.repository_snapshot_per_dag_asset_result_v2_latest is not None,
             self.live_prices is not None,
             self.repository_snapshot_test_orders_cache is not None,
             self.repository_dirty_test_orders_assets is not None,
@@ -163,9 +169,18 @@ class SnapshotStore:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.repository_snapshot_historical_close is not None:
             parts.append(f"Repository Historical Close data: {len(self.repository_snapshot_historical_close)} rijen")
+        if self.repository_snapshot_historical_close_latest is not None:
+            parts.append(
+                f"Repository Historical Close Latest data: {len(self.repository_snapshot_historical_close_latest)} rijen"
+            )
         if self.repository_snapshot_per_dag_asset_result_v2 is not None:
             parts.append(
                 f"Repository Per Dag Asset Result V2 data: {len(self.repository_snapshot_per_dag_asset_result_v2)} rijen"
+            )
+        if self.repository_snapshot_per_dag_asset_result_v2_latest is not None:
+            parts.append(
+                "Repository Per Dag Asset Result V2 Latest data: "
+                f"{len(self.repository_snapshot_per_dag_asset_result_v2_latest)} rijen"
             )
         if self.snapshot_aggregated_portfolio is not None:
             parts.append(f"Aggregated Portfolio: {len(self.snapshot_aggregated_portfolio)} assets")

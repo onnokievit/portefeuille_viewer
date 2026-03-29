@@ -117,7 +117,12 @@ def load_historical_close_snapshot() -> pl.DataFrame:
     """
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
+    df = _prepare_historical_close_snapshot(df)
     SNAPSHOT_STORE.safe_write("repository_snapshot_historical_close", df)
+    SNAPSHOT_STORE.safe_write(
+        "repository_snapshot_historical_close_latest",
+        _build_historical_close_latest_snapshot(df),
+    )
     return compact_float64(df)
 
 
@@ -136,8 +141,100 @@ def load_per_dag_asset_result_v2_snapshot() -> pl.DataFrame:
     """
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
+    df = _prepare_per_dag_asset_result_v2_snapshot(df)
     SNAPSHOT_STORE.safe_write("repository_snapshot_per_dag_asset_result_v2", df)
+    SNAPSHOT_STORE.safe_write(
+        "repository_snapshot_per_dag_asset_result_v2_latest",
+        _build_per_dag_asset_result_v2_latest_snapshot(df),
+    )
     return compact_float64(df)
+
+
+def _normalize_asset_rollup_column(df: pl.DataFrame, col_name: str = "asset_rollup") -> pl.DataFrame:
+    if col_name not in df.columns:
+        return df
+    return df.with_columns(
+        pl.col(col_name)
+        .cast(pl.Utf8, strict=False)
+        .str.strip_chars()
+        .str.to_uppercase()
+        .alias(col_name)
+    )
+
+
+def _normalize_date_column(df: pl.DataFrame, col_name: str = "datum") -> pl.DataFrame:
+    if col_name not in df.columns:
+        return df
+    return df.with_columns(
+        pl.coalesce(
+            [
+                pl.col(col_name).cast(pl.Date, strict=False),
+                pl.col(col_name).cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
+                pl.col(col_name).cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
+                pl.col(col_name).cast(pl.Utf8).str.strptime(pl.Date, "%d-%m-%Y", strict=False),
+            ]
+        ).alias(col_name)
+    )
+
+
+def _prepare_historical_close_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(schema={"datum": pl.Date, "asset_rollup": pl.Utf8, "close_price": pl.Float64})
+    df = _normalize_date_column(df, "datum")
+    df = _normalize_asset_rollup_column(df, "asset_rollup")
+    if "close_price" in df.columns:
+        df = df.with_columns(pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"))
+    return compact_float64(df)
+
+
+def _prepare_per_dag_asset_result_v2_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(
+            schema={
+                "datum": pl.Date,
+                "asset_rollup": pl.Utf8,
+                "totaal_v2": pl.Float64,
+                "totaal_aantal_bezit_v2": pl.Float64,
+            }
+        )
+    df = _normalize_date_column(df, "datum")
+    df = _normalize_asset_rollup_column(df, "asset_rollup")
+    casts: list[pl.Expr] = []
+    if "totaal_v2" in df.columns:
+        casts.append(pl.col("totaal_v2").cast(pl.Float64, strict=False).alias("totaal_v2"))
+    if "totaal_aantal_bezit_v2" in df.columns:
+        casts.append(
+            pl.col("totaal_aantal_bezit_v2").cast(pl.Float64, strict=False).alias("totaal_aantal_bezit_v2")
+        )
+    if casts:
+        df = df.with_columns(casts)
+    return compact_float64(df)
+
+
+def _build_historical_close_latest_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "close_price": pl.Float64})
+    today = date.today()
+    latest_df = (
+        df.filter(pl.col("datum").is_not_null() & (pl.col("datum") < today) & pl.col("close_price").is_not_null())
+        .sort(["asset_rollup", "datum"])
+        .group_by("asset_rollup")
+        .agg(pl.col("close_price").last().alias("close_price"))
+    )
+    return compact_float64(latest_df)
+
+
+def _build_per_dag_asset_result_v2_latest_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "totaal": pl.Float64})
+    today = date.today()
+    latest_df = (
+        df.filter(pl.col("datum").is_not_null() & (pl.col("datum") < today))
+        .sort(["asset_rollup", "datum"])
+        .group_by("asset_rollup")
+        .agg(pl.col("totaal_v2").last().alias("totaal"))
+    )
+    return compact_float64(latest_df)
 
 # ------------------------------------------------------------
 # sprinter_refenctie_data referentie tabel ophalen

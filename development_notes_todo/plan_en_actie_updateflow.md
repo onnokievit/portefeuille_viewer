@@ -1587,5 +1587,248 @@ Wordt later ingevuld.
 
 ---
 
+## Statusupdate 2026-03-29: order-save refresh versneld
+
+Afgerond in deze snede:
+
+1. Order-save refresh versmald per assettype.
+2. Multi-row inserts voor combo/doorrol transaction-safe gemaakt.
+3. `ordersCommitted` payload verrijkt met:
+   - `operation`
+   - `committed_rows`
+   - `deleted_ids`
+4. `repository_snapshot_alle_transacties` wordt nu lokaal gepatcht op basis van committed DB-resultaat.
+5. `refresh_transaction_derived_snapshots(...)` gebruikt nu patch-first en valt alleen terug op `load_alle_transacties()` als fallback.
+6. Historische full snapshots voor:
+   - `repository_snapshot_historical_close`
+   - `repository_snapshot_per_dag_asset_result_v2`
+   worden nu bij load opgeschoond (datum cast/parsen, `asset_rollup` normaliseren, numerieke casts).
+7. Voor Aandelen-tab zijn extra latest-per-asset snapshots toegevoegd:
+   - `repository_snapshot_historical_close_latest`
+   - `repository_snapshot_per_dag_asset_result_v2_latest`
+8. `aandelen_tab_summary.py` gebruikt voor Aandelen-tab niet meer de volledige historische tabellen, maar alleen deze kleine latest snapshots.
+
+Resultaat:
+
+- eerdere aandelen insert baseline:
+  - ongeveer `1.17s`
+  - waarvan `~0.90s` in `load_alle_transacties()`
+- na snapshot patching:
+  - aandelen insert ongeveer `0.49s`
+- na latest-snapshot refactor voor Aandelen-tab:
+  - aandelen insert ongeveer `0.26s`
+  - met `_runtime_recompute_selected` ongeveer `215ms`
+- optie insert zit nu rond `0.05-0.06s`
+
+Conclusie:
+
+- de bottleneck `load_alle_transacties()` is uit het normale order-save pad gehaald,
+- de Aandelen-tab gebruikt niet langer per order de volledige historische datasets voor `net_change` en `koers_prev`,
+- deze optimalisatiesnede kan als afgerond worden beschouwd.
+
+Open toekomstig optimalisatiepunt, bewust niet nu opgepakt:
+
+- verdere uitsplitsing van `build_aandelen_tab_summary(asset_rollup=...)`
+- met name equity-side single-asset summary intern timen
+- en eventueel later verder cachen / overlayen als dat nog nodig blijkt
+
+---
+
+## Auditresultaat: live tick / update flow
+
+Deze audit beschrijft het pad van een gewone live prijsupdate vanaf de price feed tot aan projections en tabs.
+
+### 1. Functioneel startpunt
+
+De live tick-flow start in `PriceFeedService` / `PriceFeedIB`.
+
+Belangrijk:
+- `PriceFeedIB.tickPrice(...)` emit `priceUpdated(sym, cur, px)` voor:
+  - `last`
+  - delayed `last`
+  - `close` als fallback
+  - bid/ask midpoint als er nog geen `last` is
+- `PriceFeedService` is de Qt-wrapper rond deze feed
+
+In `portefeuille_viewer_1.2.py` wordt vervolgens:
+- `price_feed = PriceFeedService(...)` aangemaakt
+- `PortfolioEngine(pricefeed=price_feed)` gebruikt als centrale consumer
+- daarnaast draait `start_live_price_updater(price_feed)` die periodiek `SNAPSHOT_STORE.live_prices` bijwerkt
+
+### 2. Live price pad via PortfolioEngine
+
+Geobserveerd in `domain/portfolio_engine.py`:
+
+1. `pricefeed.priceUpdated -> PortfolioEngine._on_live_price(...)`
+2. die schrijft de prijs in drie aggregators:
+   - `LiveAggregatorAandelen.update_live_price(...)`
+   - `LiveAggregatorOpties.update_live_price(...)`
+   - `LiveAggregatorSprinters.update_live_price(...)`
+3. daarna wordt niet direct gerecompute, maar gebatcht via `_update_timer`
+4. bij timer-fire draait:
+   - `live_aggregator_aandelen.process_live_update()`
+   - `live_aggregator_opties.process_live_update()`
+   - `live_aggregator_sprinters.process_live_update()`
+
+Belangrijke observatie:
+- `PortfolioEngine` batcht live price verwerking
+- interval staat nu op `10000ms`
+- de comment in code noemt nog `1500ms`, maar de feitelijke waarde is `10000`
+
+Dat betekent:
+- live ticks gaan niet 1-op-1 naar UI recompute
+- er zit al een duidelijke batchlaag tussen
+
+### 3. Wat aggregators daarna doen
+
+Geobserveerd in:
+- `data/live_aggregator_aandelen.py`
+- `data/live_aggregator_opties.py`
+- `data/live_aggregator_sprinters.py`
+
+Alle drie volgen hetzelfde patroon:
+
+1. repository snapshot lezen
+2. live prices + last prices combineren via `build_prices_df(...)`
+3. berekende live dataset opbouwen
+4. `SNAPSHOT_STORE.safe_write(...)` doen naar:
+   - `aggregator_snapshot_aandelen_live`
+   - `aggregator_snapshot_load_open_opties_from_tx_live`
+   - `aggregator_snapshot_open_sprinters_live`
+5. daarna `snapshotUpdated` emit via `safe_write`
+
+### 4. Tweede live pad: centrale `live_prices`
+
+Los van PortfolioEngine draait ook:
+- `start_live_price_updater(price_feed, interval_sec=2)`
+
+Dit pad:
+- leest `price_feed.get_all_prices()`
+- schrijft naar `SNAPSHOT_STORE.live_prices`
+
+Belangrijke observatie:
+- deze write gebruikt geen `safe_write`
+- dus er komt géén directe `snapshotUpdated` op `live_prices`
+- consumers lezen deze centrale prijsdict alleen wanneer zij zelf recomputen
+
+Dat betekent:
+- `live_prices` is cache/state
+- geen directe snapshot-bus trigger
+
+### 5. Wat `snapshotUpdated` daarna met live aggregators doet
+
+In `portefeuille_viewer_1.2.py` geldt in runtime exclusive mode:
+
+- alleen deze live topics gaan door naar engine core:
+  - `aggregator_snapshot_load_open_opties_from_tx_live`
+  - `snapshot_optie_timevalue_live`
+  - `aggregator_snapshot_open_sprinters_live`
+
+Belangrijke observatie:
+- `aggregator_snapshot_aandelen_live` gaat niet via `engine_core_runtime.publish_snapshot_update(...)`
+- Aandelen live projection refresh loopt dus niet via deze generic snapshot topic route
+- Aandelen-tab wordt in de moderne setup vooral bijgewerkt via bredere transaction-derived refreshes en eigen projection logica
+
+Voor niet-exclusive mode zijn er losse snapshot listeners:
+- opties projection refresh op `aggregator_snapshot_load_open_opties_from_tx_live`
+- optie tijdswaarde projection refresh op `snapshot_optie_timevalue_live`
+- sprinters projection refresh op `aggregator_snapshot_open_sprinters_live`
+
+### 6. OptionTimevalueService als live multiplier
+
+Geobserveerd in `services/option_timevalue_service.py`:
+
+- luistert op `ordersCommitted`
+- luistert op `databaseChanged`
+- luistert op `snapshotUpdated`
+
+Bij live/snapshot-updates reageert de service op:
+- `aggregator_snapshot_load_open_opties_from_tx_live`
+- `repository_snapshot_load_open_opties`
+- `repository_snapshot_historical_close`
+- `repository_snapshot_asset_rollup_data`
+- `repository_snapshot_optie_referentie_data`
+
+Daarna doet de service:
+- `schedule_rebuild()`
+- en publiceert weer `snapshot_optie_timevalue_live`
+
+Conclusie:
+- de optie live-flow heeft een extra service-laag
+- die is functioneel nodig
+- maar ook een duidelijke fan-out multiplier
+
+### 7. Welke UI-consumers reageren op live snapshots
+
+Moderne web tabs:
+- `AandelenWebPilotTab`
+- `OptiesOpenWebPilotTab`
+- `OptieTijdswaardeWebPilotTab`
+- `SprintersOpenWebPilotTab`
+
+Die luisteren op snapshot/projection-updates en renderen alleen actief.
+
+Qt / hybride tabs die nog direct luisteren:
+- `AandelenTab`
+- `OptiesOpenTab`
+- `OptieTijdswaardeTab`
+- `SprintersOpenTab`
+- `SingleAssetAnalyseTab`
+- `PortfolioValueTab`
+- `SectorAnalysisTab`
+
+Belangrijke observatie:
+- live fan-out komt niet alleen in de moderne web tabs terecht
+- er zijn nog steeds meerdere Qt listeners en legacy listeners op de bus
+
+### 8. Conclusie live tick/update flow
+
+De live tick-flow is gelaagd en functioneel coherent:
+
+1. price feed ontvangt tick
+2. PortfolioEngine batcht ticks
+3. aggregators bouwen live snapshots
+4. snapshot bus triggert vervolgwerk
+5. OptionTimevalueService kan opnieuw publiceren
+6. projections en tabs reageren daarop
+
+Belangrijkste conclusies:
+
+1. De live tick-flow is niet primair het probleem van de oude `load_alle_transacties` bottleneck.
+2. Er is al batching aanwezig in PortfolioEngine.
+3. De live fan-out multiplier zit vooral in:
+   - aggregators
+   - OptionTimevalueService
+   - brede set snapshot listeners
+4. Legacy tabs hangen nog steeds in de snapshot-listenerlaag zolang fallbackcode bestaat en die tabs instantiated kunnen worden.
+
+### 9. Betekenis voor legacy removal
+
+Met deze audit is de situatie nu scherper:
+
+Wat al relatief veilig voorbereid kan worden:
+- legacy tab UI consumers:
+  - `AandelenTab`
+  - `OptiesOpenTab`
+  - `OptieTijdswaardeTab`
+  - `SprintersOpenTab`
+- en fallback/pilot-wiring in `main_window_logica.py`
+
+Wat nog niet in dezelfde eerste wave moet worden verwijderd:
+- `LiveAggregatorAandelen`
+- `LiveAggregatorOpties`
+- `LiveAggregatorSprinters`
+- `OptionTimevalueService`
+
+Reden:
+- deze zitten nog echt in de live dataflow van de moderne architectuur
+- dit zijn niet alleen legacy UI-consumers
+
+Praktische conclusie:
+- een eerste legacy removal wave kan zich richten op oude tab-klassen en fallback-instantiatie
+- maar niet op aggregators/services die nog producent zijn in de live flow
+
+---
+
 ## Laatste update
-2026-03-28
+2026-03-29
