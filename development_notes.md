@@ -118,8 +118,64 @@ Smoke test geslaagd:
 Niet in deze snede meegenomen:
 
 - order-validatie / sanity checks
-- verdere cleanup van `SingleAssetAnalyseTab`
 - inhoudelijke resolver-workflow uitbreiding
 - verdere timing van `build_aandelen_tab_summary(asset_rollup=...)`
 
-Deze punten blijven open voor een volgende werkstroom.
+### 9. SingleAssetAnalyseTab cleanup gestart
+
+Uitgevoerd als eerste opschoningsstap:
+
+- `on_database_changed()` is opgesplitst in:
+  - lokale/cache reset
+  - filter/selector reset
+  - post-switch view refresh
+- `on_orders_committed()` doet niet meer direct `update_opties_open_table()`
+  - maar gebruikt nu het bestaande dirty/timer patroon
+- de code maakt nu explicieter onderscheid tussen:
+  - snapshot-driven subviews
+  - lokale/cached subviews
+
+Concreet:
+
+- snapshot-driven:
+  - summary/aandelen refresh
+  - open opties refresh
+- lokaal/cached:
+  - test orders
+  - payoff
+  - history charts
+  - sprinters tabel
+
+Deze cleanup is bewust nog geen volledige refactor, maar wel de eerste structurele versmalling van deze hybride tab.
+
+Vervolgrefactor uitgevoerd:
+
+- asset-selectie gebruikt nu expliciete helpers voor:
+  - snapshot-driven redraw
+  - test-orders view
+  - lokale/cached subviews
+- de directe vertakking in `on_asset_selected()` is kleiner geworden
+- DB-switch gebruikt nu ook dezelfde test-orders helper in plaats van losse tabelvulling
+
+Hierdoor is de updateflow in deze tab consistenter geworden, zonder functionele herbouw.
+
+Gevalideerde uitkomst:
+
+- assetwissel werkt correct
+- `Single Asset Analyse` blijft goed en snel functioneren
+- test orders werken correct:
+  - add order
+  - delete order
+  - enable op assetniveau
+  - enable per individuele order
+- DB-switch werkt ook voor deze tab correct
+- geen CLI errors
+
+### 10. Open vervolgpunten
+
+Open voor de volgende werkstroom:
+
+- verdere cleanup van `SingleAssetAnalyseTab`
+- order-validatie / sanity checks
+- inhoudelijke resolver-workflow uitbreiding
+- verdere timing van `build_aandelen_tab_summary(asset_rollup=...)`

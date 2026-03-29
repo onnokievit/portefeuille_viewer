@@ -663,6 +663,22 @@ Status na eindsmoke test:
 - Aandelen, Single Asset Analyse, Open Opties, Optie Tijdswaarde, Portfolio Value en Sector Analysis functioneren correct
 - deze updateflow/legacy-cleanup snede kan daarmee van de roadmap-hoofdlijn worden afgestreept
 
+Vervolgstatus:
+- eerste cleanup in `SingleAssetAnalyseTab` is gestart
+- `on_database_changed()` is opgesplitst
+- `on_orders_committed()` gebruikt nu dirty/scheduled redraw in plaats van directe redraw
+- asset-selectie en test-orders refresh gebruiken nu expliciete helpers
+- smoke test geslaagd:
+  - assetwissel ok
+  - DB-switch ok
+  - test orders ok
+  - geen CLI errors
+- verdere cleanup van `SingleAssetAnalyseTab` is nu geen blokkade maar alleen nog optionele vervolgopschoning
+- mogelijke toekomstige vervolgactie:
+  - extra interne vereenvoudiging
+  - minder legacy-achtige codepaden
+  - nog strakkere scheiding tussen snapshot-data en lokale UI-state
+
 ### Fase D: Transaction Engine V2 en orderflow
 1. Command handlers add/update/delete.
 2. Replay tool.
@@ -689,6 +705,15 @@ Status na eindsmoke test:
 1. Scenario/beta simulatie.
 2. Rule-based advisor / roll ondersteuning.
 3. Eventuele verdere analysetools boven op de gestabiliseerde architectuur.
+
+Aanvullende productrichting:
+- beta-sensitiviteit implementeren
+- test-order flow uitbreiden zodat scenario-orders breder in de app kunnen doorwerken
+  - bijvoorbeeld effect op Aandelen-tab
+  - en snellere/strakkere flow rond `optie eind`
+- huidige aandachtspunt:
+  - `optie eind` schrijft nu naar `test_accounts` en werkt functioneel goed door de app heen
+  - maar de flow is nog relatief traag en niet optimaal
 
 ---
 

@@ -2108,3 +2108,223 @@ Eindoordeel:
 
 
 
+---
+
+## Voorbereiding volgende werkstroom: SingleAssetAnalyseTab
+
+Deze sectie is voorbereidende analyse voor de volgende technische cleanup-stap.
+Er is nog geen refactor uitgevoerd.
+
+### 1. Huidige triggerpaden
+
+`SingleAssetAnalyseTab` heeft nu drie directe triggerpaden:
+
+1. `databaseChanged -> on_database_changed()`
+- vult filter-comboboxes opnieuw
+- herbouwt assetlijst via `_on_filter_changed()`
+- zet statusfilter op `active`
+- reloadt open-optie comments cache
+- doet direct `update_opties_open_table()`
+- reloadt test-order cache
+- doet direct `fill_test_orders_table(...)`
+- reset `_live_summary_asset` / `_live_summary_row`
+
+2. `ordersCommitted -> on_orders_committed()`
+- reset `_live_summary_asset` / `_live_summary_row`
+- doet direct `update_opties_open_table()`
+
+3. `snapshotUpdated -> _on_snapshot_updated()`
+- luistert alleen op:
+  - `aggregator_snapshot_load_open_opties_from_tx_live`
+  - `snapshot_optie_timevalue_live`
+- als tab actief is:
+  - `_schedule_opties_reload()`
+- anders:
+  - `_opties_dirty = True`
+
+Daarnaast:
+- `set_active(True)` triggert:
+  - `_schedule_summary_reload()`
+  - `_schedule_opties_reload()`
+  - state-engine controls refresh
+
+### 2. Interne refresh-mechaniek
+
+Er zijn twee aparte reload-lussen:
+
+1. summary-lus
+- `_summary_dirty`
+- `_summary_reload_timer`
+- `_reload_summary_if_needed()`
+- eindigt in `update_aandelen_table()`
+
+2. opties-lus
+- `_opties_dirty`
+- `_opties_reload_timer`
+- `_reload_opties_if_needed()`
+- eindigt in `update_opties_open_table()`
+- respecteert edit-state zodat de gebruiker niet uit een editor wordt gegooid
+
+Daarnaast zijn er directe user-driven reloads:
+
+- `on_asset_selected()` doet meteen:
+  - `update_payoff_table()`
+  - `update_history_charts()`
+  - `update_opties_open_table()`
+  - `update_aandelen_table()`
+  - `update_sprinters_table()`
+
+### 3. Welke refreshes functioneel nodig lijken
+
+#### Nodig
+
+- `databaseChanged -> on_database_changed()`
+  - ja, omdat deze tab meer doet dan snapshot-reload:
+  - comment-cache reload
+  - test-order-cache reload
+  - filter/UI reset
+  - asset selector opnieuw opbouwen
+
+- `snapshotUpdated` op:
+  - `aggregator_snapshot_load_open_opties_from_tx_live`
+  - `snapshot_optie_timevalue_live`
+  - ja, nodig voor open-opties tabellen in deze view
+
+- `set_active(True)` dirty reloads
+  - ja, logisch
+  - zorgt dat een inactieve tab rustig bijtrekt zodra hij actief wordt
+
+- `on_asset_selected()`
+  - ja, want assetwissel moet alle subviews direct opnieuw opbouwen
+
+#### Verdacht / waarschijnlijk te breed
+
+- `ordersCommitted -> update_opties_open_table()`
+  - inhoudelijk plausibel voor optieorders
+  - maar overlapt waarschijnlijk met de latere snapshot-flow
+  - en lijkt voor aandelenorders direct niet nodig
+
+- summary-refresh pad staat losser van snapshot-updates dan het opties-pad
+  - functioneel ok
+  - maar minder expliciet dan de opties-flow
+
+### 4. Scheiding tussen pure snapshot-reloads en cache/UI-werk
+
+Die scheiding is nu nog niet strak.
+
+#### Pure snapshot/UI data refresh
+
+- `update_opties_open_table()`
+- `update_aandelen_table()`
+- `update_sprinters_table()`
+- `update_history_charts()`
+- `_get_live_summary_row(..., refresh=True/False)`
+
+#### Cache / local state / UI reset
+
+- `load_open_optie_comments_cache()`
+- `load_test_orders_cache_from_db()`
+- `_fill_filter_comboboxes()`
+- `_on_filter_changed()`
+- reset van:
+  - `_live_summary_asset`
+  - `_live_summary_row`
+- test-order tabel vullen
+- step settings / state-engine controls
+
+Belangrijkste observatie:
+
+- `on_database_changed()` mixt cache/UI reset met directe data redraw
+- `on_orders_committed()` mixt live-summary cache reset met directe redraw
+
+### 5. Voorlopig oordeel
+
+`SingleAssetAnalyseTab` is nog een duidelijke hybride zone.
+
+Sterke punten:
+
+- snapshot listener is al smal
+- dirty/active patroon voor open-opties is goed
+- edit-safe timer voor optie reload is goed
+
+Zwakke punten:
+
+- `on_database_changed()` doet zowel cache-reset als directe data redraw
+- `on_orders_committed()` doet directe redraw die waarschijnlijk deels dubbel is met snapshotflow
+- summary/aandelen refreshpad is minder expliciet gekoppeld aan snapshot-updates dan het opties-pad
+- asset-selectie doet een brede directe herbouw van veel subviews
+
+### 6. Logische vervolgstap
+
+De volgende technische cleanup voor deze tab is:
+
+1. DB-switch reset scheiden van pure snapshot-driven redraw
+2. `ordersCommitted` gedrag opnieuw beoordelen, vooral voor directe `update_opties_open_table()`
+3. explicieter maken welke subviews snapshot-driven zijn en welke lokaal/cached zijn
+4. pas daarna gericht refactoren
+
+### 7. Statusupdate 2026-03-29: eerste SingleAssetAnalyseTab cleanup uitgevoerd
+
+Uitgevoerd:
+
+- `on_database_changed()` opgesplitst in:
+  - `_reset_local_state_for_database_change()`
+  - `_reset_filters_for_database_change()`
+  - `_refresh_views_after_database_change()`
+- `on_orders_committed()` doet niet meer direct `update_opties_open_table()`
+- orders-gedrag loopt nu via het bestaande dirty/schedule patroon
+- expliciet onderscheid aangebracht tussen:
+  - snapshot-driven subviews
+  - lokale/cached subviews
+
+Concreet model in de code:
+
+- snapshot-driven:
+  - summary/aandelen refresh
+  - open opties refresh
+- lokaal/cached:
+  - test orders
+  - payoff
+  - history charts
+  - sprinters tabel
+
+Oordeel:
+
+- dit is nog geen volledige refactor
+- maar wel de eerste daadwerkelijke structurele cleanup van deze hybride tab
+- volgende logische stap blijft verdere versmalling/refactor van `SingleAssetAnalyseTab`
+
+### 8. Statusupdate 2026-03-29: vervolgrefactor SingleAssetAnalyseTab
+
+Uitgevoerd:
+
+- expliciete helper toegevoegd voor snapshot-driven redraw van de actieve asset
+- expliciete helper toegevoegd voor test-orders view van de actieve asset
+- expliciete helper toegevoegd voor lokale/cached subviews van de actieve asset
+- `on_asset_selected()` gebruikt nu deze helpers in plaats van losse directe vertakkingen
+- DB-switch gebruikt nu dezelfde test-orders helper als de normale asset-refresh
+
+Oordeel:
+
+- dit is nog steeds geen volledige eindrefactor van de tab
+- maar de updateflow is nu consistenter en beter leesbaar
+- directe redraws en lokale cache-refreshes zijn verder uit elkaar getrokken
+
+### 9. Statusupdate 2026-03-29: SingleAssetAnalyseTab smoke test geslaagd
+
+Gevalideerd:
+
+- assetwissel werkt correct
+- DB-switch werkt correct
+- test orders werken correct:
+  - add order
+  - delete order
+  - enable op assetniveau
+  - enable per individuele order
+- geen CLI errors
+
+Oordeel:
+
+- de uitgevoerde versmalling/refactor heeft geen zichtbare regressie veroorzaakt
+- `SingleAssetAnalyseTab` functioneert nu goed genoeg om niet langer een directe cleanup-blokkade te zijn
+- verdere cleanup van deze tab is nu optioneel vervolgwerk en geen acute noodzaak

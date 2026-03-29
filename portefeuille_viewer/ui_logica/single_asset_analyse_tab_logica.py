@@ -666,6 +666,32 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not self._summary_reload_timer.isActive():
             self._summary_reload_timer.start()
 
+    def _schedule_snapshot_driven_views_for_active_asset(self):
+        self._schedule_summary_reload()
+        self._schedule_opties_reload()
+
+    def _refresh_snapshot_driven_views_immediately_for_active_asset(self):
+        self.update_opties_open_table()
+        self.update_aandelen_table()
+
+    def _refresh_test_orders_view_for_active_asset(self, asset_rollup):
+        if getattr(self, "show_all_test_orders", False):
+            cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
+            if cache:
+                df_orders = pl.concat(cache.values(), how="diagonal_relaxed")
+            else:
+                df_orders = None
+        else:
+            df_orders = get_cached_orders(asset_rollup)
+        self.fill_test_orders_table(df_orders)
+
+    def _refresh_selection_driven_views_for_active_asset(self, asset_rollup):
+        # Deze subviews volgen direct uit de gekozen asset en lokale caches, niet uit centrale snapshot timers.
+        self._refresh_test_orders_view_for_active_asset(asset_rollup)
+        self.update_payoff_table()
+        self.update_history_charts()
+        self.update_sprinters_table()
+
     def _reload_summary_if_needed(self):
         if not self._active:
             return
@@ -1450,25 +1476,44 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 
     
+    def _reset_local_state_for_database_change(self):
+        load_open_optie_comments_cache()
+        load_test_orders_cache_from_db()
+        self._live_summary_asset = None
+        self._live_summary_row = None
+
+    def _reset_filters_for_database_change(self):
+        self._fill_filter_comboboxes()
+        self.comboBoxStatus.blockSignals(True)
+        try:
+            idx = self.comboBoxStatus.findText("active")
+            if idx >= 0:
+                self.comboBoxStatus.setCurrentIndex(idx)
+            else:
+                self.comboBoxStatus.setCurrentText("active")
+        finally:
+            self.comboBoxStatus.blockSignals(False)
+        self._on_filter_changed()
+
+    def _refresh_views_after_database_change(self):
+        self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+        self._schedule_snapshot_driven_views_for_active_asset()
+
     def on_database_changed(self, db_name):
         # Hier vul je asset_selector, regio, value_grow etc opnieuw
         #print("Database changed:", db_name)
-        self._fill_filter_comboboxes()
-        self._on_filter_changed()
-        self.comboBoxStatus.setCurrentText("active")
-        # comment-cache opnieuw laden uit nieuwe DB en tabel verversen
-        load_open_optie_comments_cache()
-        self.update_opties_open_table()
-        # test orders cache opnieuw laden en tabel verversen
-        load_test_orders_cache_from_db()
-        self.fill_test_orders_table(get_cached_orders(self.asset_selector.currentText()))
-        self._live_summary_asset = None
-        self._live_summary_row = None
+        self._reset_local_state_for_database_change()
+        self._reset_filters_for_database_change()
+        self._refresh_views_after_database_change()
         
     def on_orders_committed(self, payload: dict | None = None):
         self._live_summary_asset = None
         self._live_summary_row = None
-        self.update_opties_open_table()
+        self._schedule_summary_reload()
+        if self._active:
+            self._schedule_opties_reload()
+        else:
+            self._opties_dirty = True
         
 
     @Slot()
@@ -2558,26 +2603,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._current_step_asset = str(asset_rollup or "")
         self._apply_step_settings_for_asset(self._current_step_asset)
         self._get_live_summary_row(asset_rollup, refresh=True)
-        # Laad testorders uit DB voor dit asset en vul de tabel
+        # Asset-selectie combineert selection-driven subviews met directe snapshot-driven redraw.
         try:
-            if getattr(self, "show_all_test_orders", False):
-                cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
-                if cache:
-                    df_orders = pl.concat(cache.values(), how="diagonal_relaxed")
-                else:
-                    df_orders = None
-            else:
-                df_orders = get_cached_orders(asset_rollup)
+            self._refresh_selection_driven_views_for_active_asset(asset_rollup)
         except Exception as e:
             print(f"Kon testorders niet laden: {e}")
-            df_orders = None
-        self.fill_test_orders_table(df_orders)
-
-        self.update_payoff_table()
-        self.update_history_charts()
-        self.update_opties_open_table()
-        self.update_aandelen_table()
-        self.update_sprinters_table()
+            self.fill_test_orders_table(None)
+            self.update_payoff_table()
+            self.update_history_charts()
+            self.update_sprinters_table()
+        self._refresh_snapshot_driven_views_immediately_for_active_asset()
 
     def _connect_stockdb(self):
         conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
