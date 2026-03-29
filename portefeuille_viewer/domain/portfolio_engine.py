@@ -23,18 +23,24 @@ class PortfolioEngine(QObject):
     # Signal emitted when any portfolio data is updated
     dataUpdated = Signal()
     
-    def __init__(self, pricefeed=None):
+    def __init__(
+        self,
+        pricefeed=None,
+        live_aggregator_aandelen: LiveAggregatorAandelen | None = None,
+        live_aggregator_opties: LiveAggregatorOpties | None = None,
+        live_aggregator_sprinters: LiveAggregatorSprinters | None = None,
+    ):
         super().__init__()
         self.pricefeed = pricefeed
         
         # Initialize specialized aggregators
-        self.live_aggregator_aandelen = LiveAggregatorAandelen()
-        self.live_aggregator_opties = LiveAggregatorOpties()
+        self.live_aggregator_aandelen = live_aggregator_aandelen or LiveAggregatorAandelen()
+        self.live_aggregator_opties = live_aggregator_opties or LiveAggregatorOpties()
         
         
         # Sprinters aggregator toevoegen
         
-        self.live_aggregator_sprinters = LiveAggregatorSprinters()
+        self.live_aggregator_sprinters = live_aggregator_sprinters or LiveAggregatorSprinters()
         
         # Throttling: batch updates instead of processing each price immediately
         self._pending_updates = False

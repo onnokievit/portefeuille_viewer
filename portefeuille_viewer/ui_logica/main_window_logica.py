@@ -1,19 +1,14 @@
 import contextlib
-import os
 from PySide6.QtWidgets import QMainWindow, QProxyStyle, QTabBar
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
 from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
 from portefeuille_viewer.ui_logica.settings_tab_logica import SettingsTab
-from portefeuille_viewer.ui_logica.sprinters_open_tab_logica import SprintersOpenTab
-from portefeuille_viewer.ui_logica.opties_open_tab_logica import OptiesOpenTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
-from portefeuille_viewer.ui_logica.aandelen_tab_logica import AandelenTab
 from portefeuille_viewer.ui_logica.aandelen_web_pilot_tab import AandelenWebPilotTab
 from portefeuille_viewer.ui_logica.opties_open_web_pilot_tab import OptiesOpenWebPilotTab
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
-from portefeuille_viewer.ui_logica.optie_tijdswaarde_tab_logica import OptieTijdswaardeTab
 from portefeuille_viewer.ui_logica.optie_tijdswaarde_web_pilot_tab import OptieTijdswaardeWebPilotTab
 from portefeuille_viewer.ui_logica.sprinters_open_web_pilot_tab import SprintersOpenWebPilotTab
 
@@ -41,57 +36,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
-        use_aandelen_web_v1 = os.getenv("PV_UI_AANDELEN_WEB_V1", "0").strip() == "1"
-        promote_aandelen_web_v1 = os.getenv("UI_AANDELEN_PROMOTED_V1", "1").strip() == "1"
-        if use_aandelen_web_v1 and promote_aandelen_web_v1:
-            self.aandelen_tab = AandelenWebPilotTab()
-            self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
-        else:
-            self.aandelen_tab = AandelenTab(self.portfolio_engine, self.price_feed)
-            self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
-            if use_aandelen_web_v1:
-                self.aandelen_web_pilot_tab = AandelenWebPilotTab()
-                self.tabWidget.addTab(self.aandelen_web_pilot_tab, "Aandelen (Web Pilot)")
+        self.aandelen_tab = AandelenWebPilotTab()
+        self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
 
-        use_opties_web_v1 = os.getenv("UI_OPTIES_WEB_V1", "0").strip() == "1"
-        promote_opties_web_v1 = os.getenv("UI_OPTIES_PROMOTED_V1", "1").strip() == "1"
-        if use_opties_web_v1 and promote_opties_web_v1:
-            self.opties_open_tab = OptiesOpenWebPilotTab()
-            self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
-        else:
-            self.opties_open_tab = OptiesOpenTab(self.portfolio_engine)
-            self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
-            if use_opties_web_v1:
-                self.opties_open_web_pilot_tab = OptiesOpenWebPilotTab()
-                self.tabWidget.addTab(self.opties_open_web_pilot_tab, "Open Opties (Web Pilot)")
-        use_optie_tijdswaarde_web_v1 = os.getenv("UI_OPTIE_TIJDSWAARDE_WEB_V1", "0").strip() == "1"
-        promote_optie_tijdswaarde_web_v1 = os.getenv("UI_OPTIE_TIJDSWAARDE_PROMOTED_V1", "1").strip() == "1"
-        if use_optie_tijdswaarde_web_v1 and promote_optie_tijdswaarde_web_v1:
-            self.optie_tijdswaarde_tab = OptieTijdswaardeWebPilotTab()
-            self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
-        else:
-            self.optie_tijdswaarde_tab = OptieTijdswaardeTab()
-            self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
-            if use_optie_tijdswaarde_web_v1:
-                self.optie_tijdswaarde_web_pilot_tab = OptieTijdswaardeWebPilotTab()
-                self.tabWidget.addTab(self.optie_tijdswaarde_web_pilot_tab, "Optie Tijdswaarde (Web Pilot)")
+        self.opties_open_tab = OptiesOpenWebPilotTab()
+        self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
+
+        self.optie_tijdswaarde_tab = OptieTijdswaardeWebPilotTab()
+        self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
 
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
         self.sector_analysis_tab = SectorAnalysisTab()
         self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
 
-        use_sprinters_web_v1 = os.getenv("UI_SPRINTERS_WEB_V1", "0").strip() == "1"
-        promote_sprinters_web_v1 = os.getenv("UI_SPRINTERS_PROMOTED_V1", "1").strip() == "1"
-        if use_sprinters_web_v1 and promote_sprinters_web_v1:
-            self.sprinters_open_tab = SprintersOpenWebPilotTab()
-            self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
-        else:
-            self.sprinters_open_tab = SprintersOpenTab(self.portfolio_engine)
-            self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
-            if use_sprinters_web_v1:
-                self.sprinters_open_web_pilot_tab = SprintersOpenWebPilotTab()
-                self.tabWidget.addTab(self.sprinters_open_web_pilot_tab, "Sprinters Open (Web Pilot)")
+        self.sprinters_open_tab = SprintersOpenWebPilotTab()
+        self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
         self.optie_eind_tab = OptieEindTab()
         self.tabWidget.addTab(self.optie_eind_tab, "Optie Eind")
         self.settings_tab = SettingsTab()

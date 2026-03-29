@@ -79,6 +79,11 @@ Waarom deze werkstroom eerst:
 - latency en hickups worden momenteel niet alleen door rendering veroorzaakt, maar ook door te veel of te overlappende vervolgacties,
 - zonder deze opschoning is het te riskant om grote codeblokken te verwijderen.
 
+Status 2026-03-29:
+- uitgevoerd voor deze snede
+- order-save, live tick/update en db-switch paden zijn geaudit en opgeschoond
+- eindsmoke test op DB-switch en hoofdtabellen is geslaagd
+
 #### Werkstroom B: legacy tabs en legacy-gerelateerde load verwijderen
 Doel:
 - oude tabs die functioneel vervangen zijn uit de app halen,
@@ -88,6 +93,11 @@ Doel:
 Voorwaarde:
 - deze werkstroom start pas echt na de eerste audit en opschoning van werkstroom A,
 - omdat legacy anders te vroeg wordt verwijderd terwijl sommige runtimepaden nog onvoldoende begrepen zijn.
+
+Status 2026-03-29:
+- uitgevoerd voor de live-tab UI-laag
+- oude live-tab modules en bijbehorende oude UI-bestanden zijn verwijderd
+- eerste compat/live fan-out cleanup is ook uitgevoerd
 
 ### 1.6 Uitvoeringsprincipe voor deze fase
 De komende fase wordt niet ad hoc gedaan, maar via twee documenten:
@@ -610,6 +620,48 @@ Status na live tick/update audit 2026-03-29:
 - eerste veilige removal-wave lijkt haalbaar voor legacy tab-UI en fallback-instantiatie
 - nog niet veilig om live aggregators of `OptionTimevalueService` in dezelfde wave te verwijderen
 - reden: deze zitten nog in de actuele live dataflow van de moderne setup
+
+Status na wave 1:
+- shell-level fallback-instantiatie voor de vier oude live tabs is verwijderd
+- moderne web tabs zijn nu in `main_window_logica.py` onvoorwaardelijk leidend
+- volgende legacy wave moet pas beslissen over daadwerkelijke bestandsverwijdering en/of listeners, niet meer over shell-keuze
+
+Status na wave 2 voorbereiding:
+- `optie_tijdswaarde_tab_logica.py` en `sprinters_open_tab_logica.py` zijn de laagste-risico removal candidates
+- `aandelen_tab_logica.py` en `opties_open_tab_logica.py` lijken ook runtime-ongebruikt, maar vragen nog een korte functionele check op vergeten legacy UX
+
+Status na wave 2a:
+- `optie_tijdswaarde_tab_logica.py` en `sprinters_open_tab_logica.py` zijn verwijderd
+- volgende remove-kandidaten zijn nu:
+  - `aandelen_tab_logica.py`
+  - `opties_open_tab_logica.py`
+
+Status na wave 2b:
+- `aandelen_tab_logica.py` en `opties_open_tab_logica.py` zijn ook verwijderd
+- oude UI-bestanden voor deze live tabs zijn verwijderd
+- de legacy live-tab UI-laag is daarmee uit de runtime en codebase gehaald
+
+Status na live aggregator consolidatie:
+- `PortfolioEngine` gebruikt nu dezelfde live aggregators als de repository/updateflow
+- dubbele aggregator-instanties zijn verwijderd
+- automatische `snapshotUpdated` / `databaseChanged` refresh-hooks zijn uit de drie live aggregators gehaald
+
+Status na OptionTimevalueService versmalling:
+- rebuild-trigger op `repository_snapshot_load_open_opties` is verwijderd
+- underlying close wordt nu uit `repository_snapshot_historical_close_latest` gelezen
+- overige Qt snapshot-listeners blijken op dit moment al relatief smal en niet de volgende lage-risico cleanup
+
+Status na `databaseChanged` versmalling:
+- directe `databaseChanged` reloads zijn verwijderd uit:
+  - `OptionTimevalueService`
+  - `PortfolioValueTab`
+  - `SectorAnalysisTab`
+- `SingleAssetAnalyseTab` en `StateEngineRunner` houden hun listener omdat daar nog extra functionele work aan hangt
+
+Status na eindsmoke test:
+- DB-switch heen en terug: ok
+- Aandelen, Single Asset Analyse, Open Opties, Optie Tijdswaarde, Portfolio Value en Sector Analysis functioneren correct
+- deze updateflow/legacy-cleanup snede kan daarmee van de roadmap-hoofdlijn worden afgestreept
 
 ### Fase D: Transaction Engine V2 en orderflow
 1. Command handlers add/update/delete.

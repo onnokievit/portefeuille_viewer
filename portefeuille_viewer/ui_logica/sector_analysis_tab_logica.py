@@ -50,7 +50,6 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "repository_snapshot_portfolio_value_total_combined_put",
         }
         self.reload_data()
-        signals.databaseChanged.connect(self._on_db_changed)
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.stateRebuildFinished.connect(self._on_state_rebuild_finished)
         if hasattr(self, "putOTMRatio"):
@@ -206,9 +205,6 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "value_aandelen_delta_all_pct": "Aandelen + Delta (all) %",
         }
         self._value_grow_table_delta_model.set_display_headers(header_map)
-
-    def _on_db_changed(self, _db_name: str):
-        self.reload_data()
 
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key in self._watched_snapshot_keys:

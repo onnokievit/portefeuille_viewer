@@ -60,28 +60,28 @@ Doel:
 ## Aanpak in fases
 
 ## Fase 1: Inventaris en audit
-- [ ] feature inventory afronden
-- [ ] trigger inventory afronden
-- [ ] meetpunten vastzetten
-- [ ] per trigger updateketen beschrijven
-- [ ] verdachte dubbele of zware paden markeren
+- [x] feature inventory afronden
+- [x] trigger inventory afronden
+- [x] meetpunten vastzetten
+- [x] per trigger updateketen beschrijven
+- [x] verdachte dubbele of zware paden markeren
 
 ## Fase 2: Updateflow opschonen
-- [ ] order-save pad opschonen
-- [ ] live tick/update pad opschonen
-- [ ] render cadence / active tab gedrag bevestigen of corrigeren
-- [ ] logging/metrics stiller maken op defaults
+- [x] order-save pad opschonen
+- [x] live tick/update pad opschonen
+- [x] render cadence / active tab gedrag bevestigen of corrigeren
+- [x] logging/metrics stiller maken op defaults
 
 ## Fase 3: Legacy removal matrix
-- [ ] legacy tabs en bijbehorende logica in kaart
-- [ ] per legacy component afhankelijkheden bepalen
-- [ ] removal waves definiëren
+- [x] legacy tabs en bijbehorende logica in kaart
+- [x] per legacy component afhankelijkheden bepalen
+- [x] removal waves defini�ren
 
 ## Fase 4: Gefaseerde verwijdering
-- [ ] wave 1
-- [ ] smoke tests
-- [ ] wave 2
-- [ ] smoke tests
+- [x] wave 1
+- [x] smoke tests
+- [x] wave 2
+- [x] smoke tests
 
 ---
 
@@ -122,10 +122,10 @@ Gebaseerd op `ui_logica/main_window_logica.py` en de huidige promotieflags.
 | `signals` | centrale event/signaal hub | `ordersCommitted`, `snapshotUpdated`, `databaseChanged`, `stateRebuildRequested` |
 | `SnapshotStore.safe_write()` | snapshot publisher | emit `snapshotUpdated` |
 | `PriceFeedService` / `PriceFeedIB` | live price ingest | aandelen, opties, contract details |
-| `OptionTimevalueService` | optie universe / timevalue meta | luistert op `ordersCommitted`, `databaseChanged`, `snapshotUpdated` |
+| `OptionTimevalueService` | optie universe / timevalue meta | luistert op `ordersCommitted` en gerichte `snapshotUpdated` keys |
 | `state_engine_runner` | zware state rebuilds | luistert op `stateRebuildRequested`, database changed |
 | `PortfolioEngine` | orchestrator/bridge | nog steeds aanwezig |
-| live aggregators aandelen/opties/sprinters | compat/live data producers | luisteren op `snapshotUpdated` en `databaseChanged` |
+| live aggregators aandelen/opties/sprinters | compat/live data producers | worden nu expliciet aangestuurd door refresh-flow en `PortfolioEngine` |
 | projection v2 modules | moderne tab-snapshots | worden gevoed via engine core runtime en snapshot updates |
 
 ### 4. Services/processen per relevante tab
@@ -139,8 +139,8 @@ Eerste inventaris, nog verder uit te werken tijdens audit.
 | Sprinters Open | sprinters projection v2 | promoted web |
 | Single Asset Analyse | repository snapshots, orders, live updates, test orders, comments, lokale modellen | hybride en waarschijnlijk gevoeligste scherm |
 | Orders | transaction data, repository snapshots, state rebuild trigger | belangrijk order-save pad |
-| Portfolio Value | snapshot-based Qt tab | luistert op `databaseChanged` en `snapshotUpdated` |
-| Sector Analysis | snapshot-based Qt tab | luistert op `databaseChanged` en `snapshotUpdated` |
+| Portfolio Value | snapshot-based Qt tab | luistert op gerichte `snapshotUpdated` keys |
+| Sector Analysis | snapshot-based Qt tab | luistert op gerichte `snapshotUpdated` keys |
 
 ---
 
@@ -1828,7 +1828,283 @@ Praktische conclusie:
 - een eerste legacy removal wave kan zich richten op oude tab-klassen en fallback-instantiatie
 - maar niet op aggregators/services die nog producent zijn in de live flow
 
+### 10. Statusupdate 2026-03-29: legacy removal wave 1
+
+Uitgevoerd:
+
+- `main_window_logica.py` instantiateert voor:
+  - Aandelen
+  - Open Opties
+  - Optie Tijdswaarde
+  - Sprinters Open
+  nu alleen nog de moderne web tabs
+- fallback-instantiatie naar de oude Qt legacy tabs is verwijderd
+- extra “Web Pilot” dubbeltabs via fallback-wiring zijn ook verwijderd
+
+Bewust nog niet verwijderd:
+
+- de legacy tab-bestanden zelf
+- live aggregators
+- `OptionTimevalueService`
+
+Reden:
+
+- deze eerste wave verwijdert alleen shell-level consumers en fallback-wiring
+- producenten en services in de live dataflow blijven nog staan
+
+### 11. Wave 2 voorbereiding: wat nu echt weg kan
+
+Na wave 1 zijn de volgende oude tab-modules in runtime niet meer in gebruik:
+
+- `ui_logica/aandelen_tab_logica.py`
+- `ui_logica/opties_open_tab_logica.py`
+- `ui_logica/optie_tijdswaarde_tab_logica.py`
+- `ui_logica/sprinters_open_tab_logica.py`
+
+Bijbehorende oude UI-bestanden die daarna ook removal candidates zijn:
+
+- `ui/aandelen_tab_ui.py`
+- `ui/opties_open_ui.py`
+- `ui/sprinters_open_ui.py`
+- `ui_designs/aandelen_tab.ui`
+- `ui_designs/opties_open.ui`
+- `ui_designs/sprinters_open.ui`
+
+Beoordeling snapshot/listener-risico:
+
+1. Oude tab-listeners zelf
+- snapshot listeners in deze modules zijn nu effectief inert
+- reden: de bijbehorende classes worden niet meer geinstantieerd vanuit `main_window_logica.py`
+
+2. Unieke functionaliteit per oude tab
+
+- `AandelenTab`
+  - eigen snapshot listener op `snapshotUpdated`
+  - broker filter popup + `aandelenProjectionFilterChanged`
+  - oude async worker rond `build_aandelen_tab_summary`
+  - conclusie: module zelf is removal candidate, maar broker-filter UX moet eerst expliciet geborgd zijn in de web tab
+
+- `OptiesOpenTab`
+  - snapshot/databaseChanged listeners
+  - comment editing / kleur / filterlogica
+  - conclusie: alleen verwijderen als bevestigd is dat web tab alle benodigde comment/filter workflows dekt
+
+- `OptieTijdswaardeTab`
+  - directe tabelweergave van timevalue snapshot
+  - beperkte zelfstandige logica
+  - conclusie: laag risico, waarschijnlijk directe removal candidate
+
+- `SprintersOpenTab`
+  - reageert via aggregator signal, niet via centrale snapshot-bus
+  - beperkte zelfstandige logica
+  - conclusie: laag risico, waarschijnlijk directe removal candidate
+
+### 12. Praktische wave 2 volgorde
+
+Veiligste volgorde:
+
+1. Eerst verwijderen:
+- `optie_tijdswaarde_tab_logica.py`
+- `sprinters_open_tab_logica.py`
+- bijbehorende oude UI-bestanden
+
+2. Daarna pas verwijderen na korte functionele check:
+- `aandelen_tab_logica.py`
+- `opties_open_tab_logica.py`
+- bijbehorende oude UI-bestanden
+
+Reden:
+- Aandelen en Open Opties hadden historisch de meeste interactieve legacy UX
+- daar zit het grootste risico op een vergeten nichefunctie
+
+### 13. Statusupdate 2026-03-29: wave 2a uitgevoerd
+
+Uitgevoerd:
+
+- `ui_logica/optie_tijdswaarde_tab_logica.py` verwijderd
+- `ui_logica/sprinters_open_tab_logica.py` verwijderd
+
+Controle:
+
+- geen runtime-verwijzingen meer in app-code
+- compilecheck op `main_window_logica.py` en `portefeuille_viewer_1.2.py` schoon
+
+Nog bewust niet gedaan in deze wave:
+
+- oude UI-bestanden verwijderen
+- `aandelen_tab_logica.py` verwijderen
+- `opties_open_tab_logica.py` verwijderen
+
+Reden:
+
+- eerst de laagste-risico tab-logica opruimen
+- daarna pas de twee zwaardere legacy tabs met meer historische UX
+
+### 14. Statusupdate 2026-03-29: wave 2b uitgevoerd
+
+Uitgevoerd:
+
+- `ui_logica/aandelen_tab_logica.py` verwijderd
+- `ui_logica/opties_open_tab_logica.py` verwijderd
+- verweesde oude UI-bestanden verwijderd:
+  - `ui/aandelen_tab_ui.py`
+  - `ui/opties_open_ui.py`
+  - `ui/sprinters_open_ui.py`
+  - `ui_designs/aandelen_tab.ui`
+  - `ui_designs/opties_open.ui`
+  - `ui_designs/sprinters_open.ui`
+
+Controle:
+
+- geen runtime-verwijzingen meer naar:
+  - `aandelen_tab_logica`
+  - `opties_open_tab_logica`
+  - `optie_tijdswaarde_tab_logica`
+  - `sprinters_open_tab_logica`
+- compilecheck op shell en moderne web tabs schoon
+
+Gevolg:
+
+- de vier oude live-tab modules zijn nu verwijderd
+- de shell en runtime gebruiken alleen nog de moderne web tabs voor:
+  - Aandelen
+
+### 15. Statusupdate 2026-03-29: live aggregator consolidatie
+
+Uitgevoerd:
+
+- `PortfolioEngine` gebruikt nu dezelfde live aggregators als de rest van de app
+- dubbele instantie-opzet voor:
+  - `LiveAggregatorAandelen`
+  - `LiveAggregatorOpties`
+  - `LiveAggregatorSprinters`
+  is verwijderd
+- directe `snapshotUpdated` / `databaseChanged` listeners zijn uit deze drie live aggregators gehaald
+
+Reden:
+
+- order-save refresh en startup refresh roepen `process_live_update()` al expliciet aan
+- live price batching in `PortfolioEngine` roept dezelfde aggregators al expliciet aan
+- de oude listeners veroorzaakten dubbele initialisatie/refresh en extra fan-out zonder eigen functionele meerwaarde
+
+Nieuwe situatie:
+
+1. repository/state refresh pad
+- schrijft repository snapshots
+- roept daarna expliciet de relevante live aggregators aan
+
+2. live tick pad
+- `PriceFeedService -> PortfolioEngine`
+- `PortfolioEngine` batcht ticks
+- dezelfde gedeelde live aggregators verwerken de live update
+
+Wat bewust nog niet is aangepakt:
+
+- verdere versmalling van snapshot fan-out in overige Qt tabs
+
+Conclusie:
+
+- de compat/live aggregator-laag is nu eenvoudiger
+- dubbele aggregator-instanties zijn weg
+- de volgende cleanup-kandidaat is nu vooral overige brede snapshot listeners
+
+### 16. Statusupdate 2026-03-29: OptionTimevalueService versmald
+
+Uitgevoerd:
+
+- `OptionTimevalueService` rebuildt niet meer op `repository_snapshot_load_open_opties`
+- `OptionTimevalueService` gebruikt voor underlying close nu `repository_snapshot_historical_close_latest`
+  in plaats van de volle `repository_snapshot_historical_close`
+- de snapshot-trigger set is daarmee versmald naar:
+  - `aggregator_snapshot_load_open_opties_from_tx_live`
+  - `repository_snapshot_historical_close_latest`
+  - `repository_snapshot_asset_rollup_data`
+  - `repository_snapshot_optie_referentie_data`
+
+Reden:
+
+- `repository_snapshot_load_open_opties` was in de huidige flow redundant naast
+  `aggregator_snapshot_load_open_opties_from_tx_live`
+- voor timevalue rebuild is alleen de laatste bekende underlying close per asset nodig,
+  niet de volledige historical-close tabel
+
+Gevolg:
+
+- minder dubbele rebuild scheduling in de optie-timevalue service
+- smallere dependency op historische close
+
+### 17. Statusupdate 2026-03-29: Qt snapshot listeners herbeoordeeld
+
+Uitkomst:
+
+- `PortfolioValueTab` luistert al alleen op relevante portfolio-value snapshots
+- `SectorAnalysisTab` luistert al alleen op relevante portfolio-value snapshots
+- `SingleAssetAnalyseTab` luistert al alleen op:
+  - `aggregator_snapshot_load_open_opties_from_tx_live`
+  - `snapshot_optie_timevalue_live`
+- `OrdersTabWidget` luistert al alleen op `repository_snapshot_alle_transacties`
+
+Conclusie:
+
+- er is op dit moment geen even veilige extra cleanup in de Qt listeners zoals bij de aggregators
+- de volgende echte kandidaat zit eerder in:
+  - verdere versmalling van `databaseChanged` effecten
+  - of specifiek nog in services rond option timevalue / resolver workflow
+
+### 18. Statusupdate 2026-03-29: databaseChanged fan-out versmald
+
+Uitgevoerd:
+
+- `OptionTimevalueService` reageert niet meer direct op `databaseChanged`
+- `PortfolioValueTab` reageert niet meer direct op `databaseChanged`
+- `SectorAnalysisTab` reageert niet meer direct op `databaseChanged`
+
+Reden:
+
+- bij DB-switch draait centraal al `refresh_everything()`
+- die rewrite van snapshots triggert daarna toch al de relevante `snapshotUpdated` paden
+- directe `databaseChanged` reloads in deze componenten waren daardoor dubbel werk
+
+Wat bewust blijft staan:
+
+- `SingleAssetAnalyseTab.on_database_changed()`
+  - nodig voor comment-cache reload
+  - nodig voor test-order-cache reload
+  - nodig voor UI/filter reset op actieve DB
+- `StateEngineRunner.handle_database_changed()`
+  - nodig voor startup/daily catchup logica op DB-wissel
+
+Conclusie:
+
+- de database-switch keten is nu smaller
+- de resterende `databaseChanged` listeners hebben nog een functionele reden buiten pure snapshot-reload
+
+### 19. Statusupdate 2026-03-29: eindsmoke test geslaagd
+
+Functioneel bevestigd:
+
+- DB-switch naar andere DB: ok
+- DB-switch terug: ok
+- `Aandelen` tab correct gevuld
+- `Single Asset Analyse` correct gevuld
+- asset selector correct gevuld
+- test orders correct gevuld
+- `Open Opties` correct geupdate
+- `Optie Tijdswaarde` correct geupdate
+- `Portfolio Value` correct geupdate
+- `Sector Analysis` correct geupdate
+- geen fouten in de CLI
+
+Eindoordeel:
+
+- Werkstroom A (`updateflow en rendergedrag`) is voor deze snede afgerond
+- Werkstroom B (`legacy removal`) is voor de live-tab UI-laag en de bijbehorende fan-out cleanup afgerond
+- dit document kan voor deze snede als uitgevoerd worden beschouwd
+
 ---
 
 ## Laatste update
 2026-03-29
+
+
+

@@ -27,6 +27,7 @@ from portefeuille_viewer.domain.projection_bus import ProjectionRunResult
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
+from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
 from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
 from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db, load_test_orders_cache_from_db
 from portefeuille_viewer.projections import (
@@ -76,6 +77,7 @@ _apply_env_defaults_from_settings()
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
 live_aggregator_opties = LiveAggregatorOpties()
+live_aggregator_sprinters = LiveAggregatorSprinters()
 ENABLE_AANDELEN_PROJECTION_V2 = os.getenv("USE_AANDELEN_PROJECTION_V2", "1").strip() == "1"
 aandelen_projection_v2 = AandelenProjectionV2() if ENABLE_AANDELEN_PROJECTION_V2 else None
 ENABLE_OPTIES_OPEN_PROJECTION_V2 = os.getenv("USE_OPTIES_OPEN_PROJECTION_V2", "1").strip() == "1"
@@ -1162,7 +1164,12 @@ def main():
         settings.get_ib_client_id()
     )
     stop_event, thread = start_live_price_updater(price_feed)
-    portfolio_engine = PortfolioEngine(price_feed)
+    portfolio_engine = PortfolioEngine(
+        price_feed,
+        live_aggregator_aandelen=live_aggregator_aandelen,
+        live_aggregator_opties=live_aggregator_opties,
+        live_aggregator_sprinters=live_aggregator_sprinters,
+    )
     option_timevalue_service = OptionTimevalueService(price_feed, STOCKDATA_DB_PATH)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
     w.option_timevalue_service = option_timevalue_service

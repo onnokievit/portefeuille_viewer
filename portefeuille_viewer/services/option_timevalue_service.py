@@ -93,6 +93,17 @@ class OpenSeriesRow:
 class OptionTimevalueService(QObject):
     """Build live option time-value snapshot from open options + option_series_master."""
 
+    _snapshot_rebuild_keys = {
+        "aggregator_snapshot_load_open_opties_from_tx_live",
+        "repository_snapshot_historical_close_latest",
+        "repository_snapshot_asset_rollup_data",
+        "repository_snapshot_optie_referentie_data",
+    }
+    _snapshot_clear_unresolved_keys = {
+        "aggregator_snapshot_load_open_opties_from_tx_live",
+        "repository_snapshot_optie_referentie_data",
+    }
+
     def __init__(self, price_feed, stock_db_path: str, parent: QObject | None = None):
         super().__init__(parent)
         self.price_feed = price_feed
@@ -126,7 +137,6 @@ class OptionTimevalueService(QObject):
         with contextlib.suppress(Exception):
             self.price_feed.optionTickUpdated.connect(self._on_option_tick)
         signals.ordersCommitted.connect(self.schedule_rebuild)
-        signals.databaseChanged.connect(self._on_database_changed)
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
 
         QTimer.singleShot(1500, self.schedule_rebuild)
@@ -151,24 +161,10 @@ class OptionTimevalueService(QObject):
             self._full_publish_timer.stop()
 
     def _on_snapshot_updated(self, snapshot_key: str):
-        if snapshot_key in {
-            "aggregator_snapshot_load_open_opties_from_tx_live",
-            "repository_snapshot_load_open_opties",
-            "repository_snapshot_historical_close",
-            "repository_snapshot_asset_rollup_data",
-            "repository_snapshot_optie_referentie_data",
-        }:
-            if snapshot_key in {
-                "repository_snapshot_optie_referentie_data",
-                "repository_snapshot_load_open_opties",
-                "aggregator_snapshot_load_open_opties_from_tx_live",
-            }:
+        if snapshot_key in self._snapshot_rebuild_keys:
+            if snapshot_key in self._snapshot_clear_unresolved_keys:
                 self._clear_unresolved("snapshot_update")
             self.schedule_rebuild()
-
-    def _on_database_changed(self, _db: str):
-        self._clear_unresolved("database_changed")
-        self.schedule_rebuild()
 
     def _clear_unresolved(self, reason: str):
         if self._unresolved_series:
@@ -728,23 +724,16 @@ class OptionTimevalueService(QObject):
         return failed
 
     def _load_underlying_close_map(self) -> dict[str, float]:
-        h = SNAPSHOT_STORE.repository_snapshot_historical_close
+        h = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close_latest", None)
         if h is None or h.is_empty():
             return {}
         try:
-            latest = (
-                h.select([
-                    pl.col("asset_rollup").cast(pl.Utf8),
-                    pl.col("datum").cast(pl.Date),
-                    pl.col("close_price").cast(pl.Float64),
-                ])
-                .sort(["asset_rollup", "datum"])
-                .group_by("asset_rollup")
-                .agg(pl.col("close_price").last().alias("close_price"))
-            )
             return {
                 _clean(r.get("asset_rollup")): float(r.get("close_price"))
-                for r in latest.to_dicts()
+                for r in h.select([
+                    pl.col("asset_rollup").cast(pl.Utf8),
+                    pl.col("close_price").cast(pl.Float64),
+                ]).to_dicts()
                 if r.get("asset_rollup") is not None and r.get("close_price") is not None
             }
         except Exception:

@@ -264,11 +264,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "repository_snapshot_portfolio_value_sprinters",
         }
 
-        # React to central signals: reload when DB changes or orders commit
-        def _on_db_changed(_name: str):
-            with contextlib.suppress(Exception):
-                print("🔄 PortfolioValueTab: databaseChanged signal ontvangen, herladen snapshot...")
-                self.reload_snapshot()
+        # React to central signals: reload when relevant snapshots are rewritten.
         def _on_snapshot_updated(snapshot_key: str):
             with contextlib.suppress(Exception):
                 if snapshot_key in self._watched_snapshot_keys:
@@ -278,7 +274,6 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             with contextlib.suppress(Exception):
                 if (payload or {}).get("status") == "ok":
                     self.reload_snapshot()
-        signals.databaseChanged.connect(_on_db_changed)
         signals.snapshotUpdated.connect(_on_snapshot_updated)
         signals.stateRebuildFinished.connect(_on_state_rebuild_finished)
         signals.uiStyleChanged.connect(self._on_ui_style_changed)

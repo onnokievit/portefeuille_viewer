@@ -104,7 +104,7 @@ Dat verklaart veel ontwerpkeuzes:
 
 ## 3. Startup en applicatielifecycle
 
-De startupflow zit geconcentreerd in [`portefeuille_viewer_1.1.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer_1.1.py).
+De startupflow zit geconcentreerd in [`portefeuille_viewer_1.2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer_1.2.py).
 
 De belangrijke stappen zijn:
 
