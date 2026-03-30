@@ -140,8 +140,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Flush test orders cache naar DB
         with contextlib.suppress(Exception):
-            from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db
+            from portefeuille_viewer.data.test_order_repository import (
+                flush_dirty_test_order_scenarios_to_db,
+                flush_dirty_test_orders_to_db,
+            )
             flush_dirty_test_orders_to_db()
+            flush_dirty_test_order_scenarios_to_db()
 
         # Flush open optie comments naar DB en refresh cache
         with contextlib.suppress(Exception):

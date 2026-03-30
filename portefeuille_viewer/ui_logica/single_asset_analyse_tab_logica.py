@@ -2,12 +2,13 @@ import contextlib
 import math
 import os
 import re
+import uuid
 from datetime import datetime
 import polars as pl
 import pyodbc
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression
 
@@ -36,10 +37,22 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
+    SCENARIO_ORDER_UID_COL,
+    DEFAULT_TEST_ORDER_SCENARIO_NAME,
+    create_test_order_scenario_in_cache,
+    delete_test_order_scenario_in_cache,
+    ensure_default_test_order_scenario,
+    ensure_test_order_scenario_schema,
+    flush_dirty_test_order_scenarios_to_db,
+    get_effective_test_orders_for_asset,
     get_cached_orders,
+    get_cached_test_order_scenarios,
+    rename_test_order_scenario_in_cache,
+    save_scenario_content_for_visible_rows,
     set_cached_orders_for_asset,
     flush_dirty_test_orders_to_db,  # voor later timer/exit
     load_test_orders_cache_from_db,
+    load_test_order_scenarios_cache_from_db,
 )
 from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
@@ -346,6 +359,81 @@ class AandelenTableModel(ColoredPolarsTableModel):
                 return Qt.AlignRight | Qt.AlignVCenter
         return super().data(index, role)
 
+
+class ScenarioManagerDialog(QDialog):
+    def __init__(self, scenarios_df: pl.DataFrame, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Scenario beheer")
+        self.resize(520, 420)
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(1)
+        self.table.setHorizontalHeaderLabels(["Scenario naam"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        layout.addWidget(self.table)
+
+        button_row = QHBoxLayout()
+        self.button_add = QPushButton("Add", self)
+        self.button_delete = QPushButton("Delete", self)
+        self.button_save = QPushButton("Opslaan", self)
+        self.button_cancel = QPushButton("Sluiten", self)
+        button_row.addWidget(self.button_add)
+        button_row.addWidget(self.button_delete)
+        button_row.addStretch(1)
+        button_row.addWidget(self.button_save)
+        button_row.addWidget(self.button_cancel)
+        layout.addLayout(button_row)
+
+        self.button_add.clicked.connect(self.add_empty_row)
+        self.button_delete.clicked.connect(self.delete_selected_row)
+        self.button_save.clicked.connect(self.accept)
+        self.button_cancel.clicked.connect(self.reject)
+
+        rows = sorted(
+            scenarios_df.to_dicts(),
+            key=lambda row: str(row.get("scenario_name") or "").strip().lower(),
+        ) if scenarios_df is not None and not scenarios_df.is_empty() else []
+        self.table.setRowCount(len(rows))
+        for row_idx, row in enumerate(rows):
+            item = QTableWidgetItem(str(row.get("scenario_name") or ""))
+            item.setData(Qt.UserRole, int(row.get("scenario_id")))
+            if str(row.get("scenario_name") or "").strip() == DEFAULT_TEST_ORDER_SCENARIO_NAME:
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row_idx, 0, item)
+
+    def add_empty_row(self):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        item = QTableWidgetItem("")
+        item.setData(Qt.UserRole, None)
+        self.table.setItem(row, 0, item)
+        self.table.setCurrentCell(row, 0)
+        self.table.editItem(item)
+
+    def delete_selected_row(self):
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        item = self.table.item(row, 0)
+        if item is not None and str(item.text() or "").strip() == DEFAULT_TEST_ORDER_SCENARIO_NAME:
+            return
+        self.table.removeRow(row)
+
+    def get_rows(self) -> list[dict]:
+        rows = []
+        for row_idx in range(self.table.rowCount()):
+            item = self.table.item(row_idx, 0)
+            if item is None:
+                continue
+            name = str(item.text() or "").strip()
+            if not name:
+                continue
+            rows.append({
+                "scenario_id": item.data(Qt.UserRole),
+                "scenario_name": name,
+            })
+        return rows
+
 # Widget-class die UI en logica koppelt
 class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuMixin):
     def __init__(self, parent=None):
@@ -388,6 +476,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._use_projection_v2_for_summary = (
             os.getenv("UI_SINGLE_ASSET_FROM_PROJECTION_V2", "1").strip() == "1"
         )
+        self._scenario_selector_loading = False
+        self._current_scenario_id: int | None = None
 
         # init flags op basis van de checkboxen
         self.show_all_test_orders = not self.checkBoxAssetOrdersOnly.isChecked()
@@ -409,12 +499,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             asset_rollups = [str(x) for x in df_rollups["asset_rollup"].unique().to_list() if x]
 
         self.test_order_columns_db = [
-            "Id", "broker", "asset_rollup", "asset_type","transactie_type","transactie_aantal","transactie_prijs","optie_call_put","optie_exp_date",
+            "Id", SCENARIO_ORDER_UID_COL, "broker", "asset_rollup", "asset_type","transactie_type","transactie_aantal","transactie_prijs","optie_call_put","optie_exp_date",
             "optie_strike",  "include"
             ]
         self.test_order_columns = self.test_order_columns_db + ["optie_comment"]
         display_labels = [
-            "Id", "Broker", "Asset", "Asset Type", "Transactie",
+            "Id", "Scenario Uid", "Broker", "Asset", "Asset Type", "Transactie",
             "Aantal", "Prijs", "c/p", "Exp datum",
             "Strike",  "Incl", "Comment",
             ]
@@ -423,6 +513,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.testOrdersTable.setColumnCount(len(self.test_order_columns))
         self.testOrdersTable.setHorizontalHeaderLabels(display_labels)
         self.testOrdersTable.setColumnHidden(0, True)
+        try:
+            self.testOrdersTable.setColumnHidden(self.test_order_columns.index(SCENARIO_ORDER_UID_COL), True)
+        except Exception:
+            pass
         header_test_orders = self.testOrdersTable.horizontalHeader()
         header_test_orders.setSectionResizeMode(QHeaderView.Interactive)
         header_test_orders.setStretchLastSection(False)
@@ -440,6 +534,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.testOrdersTable.cellChanged.connect(self.on_test_orders_changed)
         self.buttonAddTestOrder.clicked.connect(self.add_empty_row)  # als je een knop hebt
         self.buttonDeleteTestOrder.clicked.connect(self.on_delete_test_order_clicked)
+        if hasattr(self, "buttonEditScenarios"):
+            self.buttonEditScenarios.clicked.connect(self._open_scenario_manager)
 
         # Delegates koppelen op kolomnaam (niet op index), zodat kolomvolgorde vrij kan wijzigen.
         def _set_delegate(colname: str, delegate) -> None:
@@ -604,6 +700,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.tableViewOptiesOpenPut.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenPut, pos))
         self.tableViewOptiesOpenCall.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableViewOptiesOpenCall.customContextMenuRequested.connect(lambda pos: self._on_comment_context_menu_for_view(self.tableViewOptiesOpenCall, pos))
+        self._init_test_order_scenarios()
         QTimer.singleShot(0, self._bind_state_engine_controls)
         signals.stateRebuildFinished.connect(lambda _payload: self._refresh_state_engine_controls())
 
@@ -675,7 +772,25 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_aandelen_table()
 
     def _refresh_test_orders_view_for_active_asset(self, asset_rollup):
-        if getattr(self, "show_all_test_orders", False):
+        if self._current_scenario_id is not None:
+            if getattr(self, "show_all_test_orders", False):
+                cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
+                if cache:
+                    df_orders = pl.concat(
+                        [
+                            get_effective_test_orders_for_asset(asset, scenario_id=self._current_scenario_id)
+                            for asset in cache.keys()
+                        ],
+                        how="diagonal_relaxed",
+                    )
+                else:
+                    df_orders = None
+            else:
+                df_orders = get_effective_test_orders_for_asset(
+                    asset_rollup,
+                    scenario_id=self._current_scenario_id,
+                )
+        elif getattr(self, "show_all_test_orders", False):
             cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_orders_cache", {}) or {}
             if cache:
                 df_orders = pl.concat(cache.values(), how="diagonal_relaxed")
@@ -684,6 +799,136 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             df_orders = get_cached_orders(asset_rollup)
         self.fill_test_orders_table(df_orders)
+
+    def _init_test_order_scenarios(self):
+        combo = getattr(self, "comboboxScenarioSelector", None)
+        ensure_test_order_scenario_schema()
+        load_test_order_scenarios_cache_from_db()
+        if combo is None:
+            try:
+                self._current_scenario_id = ensure_default_test_order_scenario()
+                SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+                load_test_orders_cache_from_db()
+            except Exception:
+                self._current_scenario_id = None
+            return
+        combo.setEditable(False)
+        combo.currentIndexChanged.connect(self._on_scenario_selector_changed)
+        self._reload_scenario_selector()
+
+    def _reload_scenario_selector(self, selected_scenario_id: int | None = None):
+        combo = getattr(self, "comboboxScenarioSelector", None)
+        if combo is None:
+            return
+        self._scenario_selector_loading = True
+        try:
+            if selected_scenario_id is None:
+                selected_scenario_id = self._current_scenario_id or ensure_default_test_order_scenario()
+            df = get_cached_test_order_scenarios()
+            rows = sorted(
+                df.to_dicts(),
+                key=lambda row: str(row.get("scenario_name") or "").strip().lower(),
+            ) if df is not None and not df.is_empty() else []
+            combo.clear()
+            target_index = -1
+            for idx, row in enumerate(rows):
+                scenario_id = int(row.get("scenario_id"))
+                scenario_name = str(row.get("scenario_name") or "")
+                combo.addItem(scenario_name, scenario_id)
+                if scenario_id == selected_scenario_id:
+                    target_index = idx
+            if target_index < 0:
+                selected_scenario_id = ensure_default_test_order_scenario()
+                combo.addItem(DEFAULT_TEST_ORDER_SCENARIO_NAME, selected_scenario_id)
+                target_index = combo.count() - 1
+            combo.setCurrentIndex(target_index)
+            self._current_scenario_id = int(combo.currentData())
+            SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+        finally:
+            self._scenario_selector_loading = False
+
+    def _persist_current_scenario_selection_from_table(self):
+        self._persist_scenario_selection_from_table(self._current_scenario_id)
+
+    def _persist_scenario_selection_from_table(self, scenario_id: int | None):
+        if scenario_id is None:
+            return
+        rows = []
+        for r in range(self.testOrdersTable.rowCount()):
+            row_data = self.row_to_dict_db(r)
+            uid = str(row_data.get(SCENARIO_ORDER_UID_COL) or "").strip()
+            if not uid:
+                continue
+            rows.append(row_data)
+        if not rows:
+            return
+        df_visible = pl.DataFrame(rows)
+        save_scenario_content_for_visible_rows(int(scenario_id), df_visible)
+
+    def _on_scenario_selector_changed(self, _index: int):
+        if self._scenario_selector_loading:
+            return
+        combo = getattr(self, "comboboxScenarioSelector", None)
+        if combo is None:
+            return
+        data = combo.currentData()
+        if data is None:
+            return
+        self._current_scenario_id = int(data)
+        SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+        self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+        self.logic.set_asset(self.asset_selector.currentText())
+        self.update_payoff_table()
+        self.update_chart()
+
+    def _open_scenario_manager(self):
+        df = get_cached_test_order_scenarios()
+        dialog = ScenarioManagerDialog(df, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        rows = dialog.get_rows()
+        seen_names = set()
+        current_rows = get_cached_test_order_scenarios().to_dicts()
+        current_by_id = {int(row["scenario_id"]): row for row in current_rows}
+        remaining_ids = set(current_by_id.keys())
+        selected_scenario_id = self._current_scenario_id
+
+        for row in rows:
+            scenario_name = str(row.get("scenario_name") or "").strip()
+            if not scenario_name:
+                continue
+            key = scenario_name.lower()
+            if key in seen_names:
+                continue
+            seen_names.add(key)
+            scenario_id = row.get("scenario_id")
+            if scenario_id is None:
+                new_id = create_test_order_scenario_in_cache(scenario_name)
+                self._persist_scenario_selection_from_table(new_id)
+                if selected_scenario_id is None:
+                    selected_scenario_id = new_id
+                continue
+            scenario_id = int(scenario_id)
+            remaining_ids.discard(scenario_id)
+            existing_name = str(current_by_id.get(scenario_id, {}).get("scenario_name") or "").strip()
+            if existing_name != scenario_name:
+                rename_test_order_scenario_in_cache(scenario_id, scenario_name)
+
+        for scenario_id in sorted(remaining_ids):
+            try:
+                delete_test_order_scenario_in_cache(scenario_id)
+            except ValueError:
+                continue
+            if selected_scenario_id == scenario_id:
+                selected_scenario_id = None
+
+        if selected_scenario_id is None:
+            selected_scenario_id = ensure_default_test_order_scenario()
+        self._reload_scenario_selector(selected_scenario_id=selected_scenario_id)
+        self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+        self.logic.set_asset(self.asset_selector.currentText())
+        self.update_payoff_table()
+        self.update_chart()
 
     def _refresh_selection_driven_views_for_active_asset(self, asset_rollup):
         # Deze subviews volgen direct uit de gekozen asset en lokale caches, niet uit centrale snapshot timers.
@@ -952,9 +1197,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     
     def _flush_test_orders_if_dirty(self):
         flush_dirty_test_orders_to_db()
+        flush_dirty_test_order_scenarios_to_db()
         # stop timer als er niets meer dirty is
         dirty = getattr(SNAPSHOT_STORE, "repository_dirty_test_orders_assets", set()) or set()
-        if not dirty and self.testOrderFlushTimer.isActive():
+        scenario_dirty = bool(getattr(SNAPSHOT_STORE, "repository_dirty_test_order_scenarios", False))
+        if not dirty and not scenario_dirty and self.testOrderFlushTimer.isActive():
             self.testOrderFlushTimer.stop()
 
     def _flush_comments_if_dirty(self):
@@ -1027,6 +1274,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             asset_rollup = self.asset_selector.currentText()
             set_cached_orders_for_asset(asset_rollup, df_asset)
+        self._persist_current_scenario_selection_from_table()
 
         # herbereken payoff/chart op huidige asset
         current_asset = self.asset_selector.currentText()
@@ -1313,6 +1561,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 item = QTableWidgetItem()
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
                 item.setCheckState(Qt.Checked)
+            elif name == SCENARIO_ORDER_UID_COL:
+                item = QTableWidgetItem(str(uuid.uuid4()))
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
             else:
                 item = QTableWidgetItem("")
                 item.setFlags(item.flags() | Qt.ItemIsEditable)
@@ -1395,7 +1646,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def _is_valid_test_order(self, data: dict) -> bool:
         # alles leeg? overslaan
-        if all(not data.get(k) for k in data if k not in ("Id",)):
+        if all(not data.get(k) for k in data if k not in ("Id", SCENARIO_ORDER_UID_COL)):
             return False
 
         # verplichte basis
@@ -1479,6 +1730,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _reset_local_state_for_database_change(self):
         load_open_optie_comments_cache()
         load_test_orders_cache_from_db()
+        load_test_order_scenarios_cache_from_db()
+        self._reload_scenario_selector()
         self._live_summary_asset = None
         self._live_summary_row = None
 
@@ -2001,6 +2254,37 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not math.isfinite(v):
             return None
         return v
+
+    def _get_live_history_aantal_for_asset(self, asset: str):
+        if not asset:
+            return None
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
+        if df is None or df.is_empty():
+            return None
+        try:
+            row = df.filter(pl.col("asset_rollup") == asset)
+            if row.height == 0:
+                return None
+
+            def _num(colname: str) -> float:
+                if colname not in row.columns:
+                    return 0.0
+                value = row[colname][0]
+                if value is None or value == "":
+                    return 0.0
+                try:
+                    return float(value)
+                except Exception:
+                    return 0.0
+
+            return (
+                _num("aand_aantal_bezit")
+                + _num("aantal_sprinters")
+                + abs(_num("opt_aantal_ITM_put"))
+                + abs(_num("opt_aantal_OTM_put"))
+            )
+        except Exception:
+            return None
 
     def _update_summary_labels(self):
         asset = self.asset_selector.currentText()
@@ -2770,6 +3054,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         live_row = self._get_live_summary_row(asset, refresh=False)
         live_koers = self._as_finite_float(live_row.get("koers")) if live_row else None
         live_totaal_inc_fee = self._as_finite_float(live_row.get("totaal_inc_fee")) if live_row else None
+        live_aantal = self._get_live_history_aantal_for_asset(asset)
         if live_koers is not None and live_totaal_inc_fee is not None:
             today = datetime.now().date()
 
@@ -2797,10 +3082,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 datums.append(today)
                 close_price.append(live_koers)
                 totaal.append(live_totaal)
-                aantal.append(aantal[-1] if aantal else 0.0)
+                aantal.append(live_aantal if live_aantal is not None else (aantal[-1] if aantal else 0.0))
             else:
                 close_price[today_idx] = live_koers
                 totaal[today_idx] = live_totaal
+                if live_aantal is not None:
+                    aantal[today_idx] = live_aantal
 
         x = np.arange(len(datums))
 
@@ -3201,12 +3488,8 @@ class SingleAssetAnalyseLogic:
             str(a) for a in filtered["asset_rollup"].unique().to_list()
             if a is not None and str(a) != "" and a != "CORRECTIE-BENCHMARK"])
 
-    from portefeuille_viewer.data.test_order_repository import get_cached_orders
-
     def _augment_with_test_orders(self, asset_rollup: str):
-        from portefeuille_viewer.data.test_order_repository import get_cached_orders
-        
-        df_test = get_cached_orders(asset_rollup)
+        df_test = get_effective_test_orders_for_asset(asset_rollup)
         if df_test is None or df_test.is_empty():
             return
         if "include" in df_test.columns:
