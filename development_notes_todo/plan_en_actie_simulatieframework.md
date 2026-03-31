@@ -1,156 +1,178 @@
-# Plan en Actie Simulatieframework
+ï»¿# Plan en Actie Simulatieframework
 
 ## Doel en gebruik van dit document
-Dit document beschrijft het ontwerp en de uitvoeringsvolgorde voor een app-breed simulatieframework in `portefeuille_viewer_1.2`.
+Dit document beschrijft de aangepaste ontwerpkeuze en uitvoeringsvolgorde voor het simulatieframework in `portefeuille_viewer_1.2`.
 
-Het document is bedoeld als werkdocument en afvinklijst voor de bouw van:
-- centrale scenario-opslag,
-- hergebruik van de bestaande test-order flow,
-- app-brede scenario-injectie in de engine,
-- behoud van de snelle payoff-simulatie in `SingleAssetAnalyseTab`.
+Het document is bedoeld als:
+- ontwerpdocument,
+- werkdocument,
+- afvinklijst voor implementatie.
 
-Dit document beschrijft niet de administratieve bulkfunctie van `optie eind` als simulatiepad. `optie eind` blijft een afzonderlijk productiegericht hulpmiddel voor vrijdag-/zaterdagadministratie.
+De belangrijkste herijking is:
+- scenario-opslag blijft gebaseerd op de bestaande test-order tabel;
+- `SingleAssetAnalyseTab` houdt zijn eigen lokale simulatiepad;
+- app-brede simulatie voor andere tabs wordt niet meer primair via transactietabel-injectie gebouwd;
+- app-brede simulatie wordt opgebouwd via overlays op snapshot-/projectieniveau.
 
----
-
-## 1. Samenvatting van de ontwerpkeuze
-
-### 1.1 Wat blijft bestaan
-De bestaande test-order flow in `SingleAssetAnalyseTab` blijft inhoudelijk de basis.
-
-Die flow werkt nu al goed voor het belangrijkste niveau van simulatie:
-- per asset snel verschillende ordercombinaties kunnen aan- en uitzetten,
-- direct effect zien in de payoff table,
-- comments op test orders kunnen vastleggen,
-- test orders persistent opslaan in de database.
-
-Deze bestaande flow wordt niet vervangen, maar gepromoveerd naar de basis van een breder simulatieframework.
-
-### 1.2 Wat nieuw wordt gebouwd
-Boven op de bestaande test-order tabel wordt een scenario-laag gebouwd.
-
-Kern van de nieuwe opzet:
-1. de huidige test-order tabel wordt hergebruikt als centrale tabel met kandidaat-mutaties;
-2. er komt een aparte tabel met scenario-meta-data;
-3. er komt een aparte tabel met scenario-inhoud;
-4. er komt een centrale runtime-service die bepaalt welk scenario actief is;
-5. de actieve scenario-orders worden in-memory in de engine geïnjecteerd;
-6. dezelfde scenario-selectie wordt gebruikt door:
-   - payoff-simulatie per asset,
-   - en app-brede projections/tabellen.
-
-### 1.3 Wat uit scope blijft voor deze eerste snede
-De volgende zaken horen niet bij V1 van dit simulatieframework:
-- automatische generatie van alle mogelijke positiechanges uit de base-posities;
-- afgeleide generated changes voor assign/exercise/expire op brede schaal;
-- volledige vervanging of herbouw van `optie eind`;
-- meerdere tegelijk actieve scenario's;
-- tab-specifieke scenarioselecties;
-- een lokale scenario-override voor `SingleAssetAnalyseTab`.
+`optie eind` blijft buiten dit document als productiegericht administratief pad.
 
 ---
 
-## 2. Probleemdefinitie en uitgangssituatie
+## 1. Samenvatting van de nieuwe ontwerpkeuze
 
-### 2.1 Wat de app nu al kan
-De app heeft nu al een bruikbare, maar lokale simulatievoorziening in `SingleAssetAnalyseTab`.
+### 1.1 Wat blijft
+De bestaande test-order setup blijft het uitgangspunt:
+- de huidige tabel met test orders blijft de bron van kandidaat-orders;
+- comments op deze orders blijven bruikbaar;
+- scenario-opslag via scenario-meta en scenario-content blijft een goede keuze;
+- `SingleAssetAnalyseTab` blijft de primaire plek voor asset-level simulatie.
 
-Huidige eigenschappen:
-- de tabel met test orders bevat persistent opgeslagen orderregels;
-- per test order bestaat al een `include`-vinkje;
-- een globale `Enable Test Orders` schakelaar zet de lokale simulatie aan of uit;
-- de payoff table springt direct mee als een order aan of uit wordt gezet;
-- de comments op test orders bestaan al en functioneren;
-- de gebruiker kan handmatig verschillende combinaties van orders samenstellen.
+### 1.2 Wat verandert
+De eerdere richting om actieve scenario-orders via een virtuele transactielaag in de hele engine te injecteren, wordt losgelaten als primaire route voor V1.
 
-Deze setup werkt goed voor asset-level beslisvorming en is functioneel zeer belangrijk.
+Nieuwe keuze:
+1. scenario-opslag blijft op orderniveau;
+2. `SingleAssetAnalyseTab` gebruikt een eigen lokaal simulatiepad;
+3. app-brede tabs krijgen scenario-effecten via overlays op hun eigen afgeleide snapshots;
+4. de transactietabel blijft productie-georiÃ«nteerde basis en wordt niet de centrale simulatie-ingang.
 
-### 2.2 Wat nu nog ontbreekt
-Wat nog ontbreekt, is de stap van lokale payoff-simulatie naar app-brede scenario-simulatie.
+### 1.3 Waarom deze koerswijziging nodig is
+In de eerdere poging ontstonden problemen door het vermengen van:
+- lokale asset-simulatie,
+- app-brede scenario-runtime,
+- en afgeleide transactiesemantiek.
 
-Open tekortkomingen in de huidige situatie:
-- een selectie van test orders heeft nog geen naam;
-- een combinatie van orders kan niet als scenario worden opgeslagen en later teruggeladen;
-- verschillende scenario-selecties zijn niet persistent als aparte entiteiten;
-- de rest van de app rekent nog niet mee met dezelfde test-order selectie;
-- `SingleAssetAnalyseTab` simuleert nu vooral payoff, maar nog niet dezelfde scenario-impact als de rest van de app;
-- de bestaande `include`-kolom op de test-order tabel is nog de feitelijke werkselectie en nog niet losgekoppeld van scenario-opslag.
+Gevolgen:
+- dubbel tellen,
+- omklappende states,
+- verschillen tussen `SingleAssetAnalyseTab` en andere tabs,
+- te veel afhankelijkheid van refresh-volgorde.
 
-### 2.3 Waarom dit de juiste volgende stap is
-De huidige payoff-simulatie laat al zien dat de kernlogica bruikbaar is.
-
-Dat betekent:
-- er hoeft geen compleet nieuw simulatiesysteem te worden uitgevonden;
-- het bestaande test-order mechaniek kan worden hergebruikt;
-- de volgende winst zit in centralisatie, scenario-opslag en engine-injectie;
-- `SingleAssetAnalyseTab` blijft de belangrijkste ingang voor asset-level simulatie, maar wordt niet langer de enige consumer van de test orders.
+De bestaande lokale payoff-simulatie werkte inhoudelijk al goed. Dat pad moet leidend blijven.
 
 ---
 
-## 3. Ontwerpkeuze
+## 2. Uitgangssituatie
 
-## 3.1 Splitsing tussen productie en simulatie
-Er wordt bewust een harde scheiding gemaakt tussen:
+## 2.1 Wat de app nu al goed kan
+De app kan nu al:
+- handmatige test orders persistent opslaan;
+- comments op test orders opslaan;
+- scenario's opslaan en terugladen;
+- per asset in `SingleAssetAnalyseTab` snel orders aan- en uitzetten;
+- direct payoff-effect laten zien op assetniveau.
 
-### A. Productie / administratieve bulkverwerking
-Dit blijft de rol van `optie eind`.
+Dat deel is functioneel waardevol en bewezen.
+
+## 2.2 Wat nog ontbreekt
+Nog niet goed opgelost is:
+- een stabiele app-brede scenario-doorrekening;
+- een consistente manier om scenario's door te vertalen naar:
+  - `Aandelen`,
+  - `Portfolio Value`,
+  - `Sector Analysis`.
+
+`Open Opties` en `Optie Tijdswaarde` zijn nuttig, maar voor V1 niet essentieel.
+
+## 2.3 Welke tabs in scope zijn
+Voor de nieuwe opzet zijn de primaire doel-tabs:
+- `Aandelen`
+- `Portfolio Value`
+- `Sector Analysis`
+
+Niet essentieel voor V1:
+- `Open Opties`
+- `Optie Tijdswaarde`
+
+---
+
+## 3. Kernbeslissing: twee paden in plaats van Ã©Ã©n
+
+## 3.1 Pad A: lokale asset-simulatie
+`SingleAssetAnalyseTab` krijgt zijn eigen pad.
+
+Eigenschappen:
+- directe injectie van actieve test orders in de lokale asset-logica;
+- geen afhankelijkheid van app-brede scenario-runtime;
+- payoff table en charts blijven snel en voorspelbaar;
+- dit pad blijft leidend voor asset-level analyse.
 
 Doel:
-- expire/assign-afhandeling voor werkelijke vrijdagavond- en zaterdagadministratie;
-- wegschrijven van echte orders naar de productie-transactietabel;
-- correctness belangrijker dan snelheid;
-- handmatige controle tegen broker-rapporten blijft acceptabel.
+- de oude V0-sterkte behouden.
 
-`optie eind` is dus geen kernonderdeel van het simulatieframework.
+## 3.2 Pad B: app-brede scenario-overlay
+De andere tabs krijgen hun scenario-effect niet via de lokale asset-logica en ook niet primair via virtuele transacties, maar via overlays op afgeleide snapshots.
 
-### B. Simulatie / scenario-architectuur
-Dit wordt een apart, app-breed framework.
+Doel-tabs:
+- `Aandelen`
+- `Portfolio Value`
+- `Sector Analysis`
 
-Doel:
-- hypothetische orders persistent opslaan als kandidaat-mutaties;
-- scenario's opslaan als benoemde selecties van die mutaties;
-- actieve scenario's in-memory in projections injecteren;
-- payoff en app-brede tabellen op dezelfde scenario-selectie laten reageren.
+Eigenschappen:
+- scenario-orders worden per asset vertaald naar overlay-effecten;
+- base snapshots blijven bestaan;
+- scenario snapshots worden daar bovenop gebouwd;
+- deze overlays zijn los van de lokale payoff-engine.
 
-## 3.2 Eén actief scenario tegelijk
-Voor V1 wordt uitgegaan van precies één actief scenario tegelijk.
+## 3.3 Waarom deze splitsing beter is
+Deze splitsing sluit beter aan op hoe de app echt is opgebouwd:
+- `SingleAssetAnalyseTab` denkt in payoff en lokale assetdata;
+- `Aandelen` denkt in summary-rows;
+- `Portfolio Value` en `Sector Analysis` denken in asset-rollup-/waarderingssnapshots.
 
-Dat betekent:
-- er is één globale scenario-selector in de app;
-- er is één globale scenario-aan/uit schakelaar;
-- als op één tab een ander scenario wordt gekozen, geldt dat voor de hele app;
-- `SingleAssetAnalyseTab` volgt dezelfde scenario-context als de rest van de app.
-
-Deze keuze voorkomt verwarring tussen tabs die anders met verschillende scenario-bases zouden rekenen.
-
-## 3.3 `SingleAssetAnalyseTab` blijft level 0 van simulatie
-De payoff table is niet optioneel of later werk, maar blijft de kern van de simulatie.
-
-Daarom geldt:
-- de bestaande snelle payoff-reactie op test-order selectie moet behouden blijven;
-- de nieuwe scenario-architectuur moet payoff vanaf de eerste fase blijven voeden;
-- asset-level simulatie en app-wide simulatie worden niet als concurrerende paden gezien, maar als twee consumers van dezelfde scenario-basis.
+Dus:
+- verschillende consumers,
+- verschillende optimale injectiepunten,
+- Ã©Ã©n gedeelde scenario-opslag,
+- maar niet Ã©Ã©n gedeelde uitvoerroute.
 
 ---
 
-## 4. Datamodel V1
+## 4. Waarom de transactietabel niet het juiste injectiepunt is
 
-### 4.1 Hergebruik van de huidige test-order tabel
-De bestaande test-order tabel wordt hergebruikt als eerste versie van een centrale tabel met kandidaat-mutaties.
+## 4.1 Technisch bezwaar
+Injectie op transactieniveau lijkt aantrekkelijk, maar zit te laag in de keten.
 
-Werknaam in dit document:
-- `position_changes`
+Problemen:
+- te veel afgeleide repository-loaders hangen eraan;
+- open/gesloten logica, aggregatie en waardering lopen allemaal mee;
+- scenario-testdata gaat dan semantisch lijken op echte transacties;
+- lokale en app-brede paden raken te sterk verstrengeld.
 
-Pragmatische keuze voor V1:
-- de huidige tabelstructuur hoeft niet direct volledig te worden hernoemd;
-- de bestaande database-opslag kan worden hergebruikt;
-- comments op deze orders kunnen eveneens worden hergebruikt.
+## 4.2 Praktisch bezwaar
+Voor de tabs in scope is transactieniveau niet de natuurlijke bron:
+- `Aandelen` draait op `build_aandelen_tab_summary()` / projection;
+- `Portfolio Value` draait op `repository_snapshot_portfolio_value_total_combined_put`;
+- `Sector Analysis` draait op datzelfde portfolio-value snapshot.
 
-Voor V1 starten we met de bestaande handmatige test orders als inhoud van `position_changes`.
+Dus:
+- die tabs lezen al niet direct uit de transactietabel;
+- injectie op transactieniveau is dan een omweg.
 
-### 4.2 Tabel `scenarios`
-Doel:
-- scenario-meta-data opslaan.
+## 4.3 Nieuwe conclusie
+Scenario-orders horen als bron op orderniveau te blijven bestaan, maar de app-brede doorvertaling hoort op snapshot-/projectieniveau plaats te vinden.
+
+Kort:
+- opslag op orderniveau;
+- uitvoering op overlay-niveau.
+
+---
+
+## 5. Datamodel
+
+## 5.1 Orders-tabel blijft basis
+De bestaande test-order tabel blijft de basis.
+
+Inhoudelijk betekent dit:
+- de tabel is de centrale lijst met kandidaat-orders;
+- actieve selectie hoort niet in de order zelf, maar in scenario-content;
+- comments blijven gekoppeld aan de orderregels.
+
+Voor V1 hoeft de bestaande tabel niet direct formeel hernoemd te worden.
+
+## 5.2 Scenario-meta
+Tabel:
+- `scenarios`
 
 Minimale velden:
 - `scenario_id`
@@ -159,19 +181,13 @@ Minimale velden:
 - `created_at`
 - `updated_at`
 
-Eventueel later:
-- `created_by`
-- `sort_order`
-- `is_archived`
-- `scenario_type`
-
-### 4.3 Tabel `scenario_content`
-Doel:
-- per scenario vastleggen welke candidate changes actief zijn en hoe ze uitgevoerd worden.
+## 5.3 Scenario-inhoud
+Tabel:
+- `scenario_content`
 
 Minimale velden:
 - `scenario_id`
-- `position_change_id`
+- `position_change_id` of huidig order-id/uid
 - `enabled`
 - `execution_family`
 - `expected_outcome`
@@ -179,325 +195,355 @@ Minimale velden:
 - `override_amount`
 - `updated_at`
 
-Praktische betekenis:
-- `scenarios` bevat de lijst met scenario's;
-- `scenario_content` bevat de inhoud van elk scenario;
-- hetzelfde `position_change_id` kan in meerdere scenario's voorkomen met een andere aan/uit status of andere uitvoermodus.
+Voor V1 is `enabled` de belangrijkste kolom. De andere velden zijn voorbereidende ruimte.
 
-### 4.4 Comments
-De bestaande comment-opzet op test orders blijft uitgangspunt.
+## 5.4 Bucket-structuur
+De eerdere bucket-denkwijze blijft inhoudelijk geldig:
 
-Voor V1 kan dit pragmatisch zo blijven:
-- comments horen aan de test order / position change;
-- comments zijn scenario-onafhankelijk;
-- append-only commenthistorie blijft gewenst.
+### Bucket 1
+- handmatige test orders
+- dit is V1
 
-Eventueel latere verbreding:
-- comments formeel generiek maken voor aandelen, sprinters en opties;
-- desnoods later losser trekken van alleen de huidige open-optie-commentstructuur.
+### Bucket 2
+- direct uit base-posities afgeleide kandidaat-orders
 
-Voor V1 hoeft dit nog geen nieuwe commentarchitectuur te worden als hergebruik van de huidige opslag praktisch goed werkt.
+### Bucket 3
+- afgeleide vervolgorders, zoals assign/exercise/expire-effecten
+
+Voor nu bouwen we alleen V1 op bucket 1, maar de tabel mag voorbereid zijn op bucket-meta.
 
 ---
 
-## 5. Runtime-architectuur
+## 6. Welke bestaande snapshots en services relevant zijn
 
-### 5.1 Centrale service
-Er komt één centrale service, werknaam:
-- `ScenarioService`
+## 6.1 Voor `Aandelen`
+Belangrijkste bron:
+- `build_aandelen_tab_summary()`
+
+Deze gebruikt onder meer:
+- `aggregator_snapshot_aandelen_live`
+- `aggregator_snapshot_load_open_opties_from_tx_live`
+- `aggregator_snapshot_open_sprinters_live`
+- `repository_snapshot_gesloten_opties`
+- `repository_snapshot_gesloten_sprinters_no_asset_detail`
+- `repository_portfolio_dividend`
+- `repository_snapshot_portfolio_value_total_combined_put`
+
+Conclusie:
+- `Aandelen` denkt in samenvattingsrows per asset;
+- scenario-overlay hoort op summary-niveau te komen.
+
+## 6.2 Voor `Portfolio Value`
+Belangrijkste bron:
+- `repository_snapshot_portfolio_value_total_combined_put`
+
+Deze wordt opgebouwd uit:
+- `repository_snapshot_portfolio_value_aandelen`
+- `repository_snapshot_portfolio_value_optie`
+- `repository_snapshot_portfolio_value_sprinters`
+
+Conclusie:
+- scenario-overlay hoort op portfolio-value snapshotniveau te komen.
+
+## 6.3 Voor `Sector Analysis`
+Belangrijkste bron:
+- `repository_snapshot_portfolio_value_total_combined_put`
+
+Conclusie:
+- als Portfolio Value scenario-aware wordt, kan Sector Analysis daarop meeliften.
+
+---
+
+## 7. Nieuwe runtime-architectuur
+
+## 7.1 Centrale resolver
+De eerste centrale bouwsteen wordt geen transactieruntime, maar een resolver.
+
+Werknaam:
+- `ScenarioOrderResolver`
 
 Verantwoordelijkheden:
-1. laden van scenario-meta-data;
-2. laden van scenario-inhoud;
-3. bepalen welk scenario actief is;
-4. bepalen of simulatie globaal aan of uit staat;
-5. ophalen van de actieve position changes voor een scenario;
-6. omzetten van actieve scenarioregels naar virtuele transactierecords;
-7. publiceren van scenario-gerelateerde snapshots of events;
-8. beschikbaar maken van asset-subsets voor payoff-logica.
+1. actieve scenario-id laden;
+2. scenario-content laden;
+3. orders-tabel koppelen aan scenario-content;
+4. actieve orders per scenario bepalen;
+5. actieve orders groeperen per asset.
 
-### 5.2 Belangrijke runtime-functies
-De service moet conceptueel in ieder geval het volgende kunnen:
-- `get_active_scenario_id()`
-- `is_scenario_enabled()`
-- `get_active_scenario_changes()`
-- `get_active_scenario_changes_for_asset(asset_rollup)`
-- `build_virtual_transactions_global()`
-- `build_virtual_transactions_for_asset(asset_rollup)`
+Belangrijkste output:
+- `asset_rollup -> actieve scenario-orders`
 
-Hiermee kan dezelfde scenarioselectie twee kanten op werken:
-- lokaal voor payoff per asset,
-- en globaal voor projections/tabellen.
+Dit is de gedeelde basis voor:
+- lokale asset-simulatie;
+- app-brede overlays.
 
-### 5.3 Injectie in de engine
-Als scenario-simulatie aan staat, worden de actieve scenario-orders in-memory in de engine geïnjecteerd.
+## 7.2 Overlay-service
+Tweede centrale bouwsteen:
+- `ScenarioOverlayService`
 
-Gewenst pad:
-1. productie-transacties blijven de echte base;
-2. actieve scenario-orders worden omgezet naar virtuele transacties;
-3. projections rekenen met `base + scenario`;
-4. de app toont daarmee scenario-effecten zonder de productie-DB te wijzigen.
+Verantwoordelijkheden:
+1. base snapshots lezen;
+2. actieve orders per asset ophalen via resolver;
+3. per getroffen asset scenario-effect berekenen;
+4. scenario-overlays publiceren voor doel-tabs.
 
-Belangrijk:
-- dit pad moet lichter zijn dan echte DB-based order-save;
-- een testscenario hoeft niet de hele productie-orderflow te doorlopen.
+Belangrijk: deze service schrijft niet naar productie-DB en hoeft geen echte orderflow te simuleren.
 
 ---
 
-## 6. UI-gedrag V1
+## 8. Concrete uitvoerlaag voor V1
 
-### 6.1 `SingleAssetAnalyseTab`
-Deze tab blijft de primaire editor/view voor test orders en asset-level simulatie.
+## 8.1 Single Asset Analyse
+Blijft lokaal.
 
-V1-uitbreidingen:
-- scenario selector toevoegen;
-- scenario opslaan / nieuw scenario maken;
-- bestaand scenario laden;
-- huidige `include`-selectie gebruiken als werkselectie in de builder;
-- payoff table blijft direct reageren op de actieve scenario-inhoud voor dat asset.
+V1-regel:
+- geen afhankelijkheid van app-brede overlay-service voor payoff;
+- payoff table en charts blijven direct op lokale scenario-orders reageren;
+- dit pad blijft autonoom.
 
-Belangrijke eis:
-- de snelle visuele feedback van de payoff table mag niet slechter worden.
+## 8.2 Portfolio Value overlay
+Nieuwe output:
+- scenario-aware variant van `repository_snapshot_portfolio_value_total_combined_put`
 
-### 6.2 Andere tabs
-In de tabs die centraal met projections rekenen, komt minimaal:
-- een globale scenario selector;
-- een globale enable/disable simulatie knop.
+Bijvoorbeeld conceptueel:
+- base snapshot blijft bestaan;
+- scenario snapshot wordt apart gepubliceerd.
 
-Deze selector en toggle zijn geharmoniseerd:
-- wijziging op één tab geldt voor de hele app.
+Deze overlay moet per asset minimaal correcte wijzigingen verwerken in:
+- `aand_aantal_bezit`
+- `aantal_sprinters`
+- `opt_aantal_ITM_put`
+- `opt_aantal_OTM_put`
+- lineaire waarde
+- delta waarde
+- portfolio percentages
 
-Relevante tabs voor V1:
-- Aandelen
-- Open Opties
-- Optie Tijdswaarde
-- Portfolio Value
-- Sector Analysis
-- eventueel later andere tabs
+## 8.3 Sector Analysis
+Sector Analysis leest vervolgens uit die scenario-aware portfolio-value output.
 
-### 6.3 Wat V1 nog niet hoeft te doen
-Nog niet nodig in V1:
-- tab-specifieke scenario-selecties;
-- meerdere tegelijk actieve scenario's;
-- lokale override van `SingleAssetAnalyseTab` ten opzichte van de rest van de app;
-- geavanceerde scenario-vergelijking naast elkaar.
+Daardoor hoeft Sector Analysis zelf geen eigen scenario-engine te krijgen.
 
----
+## 8.4 Aandelen overlay
+Voor `Aandelen` bouwen we een scenario-aware summary pad:
+- base summary row per asset;
+- patch voor getroffen assets;
+- daarna percentages en totalen opnieuw afleiden.
 
-## 7. Fasering
-
-### Fase 1: Scenario-opslag boven op bestaande test orders
-Doel:
-- scenario's kunnen opslaan en terugladen zonder al app-breed te injecteren.
-
-Werk:
-- tabel `scenarios` maken;
-- tabel `scenario_content` maken;
-- scenario selector in `SingleAssetAnalyseTab` toevoegen;
-- huidige selectie van test orders kunnen opslaan als scenario;
-- scenario kunnen terugladen naar de bestaande `include`-selectie.
-
-Tussenresultaat:
-- payoff-scenario's krijgen een naam;
-- scenario-combinaties zijn persistent;
-- de bestaande payoff-workflow blijft intact;
-- gebruiker kan snel wisselen tussen opgeslagen asset-level selecties.
-
-Afvinklijst fase 1:
-- [ ] `scenarios` tabel bestaat
-- [ ] `scenario_content` tabel bestaat
-- [ ] scenario selector zichtbaar in `SingleAssetAnalyseTab`
-- [ ] scenario opslaan werkt
-- [ ] scenario laden werkt
-- [ ] payoff table reageert nog steeds direct
-- [ ] comments op test orders blijven werken
-
-### Fase 2: Centrale scenario runtime-service
-Doel:
-- scenario-selectie niet meer alleen lokaal gebruiken, maar centraal beschikbaar maken.
-
-Werk:
-- `ScenarioService` bouwen;
-- globale scenario-enabled state invoeren;
-- actieve scenario-id centraal opslaan;
-- service laten leveren:
-  - alle actieve scenario changes,
-  - asset-subset voor payoff,
-  - virtuele transacties voor globale injectie.
-
-Tussenresultaat:
-- scenario-selectie bestaat niet meer alleen als lokale tabelstate;
-- payoff en engine kunnen dezelfde scenario-basis lezen;
-- foundation voor app-brede simulatie ligt klaar.
-
-Afvinklijst fase 2:
-- [ ] `ScenarioService` bestaat
-- [ ] actieve scenario-id is centraal beschikbaar
-- [ ] globale scenario aan/uit state bestaat
-- [ ] asset-subset voor payoff kan centraal worden opgevraagd
-- [ ] virtuele transacties kunnen centraal worden opgebouwd
-
-### Fase 3: Injectie in projections en app-brede simulatie
-Doel:
-- actieve scenario-orders laten doorwerken in de hele app.
-
-Werk:
-- injectie van virtuele transacties vóór projections;
-- projections laten rekenen met `base + scenario` wanneer scenario actief is;
-- globale selector/toggle op hoofdtabellen toevoegen;
-- controleren dat Aandelen, Portfolio Value, Sector en andere relevante tabs scenario-effecten tonen.
-
-Tussenresultaat:
-- payoff-simulatie bestaat nog steeds;
-- app-brede metriek beweegt nu mee met hetzelfde scenario;
-- scenario's kunnen over meerdere assets tegelijk worden geëvalueerd.
-
-Afvinklijst fase 3:
-- [ ] engine accepteert scenario-injectie in-memory
-- [ ] Aandelen-tab reageert op actief scenario
-- [ ] Open Opties reageert op actief scenario
-- [ ] Portfolio Value reageert op actief scenario
-- [ ] Sector Analysis reageert op actief scenario
-- [ ] globale scenario selector werkt app-breed geharmoniseerd
-- [ ] globale enable/disable knop werkt app-breed geharmoniseerd
-
-### Fase 4: Verbreding van de candidate set
-Doel:
-- niet alleen handmatige test orders, maar ook generated candidate changes gaan gebruiken.
-
-Werk:
-- bestaande base-posities kunnen kandidaatchanges genereren;
-- later ook derived changes toevoegen voor assign/exercise/expire-uitkomsten;
-- sync-logica op `ordersCommitted` uitwerken zodat generated kandidaatregels persistent maar actueel blijven.
-
-Tussenresultaat:
-- scenario builder bevat niet alleen handmatig ingevoerde ideeën;
-- ook bestaande portefeuilleposities kunnen direct als scenario-mutaties worden gekozen;
-- de stap naar bredere portfolio-simulatie wordt veel krachtiger.
-
-Afvinklijst fase 4:
-- [ ] base-posities kunnen kandidaatchanges genereren
-- [ ] generated changes worden persistent opgeslagen of gesynchroniseerd bijgehouden
-- [ ] obsolete generated changes verdwijnen wanneer base-posities verdwijnen
-- [ ] assign/exercise/expire-uitkomsten kunnen als kandidaatregels worden gemodelleerd
-
-### Fase 5: Verdere UX en workflow-uitbreiding
-Doel:
-- scenario builder prettiger en krachtiger maken.
-
-Mogelijke uitbreidingen:
-- `Test Close` acties achter open optie-/aandelen-/sprinterregels;
-- partiële close;
-- scenario clonen;
-- scenario hernoemen;
-- scenario archiveren;
-- betere weergave van scenario-details per asset;
-- integratie met latere beta-sensitiviteit.
-
-Tussenresultaat:
-- scenarioframework is niet meer alleen technisch bruikbaar, maar ook prettig in dagelijks gebruik.
-
-Afvinklijst fase 5:
-- [ ] snelle generate-acties vanuit positie-tabellen
-- [ ] scenario beheer (clone/rename/archive)
-- [ ] verbeterde detailweergave per asset
-- [ ] voorbereiding op beta-sensitiviteit opgenomen
+Dus:
+- niet via transacties,
+- maar via scenario-aware summary-output.
 
 ---
 
-## 8. Tussenresultaten en eindresultaat
+## 9. Hoe de scenario-effecten worden berekend
 
-### 8.1 Verwachte tussenresultaten
+## 9.1 Niet full engine-herbouw
+We bouwen geen volledige simulatie van alle transactielogica.
+
+We doen dit per getroffen asset:
+1. neem base toestand van dat asset;
+2. neem actieve scenario-orders voor dat asset;
+3. bereken mutatie op relevante metriek;
+4. patch alleen dat asset in de overlay-output.
+
+## 9.2 Waarom per asset
+Voordelen:
+- sneller;
+- beter beheersbaar;
+- sluit aan op jouw huidige denkwijze;
+- minder risico op dubbele of tegenstrijdige interpretatie.
+
+## 9.3 Wat in V1 voldoende is
+V1 hoeft niet alles perfect generiek te maken.
+
+Voldoende is:
+- alleen bucket 1 orders;
+- correcte impact op de doel-tabs;
+- duidelijke scheiding tussen lokale asset-simulatie en app-brede overlays.
+
+---
+
+## 10. UI-opzet V1
+
+## 10.1 Scenario-opslag en beheer
+De huidige scenario-opzet blijft:
+- scenario selector;
+- scenario manager;
+- scenario-content;
+- caching.
+
+Dit stuk is al de juiste basis.
+
+## 10.2 Single Asset Analyse
+Blijft:
+- scenario editor;
+- test-order editor;
+- primaire payoff-simulator per asset.
+
+## 10.3 Andere tabs
+Later in V1:
+- globale scenario-selector;
+- globale simulatie aan/uit;
+- scenario-aware snapshots als bron.
+
+Niet nodig als eerste bouwstap:
+- `Open Opties`
+- `Optie Tijdswaarde`
+
+---
+
+## 11. Fases
+
+### Fase 1: ontwerp en resolverbasis
+Doel:
+- Ã©Ã©n betrouwbare actieve-scenario resolver maken.
+
+Werk:
+- orders + scenario-content samenbrengen;
+- actieve orders per asset opleveren;
+- geen injectie in tabs nog.
+
+Tussenresultaat:
+- centrale waarheid: welke orders zijn actief in welk asset.
+
+Afvinklijst:
+- [ ] orders-tabel als bron bevestigd
+- [ ] scenario-content koppeling bevestigd
+- [ ] resolver levert actieve orders per asset
+- [ ] resolver werkt volledig in-memory
+
+### Fase 2: `SingleAssetAnalyseTab` expliciet los houden
+Doel:
+- lokale asset-simulatie formeel scheiden van app-brede simulatie.
+
+Werk:
+- lokale payoff-logica blijft op eigen pad;
+- geen app-brede runtime-afhankelijkheid in payoff.
+
+Tussenresultaat:
+- lokale asset-simulatie is stabiel en onafhankelijk.
+
+Afvinklijst:
+- [ ] payoff reageert alleen op lokaal scenario-pad
+- [ ] asset-level charts blijven stabiel
+- [ ] scenario-opslag blijft dezelfde bron gebruiken
+
+### Fase 3: Portfolio Value overlay
+Doel:
+- app-brede scenario-impact zichtbaar maken in Portfolio Value.
+
+Werk:
+- base `repository_snapshot_portfolio_value_total_combined_put` lezen;
+- scenario-effect per getroffen asset berekenen;
+- scenario-overlay snapshot publiceren.
+
+Tussenresultaat:
+- Portfolio Value wordt scenario-aware zonder transactietabelinjectie.
+
+Afvinklijst:
+- [ ] overlay service leest actieve scenario-orders
+- [ ] overlay service patcht portfolio-value rows
+- [ ] base snapshot blijft ongemoeid
+- [ ] scenario snapshot apart beschikbaar
+
+### Fase 4: Sector Analysis aansluiten
+Doel:
+- Sector Analysis scenario-aware maken via portfolio-value overlay.
+
+Werk:
+- Sector-tab op scenario-aware portfolio snapshot laten lezen.
+
+Tussenresultaat:
+- sectorblootstelling en sectorwaarden bewegen mee met scenario.
+
+Afvinklijst:
+- [ ] Sector Analysis leest scenario-aware bron
+- [ ] waarden en totalen bewegen consistent mee
+
+### Fase 5: Aandelen-tab overlay
+Doel:
+- Aandelen-tab scenario-aware maken via summary-overlay.
+
+Werk:
+- scenario-aware variant van `build_aandelen_tab_summary()` of output daarvan;
+- getroffen rows patchen;
+- percentages opnieuw bepalen.
+
+Tussenresultaat:
+- Aandelen-tab toont scenario-effect app-breed.
+
+Afvinklijst:
+- [ ] summary-overlay bestaat
+- [ ] getroffen assets worden correct gepatcht
+- [ ] percentages worden correct herberekend
+
+### Fase 6: optioneel later
+Doel:
+- verdere verbreding.
+
+Mogelijke uitbreiding:
+- `Open Opties`
+- `Optie Tijdswaarde`
+- bucket 2 en 3
+- generated candidate changes
+- scenario-actieknoppen vanuit posities
+
+Afvinklijst:
+- [ ] scope voor V2/V3 vastgesteld
+
+---
+
+## 12. Tussenresultaten en eindresultaat
+
+## 12.1 Tussenresultaten
 Na fase 1:
-- de bestaande payoff-selecties zijn benoembaar en persistent als scenario.
+- Ã©Ã©n centrale actieve-scenario resolver.
 
 Na fase 2:
-- payoff en centrale runtime lezen dezelfde scenario-basis.
+- `SingleAssetAnalyseTab` stabiel en losgekoppeld van app-brede scenario-uitvoer.
 
 Na fase 3:
-- de hele app rekent met het actieve scenario.
+- `Portfolio Value` scenario-aware.
 
 Na fase 4:
-- scenario's zijn niet meer alleen handmatige test-orderlijsten, maar echte portefeuillemutatie-sets.
+- `Sector Analysis` scenario-aware.
 
 Na fase 5:
-- het framework is volwassen genoeg voor bredere simulatie- en analysetoepassingen.
+- `Aandelen` scenario-aware.
 
-### 8.2 Gewenst eindresultaat
-Het eindresultaat van dit werkpakket is:
-- één app-breed simulatieframework;
-- hergebruik van de bestaande snelle payoff-simulatie;
-- scenario's als benoemde, persistent opgeslagen selecties;
-- een centrale service die scenario's in-memory in de engine injecteert;
-- dezelfde scenario-context zichtbaar in payoff, Aandelen, Portfolio Value, Sector en andere relevante tabs;
-- `optie eind` blijft een los productiegericht administratief pad;
-- de architectuur is daarna geschikt om later:
-  - beta-sensitiviteit,
-  - bredere test-order flows,
-  - generated candidate changes,
-  - en complexere scenario-tools toe te voegen.
+## 12.2 Gewenst eindresultaat
+Het gewenste eindresultaat is:
+- Ã©Ã©n gedeelde scenario-opslag;
+- Ã©Ã©n gedeelde actieve-order resolver;
+- lokale asset-simulatie blijft autonoom;
+- app-brede overlays voor de relevante tabs;
+- geen primaire afhankelijkheid van transactietabelinjectie;
+- uitbreidbaar naar bucket 2/3 en bredere scenario-tools.
 
 ---
 
-## 9. Open ontwerpbeslissingen voor later
-Deze punten hoeven nog niet voor fase 1 te worden opgelost, maar moeten later wel expliciet gekozen worden:
-- of de bestaande test-order tabel direct wordt hernoemd of pas later;
-- of comments formeel generiek worden gemaakt voor alle `position_changes`;
-- of `include` op de test-order tabel een tijdelijke werkkolom blijft of later helemaal verdwijnt;
-- hoe generated candidate changes exact persistent en gesynchroniseerd worden;
-- hoe option expiry/assign-uitkomsten exact als scenario-keuze worden gemodelleerd;
-- of `SingleAssetAnalyseTab` later een optionele lokale scenario-override krijgt;
-- hoe beta-sensitiviteit precies op dezelfde scenario-basis wordt aangesloten.
+## 13. Beslissingen die nu vastliggen
+
+- de bestaande orders-tabel blijft uitgangspunt;
+- scenario-meta en scenario-content blijven geldig ontwerp;
+- `SingleAssetAnalyseTab` houdt zijn eigen lokale simulatiepad;
+- app-brede simulatie gaat naar snapshot-/projectieniveau;
+- de transactietabel is niet het primaire injectiepunt voor V1;
+- V1 richt zich op:
+  - `Aandelen`
+  - `Portfolio Value`
+  - `Sector Analysis`
 
 ---
 
-## 10. Beslissingen die nu al vastliggen
-Voor deze eerste ontwerpfase liggen de volgende keuzes al vast:
-- `optie eind` blijft productiegericht en staat los van simulatie;
-- de bestaande test-order tabel wordt hergebruikt;
-- de bestaande payoff-simulatie blijft behouden en is kernfunctionaliteit;
-- er komt een aparte scenario-meta tabel;
-- er komt een aparte scenario-inhoud tabel;
-- er komt één actief scenario tegelijk;
-- scenario-selectie is app-breed en geharmoniseerd;
-- injectie gebeurt centraal vóór projections;
-- `SingleAssetAnalyseTab` volgt in V1 hetzelfde globale scenario als de rest van de app.
+## 14. Open punten
+
+- exacte naamgeving van de nieuwe resolver- en overlay-services;
+- of scenario-aware snapshots aparte keys krijgen of tijdelijk bestaande keys overschrijven;
+- hoe percentages in `Aandelen` exact opnieuw worden afgeleid na overlay-patches;
+- of `Open Opties` en `Optie Tijdswaarde` in een latere fase dezelfde overlay-architectuur volgen;
+- hoe bucket 2 en 3 later op dezelfde resolver aansluiten.
 
 ---
 
 ## Laatste update
-2026-03-29
-
-## 11. Nuance: `include` verhuist van opslaglaag naar weergavelaag
-In de nieuwe opzet blijft de vinkkolom in de UI voorlopig bestaan, maar niet meer als bron van waarheid in de test-order / `position_changes` tabel.
-
-Dat betekent:
-- de huidige `include`-kolom op de bestaande test-order tabel is in V1 niet langer de formele scenario-opslag;
-- de echte scenario-selectie wordt opgeslagen in `scenario_content`;
-- per scenario staat daar dus welke `position_change_id` aan of uit staat en met welke uitvoermodus.
-
-Voorbeeld:
-- scenario 1 activeert orders `1, 2, 3`;
-- scenario 2 activeert orders `4, 5`;
-- dezelfde order kan dus in meerdere scenario's met andere status voorkomen.
-
-### 11.1 Consequentie voor de UI in V1
-De gebruiker mag in V1 zo min mogelijk verandering ervaren in de bestaande test-order workflow.
-
-Daarom blijft de weergave in `SingleAssetAnalyseTab` voorlopig zoveel mogelijk hetzelfde:
-- dezelfde tabelvorm;
-- dezelfde vinkkolom (`Incl`);
-- dezelfde directe payoff-reactie;
-- dezelfde comments op de regels.
-
-Wat verandert, is de databron achter die tabel:
-- nu toont de tabel direct de DB-tabel met test orders;
-- straks toont de tabel effectief de join tussen:
-  - `position_changes`
-  - en de selectie van het gekozen scenario uit `scenario_content`.
-
-Praktisch gedrag:
-- de gebruiker kiest een scenario in een combobox;
-- de vinkjes in de tabel springen mee naar de inhoud van dat scenario;
-- het aanpassen van een vinkje schrijft niet meer naar `position_changes.include`, maar naar `scenario_content.enabled` voor het gekozen scenario;
-- de payoff table blijft direct reageren op die wijziging.
+2026-03-31

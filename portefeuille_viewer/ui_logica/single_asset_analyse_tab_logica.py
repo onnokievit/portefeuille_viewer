@@ -34,6 +34,10 @@ from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_gesloten_aandelen_payoff,
     bereken_open_aandelen_payoff,
 )
+from portefeuille_viewer.services.scenario_order_resolver import refresh_active_scenario_orders_snapshot
+from portefeuille_viewer.services.scenario_portfolio_value_overlay import (
+    refresh_portfolio_value_scenario_overlay_snapshot,
+)
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
@@ -418,6 +422,11 @@ class ScenarioManagerDialog(QDialog):
         if item is not None and str(item.text() or "").strip() == DEFAULT_TEST_ORDER_SCENARIO_NAME:
             return
         self.table.removeRow(row)
+        remaining = self.table.rowCount()
+        if remaining <= 0:
+            return
+        next_row = min(row, remaining - 1)
+        self.table.setCurrentCell(next_row, 0)
 
     def get_rows(self) -> list[dict]:
         rows = []
@@ -808,7 +817,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             try:
                 self._current_scenario_id = ensure_default_test_order_scenario()
                 SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+                SNAPSHOT_STORE.runtime_test_orders_enabled = bool(self.checkBoxEnableTestOrders.isChecked())
                 load_test_orders_cache_from_db()
+                refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+                refresh_portfolio_value_scenario_overlay_snapshot(
+                    self._current_scenario_id,
+                    enabled=SNAPSHOT_STORE.runtime_test_orders_enabled,
+                )
             except Exception:
                 self._current_scenario_id = None
             return
@@ -844,6 +859,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             combo.setCurrentIndex(target_index)
             self._current_scenario_id = int(combo.currentData())
             SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+            refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+            refresh_portfolio_value_scenario_overlay_snapshot(
+                self._current_scenario_id,
+                enabled=bool(getattr(self, "enable_test_orders", False)),
+            )
         finally:
             self._scenario_selector_loading = False
 
@@ -864,6 +884,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
         df_visible = pl.DataFrame(rows)
         save_scenario_content_for_visible_rows(int(scenario_id), df_visible)
+        refresh_active_scenario_orders_snapshot(int(scenario_id))
 
     def _on_scenario_selector_changed(self, _index: int):
         if self._scenario_selector_loading:
@@ -876,6 +897,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
         self._current_scenario_id = int(data)
         SNAPSHOT_STORE.runtime_active_test_order_scenario_id = self._current_scenario_id
+        refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+        refresh_portfolio_value_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
         self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
         self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
@@ -887,32 +913,49 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if dialog.exec() != QDialog.Accepted:
             return
         rows = dialog.get_rows()
-        seen_names = set()
         current_rows = get_cached_test_order_scenarios().to_dicts()
         current_by_id = {int(row["scenario_id"]): row for row in current_rows}
         remaining_ids = set(current_by_id.keys())
         selected_scenario_id = self._current_scenario_id
 
+        # Markeer alle bestaande ids die nog in de dialog staan eerst als behouden.
+        # Zo kan een duplicate naamconflict nooit een ander scenario impliciet verwijderen.
+        for row in rows:
+            scenario_id = row.get("scenario_id")
+            if scenario_id is None:
+                continue
+            remaining_ids.discard(int(scenario_id))
+
+        seen_names = set()
         for row in rows:
             scenario_name = str(row.get("scenario_name") or "").strip()
             if not scenario_name:
                 continue
             key = scenario_name.lower()
-            if key in seen_names:
-                continue
-            seen_names.add(key)
             scenario_id = row.get("scenario_id")
+
             if scenario_id is None:
+                if key in seen_names:
+                    print(f"[scenario-manager] duplicate new scenario skipped: {scenario_name}")
+                    continue
+                seen_names.add(key)
                 new_id = create_test_order_scenario_in_cache(scenario_name)
                 self._persist_scenario_selection_from_table(new_id)
                 if selected_scenario_id is None:
                     selected_scenario_id = new_id
                 continue
+
             scenario_id = int(scenario_id)
-            remaining_ids.discard(scenario_id)
             existing_name = str(current_by_id.get(scenario_id, {}).get("scenario_name") or "").strip()
+            if key in seen_names and existing_name.lower() != key:
+                print(f"[scenario-manager] duplicate rename skipped for scenario_id={scenario_id}: {scenario_name}")
+                continue
+            seen_names.add(key)
             if existing_name != scenario_name:
-                rename_test_order_scenario_in_cache(scenario_id, scenario_name)
+                try:
+                    rename_test_order_scenario_in_cache(scenario_id, scenario_name)
+                except ValueError as exc:
+                    print(f"[scenario-manager] rename skipped for scenario_id={scenario_id}: {exc}")
 
         for scenario_id in sorted(remaining_ids):
             try:
@@ -925,6 +968,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if selected_scenario_id is None:
             selected_scenario_id = ensure_default_test_order_scenario()
         self._reload_scenario_selector(selected_scenario_id=selected_scenario_id)
+        refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+        refresh_portfolio_value_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
         self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
         self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
@@ -1190,6 +1238,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def on_toggle_enable_test_orders(self, checked):
         self.enable_test_orders = checked
         self.logic.enable_test_orders = checked
+        SNAPSHOT_STORE.runtime_test_orders_enabled = bool(checked)
+        refresh_portfolio_value_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(checked),
+        )
         asset = self.asset_selector.currentText()
         self.logic.set_asset(asset)
         self.update_payoff_table()
@@ -1275,6 +1328,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             asset_rollup = self.asset_selector.currentText()
             set_cached_orders_for_asset(asset_rollup, df_asset)
         self._persist_current_scenario_selection_from_table()
+        refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+        refresh_portfolio_value_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
 
         # herbereken payoff/chart op huidige asset
         current_asset = self.asset_selector.currentText()
@@ -1614,6 +1672,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._debug_print_test_orders_cache(f"after delete id={order_id} asset={deleted_asset}")
         if not self.testOrderFlushTimer.isActive():
             self.testOrderFlushTimer.start()
+        refresh_active_scenario_orders_snapshot(self._current_scenario_id)
+        refresh_portfolio_value_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
         self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
         self.update_chart()

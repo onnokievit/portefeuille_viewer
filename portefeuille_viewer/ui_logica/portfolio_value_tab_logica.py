@@ -258,6 +258,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._snapshot_reload_timer.timeout.connect(self.reload_snapshot)
         self._watched_snapshot_keys = {
             "repository_snapshot_portfolio_value_total_combined_put",
+            "repository_snapshot_portfolio_value_total_combined_scenario",
             "repository_snapshot_portfolio_value_aandelen",
             "repository_snapshot_portfolio_value_optie",
             "repository_snapshot_portfolio_value_optie_call_put_detailed",
@@ -426,7 +427,11 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     def reload_snapshot(self):
         # Expected snapshot key: repository_snapshot_portfolio_value_total_combined
         # print("🔄 PortfolioValueTab: snapshot herladen...")
-        df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
+        df = None
+        if bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)):
+            df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_scenario", None)
+        if df is None:
+            df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             self.model.set_df(pl.DataFrame({}))
             self._clear_totals()

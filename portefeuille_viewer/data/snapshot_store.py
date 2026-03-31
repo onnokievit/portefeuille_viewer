@@ -32,6 +32,7 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_optie: pl.DataFrame | None = None
         self.repository_snapshot_portfolio_value_sprinters: pl.DataFrame | None = None
         self.repository_snapshot_portfolio_value_total_combined_put: pl.DataFrame | None = None
+        self.repository_snapshot_portfolio_value_total_combined_scenario: pl.DataFrame | None = None
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_snapshot_historical_close: pl.DataFrame | None = None
         self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
@@ -40,6 +41,10 @@ class SnapshotStore:
         self.live_prices: dict | None = None
         self.repository_snapshot_test_orders_cache: dict = {}
         self.repository_dirty_test_orders_assets: set = set()
+        self.repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None = None
+        self.repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame] = {}
+        self.runtime_active_test_order_scenario_id: int | None = None
+        self.runtime_test_orders_enabled: bool = False
         self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
         self.repository_dirty_open_optie_comments: list = []
         self.snapshot_optie_timevalue_live: pl.DataFrame | None = None
@@ -74,6 +79,7 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_optie = None
         self.repository_snapshot_portfolio_value_sprinters = None
         self.repository_snapshot_portfolio_value_total_combined_put = None
+        self.repository_snapshot_portfolio_value_total_combined_scenario = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
         self.repository_snapshot_historical_close = None
@@ -84,6 +90,10 @@ class SnapshotStore:
         self.live_prices = None
         self.repository_snapshot_test_orders_cache = {}
         self.repository_dirty_test_orders_assets = set()
+        self.repository_snapshot_active_scenario_orders_flat = None
+        self.repository_snapshot_active_scenario_orders_by_asset = {}
+        self.runtime_active_test_order_scenario_id = None
+        self.runtime_test_orders_enabled = False
         self.repository_snapshot_open_optie_comments = None
         self.repository_dirty_open_optie_comments = []
         self.snapshot_optie_timevalue_live = None
@@ -114,6 +124,7 @@ class SnapshotStore:
             self.repository_snapshot_portfolio_value_optie is not None,
             self.repository_snapshot_portfolio_value_sprinters is not None,
             self.repository_snapshot_portfolio_value_total_combined_put is not None,
+            self.repository_snapshot_portfolio_value_total_combined_scenario is not None,
             self.repository_portfolio_dividend is not None,
             self.repository_snapshot_historical_close is not None,
             self.repository_snapshot_historical_close_latest is not None,
@@ -122,6 +133,7 @@ class SnapshotStore:
             self.live_prices is not None,
             self.repository_snapshot_test_orders_cache is not None,
             self.repository_dirty_test_orders_assets is not None,
+            self.repository_snapshot_active_scenario_orders_flat is not None,
             self.snapshot_optie_timevalue_live is not None,
         ])
 
@@ -168,6 +180,11 @@ class SnapshotStore:
             parts.append(f"Repository Portfolio Value Sprinters data: {len(self.repository_snapshot_portfolio_value_sprinters)} rijen")
         if self.repository_snapshot_portfolio_value_total_combined_put is not None:
             parts.append(f"Repository Portfolio Value Total Combined data: {len(self.repository_snapshot_portfolio_value_total_combined_put)} rijen")   
+        if self.repository_snapshot_portfolio_value_total_combined_scenario is not None:
+            parts.append(
+                "Scenario Portfolio Value Total Combined data: "
+                f"{len(self.repository_snapshot_portfolio_value_total_combined_scenario)} rijen"
+            )
         if self.repository_portfolio_dividend is not None:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.repository_snapshot_historical_close is not None:
@@ -193,6 +210,11 @@ class SnapshotStore:
             parts.append(f"Dirty Test Orders Assets: {len(self.repository_dirty_test_orders_assets)} items")
         if self.repository_snapshot_test_orders_cache:
             parts.append(f"Test Orders Cache: {len(self.repository_snapshot_test_orders_cache)} items")
+        if self.repository_snapshot_active_scenario_orders_flat is not None:
+            parts.append(
+                "Active Scenario Orders Flat: "
+                f"{len(self.repository_snapshot_active_scenario_orders_flat)} rijen"
+            )
         if self.snapshot_optie_timevalue_live is not None:
             parts.append(f"Optie Timevalue Live: {len(self.snapshot_optie_timevalue_live)} rijen")
 
