@@ -631,3 +631,20 @@ Voor openstaand werk en visie:
 
 Voor vrije ideeën en klad:
 - [TODO.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\TODO.md)
+
+
+## Statusupdate 2026-03-29 overgenomen uit voormalig root-document
+
+Deze sectie is verplaatst uit het eerdere root-bestand development_notes.md, zodat de ontwikkelnotities weer op één plek staan.
+
+# Development Notes
+
+Deze tekst is verplaatst naar:
+
+- `development_notes_todo/development_notes.md`
+
+Reden:
+
+- de ontwikkelnotities stonden dubbel
+- de inhoud van 2026-03-29 hoort als update thuis in de centrale notities onder `development_notes_todo`
+

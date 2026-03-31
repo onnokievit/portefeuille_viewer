@@ -2328,3 +2328,61 @@ Oordeel:
 - de uitgevoerde versmalling/refactor heeft geen zichtbare regressie veroorzaakt
 - `SingleAssetAnalyseTab` functioneert nu goed genoeg om niet langer een directe cleanup-blokkade te zijn
 - verdere cleanup van deze tab is nu optioneel vervolgwerk en geen acute noodzaak
+
+### 10. Statusupdate 2026-03-31: scenario-V1 via overlays gebouwd
+
+Uitgevoerd:
+
+- het eerdere scenario-pad via injectie in 	ransacties_bron_data is verlaten als hoofdontwerp
+- Single Asset Analyse blijft het lokale en leidende simulatiepad voor payoff, charts en assetanalyse
+- de bestaande test-order tabel blijft het uitgangspunt voor scenario-orders
+- de bestaande scenario-opzet blijft het uitgangspunt voor welke orders actief zijn
+- centrale resolve-laag toegevoegd:
+  - ScenarioOrderResolver
+  - output als actieve scenario-orders flat en per sset_rollup
+
+Nieuwe V1-opzet:
+
+1. lokaal asset-pad
+- Single Asset Analyse
+- directe lokale injectie van test orders
+- geen afhankelijkheid van app-brede scenario-transacties
+
+2. app-breed overlay-pad
+- geen injectie via transactietabel
+- scenario-effecten worden op snapshot/projectieniveau toegepast
+- overlays blijven additief bovenop de base snapshots
+
+Gebouwd in V1:
+
+- Portfolio Value scenario-aware gemaakt via aparte overlay-service
+- Sector Analysis aangesloten op scenario-aware snapshots
+- Aandelen aangesloten op scenario-aware overlay/projectie
+- scenario manager verbeterd:
+  - rename stabieler
+  - meervoudig deleten werkt
+  - nieuw scenario start leeg
+
+Bewuste grenzen van V1:
+
+- Open Opties (Live) is niet opnieuw aangesloten in deze overlay-opzet
+- Optie Tijdswaarde is niet essentieel gemaakt voor deze V1
+- scenario-simulatie wordt bewust niet via de volledige transactieketen afgedwongen
+
+Oordeel:
+
+- de nieuwe scenario-opzet sluit beter aan op hoe de app werkelijk is opgebouwd
+- de tabs die voor V1 het belangrijkst waren werken nu zonder de eerdere dubbelinjectie- en syncproblemen
+- de architectuur is nu:
+  - orderniveau voor opslag en scenarioselectie
+  - lokaal pad voor assetanalyse
+  - snapshot-overlays voor app-brede simulatie
+
+### 11. Openstaand werk na scenario-V1
+
+Nog niet als vervolg opgepakt:
+
+- beoordelen of Open Opties (Live) nog scenario-aware moet worden
+- beoordelen of Optie Tijdswaarde nog scenario-aware moet worden
+- eventuele inhoudelijke validatie van overlaylogica per assettype op grotere scenario-sets
+- lichte cleanup van overlay-services en logging nu de architectuurrichting vaststaat

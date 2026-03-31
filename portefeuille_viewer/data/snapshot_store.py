@@ -36,6 +36,7 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_sprinters_scenario: pl.DataFrame | None = None
         self.repository_snapshot_portfolio_value_total_combined_put: pl.DataFrame | None = None
         self.repository_snapshot_portfolio_value_total_combined_scenario: pl.DataFrame | None = None
+        self.snapshot_aandelen_projection_v2_scenario: pl.DataFrame | None = None
         self.repository_portfolio_dividend: pl.DataFrame | None = None
         self.repository_snapshot_historical_close: pl.DataFrame | None = None
         self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
@@ -86,6 +87,7 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_sprinters_scenario = None
         self.repository_snapshot_portfolio_value_total_combined_put = None
         self.repository_snapshot_portfolio_value_total_combined_scenario = None
+        self.snapshot_aandelen_projection_v2_scenario = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
         self.repository_snapshot_historical_close = None
@@ -134,6 +136,7 @@ class SnapshotStore:
             self.repository_snapshot_portfolio_value_sprinters_scenario is not None,
             self.repository_snapshot_portfolio_value_total_combined_put is not None,
             self.repository_snapshot_portfolio_value_total_combined_scenario is not None,
+            self.snapshot_aandelen_projection_v2_scenario is not None,
             self.repository_portfolio_dividend is not None,
             self.repository_snapshot_historical_close is not None,
             self.repository_snapshot_historical_close_latest is not None,
@@ -199,6 +202,11 @@ class SnapshotStore:
             parts.append(
                 "Scenario Portfolio Value Total Combined data: "
                 f"{len(self.repository_snapshot_portfolio_value_total_combined_scenario)} rijen"
+            )
+        if self.snapshot_aandelen_projection_v2_scenario is not None:
+            parts.append(
+                "Scenario Aandelen Projection V2 data: "
+                f"{len(self.snapshot_aandelen_projection_v2_scenario)} rijen"
             )
         if self.repository_portfolio_dividend is not None:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")

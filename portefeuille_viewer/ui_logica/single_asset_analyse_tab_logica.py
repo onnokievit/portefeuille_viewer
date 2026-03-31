@@ -41,6 +41,9 @@ from portefeuille_viewer.services.scenario_portfolio_value_overlay import (
 from portefeuille_viewer.services.scenario_sector_overlay import (
     refresh_sector_scenario_overlay_snapshots,
 )
+from portefeuille_viewer.services.scenario_aandelen_overlay import (
+    refresh_aandelen_scenario_overlay_snapshot,
+)
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
@@ -831,6 +834,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     self._current_scenario_id,
                     enabled=SNAPSHOT_STORE.runtime_test_orders_enabled,
                 )
+                refresh_aandelen_scenario_overlay_snapshot(
+                    self._current_scenario_id,
+                    enabled=SNAPSHOT_STORE.runtime_test_orders_enabled,
+                )
             except Exception:
                 self._current_scenario_id = None
             return
@@ -872,6 +879,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 enabled=bool(getattr(self, "enable_test_orders", False)),
             )
             refresh_sector_scenario_overlay_snapshots(
+                self._current_scenario_id,
+                enabled=bool(getattr(self, "enable_test_orders", False)),
+            )
+            refresh_aandelen_scenario_overlay_snapshot(
                 self._current_scenario_id,
                 enabled=bool(getattr(self, "enable_test_orders", False)),
             )
@@ -917,6 +928,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._current_scenario_id,
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
+        refresh_aandelen_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
         self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
         self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
@@ -955,7 +970,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     continue
                 seen_names.add(key)
                 new_id = create_test_order_scenario_in_cache(scenario_name)
-                self._persist_scenario_selection_from_table(new_id)
+                # Nieuw scenario start expliciet leeg; kopieer geen huidige selectie.
                 if selected_scenario_id is None:
                     selected_scenario_id = new_id
                 continue
@@ -989,6 +1004,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
         refresh_sector_scenario_overlay_snapshots(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
+        refresh_aandelen_scenario_overlay_snapshot(
             self._current_scenario_id,
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
@@ -1266,6 +1285,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._current_scenario_id,
             enabled=bool(checked),
         )
+        refresh_aandelen_scenario_overlay_snapshot(
+            self._current_scenario_id,
+            enabled=bool(checked),
+        )
         asset = self.asset_selector.currentText()
         self.logic.set_asset(asset)
         self.update_payoff_table()
@@ -1357,6 +1380,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
         refresh_sector_scenario_overlay_snapshots(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
+        refresh_aandelen_scenario_overlay_snapshot(
             self._current_scenario_id,
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
@@ -1705,6 +1732,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )
         refresh_sector_scenario_overlay_snapshots(
+            self._current_scenario_id,
+            enabled=bool(getattr(self, "enable_test_orders", False)),
+        )
+        refresh_aandelen_scenario_overlay_snapshot(
             self._current_scenario_id,
             enabled=bool(getattr(self, "enable_test_orders", False)),
         )

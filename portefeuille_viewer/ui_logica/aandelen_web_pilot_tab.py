@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.services.scenario_aandelen_overlay import build_aandelen_scenario_overlay_df
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 
 try:
@@ -90,12 +91,17 @@ class AandelenWebPilotTab(QWidget):
     def _on_snapshot_updated(self, snapshot_key: str):
         if AANDELEN_WEB_DEBUG:
             print(f"[aandelen-web-debug] snapshotUpdated key={snapshot_key} active={self._is_active} js_ready={self._js_ready} needs_snapshot={self._needs_snapshot} needs_patch={self._needs_patch} needs_meta={self._needs_meta}")
-        if snapshot_key == "snapshot_aandelen_projection_v2":
+        use_scenario = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False))
+        if snapshot_key in {"snapshot_aandelen_projection_v2", "snapshot_aandelen_projection_v2_scenario"}:
             self._needs_snapshot = True
             self._needs_patch = False
             self._schedule_render()
         elif snapshot_key == "snapshot_aandelen_projection_v2_patch":
-            self._needs_patch = True
+            if use_scenario:
+                self._needs_snapshot = True
+                self._needs_patch = False
+            else:
+                self._needs_patch = True
             self._schedule_render()
         elif snapshot_key == "snapshot_aandelen_projection_v2_meta":
             self._needs_meta = True
@@ -139,7 +145,7 @@ class AandelenWebPilotTab(QWidget):
             self._needs_meta = False
 
     def _publish_full_snapshot(self):
-        df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+        df = self._current_snapshot_df()
         if df is None:
             return
         if AANDELEN_WEB_DEBUG:
@@ -313,7 +319,7 @@ class AandelenWebPilotTab(QWidget):
             print(f"[aandelen-web] save column widths failed: {exc}")
 
     def _export_snapshot(self):
-        df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+        df = self._current_snapshot_df()
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             QMessageBox.information(self, "Export", "Geen projection snapshot beschikbaar.")
             return
@@ -344,6 +350,24 @@ class AandelenWebPilotTab(QWidget):
         if isinstance(value, (datetime, date)):
             return value.isoformat()
         return str(value)
+
+    def _current_snapshot_df(self):
+        use_scenario = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False))
+        if use_scenario:
+            try:
+                scenario_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
+                df_scenario = build_aandelen_scenario_overlay_df(
+                    scenario_id=scenario_id,
+                    enabled=True,
+                )
+                if df_scenario is not None:
+                    return df_scenario
+            except Exception:
+                pass
+            df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2_scenario", None)
+            if df is not None:
+                return df
+        return getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
 
     def _html_template(self) -> str:
         return """

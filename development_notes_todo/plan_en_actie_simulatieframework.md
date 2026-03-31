@@ -66,11 +66,11 @@ Dat deel is functioneel waardevol en bewezen.
 
 ## 2.2 Wat nog ontbreekt
 Nog niet goed opgelost is:
-- een stabiele app-brede scenario-doorrekening;
-- een consistente manier om scenario's door te vertalen naar:
-  - `Aandelen`,
-  - `Portfolio Value`,
-  - `Sector Analysis`.
+- verdere inhoudelijke validatie van de app-brede scenario-doorrekening;
+- eventuele uitbreiding naar:
+  - `Open Opties`,
+  - `Optie Tijdswaarde`;
+- latere uitbreiding naar generated scenario's en bucket 2/3.
 
 `Open Opties` en `Optie Tijdswaarde` zijn nuttig, maar voor V1 niet essentieel.
 
@@ -247,10 +247,11 @@ Conclusie:
 
 ## 6.3 Voor `Sector Analysis`
 Belangrijkste bron:
-- `repository_snapshot_portfolio_value_total_combined_put`
+- sector-output leunt inhoudelijk op portfolio-value data, maar gebruikt in de praktijk ook eigen broncombinaties en afgeleide snapshots
 
 Conclusie:
-- als Portfolio Value scenario-aware wordt, kan Sector Analysis daarop meeliften.
+- `Sector Analysis` kan niet alleen als simpele alias van `Portfolio Value` worden aangesloten;
+- er is een eigen sector-overlay nodig, wel op dezelfde snapshot-architectuur.
 
 ---
 
@@ -381,9 +382,9 @@ Blijft:
 
 ## 10.3 Andere tabs
 Later in V1:
-- globale scenario-selector;
-- globale simulatie aan/uit;
-- scenario-aware snapshots als bron.
+- de bestaande scenario-selector in `SingleAssetAnalyseTab` blijft de bedieningsplek;
+- app-brede tabs lezen scenario-aware snapshots als bron;
+- geen aparte globale selector toegevoegd in deze V1.
 
 Niet nodig als eerste bouwstap:
 - `Open Opties`
@@ -406,10 +407,10 @@ Tussenresultaat:
 - centrale waarheid: welke orders zijn actief in welk asset.
 
 Afvinklijst:
-- [ ] orders-tabel als bron bevestigd
-- [ ] scenario-content koppeling bevestigd
-- [ ] resolver levert actieve orders per asset
-- [ ] resolver werkt volledig in-memory
+- [x] orders-tabel als bron bevestigd
+- [x] scenario-content koppeling bevestigd
+- [x] resolver levert actieve orders per asset
+- [x] resolver werkt volledig in-memory
 
 ### Fase 2: `SingleAssetAnalyseTab` expliciet los houden
 Doel:
@@ -423,9 +424,9 @@ Tussenresultaat:
 - lokale asset-simulatie is stabiel en onafhankelijk.
 
 Afvinklijst:
-- [ ] payoff reageert alleen op lokaal scenario-pad
-- [ ] asset-level charts blijven stabiel
-- [ ] scenario-opslag blijft dezelfde bron gebruiken
+- [x] payoff reageert alleen op lokaal scenario-pad
+- [x] asset-level charts blijven stabiel
+- [x] scenario-opslag blijft dezelfde bron gebruiken
 
 ### Fase 3: Portfolio Value overlay
 Doel:
@@ -440,24 +441,25 @@ Tussenresultaat:
 - Portfolio Value wordt scenario-aware zonder transactietabelinjectie.
 
 Afvinklijst:
-- [ ] overlay service leest actieve scenario-orders
-- [ ] overlay service patcht portfolio-value rows
-- [ ] base snapshot blijft ongemoeid
-- [ ] scenario snapshot apart beschikbaar
+- [x] overlay service leest actieve scenario-orders
+- [x] overlay service patcht portfolio-value rows
+- [x] base snapshot blijft ongemoeid
+- [x] scenario snapshot apart beschikbaar
 
 ### Fase 4: Sector Analysis aansluiten
 Doel:
-- Sector Analysis scenario-aware maken via portfolio-value overlay.
+- Sector Analysis scenario-aware maken via dezelfde overlay-richting.
 
 Werk:
-- Sector-tab op scenario-aware portfolio snapshot laten lezen.
+- sector-overlay snapshots bouwen;
+- `Sector Analysis` daarop laten lezen.
 
 Tussenresultaat:
 - sectorblootstelling en sectorwaarden bewegen mee met scenario.
 
 Afvinklijst:
-- [ ] Sector Analysis leest scenario-aware bron
-- [ ] waarden en totalen bewegen consistent mee
+- [x] Sector Analysis leest scenario-aware bron
+- [x] waarden en totalen bewegen consistent mee
 
 ### Fase 5: Aandelen-tab overlay
 Doel:
@@ -472,9 +474,9 @@ Tussenresultaat:
 - Aandelen-tab toont scenario-effect app-breed.
 
 Afvinklijst:
-- [ ] summary-overlay bestaat
-- [ ] getroffen assets worden correct gepatcht
-- [ ] percentages worden correct herberekend
+- [x] summary-overlay bestaat
+- [x] getroffen assets worden correct gepatcht
+- [x] percentages worden correct herberekend
 
 ### Fase 6: optioneel later
 Doel:
@@ -492,9 +494,40 @@ Afvinklijst:
 
 ---
 
-## 12. Tussenresultaten en eindresultaat
+## 12. Status van wat werkelijk gebouwd is
 
-## 12.1 Tussenresultaten
+### 12.1 Gebouwd in deze V1
+
+Gereed:
+
+- centrale `ScenarioOrderResolver`
+- scenario-opslag op basis van bestaande test-order tabel en scenario-content
+- `SingleAssetAnalyseTab` blijft lokaal simulatiepad
+- `Portfolio Value` scenario-aware via overlay-service
+- `Sector Analysis` scenario-aware via eigen overlay-pad
+- `Aandelen` scenario-aware via overlay/projectiepad
+- scenario manager verbeterd:
+  - rename stabieler
+  - meervoudig deleten werkt
+  - nieuw scenario start leeg
+
+### 12.2 Bewust niet meer gedaan
+
+Niet gekozen:
+
+- scenario-injectie via `transacties_bron_data` als hoofdroute
+- één gedeelde runtime waarin lokale payoff en app-brede scenario-injectie door elkaar lopen
+
+Reden:
+
+- dat pad gaf dubbel tellen, syncproblemen en onstabiel gedrag;
+- de nieuwe overlay-opzet sluit beter aan op de echte bronnen van de doel-tabs.
+
+---
+
+## 13. Tussenresultaten en eindresultaat
+
+## 13.1 Tussenresultaten
 Na fase 1:
 - één centrale actieve-scenario resolver.
 
@@ -510,7 +543,7 @@ Na fase 4:
 Na fase 5:
 - `Aandelen` scenario-aware.
 
-## 12.2 Gewenst eindresultaat
+## 13.2 Gewenst eindresultaat
 Het gewenste eindresultaat is:
 - één gedeelde scenario-opslag;
 - één gedeelde actieve-order resolver;
@@ -521,7 +554,7 @@ Het gewenste eindresultaat is:
 
 ---
 
-## 13. Beslissingen die nu vastliggen
+## 14. Beslissingen die nu vastliggen
 
 - de bestaande orders-tabel blijft uitgangspunt;
 - scenario-meta en scenario-content blijven geldig ontwerp;
@@ -535,10 +568,10 @@ Het gewenste eindresultaat is:
 
 ---
 
-## 14. Open punten
+## 15. Open punten
 
 - exacte naamgeving van de nieuwe resolver- en overlay-services;
-- of scenario-aware snapshots aparte keys krijgen of tijdelijk bestaande keys overschrijven;
+- of scenario-aware snapshots op termijn nog verder gestandaardiseerd moeten worden;
 - hoe percentages in `Aandelen` exact opnieuw worden afgeleid na overlay-patches;
 - of `Open Opties` en `Optie Tijdswaarde` in een latere fase dezelfde overlay-architectuur volgen;
 - hoe bucket 2 en 3 later op dezelfde resolver aansluiten.
