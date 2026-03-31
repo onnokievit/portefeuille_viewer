@@ -45,8 +45,11 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self._snapshot_reload_timer.timeout.connect(self.reload_data)
         self._watched_snapshot_keys = {
             "repository_snapshot_portfolio_value_optie_call_put_detailed",
+            "repository_snapshot_portfolio_value_optie_call_put_detailed_scenario",
             "repository_snapshot_portfolio_value_aandelen",
+            "repository_snapshot_portfolio_value_aandelen_scenario",
             "repository_snapshot_portfolio_value_sprinters",
+            "repository_snapshot_portfolio_value_sprinters_scenario",
             "repository_snapshot_portfolio_value_total_combined_put",
         }
         self.reload_data()
@@ -229,9 +232,27 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self.reload_data()
 
     def reload_data(self):
-        df_opties = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
-        df_aandelen = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
-        df_sprinters = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters", None)
+        use_scenario = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False))
+        df_opties = (
+            getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed_scenario", None)
+            if use_scenario else None
+        )
+        if df_opties is None:
+            df_opties = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
+
+        df_aandelen = (
+            getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen_scenario", None)
+            if use_scenario else None
+        )
+        if df_aandelen is None:
+            df_aandelen = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
+
+        df_sprinters = (
+            getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters_scenario", None)
+            if use_scenario else None
+        )
+        if df_sprinters is None:
+            df_sprinters = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters", None)
 
         df_opties = df_opties if df_opties is not None else pl.DataFrame()
         df_aandelen = df_aandelen if df_aandelen is not None else pl.DataFrame()
@@ -293,9 +314,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "pieChartValueDelta": data_delta.get("value_aandelen_put_delta", {}),
             "pieChartValueDeltaPutITM": data_delta.get("value_aandelen_delta_all", {}),
         }
-        df_opties_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_optie_call_put_detailed", None)
-        df_aandelen_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_aandelen", None)
-        df_sprinters_vg = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_sprinters", None)
+        df_opties_vg = df_opties
+        df_aandelen_vg = df_aandelen
+        df_sprinters_vg = df_sprinters
         df_opties_vg = df_opties_vg if df_opties_vg is not None else pl.DataFrame()
         df_aandelen_vg = df_aandelen_vg if df_aandelen_vg is not None else pl.DataFrame()
         df_sprinters_vg = df_sprinters_vg if df_sprinters_vg is not None else pl.DataFrame()
