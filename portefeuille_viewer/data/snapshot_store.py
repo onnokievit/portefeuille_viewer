@@ -1,5 +1,6 @@
 import contextlib
 import polars as pl
+from typing import Any
 
 
 class SnapshotStore:
@@ -48,6 +49,7 @@ class SnapshotStore:
         self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
         self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
         self.active_database_name: str | None = None
+        self.state_engine_runner: Any | None = None
         self._last_update_ts = {}
 
     def clear(self):
@@ -87,6 +89,7 @@ class SnapshotStore:
         self.snapshot_optie_timevalue_live = None
         self.snapshot_optie_timevalue_summary = None
         self.snapshot_optie_timevalue_meta = None
+        self.state_engine_runner = None
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""

@@ -49,8 +49,8 @@ def qt_message_handler(mode, context, message):
 qInstallMessageHandler(qt_message_handler)
 
 # Forceer Python om deze map als eerste te gebruiken
-#sys.path.insert(0, os.path.dirname(__file__))
-sys.path.insert(0, os.path.dirname(inspect.getfile(inspect.currentframe())))
+# sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 print("✅ Repository geladen uit:", repository.__file__)
 
@@ -1152,10 +1152,9 @@ def main():
     )
     font = QFont()
     font.setPointSize(9)
-    try:
-        font.setWeight(QFont.Weight.DemiBold)
-    except AttributeError:
-        font.setWeight(QFont.DemiBold)
+    demi_bold = getattr(getattr(QFont, "Weight", None), "DemiBold", None)
+    if demi_bold is not None:
+        font.setWeight(demi_bold)
     app.setFont(font)
     settings = get_settings()
     price_feed = PriceFeedService(
@@ -1172,7 +1171,7 @@ def main():
     )
     option_timevalue_service = OptionTimevalueService(price_feed, STOCKDATA_DB_PATH)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
-    w.option_timevalue_service = option_timevalue_service
+    setattr(w, "option_timevalue_service", option_timevalue_service)
     w.show()
     # Start price-update pas nadat UI volledig staat en event-loop idle is.
     QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)
