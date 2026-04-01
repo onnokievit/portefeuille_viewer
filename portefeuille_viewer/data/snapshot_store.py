@@ -47,6 +47,8 @@ class SnapshotStore:
         self.repository_dirty_test_orders_assets: set = set()
         self.repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None = None
         self.repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame] = {}
+        self.runtime_bucket23_out_of_sync: bool = True
+        self.runtime_bucket23_dirty_reason: str | None = "startup"
         self.runtime_active_test_order_scenario_id: int | None = None
         self.runtime_test_orders_enabled: bool = False
         self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
@@ -100,6 +102,8 @@ class SnapshotStore:
         self.repository_dirty_test_orders_assets = set()
         self.repository_snapshot_active_scenario_orders_flat = None
         self.repository_snapshot_active_scenario_orders_by_asset = {}
+        self.runtime_bucket23_out_of_sync = True
+        self.runtime_bucket23_dirty_reason = "database_change"
         self.runtime_active_test_order_scenario_id = None
         self.runtime_test_orders_enabled = False
         self.repository_snapshot_open_optie_comments = None
@@ -237,6 +241,11 @@ class SnapshotStore:
             parts.append(
                 "Active Scenario Orders Flat: "
                 f"{len(self.repository_snapshot_active_scenario_orders_flat)} rijen"
+            )
+        if self.runtime_bucket23_out_of_sync:
+            parts.append(
+                "Bucket2/3 Out Of Sync"
+                + (f": {self.runtime_bucket23_dirty_reason}" if self.runtime_bucket23_dirty_reason else "")
             )
         if self.snapshot_optie_timevalue_live is not None:
             parts.append(f"Optie Timevalue Live: {len(self.snapshot_optie_timevalue_live)} rijen")

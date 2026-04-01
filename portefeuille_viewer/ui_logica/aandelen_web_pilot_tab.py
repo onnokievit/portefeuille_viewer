@@ -17,6 +17,9 @@ from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.services.scenario_aandelen_overlay import build_aandelen_scenario_overlay_df
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import (
+    GeneratedOptionOrdersDialog,
+)
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 
 try:
@@ -318,6 +321,16 @@ class AandelenWebPilotTab(QWidget):
         except Exception as exc:
             print(f"[aandelen-web] save column widths failed: {exc}")
 
+    def _open_generated_option_orders_popup(self) -> None:
+        dialog = getattr(self, "_generated_option_orders_dialog", None)
+        if dialog is None:
+            dialog = GeneratedOptionOrdersDialog(self)
+            dialog.setModal(False)
+            self._generated_option_orders_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _export_snapshot(self):
         df = self._current_snapshot_df()
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
@@ -498,6 +511,7 @@ class AandelenWebPilotTab(QWidget):
         Table live update
       </label>
       <button id="btn_export_snapshot">Export snapshot</button>
+      <button id="btn_generated_options">Generated options</button>
     </div>
     <div class="table-shell">
       <div class="table-scroll" id="table-scroll">
@@ -1117,6 +1131,14 @@ class AandelenWebPilotTab(QWidget):
             }
           });
         }
+        const btnGenerated = document.getElementById("btn_generated_options");
+        if (btnGenerated) {
+          btnGenerated.addEventListener("click", () => {
+            if (state.bridge && state.bridge.openGeneratedOptionsEditor) {
+              try { state.bridge.openGeneratedOptionsEditor(); } catch (_) {}
+            }
+          });
+        }
       }
 
       window.renderMeta = function(meta) {
@@ -1346,3 +1368,7 @@ class _AandelenWebBridge(QObject):
     @Slot()
     def exportSnapshot(self) -> None:
         self._tab._export_snapshot()
+
+    @Slot()
+    def openGeneratedOptionsEditor(self) -> None:
+        self._tab._open_generated_option_orders_popup()

@@ -11,6 +11,13 @@ TEST_ORDER_SCENARIOS_TABLE = "transacties_test_order_scenarios"
 TEST_ORDER_SCENARIO_CONTENT_TABLE = "transacties_test_order_scenario_content"
 DEFAULT_TEST_ORDER_SCENARIO_NAME = "Default"
 SCENARIO_ORDER_UID_COL = "scenario_order_uid"
+SOURCE_BUCKET_COL = "source_bucket"
+SOURCE_TYPE_COL = "source_type"
+BASE_POSITION_UNIEK_ID_COL = "base_position_uniek_id"
+PARENT_CHANGE_UID_COL = "parent_change_uid"
+CHANGE_KIND_COL = "change_kind"
+
+BUCKET_1 = "bucket_1"
 
 TEST_ORDER_COLS = [
     "broker",
@@ -25,6 +32,11 @@ TEST_ORDER_COLS = [
     "create_date",
     "include",
     SCENARIO_ORDER_UID_COL,
+    SOURCE_BUCKET_COL,
+    SOURCE_TYPE_COL,
+    BASE_POSITION_UNIEK_ID_COL,
+    PARENT_CHANGE_UID_COL,
+    CHANGE_KIND_COL,
 ]
 
 def _empty_orders_df() -> pl.DataFrame:
@@ -56,7 +68,7 @@ def ensure_test_order_scenario_schema() -> None:
     with get_connection() as conn:
         cur = conn.cursor()
 
-        # Base tabel uitbreiden met stabiele scenario uid.
+        # Base tabel uitbreiden met scenario metadata voor bucket 1/2/3.
         cols = _column_names(cur, "transacties_test_orders")
         if SCENARIO_ORDER_UID_COL not in cols:
             try:
@@ -65,6 +77,20 @@ def ensure_test_order_scenario_schema() -> None:
                 )
             except Exception:
                 pass
+        for col_name in (
+            SOURCE_BUCKET_COL,
+            SOURCE_TYPE_COL,
+            BASE_POSITION_UNIEK_ID_COL,
+            PARENT_CHANGE_UID_COL,
+            CHANGE_KIND_COL,
+        ):
+            if col_name not in cols:
+                try:
+                    cur.execute(
+                        f"ALTER TABLE transacties_test_orders ADD COLUMN {col_name} TEXT(255)"
+                    )
+                except Exception:
+                    pass
 
         # Missende uid's backfillen zodat scenario-content niet op vluchtige autonummers hoeft te leunen.
         try:
@@ -76,6 +102,14 @@ def ensure_test_order_scenario_schema() -> None:
                     f"UPDATE transacties_test_orders SET {SCENARIO_ORDER_UID_COL}=? WHERE Id=?",
                     (str(uuid.uuid4()), int(row[0])),
                 )
+        except Exception:
+            pass
+        try:
+            cur.execute(
+                f"UPDATE transacties_test_orders SET {SOURCE_BUCKET_COL}=? "
+                f"WHERE {SOURCE_BUCKET_COL} IS NULL OR {SOURCE_BUCKET_COL}=''",
+                (BUCKET_1,),
+            )
         except Exception:
             pass
 
@@ -205,7 +239,10 @@ def get_effective_test_orders_for_asset(
     if effective_scenario_id is None or SCENARIO_ORDER_UID_COL not in df_orders.columns:
         return df_orders
     content_map = get_cached_test_order_scenario_content_map(effective_scenario_id)
-    enabled_uids = set(content_map.keys())
+    enabled_uids = {
+        uid for uid, row in content_map.items()
+        if int(row.get("enabled") or 0) == 1
+    }
     return df_orders.with_columns(
         pl.col(SCENARIO_ORDER_UID_COL)
         .cast(pl.Utf8, strict=False)
@@ -394,20 +431,20 @@ def save_scenario_content_for_visible_rows(scenario_id: int, df: pl.DataFrame | 
         for row in rows
         if str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
     ]
-    enabled_rows = [row for row in rows if str(row.get("include", 0)).strip() in {"1", "True", "true"} or row.get("include") == 1]
     cache = getattr(SNAPSHOT_STORE, "repository_snapshot_test_order_scenario_content", {}) or {}
     scenario_map = dict(cache.get(int(scenario_id), {}) or {})
     for uid in visible_uids:
         scenario_map.pop(uid, None)
     now = dt.datetime.now()
-    for row in enabled_rows:
+    for row in rows:
         uid = str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
         if not uid:
             continue
+        enabled = 1 if (str(row.get("include", 0)).strip() in {"1", "True", "true"} or row.get("include") == 1) else 0
         scenario_map[uid] = {
             "scenario_id": int(scenario_id),
             SCENARIO_ORDER_UID_COL: uid,
-            "enabled": 1,
+            "enabled": enabled,
             "execution_family": None,
             "expected_outcome": None,
             "override_price": None,
@@ -519,7 +556,9 @@ def get_test_orders(asset_rollup: str | None = None, scenario_id: int | None = N
     where = " WHERE asset_rollup = ?" if asset_rollup else ""
     params = [asset_rollup] if asset_rollup else None
     sql = (
-        f"SELECT Id, {SCENARIO_ORDER_UID_COL}, broker, asset_rollup, asset_type, transactie_type, "
+        f"SELECT Id, {SCENARIO_ORDER_UID_COL}, {SOURCE_BUCKET_COL}, {SOURCE_TYPE_COL}, "
+        f"{BASE_POSITION_UNIEK_ID_COL}, {PARENT_CHANGE_UID_COL}, {CHANGE_KIND_COL}, "
+        "broker, asset_rollup, asset_type, transactie_type, "
         "transactie_aantal, transactie_prijs, optie_call_put, "
         "optie_strike, optie_exp_date, create_date , include "
         "FROM transacties_test_orders" + where +
@@ -553,9 +592,22 @@ def get_test_orders(asset_rollup: str | None = None, scenario_id: int | None = N
             df = df.with_columns(pl.col("create_date").cast(pl.Utf8).fill_null("").alias("create_date"))
     if SCENARIO_ORDER_UID_COL in df.columns:
         df = df.with_columns(pl.col(SCENARIO_ORDER_UID_COL).cast(pl.Utf8).fill_null("").alias(SCENARIO_ORDER_UID_COL))
+    for col_name in (
+        SOURCE_BUCKET_COL,
+        SOURCE_TYPE_COL,
+        BASE_POSITION_UNIEK_ID_COL,
+        PARENT_CHANGE_UID_COL,
+        CHANGE_KIND_COL,
+    ):
+        if col_name in df.columns:
+            default_value = BUCKET_1 if col_name == SOURCE_BUCKET_COL else ""
+            df = df.with_columns(pl.col(col_name).cast(pl.Utf8).fill_null(default_value).alias(col_name))
     if scenario_id is not None and df.height > 0 and SCENARIO_ORDER_UID_COL in df.columns:
         content_map = get_test_order_scenario_content_map(int(scenario_id))
-        enabled_uids = set(content_map.keys())
+        enabled_uids = {
+            uid for uid, row in content_map.items()
+            if int(row.get("enabled") or 0) == 1
+        }
         df = df.with_columns(
             pl.col(SCENARIO_ORDER_UID_COL)
             .map_elements(lambda uid: 1 if str(uid or "").strip() in enabled_uids else 0, return_dtype=pl.Int64)
@@ -658,6 +710,11 @@ def _normalize_order_row(row: dict) -> dict:
     data["create_date"] = dt_val(data.get("create_date")) or dt.datetime.now()
     uid = str(data.get(SCENARIO_ORDER_UID_COL) or "").strip()
     data[SCENARIO_ORDER_UID_COL] = uid or str(uuid.uuid4())
+    data[SOURCE_BUCKET_COL] = str(data.get(SOURCE_BUCKET_COL) or "").strip() or BUCKET_1
+    data[SOURCE_TYPE_COL] = str(data.get(SOURCE_TYPE_COL) or "").strip() or None
+    data[BASE_POSITION_UNIEK_ID_COL] = str(data.get(BASE_POSITION_UNIEK_ID_COL) or "").strip() or None
+    data[PARENT_CHANGE_UID_COL] = str(data.get(PARENT_CHANGE_UID_COL) or "").strip() or None
+    data[CHANGE_KIND_COL] = str(data.get(CHANGE_KIND_COL) or "").strip() or None
     inc = data.get("include", 1)
     try:
         data["include"] = int(inc)

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy
+from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QPushButton, QCheckBox, QApplication
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QTimer
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
@@ -9,6 +9,10 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.filter_popup import HeaderFilterMenuMixin
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import GeneratedOptionOrdersDialog
+from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
+from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
+from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
 
 class PercentColoredPolarsModel(QAbstractTableModel):
     """
@@ -231,6 +235,15 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.btnClearFilter = getattr(self.ui, "btnClearFilter", None) or getattr(self.ui, "pushButton_2", None)
         if self.btnClearFilter is not None:
             self.btnClearFilter.clicked.connect(self._on_clear_filters_clicked)
+            self.btnGeneratedOptions = QPushButton("Generated options", self.ui.widget)
+            self.checkEnableTestOrders = QCheckBox("Enable", self.ui.widget)
+            self.checkEnableTestOrders.setChecked(bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)))
+            parent_layout = self.btnClearFilter.parentWidget().layout() if self.btnClearFilter.parentWidget() is not None else None
+            if parent_layout is not None:
+                parent_layout.addWidget(self.btnGeneratedOptions)
+                parent_layout.addWidget(self.checkEnableTestOrders)
+            self.btnGeneratedOptions.clicked.connect(self._open_generated_options_dialog)
+            self.checkEnableTestOrders.toggled.connect(self._on_toggle_enable_test_orders)
 
         # Header contextmenu voor filters/sorteren
         header = self.ui.tableView.horizontalHeader()
@@ -278,6 +291,41 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         signals.snapshotUpdated.connect(_on_snapshot_updated)
         signals.stateRebuildFinished.connect(_on_state_rebuild_finished)
         signals.uiStyleChanged.connect(self._on_ui_style_changed)
+
+    def _open_generated_options_dialog(self) -> None:
+        dialog = getattr(self, "_generated_option_orders_dialog", None)
+        if dialog is None:
+            dialog = GeneratedOptionOrdersDialog(self)
+            dialog.setModal(False)
+            self._generated_option_orders_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _apply_test_orders_enabled_state(self, checked: bool) -> None:
+        SNAPSHOT_STORE.runtime_test_orders_enabled = bool(checked)
+        scenario_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
+        if scenario_id is None:
+            return
+        refresh_portfolio_value_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
+        refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=bool(checked))
+        refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
+        app = QApplication.instance()
+        if app is None:
+            return
+        for widget in app.allWidgets():
+            if widget is self.checkEnableTestOrders:
+                continue
+            if getattr(widget, "objectName", lambda: "")() == "checkBoxEnableTestOrders":
+                widget.blockSignals(True)
+                try:
+                    if isinstance(widget, QCheckBox):
+                        widget.setChecked(bool(checked))
+                finally:
+                    widget.blockSignals(False)
+
+    def _on_toggle_enable_test_orders(self, checked: bool) -> None:
+        self._apply_test_orders_enabled_state(bool(checked))
 
     def _on_header_clicked(self, section: int):
         """Klik op kolomheader toggelt sorteerorde via proxy model."""

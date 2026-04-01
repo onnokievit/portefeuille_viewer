@@ -2,7 +2,12 @@ import polars as pl
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.test_order_repository import (
+    BASE_POSITION_UNIEK_ID_COL,
+    CHANGE_KIND_COL,
+    PARENT_CHANGE_UID_COL,
     SCENARIO_ORDER_UID_COL,
+    SOURCE_BUCKET_COL,
+    SOURCE_TYPE_COL,
     ensure_default_test_order_scenario,
     get_cached_test_order_scenario_content_map,
     load_test_order_scenarios_cache_from_db,
@@ -20,6 +25,11 @@ SCENARIO_RESOLVED_COLS = [
     "override_amount",
     "Id",
     SCENARIO_ORDER_UID_COL,
+    SOURCE_BUCKET_COL,
+    SOURCE_TYPE_COL,
+    BASE_POSITION_UNIEK_ID_COL,
+    PARENT_CHANGE_UID_COL,
+    CHANGE_KIND_COL,
     "broker",
     "asset_rollup",
     "asset_type",
@@ -157,4 +167,3 @@ def refresh_active_scenario_orders_snapshot(
         else {}
     )
     return resolved_df
-

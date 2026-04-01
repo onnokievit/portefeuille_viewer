@@ -44,11 +44,16 @@ from portefeuille_viewer.services.scenario_sector_overlay import (
 from portefeuille_viewer.services.scenario_aandelen_overlay import (
     refresh_aandelen_scenario_overlay_snapshot,
 )
+from portefeuille_viewer.services.scenario_generated_option_sync import (
+    mark_bucket23_out_of_sync,
+)
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
+    BUCKET_1,
     SCENARIO_ORDER_UID_COL,
     DEFAULT_TEST_ORDER_SCENARIO_NAME,
+    SOURCE_BUCKET_COL,
     create_test_order_scenario_in_cache,
     delete_test_order_scenario_in_cache,
     ensure_default_test_order_scenario,
@@ -786,6 +791,44 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_opties_open_table()
         self.update_aandelen_table()
 
+    def _manual_test_orders_only(self, df_orders: pl.DataFrame | None) -> pl.DataFrame | None:
+        if df_orders is None:
+            return None
+        if df_orders.is_empty() or SOURCE_BUCKET_COL not in df_orders.columns:
+            return df_orders
+        return df_orders.filter(
+            pl.col(SOURCE_BUCKET_COL).fill_null(BUCKET_1).cast(pl.Utf8, strict=False) == BUCKET_1
+        )
+
+    def _merge_manual_with_existing_generated(
+        self,
+        asset_rollup: str,
+        manual_df: pl.DataFrame | None,
+    ) -> pl.DataFrame:
+        existing_df = get_cached_orders(asset_rollup)
+        generated_df = None
+        if existing_df is not None and not existing_df.is_empty() and SOURCE_BUCKET_COL in existing_df.columns:
+            generated_df = existing_df.filter(
+                pl.col(SOURCE_BUCKET_COL).fill_null(BUCKET_1).cast(pl.Utf8, strict=False) != BUCKET_1
+            )
+
+        if manual_df is not None and not manual_df.is_empty():
+            if SOURCE_BUCKET_COL not in manual_df.columns:
+                manual_df = manual_df.with_columns(pl.lit(BUCKET_1).alias(SOURCE_BUCKET_COL))
+            else:
+                manual_df = manual_df.with_columns(
+                    pl.col(SOURCE_BUCKET_COL).fill_null(BUCKET_1).cast(pl.Utf8, strict=False).alias(SOURCE_BUCKET_COL)
+                )
+
+        if generated_df is not None and not generated_df.is_empty():
+            if manual_df is not None and not manual_df.is_empty():
+                return pl.concat([manual_df, generated_df], how="diagonal_relaxed")
+            return generated_df
+
+        if manual_df is not None:
+            return manual_df
+        return pl.DataFrame()
+
     def _refresh_test_orders_view_for_active_asset(self, asset_rollup):
         if self._current_scenario_id is not None:
             if getattr(self, "show_all_test_orders", False):
@@ -813,7 +856,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 df_orders = None
         else:
             df_orders = get_cached_orders(asset_rollup)
-        self.fill_test_orders_table(df_orders)
+        self.fill_test_orders_table(self._manual_test_orders_only(df_orders))
 
     def _init_test_order_scenarios(self):
         combo = getattr(self, "comboboxScenarioSelector", None)
@@ -995,6 +1038,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if selected_scenario_id == scenario_id:
                 selected_scenario_id = None
 
+        flush_dirty_test_order_scenarios_to_db()
+        load_test_order_scenarios_cache_from_db()
         if selected_scenario_id is None:
             selected_scenario_id = ensure_default_test_order_scenario()
         self._reload_scenario_selector(selected_scenario_id=selected_scenario_id)
@@ -1270,7 +1315,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             df = pl.concat(cache.values(), how="diagonal_relaxed") if cache else None
         else:
             df = get_cached_orders(asset)
-        self.fill_test_orders_table(df)
+        self.fill_test_orders_table(self._manual_test_orders_only(df))
 
     @Slot(bool)
     def on_toggle_enable_test_orders(self, checked):
@@ -1369,10 +1414,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if getattr(self, "show_all_test_orders", False):
             for asset_val in df_asset["asset_rollup"].unique().to_list():
                 df_sub = df_asset.filter(pl.col("asset_rollup") == asset_val)
-                set_cached_orders_for_asset(asset_val, df_sub)
+                set_cached_orders_for_asset(
+                    asset_val,
+                    self._merge_manual_with_existing_generated(asset_val, df_sub),
+                )
         else:
             asset_rollup = self.asset_selector.currentText()
-            set_cached_orders_for_asset(asset_rollup, df_asset)
+            set_cached_orders_for_asset(
+                asset_rollup,
+                self._merge_manual_with_existing_generated(asset_rollup, df_asset),
+            )
         self._persist_current_scenario_selection_from_table()
         refresh_active_scenario_orders_snapshot(self._current_scenario_id)
         refresh_portfolio_value_scenario_overlay_snapshot(
@@ -1718,10 +1769,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 df_asset_remaining = df_remaining.filter(pl.col("asset_rollup") == deleted_asset)
             else:
                 df_asset_remaining = pl.DataFrame({c: [] for c in self.test_order_columns})
-            set_cached_orders_for_asset(deleted_asset, df_asset_remaining)
+            set_cached_orders_for_asset(
+                deleted_asset,
+                self._merge_manual_with_existing_generated(deleted_asset, df_asset_remaining),
+            )
         else:
             # single-asset mode: tabel bevat alleen dit asset
-            set_cached_orders_for_asset(deleted_asset, df_remaining)
+            set_cached_orders_for_asset(
+                deleted_asset,
+                self._merge_manual_with_existing_generated(deleted_asset, df_remaining),
+            )
 
         self._debug_print_test_orders_cache(f"after delete id={order_id} asset={deleted_asset}")
         if not self.testOrderFlushTimer.isActive():
@@ -1880,11 +1937,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def on_database_changed(self, db_name):
         # Hier vul je asset_selector, regio, value_grow etc opnieuw
         #print("Database changed:", db_name)
+        mark_bucket23_out_of_sync("database_changed")
         self._reset_local_state_for_database_change()
         self._reset_filters_for_database_change()
         self._refresh_views_after_database_change()
         
     def on_orders_committed(self, payload: dict | None = None):
+        mark_bucket23_out_of_sync("orders_committed")
         self._live_summary_asset = None
         self._live_summary_row = None
         self._schedule_summary_reload()
