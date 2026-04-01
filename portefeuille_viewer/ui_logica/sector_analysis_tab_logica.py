@@ -59,6 +59,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         self.reload_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
         signals.stateRebuildFinished.connect(self._on_state_rebuild_finished)
+        signals.testOrdersEnabledChanged.connect(self._on_test_orders_enabled_changed)
         if hasattr(self, "putOTMRatio"):
             try:
                 self.putOTMRatio.setValue(100)
@@ -99,22 +100,17 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         refresh_portfolio_value_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
         refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=bool(checked))
         refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
-        app = QApplication.instance()
-        if app is None:
-            return
-        for widget in app.allWidgets():
-            if widget is self.checkEnableTestOrders:
-                continue
-            if getattr(widget, "objectName", lambda: "")() == "checkBoxEnableTestOrders":
-                widget.blockSignals(True)
-                try:
-                    if isinstance(widget, QCheckBox):
-                        widget.setChecked(bool(checked))
-                finally:
-                    widget.blockSignals(False)
+        signals.queued_emit_testOrdersEnabledChanged(bool(checked))
 
     def _on_toggle_enable_test_orders(self, checked: bool) -> None:
         self._apply_test_orders_enabled_state(bool(checked))
+
+    def _on_test_orders_enabled_changed(self, enabled: bool) -> None:
+        self.checkEnableTestOrders.blockSignals(True)
+        try:
+            self.checkEnableTestOrders.setChecked(bool(enabled))
+        finally:
+            self.checkEnableTestOrders.blockSignals(False)
 
     def _get_pie_frame(self, primary_name: str, fallback_name: str | None = None):
         if hasattr(self, primary_name):

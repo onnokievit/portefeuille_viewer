@@ -55,6 +55,13 @@ class Signals(QObject):
     # Emitted when a background projection result is ready to publish on main thread.
     # Payload: projection/view key (str)
     projectionPublishTick = Signal(str)
+
+    # Emitted when test-order scenario definitions change (create/rename/delete).
+    testOrderScenariosChanged = Signal()
+
+    # Emitted when the global test-orders enabled state changes.
+    testOrdersEnabledChanged = Signal(bool)
+
     
     # In signals.py
     #liveDataShouldUpdate = Signal()
@@ -95,6 +102,13 @@ class Signals(QObject):
 
     def queued_emit_projectionPublishTick(self, view_key: str):
         QTimer.singleShot(0, lambda: self.projectionPublishTick.emit(view_key))
+
+    def queued_emit_testOrderScenariosChanged(self):
+        QTimer.singleShot(0, lambda: self.testOrderScenariosChanged.emit())
+
+    def queued_emit_testOrdersEnabledChanged(self, enabled: bool):
+        QTimer.singleShot(0, lambda: self.testOrdersEnabledChanged.emit(bool(enabled)))
+
 
 
 signals = Signals()

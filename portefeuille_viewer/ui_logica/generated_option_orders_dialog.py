@@ -19,23 +19,29 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.data.test_order_repository import (
     BUCKET_1,
     CHANGE_KIND_COL,
+    DEFAULT_TEST_ORDER_SCENARIO_NAME,
     PARENT_CHANGE_UID_COL,
     SCENARIO_ORDER_UID_COL,
     SOURCE_BUCKET_COL,
+    create_test_order_scenario_in_cache,
+    delete_test_order_scenario_in_cache,
     ensure_default_test_order_scenario,
     flush_dirty_test_order_scenarios_to_db,
     get_cached_test_order_scenario_content_map,
     get_cached_test_order_scenarios,
     get_test_orders,
     load_test_order_scenarios_cache_from_db,
+    rename_test_order_scenario_in_cache,
     save_scenario_content_for_visible_rows,
 )
 from portefeuille_viewer.services.scenario_aandelen_overlay import (
@@ -163,6 +169,86 @@ class MultiSelectFilterDialog(QDialog):
         self._render_list()
 
 
+class ScenarioManagerDialog(QDialog):
+    def __init__(self, scenarios_df: pl.DataFrame, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("Scenario beheer")
+        self.resize(520, 420)
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(1)
+        self.table.setHorizontalHeaderLabels(["Scenario naam"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        layout.addWidget(self.table)
+
+        button_row = QHBoxLayout()
+        self.button_add = QPushButton("Add", self)
+        self.button_delete = QPushButton("Delete", self)
+        self.button_save = QPushButton("Opslaan", self)
+        self.button_cancel = QPushButton("Sluiten", self)
+        button_row.addWidget(self.button_add)
+        button_row.addWidget(self.button_delete)
+        button_row.addStretch(1)
+        button_row.addWidget(self.button_save)
+        button_row.addWidget(self.button_cancel)
+        layout.addLayout(button_row)
+
+        self.button_add.clicked.connect(self.add_empty_row)
+        self.button_delete.clicked.connect(self.delete_selected_row)
+        self.button_save.clicked.connect(self.accept)
+        self.button_cancel.clicked.connect(self.reject)
+
+        rows = sorted(
+            scenarios_df.to_dicts(),
+            key=lambda row: str(row.get("scenario_name") or "").strip().lower(),
+        ) if scenarios_df is not None and not scenarios_df.is_empty() else []
+        self.table.setRowCount(len(rows))
+        for row_idx, row in enumerate(rows):
+            item = QTableWidgetItem(str(row.get("scenario_name") or ""))
+            item.setData(Qt.UserRole, int(row.get("scenario_id")))
+            if str(row.get("scenario_name") or "").strip() == DEFAULT_TEST_ORDER_SCENARIO_NAME:
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row_idx, 0, item)
+
+    def add_empty_row(self):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        item = QTableWidgetItem("")
+        item.setData(Qt.UserRole, None)
+        self.table.setItem(row, 0, item)
+        self.table.setCurrentCell(row, 0)
+        self.table.editItem(item)
+
+    def delete_selected_row(self):
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        item = self.table.item(row, 0)
+        if item is not None and str(item.text() or "").strip() == DEFAULT_TEST_ORDER_SCENARIO_NAME:
+            return
+        self.table.removeRow(row)
+        remaining = self.table.rowCount()
+        if remaining <= 0:
+            return
+        next_row = min(row, remaining - 1)
+        self.table.setCurrentCell(next_row, 0)
+
+    def get_rows(self) -> list[dict]:
+        rows = []
+        for row_idx in range(self.table.rowCount()):
+            item = self.table.item(row_idx, 0)
+            if item is None:
+                continue
+            name = str(item.text() or "").strip()
+            if not name:
+                continue
+            rows.append({
+                "scenario_id": item.data(Qt.UserRole),
+                "scenario_name": name,
+            })
+        return rows
+
+
 class GeneratedOptionOrdersDialog(QDialog):
     @staticmethod
     def _scenario_content_safe_df(rows: list[dict]) -> pl.DataFrame:
@@ -189,6 +275,11 @@ class GeneratedOptionOrdersDialog(QDialog):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Generated Option Orders")
+        self.setWindowFlag(Qt.Window, True)
+        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowCloseButtonHint, True)
+        self.setSizeGripEnabled(True)
         self.resize(1180, 760)
         self._scenario_id: int | None = None
         self._bucket1_df = pl.DataFrame()
@@ -204,24 +295,18 @@ class GeneratedOptionOrdersDialog(QDialog):
         self._exp_filter_options: list[str] = []
         self._exp_filter_selected: set[str] = set()
         self._suppress_bucket2_item_changed = False
+        self._bucket3_collapsed = True
 
         layout = QVBoxLayout(self)
 
         controls = QHBoxLayout()
+        self.btnSync = QPushButton("Sync", self)
+        controls.addWidget(self.btnSync)
+        self.btnManageScenarios = QPushButton("Scenario beheer", self)
+        controls.addWidget(self.btnManageScenarios)
         controls.addWidget(QLabel("Scenario"))
         self.comboScenario = QComboBox(self)
         controls.addWidget(self.comboScenario)
-        self.checkEnableTestOrders = QCheckBox("Test Orders", self)
-        self.checkEnableTestOrders.setChecked(bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)))
-        controls.addWidget(self.checkEnableTestOrders)
-        self.btnSync = QPushButton("Sync", self)
-        controls.addWidget(self.btnSync)
-        self.btnSelectAll = QPushButton("Select all", self)
-        controls.addWidget(self.btnSelectAll)
-        self.btnSelectNone = QPushButton("Select none", self)
-        controls.addWidget(self.btnSelectNone)
-        self.btnSave = QPushButton("Save", self)
-        controls.addWidget(self.btnSave)
         self.btnClose = QPushButton("Close", self)
         controls.addWidget(self.btnClose)
         controls.addStretch(1)
@@ -237,7 +322,6 @@ class GeneratedOptionOrdersDialog(QDialog):
         filters.addWidget(self.btnAssetFilter)
         self.btnItmFilter = QPushButton("ITM/OTM", self)
         filters.addWidget(self.btnItmFilter)
-        filters.addWidget(QLabel("c/p"))
         self.filterCp = QComboBox(self)
         filters.addWidget(self.filterCp)
         self.btnExpFilter = QPushButton("Expiratie", self)
@@ -246,6 +330,11 @@ class GeneratedOptionOrdersDialog(QDialog):
         filters.addWidget(self.btnFilteredOn)
         self.btnFilteredOff = QPushButton("Selection off", self)
         filters.addWidget(self.btnFilteredOff)
+        self.btnSave = QPushButton("Save", self)
+        filters.addWidget(self.btnSave)
+        self.checkEnableTestOrders = QCheckBox("Test Orders", self)
+        self.checkEnableTestOrders.setChecked(bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)))
+        filters.addWidget(self.checkEnableTestOrders)
         self.btnClearFilters = QPushButton("Clear filters", self)
         filters.addWidget(self.btnClearFilters)
         filters.addStretch(1)
@@ -262,15 +351,21 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.tableBucket2 = self._create_table(self)
         layout.addWidget(self.tableBucket2, 1)
 
-        layout.addWidget(QLabel("Bucket 3 - Derived Option EOM", self))
+        bucket3_header = QHBoxLayout()
+        self.btnToggleBucket3 = QToolButton(self)
+        self.btnToggleBucket3.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.btnToggleBucket3.setArrowType(Qt.RightArrow)
+        self.btnToggleBucket3.setText("Bucket 3 - Derived Option EOM")
+        bucket3_header.addWidget(self.btnToggleBucket3)
+        bucket3_header.addStretch(1)
+        layout.addLayout(bucket3_header)
         self.tableBucket3 = self._create_table(self)
         layout.addWidget(self.tableBucket3, 1)
 
         self.comboScenario.currentIndexChanged.connect(self._on_scenario_changed)
+        self.btnManageScenarios.clicked.connect(self._open_scenario_manager)
         self.checkEnableTestOrders.toggled.connect(self._on_toggle_enable_test_orders)
         self.btnSync.clicked.connect(self._on_sync_clicked)
-        self.btnSelectAll.clicked.connect(lambda: self._set_all_checks(True))
-        self.btnSelectNone.clicked.connect(lambda: self._set_all_checks(False))
         self.btnFilteredOn.clicked.connect(lambda: self._set_filtered_bucket2_checks(True))
         self.btnFilteredOff.clicked.connect(lambda: self._set_filtered_bucket2_checks(False))
         self.btnClearFilters.clicked.connect(self._clear_filters)
@@ -283,9 +378,13 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.filterCp.currentIndexChanged.connect(self._apply_bucket2_filters)
         self.btnExpFilter.clicked.connect(self._open_expiry_filter_dialog)
         self.tableBucket2.itemChanged.connect(self._on_bucket2_item_changed)
+        self.btnToggleBucket3.clicked.connect(self._toggle_bucket3_collapsed)
+        signals.testOrderScenariosChanged.connect(self._on_test_order_scenarios_changed)
+        signals.testOrdersEnabledChanged.connect(self._on_test_orders_enabled_changed)
 
         self._reload_scenarios()
         self._reload_tables()
+        self._apply_bucket3_collapsed_state()
 
     @staticmethod
     def _create_table(parent: QWidget) -> QTableWidget:
@@ -305,7 +404,7 @@ class GeneratedOptionOrdersDialog(QDialog):
         combo.blockSignals(True)
         try:
             combo.clear()
-            combo.addItem("ALL")
+            combo.addItem("C/P")
             for value in values:
                 combo.addItem(value)
             idx = combo.findText(current)
@@ -313,9 +412,10 @@ class GeneratedOptionOrdersDialog(QDialog):
         finally:
             combo.blockSignals(False)
 
-    def _reload_scenarios(self) -> None:
+    def _reload_scenarios(self, selected_id: int | None = None) -> None:
         load_test_order_scenarios_cache_from_db()
-        selected_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
+        if selected_id is None:
+            selected_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
         if selected_id is None:
             selected_id = ensure_default_test_order_scenario()
         df = get_cached_test_order_scenarios()
@@ -344,10 +444,23 @@ class GeneratedOptionOrdersDialog(QDialog):
 
     def _generated_df_for_selected_scenario(self) -> pl.DataFrame:
         scenario_id = self._scenario_id or ensure_default_test_order_scenario()
-        df = get_test_orders(asset_rollup=None, scenario_id=scenario_id)
+        df = get_test_orders(asset_rollup=None, scenario_id=None)
         if df is None or df.is_empty():
             return pl.DataFrame()
-        return df
+        content_map = get_cached_test_order_scenario_content_map(int(scenario_id))
+        enabled_map = {
+            str(uid).strip(): int(row.get("enabled") or 0)
+            for uid, row in content_map.items()
+            if str(uid).strip()
+        }
+        if SCENARIO_ORDER_UID_COL not in df.columns:
+            return df.with_columns(pl.lit(0).alias("include"))
+        return df.with_columns(
+            pl.col(SCENARIO_ORDER_UID_COL)
+            .cast(pl.Utf8, strict=False)
+            .map_elements(lambda uid: int(enabled_map.get(str(uid or "").strip(), 0)), return_dtype=pl.Int64)
+            .alias("include")
+        )
 
     def _reload_tables(self) -> None:
         df = self._generated_df_for_selected_scenario()
@@ -382,6 +495,14 @@ class GeneratedOptionOrdersDialog(QDialog):
             f"bucket3={self._bucket3_df.height if not self._bucket3_df.is_empty() else 0}"
         )
 
+    def _toggle_bucket3_collapsed(self) -> None:
+        self._bucket3_collapsed = not self._bucket3_collapsed
+        self._apply_bucket3_collapsed_state()
+
+    def _apply_bucket3_collapsed_state(self) -> None:
+        self.tableBucket3.setVisible(not self._bucket3_collapsed)
+        self.btnToggleBucket3.setArrowType(Qt.RightArrow if self._bucket3_collapsed else Qt.DownArrow)
+
     def _fill_bucket_table(self, table: QTableWidget, df: pl.DataFrame, *, bucket3: bool) -> None:
         cols = [
             ("Incl", "include"),
@@ -396,8 +517,6 @@ class GeneratedOptionOrdersDialog(QDialog):
             ("Exp datum", "optie_exp_date"),
             ("Strike", "optie_strike"),
         ]
-        if bucket3:
-            cols.append(("Parent", PARENT_CHANGE_UID_COL))
 
         table.blockSignals(True)
         try:
@@ -484,8 +603,8 @@ class GeneratedOptionOrdersDialog(QDialog):
             (self.filterCp, "optie_call_put"),
         ]
         for combo, key in checks:
-            selected = (combo.currentText() or "ALL").strip()
-            if selected == "ALL":
+            selected = (combo.currentText() or "C/P").strip()
+            if selected in {"ALL", "C/P", ""}:
                 continue
             if key == "broker":
                 col = 2
@@ -722,20 +841,17 @@ class GeneratedOptionOrdersDialog(QDialog):
         refresh_portfolio_value_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
         refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=bool(checked))
         refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=bool(checked))
-        app = QApplication.instance()
-        if app is None:
-            return
-        for widget in app.allWidgets():
-            if getattr(widget, "objectName", lambda: "")() == "checkBoxEnableTestOrders":
-                widget.blockSignals(True)
-                try:
-                    if isinstance(widget, QCheckBox):
-                        widget.setChecked(bool(checked))
-                finally:
-                    widget.blockSignals(False)
+        signals.queued_emit_testOrdersEnabledChanged(bool(checked))
 
     def _on_toggle_enable_test_orders(self, checked: bool) -> None:
         self._apply_test_orders_enabled_state(bool(checked))
+
+    def _on_test_orders_enabled_changed(self, enabled: bool) -> None:
+        self.checkEnableTestOrders.blockSignals(True)
+        try:
+            self.checkEnableTestOrders.setChecked(bool(enabled))
+        finally:
+            self.checkEnableTestOrders.blockSignals(False)
 
     def _persist_current_scenario(self) -> None:
         scenario_id = self._scenario_id or ensure_default_test_order_scenario()
@@ -759,6 +875,73 @@ class GeneratedOptionOrdersDialog(QDialog):
         if data is None:
             return
         self._scenario_id = int(data)
+        self._reload_tables()
+
+    def _on_test_order_scenarios_changed(self) -> None:
+        load_test_order_scenarios_cache_from_db()
+        self._reload_scenarios(selected_id=self._scenario_id)
+        self._reload_tables()
+
+    def _open_scenario_manager(self) -> None:
+        df = get_cached_test_order_scenarios()
+        dialog = ScenarioManagerDialog(df, self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        rows = dialog.get_rows()
+        current_rows = get_cached_test_order_scenarios().to_dicts()
+        current_by_id = {int(row["scenario_id"]): row for row in current_rows}
+        remaining_ids = set(current_by_id.keys())
+        selected_scenario_id = self._scenario_id
+
+        for row in rows:
+            scenario_id = row.get("scenario_id")
+            if scenario_id is None:
+                continue
+            remaining_ids.discard(int(scenario_id))
+
+        seen_names = set()
+        for row in rows:
+            scenario_name = str(row.get("scenario_name") or "").strip()
+            if not scenario_name:
+                continue
+            key = scenario_name.lower()
+            scenario_id = row.get("scenario_id")
+
+            if scenario_id is None:
+                if key in seen_names:
+                    continue
+                seen_names.add(key)
+                new_id = create_test_order_scenario_in_cache(scenario_name)
+                if selected_scenario_id is None:
+                    selected_scenario_id = new_id
+                continue
+
+            scenario_id = int(scenario_id)
+            existing_name = str(current_by_id.get(scenario_id, {}).get("scenario_name") or "").strip()
+            if key in seen_names and existing_name.lower() != key:
+                continue
+            seen_names.add(key)
+            if existing_name != scenario_name:
+                try:
+                    rename_test_order_scenario_in_cache(scenario_id, scenario_name)
+                except ValueError:
+                    continue
+
+        for scenario_id in sorted(remaining_ids):
+            try:
+                delete_test_order_scenario_in_cache(scenario_id)
+            except ValueError:
+                continue
+            if selected_scenario_id == scenario_id:
+                selected_scenario_id = None
+
+        flush_dirty_test_order_scenarios_to_db()
+        load_test_order_scenarios_cache_from_db()
+        signals.queued_emit_testOrderScenariosChanged()
+        if selected_scenario_id is None:
+            selected_scenario_id = ensure_default_test_order_scenario()
+        self._reload_scenarios(selected_id=int(selected_scenario_id))
         self._reload_tables()
 
     def _on_sync_clicked(self) -> None:

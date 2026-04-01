@@ -310,9 +310,40 @@ class StateEngineRunner(QObject):
         with pyodbc.connect(conn_str) as conn:
             cur = conn.cursor()
             inserted = 0
+            updated = 0
             now = datetime.now()
             for asset in assets:
                 for asset_class in classes:
+                    asset_value = str(asset).strip()
+                    class_value = str(asset_class).strip().lower()
+                    existing = cur.execute(
+                        """
+                        SELECT TOP 1 Id
+                        FROM state_rebuild_queue
+                        WHERE asset_rollup=?
+                          AND asset_class=?
+                          AND from_date=?
+                          AND reason=?
+                          AND status IN ('pending', 'running')
+                        ORDER BY Id DESC
+                        """,
+                        asset_value,
+                        class_value,
+                        from_date_value,
+                        reason,
+                    ).fetchone()
+                    if existing:
+                        cur.execute(
+                            """
+                            UPDATE state_rebuild_queue
+                            SET updated_at=?
+                            WHERE Id=?
+                            """,
+                            now,
+                            int(existing[0]),
+                        )
+                        updated += 1
+                        continue
                     cur.execute(
                         """
                         INSERT INTO state_rebuild_queue
@@ -320,15 +351,15 @@ class StateEngineRunner(QObject):
                         VALUES (?, ?, ?, ?, ?, 'pending', Null, ?)
                         """,
                         now,
-                        str(asset).strip(),
-                        str(asset_class).strip().lower(),
+                        asset_value,
+                        class_value,
                         from_date_value,
                         reason,
                         now,
                     )
                     inserted += 1
             conn.commit()
-        print(f"[state-engine-runner] queued pending order rebuild rows: {inserted}")
+        print(f"[state-engine-runner] queued pending order rebuild rows: {inserted} (dedup-updated={updated})")
 
     def _claim_pending_order_rebuild_bundle(self) -> dict | None:
         db_path = getattr(repository, "db_path", None)
@@ -339,23 +370,27 @@ class StateEngineRunner(QObject):
         queue_run_id = str(uuid.uuid4())
         with pyodbc.connect(conn_str) as conn:
             cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE state_rebuild_queue
+                SET status='running', run_id=?, updated_at=?
+                WHERE status='pending'
+                """,
+                queue_run_id,
+                datetime.now(),
+            )
+            conn.commit()
             rows = cur.execute(
                 """
                 SELECT Id, asset_rollup, asset_class, from_date, reason
                 FROM state_rebuild_queue
-                WHERE status='pending'
+                WHERE run_id=?
                 """
+                ,
+                queue_run_id,
             ).fetchall()
             if not rows:
                 return None
-
-            ids = [int(r[0]) for r in rows if r[0] is not None]
-            placeholders = ",".join("?" for _ in ids)
-            cur.execute(
-                f"UPDATE state_rebuild_queue SET status='running', run_id=?, updated_at=? WHERE Id IN ({placeholders})",
-                [queue_run_id, datetime.now(), *ids],
-            )
-            conn.commit()
 
         assets: set[str] = set()
         classes: set[str] = set()

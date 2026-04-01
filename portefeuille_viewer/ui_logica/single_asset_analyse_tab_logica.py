@@ -48,6 +48,7 @@ from portefeuille_viewer.services.scenario_generated_option_sync import (
     mark_bucket23_out_of_sync,
 )
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import GeneratedOptionOrdersDialog
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
     BUCKET_1,
@@ -555,7 +556,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.buttonAddTestOrder.clicked.connect(self.add_empty_row)  # als je een knop hebt
         self.buttonDeleteTestOrder.clicked.connect(self.on_delete_test_order_clicked)
         if hasattr(self, "buttonEditScenarios"):
-            self.buttonEditScenarios.clicked.connect(self._open_scenario_manager)
+            self.buttonEditScenarios.clicked.connect(self._open_scenario_builder)
 
         # Delegates koppelen op kolomnaam (niet op index), zodat kolomvolgorde vrij kan wijzigen.
         def _set_delegate(colname: str, delegate) -> None:
@@ -588,6 +589,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         signals.databaseChanged.connect(self.on_database_changed)
         signals.ordersCommitted.connect(self.on_orders_committed)
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
+        signals.testOrderScenariosChanged.connect(self._on_test_order_scenarios_changed)
+        signals.testOrdersEnabledChanged.connect(self._on_test_orders_enabled_changed)
         self.comboBoxStatus.setCurrentText("active")
         self.comboBoxRegio.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
@@ -980,6 +983,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_payoff_table()
         self.update_chart()
 
+    def _on_test_order_scenarios_changed(self):
+        load_test_order_scenarios_cache_from_db()
+        self._reload_scenario_selector(selected_scenario_id=self._current_scenario_id)
+
     def _open_scenario_manager(self):
         df = get_cached_test_order_scenarios()
         dialog = ScenarioManagerDialog(df, self)
@@ -1040,6 +1047,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         flush_dirty_test_order_scenarios_to_db()
         load_test_order_scenarios_cache_from_db()
+        signals.queued_emit_testOrderScenariosChanged()
         if selected_scenario_id is None:
             selected_scenario_id = ensure_default_test_order_scenario()
         self._reload_scenario_selector(selected_scenario_id=selected_scenario_id)
@@ -1060,6 +1068,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.logic.set_asset(self.asset_selector.currentText())
         self.update_payoff_table()
         self.update_chart()
+
+    def _open_scenario_builder(self):
+        dialog = getattr(self, "_generated_option_orders_dialog", None)
+        if dialog is None:
+            dialog = GeneratedOptionOrdersDialog(self)
+            dialog.setModal(False)
+            self._generated_option_orders_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _refresh_selection_driven_views_for_active_asset(self, asset_rollup):
         # Deze subviews volgen direct uit de gekozen asset en lokale caches, niet uit centrale snapshot timers.
@@ -1338,6 +1356,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.logic.set_asset(asset)
         self.update_payoff_table()
         self.update_chart()
+        signals.queued_emit_testOrdersEnabledChanged(bool(checked))
+
+    def _on_test_orders_enabled_changed(self, enabled: bool):
+        enabled = bool(enabled)
+        self.enable_test_orders = enabled
+        self.logic.enable_test_orders = enabled
+        self.checkBoxEnableTestOrders.blockSignals(True)
+        try:
+            self.checkBoxEnableTestOrders.setChecked(enabled)
+        finally:
+            self.checkBoxEnableTestOrders.blockSignals(False)
     
     def _flush_test_orders_if_dirty(self):
         flush_dirty_test_orders_to_db()
