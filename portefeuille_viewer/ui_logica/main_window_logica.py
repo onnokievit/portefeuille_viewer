@@ -30,41 +30,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.price_feed = price_feed
         self.portfolio_engine = portfolio_engine
         self.live_price_updater_stop_event = live_price_updater_stop_event
+        self._tab_specs = []
+        self._tab_ids_by_widget = {}
+        self._restoring_tab_order = False
         
-    # Hier kun je later echte tab-klassen toevoegen
-        self.orders_tab = OrdersTabWidget() 
-        self.tabWidget.addTab(self.orders_tab, "Orders")
-
-        self.single_asset_analyse_tab = SingleAssetAnalyseTab()
-        self.tabWidget.addTab(self.single_asset_analyse_tab, "Single Asset Analyse")
-        self.aandelen_tab = AandelenWebPilotTab()
-        self.tabWidget.addTab(self.aandelen_tab, "Aandelen")
-
-        self.opties_open_tab = OptiesOpenWebPilotTab()
-        self.tabWidget.addTab(self.opties_open_tab, "Open Opties (Live)")
-
-        self.optie_tijdswaarde_tab = OptieTijdswaardeWebPilotTab()
-        self.tabWidget.addTab(self.optie_tijdswaarde_tab, "Optie Tijdswaarde")
-
-        self.portfolio_value_tab = PortfolioValueTab()
-        self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
-        self.maand_eind_tab = MaandEindWebTab()
-        self.tabWidget.addTab(self.maand_eind_tab, "Maand Eind")
-        self.sector_analysis_tab = SectorAnalysisTab()
-        self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
-
-        self.sprinters_open_tab = SprintersOpenWebPilotTab()
-        self.tabWidget.addTab(self.sprinters_open_tab, "Sprinters Open")
-        self.optie_eind_tab = OptieEindTab()
-        self.tabWidget.addTab(self.optie_eind_tab, "Optie Eind")
-        self.settings_tab = SettingsTab()
-        self.tabWidget.addTab(self.settings_tab, "Settings")
-        self.repository_tester_tab = RepositoryTesterTab()
-        self.tabWidget.addTab(self.repository_tester_tab, "Repository Tester")
+        self._register_tabs()
+        self._apply_saved_tab_order()
 
         self.tabWidget.currentChanged.connect(self._on_tab_changed)
         self._on_tab_changed(self.tabWidget.currentIndex())
         self.tabWidget.tabBar().setStyle(_TabBarNoFocusRectStyle())
+        self.tabWidget.setMovable(True)
+        self.tabWidget.tabBar().tabMoved.connect(self._on_tab_moved)
         self._apply_tab_style()
         signals.uiStyleChanged.connect(self._on_ui_style_changed)
 
@@ -84,6 +61,76 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.tabWidget.setCurrentIndex((self.tabWidget.currentIndex() - 1) % self.tabWidget.count())
                     return True  # event is handled
         return super().eventFilter(obj, event)
+
+    def _register_tabs(self):
+        self.orders_tab = OrdersTabWidget()
+        self.single_asset_analyse_tab = SingleAssetAnalyseTab()
+        self.aandelen_tab = AandelenWebPilotTab()
+        self.opties_open_tab = OptiesOpenWebPilotTab()
+        self.optie_tijdswaarde_tab = OptieTijdswaardeWebPilotTab()
+        self.portfolio_value_tab = PortfolioValueTab()
+        self.maand_eind_tab = MaandEindWebTab()
+        self.sector_analysis_tab = SectorAnalysisTab()
+        self.sprinters_open_tab = SprintersOpenWebPilotTab()
+        self.optie_eind_tab = OptieEindTab()
+        self.settings_tab = SettingsTab()
+        self.repository_tester_tab = RepositoryTesterTab()
+
+        self._tab_specs = [
+            ("orders", "Orders", self.orders_tab),
+            ("single_asset_analyse", "Single Asset Analyse", self.single_asset_analyse_tab),
+            ("aandelen", "Aandelen", self.aandelen_tab),
+            ("opties_open_live", "Open Opties (Live)", self.opties_open_tab),
+            ("optie_tijdswaarde", "Optie Tijdswaarde", self.optie_tijdswaarde_tab),
+            ("portfolio_value", "Portfolio Value", self.portfolio_value_tab),
+            ("maand_eind", "Maand Eind", self.maand_eind_tab),
+            ("sector_analysis", "Sector Analysis", self.sector_analysis_tab),
+            ("sprinters_open", "Sprinters Open", self.sprinters_open_tab),
+            ("optie_eind", "Optie Eind", self.optie_eind_tab),
+            ("settings", "Settings", self.settings_tab),
+            ("repository_tester", "Repository Tester", self.repository_tester_tab),
+        ]
+        for tab_id, title, widget in self._tab_specs:
+            self.tabWidget.addTab(widget, title)
+            self._tab_ids_by_widget[widget] = tab_id
+
+    def _apply_saved_tab_order(self):
+        saved_order = get_settings().get_tab_order()
+        if not saved_order:
+            self._persist_tab_order()
+            return
+        widget_by_id = {tab_id: widget for tab_id, _title, widget in self._tab_specs}
+        ordered_ids = [tab_id for tab_id in saved_order if tab_id in widget_by_id]
+        for tab_id, _title, _widget in self._tab_specs:
+            if tab_id not in ordered_ids:
+                ordered_ids.append(tab_id)
+        desired_widgets = [widget_by_id[tab_id] for tab_id in ordered_ids]
+        self._restoring_tab_order = True
+        try:
+            for target_index, widget in enumerate(desired_widgets):
+                current_index = self.tabWidget.indexOf(widget)
+                if current_index >= 0 and current_index != target_index:
+                    self.tabWidget.tabBar().moveTab(current_index, target_index)
+        finally:
+            self._restoring_tab_order = False
+        self._persist_tab_order()
+
+    def _current_tab_order(self) -> list[str]:
+        out: list[str] = []
+        for index in range(self.tabWidget.count()):
+            widget = self.tabWidget.widget(index)
+            tab_id = self._tab_ids_by_widget.get(widget)
+            if tab_id:
+                out.append(tab_id)
+        return out
+
+    def _persist_tab_order(self):
+        get_settings().set_tab_order(self._current_tab_order())
+
+    def _on_tab_moved(self, _from: int, _to: int):
+        if self._restoring_tab_order:
+            return
+        self._persist_tab_order()
 
     def _on_tab_changed(self, index):
         if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "set_active"):

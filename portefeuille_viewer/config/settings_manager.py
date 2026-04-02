@@ -288,6 +288,35 @@ class SettingsManager:
         self.config.set('ui', 'aandelen_web_col_widths', json.dumps(clean, ensure_ascii=False))
         self.save()
 
+    def get_tab_order(self) -> list[str]:
+        raw = self.config.get('ui', 'tab_order', fallback='[]')
+        try:
+            items = json.loads(raw)
+        except Exception:
+            return []
+        if not isinstance(items, list):
+            return []
+        out: list[str] = []
+        for item in items:
+            text = str(item).strip()
+            if text:
+                out.append(text)
+        return out
+
+    def set_tab_order(self, tab_ids: list[str]):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean: list[str] = []
+        seen: set[str] = set()
+        for item in (tab_ids or []):
+            text = str(item).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            clean.append(text)
+        self.config.set('ui', 'tab_order', json.dumps(clean, ensure_ascii=False))
+        self.save()
+
     
     # === App Settings ===
     def get_last_database(self) -> Optional[str]:
