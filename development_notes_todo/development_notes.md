@@ -1,7 +1,7 @@
 # Development Notes
 
 ## Doel van dit document
-Dit document beschrijft de actuele, gebouwde architectuur van `portefeuille_viewer_1.1`. Het vervangt de oude ontwikkelnotities als primaire technische referentie voor wat er nu in de app aanwezig is en hoe de onderdelen met elkaar samenwerken.
+Dit document beschrijft de actuele, gebouwde architectuur van `portefeuille_viewer_1.2` en de huidige scenario-/simulatie-opzet. Het vervangt de oude ontwikkelnotities als primaire technische referentie voor wat er nu in de app aanwezig is en hoe de onderdelen met elkaar samenwerken.
 
 De nadruk ligt op:
 - de huidige architectuur,
@@ -15,10 +15,10 @@ Verouderde plannen, experimenten en historische tussenstappen zijn bewust weggel
 
 ## Scope
 Actieve codebasis:
-- `c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1`
+- `c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2`
 
 Belangrijkste hoofdstructuur:
-- `portefeuille_viewer_1.1.py`: app-startup en orkestratie
+- `portefeuille_viewer_1.2.py`: app-startup en orkestratie
 - `portefeuille_viewer/domain/`: event/runtime/projectie-fundament
 - `portefeuille_viewer/services/`: prijsfeeds, option timevalue, state-engine, migraties
 - `portefeuille_viewer/data/`: repository, snapshot store, aggregators, caches
@@ -59,8 +59,8 @@ De app is gemigreerd via parallelle architectuur in plaats van een volledige ver
 - rollback eenvoudig blijft.
 
 Die keuze zie je direct terug in:
-- environment flags in [`portefeuille_viewer_1.1.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer_1.1.py)
-- promoted flags in [`main_window_logica.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\main_window_logica.py)
+- environment flags in [`portefeuille_viewer_1.2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer_1.2.py)
+- promoted flags in [`main_window_logica.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\main_window_logica.py)
 
 ### 2.2 Snapshots als centrale datalaag
 In plaats van elke tab zijn eigen query- en aggregatielogica te laten uitvoeren, is de centrale keuze geworden:
@@ -136,9 +136,69 @@ Bij afsluiten van de app doet `MainWindow.closeEvent()` nog expliciet flushes vo
 
 Hiermee is shutdown geen passieve UI-close, maar een gecoördineerde flush van in-memory state naar persistente opslag.
 
+
+## 3A. Scenario testing architectuur
+
+De huidige scenario-architectuur in `portefeuille_viewer_1.2` volgt bewust niet de oude richting van injectie via een virtuele transactietabel.
+
+De actuele keuze is:
+- test orders blijven opgeslagen in de bestaande test-order tabel;
+- scenario-selectie gebeurt via scenario-meta en scenario-content;
+- `Single Asset Analyse` houdt een eigen lokaal simulatiepad;
+- app-brede scenario-impact wordt vertaald via overlay-services op snapshot-/projectieniveau.
+
+### 3A.1 Kernonderdelen
+Belangrijkste bouwstenen zijn nu:
+- `test_order_repository.py`: opslag, scenario-meta, scenario-content, bucket metadata;
+- `scenario_order_resolver.py`: bepaalt welke orders actief zijn in het gekozen scenario;
+- overlay-services voor:
+  - `Portfolio Value`
+  - `Sector Analysis`
+  - `Aandelen`
+- `generated_option_orders_dialog.py`: centrale builder/editor voor scenario-selectie en generated option flows.
+
+### 3A.2 Buckets
+De huidige bucket-definitie is:
+- `bucket_1`: handmatige test orders;
+- `bucket_2`: generated orders vanuit open optieposities;
+- `bucket_3`: afgeleide EOM/ITM-effecten van bucket 2.
+
+Op dit moment zijn bucket 2 en 3 alleen gebouwd voor open opties.
+Voor aandelen en sprinters bestaat deze generated flow nog niet.
+
+### 3A.3 Wat scenario-aware is
+Op dit moment zijn scenario-aware aangesloten:
+- `Single Asset Analyse` (lokaal pad)
+- `Portfolio Value`
+- `Sector Analysis`
+- `Aandelen`
+
+Nog niet scenario-aware op dezelfde architectuurlijn:
+- `Sprinters Open`
+- `Open Opties`
+- `Optie Tijdswaarde`
+
+### 3A.4 Builder-opzet
+De huidige scenario builder is een modeless venster met:
+- scenario selector;
+- scenario-beheer;
+- bucket 1, 2 en 3 tabellen;
+- filters en bulkselectie voor bucket 2;
+- globale `Test Orders` enable-toggle.
+
+De builder is bedoeld als centrale scenario-editor. `Single Asset Analyse` blijft daarnaast de primaire plek om handmatige bucket-1 orders inhoudelijk te bewerken.
+
+### 3A.5 Ontwerpreden
+Deze architectuur is gekozen omdat:
+- lokale payoff-logica in `Single Asset Analyse` al inhoudelijk goed werkte;
+- app-brede tabs niet natuurlijk op transactietabelniveau lezen;
+- injectie op transactieniveau te veel dubbel tellen en sync-problemen gaf;
+- overlays op snapshot-/projectieniveau beter aansluiten op de echte consumers.
+
+
 ## 4. Snapshot-architectuur
 
-De centrale geheugenlaag staat in [`snapshot_store.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\data\snapshot_store.py).
+De centrale geheugenlaag staat in [`snapshot_store.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\data\snapshot_store.py).
 
 `SNAPSHOT_STORE` bevat zowel:
 - repository snapshots,
@@ -174,10 +234,10 @@ Die `safe_write()` keuze is belangrijk: een snapshot-update is niet alleen data-
 ## 5. Event- en runtime-architectuur
 
 De generieke runtimefundering zit in:
-- [`events.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\domain\events.py)
-- [`state_store.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\domain\state_store.py)
-- [`projection_bus.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\domain\projection_bus.py)
-- [`engine_core_runtime.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\domain\engine_core_runtime.py)
+- [`events.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\domain\events.py)
+- [`state_store.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\domain\state_store.py)
+- [`projection_bus.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\domain\projection_bus.py)
+- [`engine_core_runtime.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\domain\engine_core_runtime.py)
 
 ### 5.1 Eventmodel
 Events zijn kleine immutable records met:
@@ -229,10 +289,10 @@ Ontwerpintentie:
 ## 6. Projection-v2 architectuur
 
 De projection-laag zit in:
-- [`aandelen_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\projections\aandelen_projection_v2.py)
-- [`opties_open_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\projections\opties_open_projection_v2.py)
-- [`optie_tijdswaarde_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\projections\optie_tijdswaarde_projection_v2.py)
-- [`sprinters_open_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\projections\sprinters_open_projection_v2.py)
+- [`aandelen_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\projections\aandelen_projection_v2.py)
+- [`opties_open_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\projections\opties_open_projection_v2.py)
+- [`optie_tijdswaarde_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\projections\optie_tijdswaarde_projection_v2.py)
+- [`sprinters_open_projection_v2.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\projections\sprinters_open_projection_v2.py)
 
 Elke projection is verantwoordelijk voor:
 - tab-specifieke datasetopbouw,
@@ -262,7 +322,7 @@ Met projections is dit verplaatst naar een expliciete backendlaag, zodat de UI:
 - minder full resets hoeft te doen.
 
 ### 6.2 Metrics en observability
-De projection-laag is ook meetbaar gemaakt. In `portefeuille_viewer_1.1.py` bestaan metrics-queues en logbestanden voor onder andere:
+De projection-laag is ook meetbaar gemaakt. In `portefeuille_viewer_1.2.py` bestaan metrics-queues en logbestanden voor onder andere:
 - aandelen projection
 - open opties projection
 - optie tijdswaarde projection
@@ -275,7 +335,7 @@ Daarmee kunnen recompute-, publish- en total timings worden gevolgd.
 De service-laag bevat het grootste deel van de runtime-intelligentie.
 
 ### 7.1 Price feed
-[`price_feed.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\services\price_feed.py) beheert:
+[`price_feed.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\services\price_feed.py) beheert:
 - verbinding met IBKR,
 - equity/index/future prijsupdates,
 - option ticks,
@@ -290,7 +350,7 @@ Belangrijke ontwerpkeuzes:
 - voor aandelen en asset rollups lopen subscriptions via de verzamelde symbolen uit `asset_rollup_data`.
 
 ### 7.2 Option timevalue service
-[`option_timevalue_service.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\services\option_timevalue_service.py) is een kerncomponent.
+[`option_timevalue_service.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\services\option_timevalue_service.py) is een kerncomponent.
 
 Deze service:
 - bouwt de universe van open optieseries;
@@ -315,7 +375,7 @@ Ook de unresolved flow zit hier:
 Daarnaast bestaat expliciet de kolom/flag `resolver_locked`, zodat handmatige masterdata niet zomaar door de automatische resolver overschreven wordt.
 
 ### 7.3 State engine runner
-[`state_engine_runner.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\services\state_engine_runner.py) coördineert zware rebuilds buiten de UI.
+[`state_engine_runner.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\services\state_engine_runner.py) coördineert zware rebuilds buiten de UI.
 
 De runner ondersteunt:
 - queueing van rebuild payloads,
@@ -331,7 +391,7 @@ Dit is een belangrijk scheidingsvlak in de architectuur:
 - zwaardere consistente state rebuilds worden apart, asynchroon en expliciet uitgevoerd.
 
 ### 7.4 DB migration service
-[`db_migration_service.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\services\db_migration_service.py) zorgt voor:
+[`db_migration_service.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\services\db_migration_service.py) zorgt voor:
 - startup migraties,
 - versiecontrole per user DB,
 - success/fail logging.
@@ -342,7 +402,7 @@ De migratiestrategie is additief en compatibiliteitsgericht. Dat is een harde on
 
 De oudere live-aggregatorlaag is nog steeds relevant en vormt een brug tussen price feed en snapshot/presentation data.
 
-[`portfolio_engine.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\domain\portfolio_engine.py) orkestreert:
+[`portfolio_engine.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\domain\portfolio_engine.py) orkestreert:
 - `LiveAggregatorAandelen`
 - `LiveAggregatorOpties`
 - `LiveAggregatorSprinters`
@@ -370,7 +430,7 @@ Dit is architectonisch belangrijk, omdat het laat zien dat de oude monolithische
 De applicatieschil is nog steeds PySide6. `MainWindow` maakt de tabs, verzorgt tab switching en handelt shutdown af.
 
 ### 9.2 Feature flags en promoted tabs
-In [`main_window_logica.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\main_window_logica.py) wordt per tab bepaald:
+In [`main_window_logica.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\main_window_logica.py) wordt per tab bepaald:
 - gebruik ik de legacy tab?
 - gebruik ik de web tab als extra pilot?
 - of promoot ik de web tab zodat deze de legacy tab vervangt?
@@ -402,10 +462,10 @@ Dit is cruciaal voor performance en voorkomt onnodige WebEngine renders.
 De moderne tabbladen zijn geen pure browserapplicaties, maar embedded HTML/JS views binnen PySide6.
 
 Voorbeelden:
-- [`aandelen_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\aandelen_web_pilot_tab.py)
-- [`opties_open_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\opties_open_web_pilot_tab.py)
-- [`optie_tijdswaarde_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\optie_tijdswaarde_web_pilot_tab.py)
-- [`sprinters_open_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\portefeuille_viewer\ui_logica\sprinters_open_web_pilot_tab.py)
+- [`aandelen_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\aandelen_web_pilot_tab.py)
+- [`opties_open_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\opties_open_web_pilot_tab.py)
+- [`optie_tijdswaarde_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\optie_tijdswaarde_web_pilot_tab.py)
+- [`sprinters_open_web_pilot_tab.py`](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\portefeuille_viewer\ui_logica\sprinters_open_web_pilot_tab.py)
 
 Gemeenschappelijk patroon:
 - `QWebEngineView`
@@ -594,7 +654,7 @@ Dit is geen toeval, maar een gevolg van de gekozen migratiestrategie: eerst stab
 
 ## 18. Samenvatting
 
-`portefeuille_viewer_1.1` is technisch gezien een overgangsarchitectuur, maar wel een bewuste en volwassen overgangsarchitectuur.
+`portefeuille_viewer_1.2` is technisch gezien nog steeds een overgangsarchitectuur, maar wel een bewuste en volwassen overgangsarchitectuur met een inmiddels expliciet scenario-/simulatiepad.
 
 De app bestaat uit:
 - een PySide6 shell,
@@ -617,20 +677,20 @@ Dit document beschrijft daarmee niet alleen wat er gebouwd is, maar ook waarom d
 
 ## Historische documenten
 De volgende documenten zijn gearchiveerd en gelden niet meer als primaire bron:
-- [DEVELOPMENT_NOTES_1.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\DEVELOPMENT_NOTES_1.md)
-- [DEVELOPMENT_NOTES_2.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\DEVELOPMENT_NOTES_2.md)
-- [DEVELOPMENT_NOTES_3.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\DEVELOPMENT_NOTES_3.md)
-- [DEVELOPMENT_NOTES_4.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\DEVELOPMENT_NOTES_4.md)
-- [integratie_live_optie_engine.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\integratie_live_optie_engine.md)
-- [optimalisatie engine.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\optimalisatie%20engine.md)
-- [roadmap_engine_ui_modernisatie.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\roadmap_engine_ui_modernisatie.md)
-- [roadmap_modernisatie_TODO.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\archive\roadmap_modernisatie_TODO.md)
+- [DEVELOPMENT_NOTES_1.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\DEVELOPMENT_NOTES_1.md)
+- [DEVELOPMENT_NOTES_2.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\DEVELOPMENT_NOTES_2.md)
+- [DEVELOPMENT_NOTES_3.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\DEVELOPMENT_NOTES_3.md)
+- [DEVELOPMENT_NOTES_4.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\DEVELOPMENT_NOTES_4.md)
+- [integratie_live_optie_engine.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\integratie_live_optie_engine.md)
+- [optimalisatie engine.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\optimalisatie%20engine.md)
+- [roadmap_engine_ui_modernisatie.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\roadmap_engine_ui_modernisatie.md)
+- [roadmap_modernisatie_TODO.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\archive\roadmap_modernisatie_TODO.md)
 
 Voor openstaand werk en visie:
-- [roadmap.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\roadmap.md)
+- [roadmap.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\roadmap.md)
 
 Voor vrije ideeën en klad:
-- [TODO.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.1\development_notes_todo\TODO.md)
+- [TODO.md](c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2\development_notes_todo\TODO.md)
 
 
 ## Statusupdate 2026-03-29 overgenomen uit voormalig root-document

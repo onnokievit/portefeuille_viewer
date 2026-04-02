@@ -67,12 +67,14 @@ Dat deel is functioneel waardevol en bewezen.
 ## 2.2 Wat nog ontbreekt
 Nog niet goed opgelost is:
 - verdere inhoudelijke validatie van de app-brede scenario-doorrekening;
-- eventuele uitbreiding naar:
+- scenario-uitbreiding naar `Sprinters Open`;
+- eventuele latere uitbreiding naar:
   - `Open Opties`,
   - `Optie Tijdswaarde`;
-- latere uitbreiding naar generated scenario's en bucket 2/3.
+- verdere verbreding van generated scenario's buiten open opties.
 
 `Open Opties` en `Optie Tijdswaarde` zijn nuttig, maar voor V1 niet essentieel.
+`Sprinters Open` is de eerstvolgende logische functionele uitbreiding binnen de simulatieflow.
 
 ## 2.3 Welke tabs in scope zijn
 Voor de nieuwe opzet zijn de primaire doel-tabs:
@@ -483,10 +485,11 @@ Doel:
 - verdere verbreding.
 
 Mogelijke uitbreiding:
+- `Sprinters Open`
 - `Open Opties`
 - `Optie Tijdswaarde`
-- bucket 2 en 3
-- generated candidate changes
+- bucket 2 en 3 buiten open opties
+- generated candidate changes voor aandelen en sprinters
 - scenario-actieknoppen vanuit posities
 
 Afvinklijst:
@@ -510,6 +513,15 @@ Gereed:
   - rename stabieler
   - meervoudig deleten werkt
   - nieuw scenario start leeg
+- generated scenario builder voor open opties:
+  - bucket 1 zichtbaar in dezelfde editor
+  - bucket 2 generated open option orders
+  - bucket 3 derived ITM EOM-effects
+  - scenario selector, filters, multiselects en scenario-beheer vanuit dezelfde popup
+  - modeless venster met eigen enable-toggle
+- state rebuild queue stabilisatie:
+  - deduplicerend enqueue-gedrag
+  - lichtere claim-query zonder grote `IN (...)` lijst
 
 ### 12.2 Bewust niet meer gedaan
 
@@ -570,13 +582,26 @@ Het gewenste eindresultaat is:
 
 ## 15. Open punten
 
-- exacte naamgeving van de nieuwe resolver- en overlay-services;
-- of scenario-aware snapshots op termijn nog verder gestandaardiseerd moeten worden;
+- `Sprinters Open` nog scenario-aware maken op dezelfde overlay-architectuur;
+- generated scenario-uitbreiding buiten open opties:
+  - aandelen
+  - sprinters
+- verdere inhoudelijke validatie van bucket 2/3 bij opties;
 - hoe percentages in `Aandelen` exact opnieuw worden afgeleid na overlay-patches;
 - of `Open Opties` en `Optie Tijdswaarde` in een latere fase dezelfde overlay-architectuur volgen;
-- hoe bucket 2 en 3 later op dezelfde resolver aansluiten.
+- of scenario-aware snapshots op termijn nog verder gestandaardiseerd moeten worden.
 
 ---
 
 ## Laatste update
 2026-03-31
+
+
+## 16. Praktische status voor vervolggesprek
+Voor een nieuw gesprek is de relevante samenvatting:
+- de actieve codebasis is `c:\python_coding\portefeuille_viewer\portefeuille_viewer_1.2`;
+- de gekozen simulatie-architectuur is orderopslag + scenario-content + overlays, niet transactietabelinjectie;
+- bucket 1 is handmatig;
+- bucket 2/3 zijn nu alleen gebouwd voor open opties;
+- `Portfolio Value`, `Sector Analysis` en `Aandelen` zijn aangesloten;
+- eerstvolgende logische uitbreiding binnen simulatie is `Sprinters Open`.

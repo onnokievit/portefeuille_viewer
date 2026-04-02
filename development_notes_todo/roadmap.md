@@ -151,25 +151,38 @@ Waarom dit nog relevant is:
 - stabiliteit van Single Asset Analyse en order-workflows hangt hier direct mee samen.
 
 ### 2.2 Scenario- en simulatie-uitbreiding
-Dit is geen direct stabiliteitswerk, maar wel een logische volgende uitbreidingsrichting die al eerder is bedacht en nog steeds relevant is.
+Dit is inmiddels niet meer alleen een idee, maar een actieve werkstroom met een eerste functionele V1.
+
+Reeds gebouwd:
+1. handmatige scenario-opslag op basis van test orders + scenario-content;
+2. scenario-aware doorrekening voor:
+   - `Single Asset Analyse`
+   - `Portfolio Value`
+   - `Sector Analysis`
+   - `Aandelen`
+3. generated option builder met bucket 1/2/3 voor open opties.
 
 Open uitbreidingen:
-1. Markt-/beta-simulatie:
+1. `Sprinters Open` scenario-aware maken op dezelfde overlay-architectuur.
+2. Generated bucket 2/3 verbreden naar:
+   - aandelen
+   - sprinters
+3. Daarna pas herbeoordelen of ook nodig is:
+   - `Open Opties`
+   - `Optie Tijdswaarde`
+4. Markt-/beta-simulatie:
    - gebruiker definieert een marktshock,
    - per asset een formule of beta-relatie,
    - doorrekening naar aandelen, optieresultaat, portfolio value en sector views.
-2. Scenario-context naast live-context:
-   - live snapshot blijft onaangetast,
-   - scenario draait als aparte projection context of aparte state-scope.
-3. Rule-based roll advisor / strategie-assistent:
+5. Rule-based roll advisor / strategie-assistent:
    - transparante scoringsregels,
    - geen black-box advies,
    - uit te breiden naar latere ML-laag.
 
-Waarom dit nog relevant is:
-- de app heeft al de nodige datasets en berekende outputs,
-- de grootste ontbrekende stap is niet data, maar een gecontroleerd simulatiepad,
-- hiervoor is een nette event/projection architectuur juist een sterke basis.
+Strategische conclusie:
+- de grootste architectuurkeuze is al gemaakt;
+- scenario-simulatie loopt nu via overlays en scenario-content;
+- de volgende fase is verbreding en inhoudelijke validatie, niet opnieuw een fundamenteel ontwerp kiezen.
 
 ### 2.3 Resolver workflow verder uitbouwen
 De manual resolver flow voor unresolved optie-series is begonnen, maar nog niet af.
@@ -732,7 +745,7 @@ Niet meer blokkerend, maar later nog interessant:
 De volgende soorten items zijn niet opnieuw opgenomen:
 - oude versie-specifieke implementatieplannen voor andere projectmappen,
 - onderdelen die aantoonbaar al in de huidige code zitten en geen open vervolg meer hebben,
-- tijdelijke experimentstructuren die niet meer de richting van `portefeuille_viewer_1.1` bepalen.
+- tijdelijke experimentstructuren die niet meer de richting van `portefeuille_viewer_1.2` bepalen.
 
 Deze informatie blijft alleen als archief/context bestaan.
 
@@ -740,3 +753,16 @@ Deze informatie blijft alleen als archief/context bestaan.
 
 ## Laatste update
 2026-03-29
+
+
+## 8. Scenario-context voor vervolggesprekken
+Voor een nieuw gesprek of nieuwe engineer zijn de drie belangrijkste documenten nu:
+- `development_notes_todo/development_notes.md`: huidige architectuur van de app en scenario-opzet;
+- `development_notes_todo/plan_en_actie_simulatieframework.md`: ontwerp en actuele status van het simulatiepad;
+- `development_notes_todo/roadmap.md`: strategisch doel, open werk en prioriteiten.
+
+De kernboodschap voor vervolgwerk is:
+- de app is `portefeuille_viewer_1.2`;
+- scenario-simulatie gebruikt niet meer de oude transactietabelinjectie als hoofdroute;
+- de huidige simulatie-V1 is functioneel voor bucket 1 en generated optie-buckets 2/3;
+- de eerstvolgende logische simulatie-uitbreiding is `Sprinters Open`.

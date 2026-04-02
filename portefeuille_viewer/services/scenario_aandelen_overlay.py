@@ -1,8 +1,12 @@
 import polars as pl
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.data.test_order_repository import CHANGE_KIND_COL, SOURCE_TYPE_COL
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.services.scenario_order_resolver import resolve_active_scenario_orders_df
+
+
+CHANGE_KIND_OPTION_EOM = "option_eom"
 
 
 def _norm_asset(value) -> str:
@@ -138,6 +142,34 @@ def _row_template(base_columns: list[str], asset: str, meta: dict) -> dict:
     return row
 
 
+def _asset_has_option_eom_flow(active_df: pl.DataFrame, asset: str) -> bool:
+    if (
+        active_df is None
+        or active_df.is_empty()
+        or "asset_rollup" not in active_df.columns
+    ):
+        return False
+    asset_key = _norm_asset(asset)
+    asset_rows = active_df.filter(
+        pl.col("asset_rollup").cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_uppercase()
+        == asset_key
+    )
+    if asset_rows.is_empty():
+        return False
+    if CHANGE_KIND_COL in asset_rows.columns:
+        asset_rows = asset_rows.filter(
+            pl.col(CHANGE_KIND_COL).cast(pl.Utf8, strict=False).fill_null("").str.to_lowercase()
+            == CHANGE_KIND_OPTION_EOM
+        )
+    if asset_rows.is_empty():
+        return False
+    if SOURCE_TYPE_COL not in asset_rows.columns:
+        return True
+    return asset_rows.filter(
+        pl.col(SOURCE_TYPE_COL).cast(pl.Utf8, strict=False).fill_null("").str.strip_chars().str.to_lowercase() != ""
+    ).height > 0
+
+
 def build_aandelen_scenario_overlay_df(
     scenario_id: int | None = None,
     *,
@@ -198,23 +230,24 @@ def build_aandelen_scenario_overlay_df(
             row["portfolio_total_waarde_delta_pct"] = _to_float(
                 scenario_row.get("portfolio_total_waarde_delta_pct", row.get("portfolio_total_waarde_delta_pct"))
             )
-        if "net_change" in row and scenario_row:
+        has_option_eom_flow = _asset_has_option_eom_flow(active_df, asset)
+        if "net_change" in row and scenario_row and not has_option_eom_flow:
             base_lineair = _to_float(base_row.get("total_waarde_lineair"))
             scenario_lineair = _to_float(scenario_row.get("total_waarde_lineair"))
             delta_lineair = scenario_lineair - base_lineair
             row["net_change"] = _to_float(row.get("net_change")) + delta_lineair
-        if "totaal_inc_fee" in row and scenario_row:
+        if "totaal_inc_fee" in row and scenario_row and not has_option_eom_flow:
             base_lineair = _to_float(base_row.get("total_waarde_lineair"))
             scenario_lineair = _to_float(scenario_row.get("total_waarde_lineair"))
             delta_lineair = scenario_lineair - base_lineair
             row["totaal_inc_fee"] = _to_float(row.get("totaal_inc_fee")) + delta_lineair
-        if "totaal_ex_fee" in row and scenario_row:
+        if "totaal_ex_fee" in row and scenario_row and not has_option_eom_flow:
             base_lineair = _to_float(base_row.get("total_waarde_lineair"))
             scenario_lineair = _to_float(scenario_row.get("total_waarde_lineair"))
             delta_lineair = scenario_lineair - base_lineair
             row["totaal_ex_fee"] = _to_float(row.get("totaal_ex_fee")) + delta_lineair
         option_delta = _to_float(option_delta_map.get(asset))
-        if abs(option_delta) > 1e-9:
+        if abs(option_delta) > 1e-9 and not has_option_eom_flow:
             base_lineair = _to_float(base_row.get("total_waarde_lineair"))
             scenario_lineair = _to_float(scenario_row.get("total_waarde_lineair"))
             delta_lineair = scenario_lineair - base_lineair
