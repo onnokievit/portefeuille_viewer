@@ -11,6 +11,8 @@ from portefeuille_viewer.services.scenario_portfolio_value_overlay import (
     _to_float,
 )
 
+CHANGE_KIND_MARKET_CLOSE = "market_close"
+
 
 def _empty_like(attr_name: str) -> pl.DataFrame:
     base_df = getattr(SNAPSHOT_STORE, attr_name, None)
@@ -67,12 +69,18 @@ def _synthetic_option_rows(active_df: pl.DataFrame, price_lookup: dict[str, floa
             continue
         spot = price_lookup.get(asset, 0.0)
         strike = _to_float(row.get("optie_strike"))
+        transactie_prijs = _to_float(row.get("transactie_prijs"))
+        change_kind = str(row.get("change_kind") or "").strip().lower()
         if spot == 0.0 or strike == 0.0:
             continue
         is_itm = strike > spot if call_put == "put" else strike < spot
-        waarde_bezit = qty * strike * (-1.0 if call_put == "put" else 1.0)
-        delta = estimate_delta(call_put, spot, strike) or 0.0
-        waarde_bezit_delta = qty * spot * delta
+        if change_kind == CHANGE_KIND_MARKET_CLOSE:
+            waarde_bezit = qty * transactie_prijs * -1.0
+            waarde_bezit_delta = waarde_bezit
+        else:
+            waarde_bezit = qty * strike * (-1.0 if call_put == "put" else 1.0)
+            delta = estimate_delta(call_put, spot, strike) or 0.0
+            waarde_bezit_delta = qty * spot * delta
         meta = dict(meta_lookup.get(asset, {}) or {})
         rows.append(
             {

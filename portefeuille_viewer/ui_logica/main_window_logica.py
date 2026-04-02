@@ -11,6 +11,7 @@ from portefeuille_viewer.ui_logica.opties_open_web_pilot_tab import OptiesOpenWe
 from portefeuille_viewer.ui_logica.portfolio_value_tab_logica import PortfolioValueTab
 from portefeuille_viewer.ui_logica.optie_tijdswaarde_web_pilot_tab import OptieTijdswaardeWebPilotTab
 from portefeuille_viewer.ui_logica.sprinters_open_web_pilot_tab import SprintersOpenWebPilotTab
+from portefeuille_viewer.ui_logica.maand_eind_web_tab import MaandEindWebTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
@@ -47,6 +48,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.portfolio_value_tab = PortfolioValueTab()
         self.tabWidget.addTab(self.portfolio_value_tab, "Portfolio Value")
+        self.maand_eind_tab = MaandEindWebTab()
+        self.tabWidget.addTab(self.maand_eind_tab, "Maand Eind")
         self.sector_analysis_tab = SectorAnalysisTab()
         self.tabWidget.addTab(self.sector_analysis_tab, "Sector Analysis")
 
@@ -93,6 +96,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.optie_tijdswaarde_tab.set_active(index == self.tabWidget.indexOf(self.optie_tijdswaarde_tab))
         if hasattr(self, "sprinters_open_tab") and hasattr(self.sprinters_open_tab, "set_active"):
             self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
+        if hasattr(self, "maand_eind_tab") and hasattr(self.maand_eind_tab, "set_active"):
+            self.maand_eind_tab.set_active(index == self.tabWidget.indexOf(self.maand_eind_tab))
 
     def _apply_tab_style(self):
         settings = get_settings()

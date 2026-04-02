@@ -4,6 +4,8 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import estimate_delta
 from portefeuille_viewer.services.scenario_order_resolver import resolve_active_scenario_orders_df
 
+CHANGE_KIND_MARKET_CLOSE = "market_close"
+
 
 def _empty_df_like_base() -> pl.DataFrame:
     base_df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
@@ -144,7 +146,27 @@ def _apply_order_delta(target: dict, row: dict, spot_price: float) -> None:
 
     call_put = str(row.get("optie_call_put") or "").strip().lower()
     strike = _to_float(row.get("optie_strike"))
+    transactie_prijs = _to_float(row.get("transactie_prijs"))
+    change_kind = str(row.get("change_kind") or "").strip().lower()
     if call_put not in {"call", "put"}:
+        return
+
+    if change_kind == CHANGE_KIND_MARKET_CLOSE:
+        close_value = qty * transactie_prijs * -1.0
+        is_itm = strike > spot_price if call_put == "put" else strike < spot_price
+        target["opt_waarde_bezit"] += close_value
+        target["opt_waarde_bezit_delta"] += close_value
+        if call_put == "put":
+            if is_itm:
+                target["opt_aantal_ITM_put"] += qty
+                target["opt_waarde_ITM"] += close_value
+            else:
+                target["opt_aantal_OTM_put"] += qty
+        else:
+            if is_itm:
+                target["opt_aantal_ITM_call"] += qty
+            else:
+                target["opt_aantal_OTM_call"] += qty
         return
 
     if call_put == "put":

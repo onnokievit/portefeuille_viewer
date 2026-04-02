@@ -93,6 +93,41 @@ def _open_options_df() -> tuple[pl.DataFrame, str]:
             .join(df_live_join, on=live_keys, how="left")
         )
         source_name = "repository_snapshot_load_open_opties+live_koers"
+    df_option_live = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+    option_join_cols = {"broker", "asset", "c_p", "strike", "exp", "last_px"}
+    if df_option_live is not None and not df_option_live.is_empty() and option_join_cols.issubset(set(df_option_live.columns)):
+        option_keys = ["broker", "asset_rollup", "optie_call_put", "optie_strike", "optie_exp_date"]
+        df_option_join = (
+            df_option_live.select(["broker", "asset", "c_p", "strike", "exp", "last_px"])
+            .rename({
+                "asset": "asset_rollup",
+                "c_p": "optie_call_put",
+                "strike": "optie_strike",
+                "exp": "optie_exp_date",
+                "last_px": "option_market_price",
+            })
+            .with_columns([
+                pl.col("broker").cast(pl.Utf8, strict=False),
+                pl.col("asset_rollup").cast(pl.Utf8, strict=False),
+                pl.col("optie_call_put").cast(pl.Utf8, strict=False),
+                pl.col("optie_strike").cast(pl.Float64, strict=False),
+                pl.col("optie_exp_date").cast(pl.Date, strict=False),
+                pl.col("option_market_price").cast(pl.Float64, strict=False),
+            ])
+            .filter(pl.col("option_market_price").is_not_null() & (pl.col("option_market_price") > 0))
+            .unique(subset=option_keys, keep="last")
+        )
+        df = (
+            df.with_columns([
+                pl.col("broker").cast(pl.Utf8, strict=False),
+                pl.col("asset_rollup").cast(pl.Utf8, strict=False),
+                pl.col("optie_call_put").cast(pl.Utf8, strict=False),
+                pl.col("optie_strike").cast(pl.Float64, strict=False),
+                pl.col("optie_exp_date").cast(pl.Date, strict=False),
+            ])
+            .join(df_option_join, on=option_keys, how="left")
+        )
+        source_name = f"{source_name}+option_timevalue_last_px"
     return df, source_name
 
 
@@ -200,7 +235,11 @@ def _normalized_amount(base_amount: float, existing_row: dict | None = None) -> 
 
 def _bucket2_row_from_open_position(row: dict, existing_row: dict | None = None) -> dict:
     amount_signed = _as_float(row.get("SomVantransactie_aantal")) or 0.0
-    price_now = _as_float(row.get("Koers")) or 0.0
+    price_now = _as_float(row.get("option_market_price"))
+    if price_now is None or price_now <= 0:
+        price_now = _as_float(existing_row.get("transactie_prijs")) if existing_row else None
+    if price_now is None or price_now <= 0:
+        price_now = 0.0
     change_kind = str(existing_row.get(CHANGE_KIND_COL) or "").strip() if existing_row else ""
     change_kind = change_kind or CHANGE_KIND_OPTION_EOM
     amount = _normalized_amount(amount_signed, existing_row)

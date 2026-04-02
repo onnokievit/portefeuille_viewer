@@ -33,16 +33,20 @@ from portefeuille_viewer.data.test_order_repository import (
     PARENT_CHANGE_UID_COL,
     SCENARIO_ORDER_UID_COL,
     SOURCE_BUCKET_COL,
+    SOURCE_TYPE_COL,
     create_test_order_scenario_in_cache,
     delete_test_order_scenario_in_cache,
     ensure_default_test_order_scenario,
     flush_dirty_test_order_scenarios_to_db,
     get_cached_test_order_scenario_content_map,
     get_cached_test_order_scenarios,
+    get_cached_orders,
     get_test_orders,
+    flush_dirty_test_orders_to_db,
     load_test_order_scenarios_cache_from_db,
     rename_test_order_scenario_in_cache,
     save_scenario_content_for_visible_rows,
+    set_cached_orders_for_asset,
 )
 from portefeuille_viewer.services.scenario_aandelen_overlay import (
     refresh_aandelen_scenario_overlay_snapshot,
@@ -50,6 +54,9 @@ from portefeuille_viewer.services.scenario_aandelen_overlay import (
 from portefeuille_viewer.services.scenario_generated_option_sync import (
     BUCKET_2,
     BUCKET_3,
+    CHANGE_KIND_MARKET_CLOSE,
+    CHANGE_KIND_OPTION_EOM,
+    SOURCE_TYPE_OPTION_EOM_CHILD,
     sync_generated_option_orders,
 )
 from portefeuille_viewer.services.scenario_order_resolver import (
@@ -250,6 +257,34 @@ class ScenarioManagerDialog(QDialog):
 
 
 class GeneratedOptionOrdersDialog(QDialog):
+    _BUCKET2_COLS = [
+        ("Incl", "include"),
+        ("Asset", "asset_rollup"),
+        ("Broker", "broker"),
+        ("ITM/OTM", "itm_otm"),
+        ("Type", "asset_type"),
+        ("Transactie", "transactie_type"),
+        ("Afhandeling", CHANGE_KIND_COL),
+        ("Aantal", "transactie_aantal"),
+        ("Prijs", "transactie_prijs"),
+        ("c/p", "optie_call_put"),
+        ("Exp datum", "optie_exp_date"),
+        ("Strike", "optie_strike"),
+    ]
+    _BUCKET3_COLS = [
+        ("Incl", "include"),
+        ("Asset", "asset_rollup"),
+        ("Broker", "broker"),
+        ("ITM/OTM", "itm_otm"),
+        ("Type", "asset_type"),
+        ("Transactie", "transactie_type"),
+        ("Aantal", "transactie_aantal"),
+        ("Prijs", "transactie_prijs"),
+        ("c/p", "optie_call_put"),
+        ("Exp datum", "optie_exp_date"),
+        ("Strike", "optie_strike"),
+    ]
+
     @staticmethod
     def _scenario_content_safe_df(rows: list[dict]) -> pl.DataFrame:
         safe_rows: list[dict] = []
@@ -347,7 +382,14 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.tableBucket1 = self._create_table(self)
         layout.addWidget(self.tableBucket1, 1)
 
-        layout.addWidget(QLabel("Bucket 2 - Open Position", self))
+        bucket2_header = QHBoxLayout()
+        bucket2_header.addWidget(QLabel("Bucket 2 - Open Position", self))
+        bucket2_header.addStretch(1)
+        self.btnBucket2AllEom = QPushButton("Visible -> EOM", self)
+        bucket2_header.addWidget(self.btnBucket2AllEom)
+        self.btnBucket2AllMarketClose = QPushButton("Visible -> Market Close", self)
+        bucket2_header.addWidget(self.btnBucket2AllMarketClose)
+        layout.addLayout(bucket2_header)
         self.tableBucket2 = self._create_table(self)
         layout.addWidget(self.tableBucket2, 1)
 
@@ -378,6 +420,10 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.filterCp.currentIndexChanged.connect(self._apply_bucket2_filters)
         self.btnExpFilter.clicked.connect(self._open_expiry_filter_dialog)
         self.tableBucket2.itemChanged.connect(self._on_bucket2_item_changed)
+        self.btnBucket2AllEom.clicked.connect(lambda: self._set_bucket2_change_kind_for_visible(CHANGE_KIND_OPTION_EOM))
+        self.btnBucket2AllMarketClose.clicked.connect(
+            lambda: self._set_bucket2_change_kind_for_visible(CHANGE_KIND_MARKET_CLOSE)
+        )
         self.btnToggleBucket3.clicked.connect(self._toggle_bucket3_collapsed)
         signals.testOrderScenariosChanged.connect(self._on_test_order_scenarios_changed)
         signals.testOrdersEnabledChanged.connect(self._on_test_orders_enabled_changed)
@@ -411,6 +457,10 @@ class GeneratedOptionOrdersDialog(QDialog):
             combo.setCurrentIndex(idx if idx >= 0 else 0)
         finally:
             combo.blockSignals(False)
+
+    @staticmethod
+    def _table_cols(bucket3: bool) -> list[tuple[str, str]]:
+        return list(GeneratedOptionOrdersDialog._BUCKET3_COLS if bucket3 else GeneratedOptionOrdersDialog._BUCKET2_COLS)
 
     def _reload_scenarios(self, selected_id: int | None = None) -> None:
         load_test_order_scenarios_cache_from_db()
@@ -482,6 +532,14 @@ class GeneratedOptionOrdersDialog(QDialog):
             self._fill_bucket_table(self.tableBucket1, self._bucket1_df, bucket3=False)
         finally:
             self.tableBucket1.blockSignals(False)
+        self._render_tables_from_frames()
+        self.labelStatus.setText(
+            f"Scenario {self.comboScenario.currentText()} | bucket1={self._bucket1_df.height if not self._bucket1_df.is_empty() else 0} | "
+            f"bucket2={self._bucket2_df.height if not self._bucket2_df.is_empty() else 0} | "
+            f"bucket3={self._bucket3_df.height if not self._bucket3_df.is_empty() else 0}"
+        )
+
+    def _render_tables_from_frames(self) -> None:
         self._bucket2_df = self._with_itm_otm(self._bucket2_df)
         self._bucket3_df = self._with_itm_otm(self._bucket3_df)
         self._fill_bucket_table(self.tableBucket2, self._bucket2_df, bucket3=False)
@@ -489,11 +547,6 @@ class GeneratedOptionOrdersDialog(QDialog):
         self._reload_bucket2_filters()
         self._sync_bucket3_checkstates_from_bucket2()
         self._apply_bucket2_filters()
-        self.labelStatus.setText(
-            f"Scenario {self.comboScenario.currentText()} | bucket1={self._bucket1_df.height if not self._bucket1_df.is_empty() else 0} | "
-            f"bucket2={self._bucket2_df.height if not self._bucket2_df.is_empty() else 0} | "
-            f"bucket3={self._bucket3_df.height if not self._bucket3_df.is_empty() else 0}"
-        )
 
     def _toggle_bucket3_collapsed(self) -> None:
         self._bucket3_collapsed = not self._bucket3_collapsed
@@ -504,19 +557,7 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.btnToggleBucket3.setArrowType(Qt.RightArrow if self._bucket3_collapsed else Qt.DownArrow)
 
     def _fill_bucket_table(self, table: QTableWidget, df: pl.DataFrame, *, bucket3: bool) -> None:
-        cols = [
-            ("Incl", "include"),
-            ("Asset", "asset_rollup"),
-            ("Broker", "broker"),
-            ("ITM/OTM", "itm_otm"),
-            ("Type", "asset_type"),
-            ("Transactie", "transactie_type"),
-            ("Aantal", "transactie_aantal"),
-            ("Prijs", "transactie_prijs"),
-            ("c/p", "optie_call_put"),
-            ("Exp datum", "optie_exp_date"),
-            ("Strike", "optie_strike"),
-        ]
+        cols = self._table_cols(bucket3 or table is self.tableBucket1)
 
         table.blockSignals(True)
         try:
@@ -540,6 +581,21 @@ class GeneratedOptionOrdersDialog(QDialog):
                         if bucket3:
                             item.setData(Qt.UserRole + 1, str(row.get(PARENT_CHANGE_UID_COL) or ""))
                         table.setItem(r, c, item)
+                        continue
+                    if key == CHANGE_KIND_COL and table is self.tableBucket2:
+                        current_value = str(row.get(key) or "").strip() or CHANGE_KIND_OPTION_EOM
+                        item = QTableWidgetItem(current_value)
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                        table.setItem(r, c, item)
+                        table.setCellWidget(
+                            r,
+                            c,
+                            self._build_change_kind_toggle(
+                                str(row.get(SCENARIO_ORDER_UID_COL) or "").strip(),
+                                current_value,
+                                table,
+                            ),
+                        )
                         continue
                     value = row.get(key)
                     text = "" if value is None else str(value)
@@ -566,6 +622,35 @@ class GeneratedOptionOrdersDialog(QDialog):
         self._sync_asset_button()
         self._sync_itm_button()
         self._sync_exp_button()
+
+    def _build_change_kind_toggle(self, scenario_uid: str, value: str, parent: QWidget) -> QWidget:
+        wrapper = QWidget(parent)
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(4)
+        btn_eom = QToolButton(wrapper)
+        btn_eom.setText("EOM")
+        btn_eom.setCheckable(True)
+        btn_eom.setAutoExclusive(True)
+        btn_mkt = QToolButton(wrapper)
+        btn_mkt.setText("Mkt Close")
+        btn_mkt.setCheckable(True)
+        btn_mkt.setAutoExclusive(True)
+        current = str(value or "").strip() or CHANGE_KIND_OPTION_EOM
+        btn_eom.setChecked(current == CHANGE_KIND_OPTION_EOM)
+        btn_mkt.setChecked(current == CHANGE_KIND_MARKET_CLOSE)
+        btn_eom.clicked.connect(
+            lambda checked, uid=scenario_uid: self._on_bucket2_change_kind_changed(uid, CHANGE_KIND_OPTION_EOM)
+            if checked else None
+        )
+        btn_mkt.clicked.connect(
+            lambda checked, uid=scenario_uid: self._on_bucket2_change_kind_changed(uid, CHANGE_KIND_MARKET_CLOSE)
+            if checked else None
+        )
+        layout.addWidget(btn_eom)
+        layout.addWidget(btn_mkt)
+        layout.addStretch(1)
+        return wrapper
 
     def _clear_filters(self) -> None:
         self.searchAll.blockSignals(True)
@@ -594,7 +679,7 @@ class GeneratedOptionOrdersDialog(QDialog):
         if q:
             haystack = " | ".join(
                 (self.tableBucket2.item(row, col).text() if self.tableBucket2.item(row, col) else "").strip().lower()
-                for col in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+                for col in range(1, self.tableBucket2.columnCount())
             )
             terms = [part.strip().lower() for part in q.split(",") if part.strip()]
             if any(term not in haystack for term in terms):
@@ -611,7 +696,7 @@ class GeneratedOptionOrdersDialog(QDialog):
             elif key == "asset_rollup":
                 col = 1
             elif key == "optie_call_put":
-                col = 7
+                col = self._bucket2_column_index("optie_call_put")
             item = self.tableBucket2.item(row, col)
             value = (item.text() if item else "").strip()
             if value != selected:
@@ -622,21 +707,27 @@ class GeneratedOptionOrdersDialog(QDialog):
             if value not in self._broker_filter_selected:
                 return False
         if self._asset_filter_selected:
-            item = self.tableBucket2.item(row, 1)
+            item = self.tableBucket2.item(row, self._bucket2_column_index("asset_rollup"))
             value = (item.text() if item else "").strip()
             if value not in self._asset_filter_selected:
                 return False
         if self._itm_filter_selected:
-            item = self.tableBucket2.item(row, 3)
+            item = self.tableBucket2.item(row, self._bucket2_column_index("itm_otm"))
             value = (item.text() if item else "").strip()
             if value not in self._itm_filter_selected:
                 return False
         if self._exp_filter_selected:
-            item = self.tableBucket2.item(row, 9)
+            item = self.tableBucket2.item(row, self._bucket2_column_index("optie_exp_date"))
             value = (item.text() if item else "").strip()
             if value not in self._exp_filter_selected:
                 return False
         return True
+
+    def _bucket2_column_index(self, key: str) -> int:
+        for idx, (_label, col_key) in enumerate(self._BUCKET2_COLS):
+            if col_key == key:
+                return idx
+        return -1
 
     def _sync_broker_button(self) -> None:
         count = len(self._broker_filter_selected)
@@ -722,6 +813,186 @@ class GeneratedOptionOrdersDialog(QDialog):
                     out[asset] = price
         return out
 
+    @staticmethod
+    def _norm_option_exp(value) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        if hasattr(value, "strftime"):
+            try:
+                return value.strftime("%d-%m-%Y")
+            except Exception:
+                return text
+        for sep in ("-", "/", "."):
+            parts = text.replace("/", sep).replace(".", sep).split(sep)
+            if len(parts) != 3:
+                continue
+            try:
+                a, b, c = [int(p) for p in parts]
+            except Exception:
+                continue
+            if len(parts[0]) == 4:
+                year, month, day = a, b, c
+                return f"{day:02d}-{month:02d}-{year:04d}"
+            year = c + 2000 if c < 100 else c
+            return f"{a:02d}-{b:02d}-{year:04d}"
+        return text
+
+    def _option_price_lookup(self) -> dict[tuple[str, str, str, str, str], float]:
+        out: dict[tuple[str, str, str, str, str], float] = {}
+        df = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+        if (
+            df is not None
+            and not df.is_empty()
+            and {"broker", "asset", "c_p", "strike", "exp", "last_px"}.issubset(set(df.columns))
+        ):
+            for row in df.to_dicts():
+                try:
+                    price = float(row.get("last_px"))
+                    strike_key = f"{float(row.get('strike')):.8f}"
+                except Exception:
+                    continue
+                if price <= 0:
+                    continue
+                key = (
+                    str(row.get("broker") or "").strip().lower(),
+                    str(row.get("asset") or "").strip().upper(),
+                    str(row.get("c_p") or "").strip().lower(),
+                    strike_key,
+                    self._norm_option_exp(row.get("exp")),
+                )
+                if all(key) and key not in out:
+                    out[key] = price
+        return out
+
+    def _market_close_price_for_row(self, row: dict, lookup: dict[tuple[str, str, str, str, str], float]) -> float:
+        try:
+            strike_key = f"{float(row.get('optie_strike')):.8f}"
+        except Exception:
+            strike_key = ""
+        key = (
+            str(row.get("broker") or "").strip().lower(),
+            str(row.get("asset_rollup") or "").strip().upper(),
+            str(row.get("optie_call_put") or "").strip().lower(),
+            strike_key,
+            self._norm_option_exp(row.get("optie_exp_date")),
+        )
+        if key in lookup:
+            return float(lookup[key])
+        try:
+            return float(row.get("transactie_prijs") or 0.0)
+        except Exception:
+            return 0.0
+
+    def _rebuild_bucket3_preview_from_bucket2(self) -> None:
+        rows = self._bucket2_df.to_dicts() if self._bucket2_df is not None and not self._bucket2_df.is_empty() else []
+        existing_by_parent: dict[str, dict] = {}
+        if self._bucket3_df is not None and not self._bucket3_df.is_empty():
+            for row in self._bucket3_df.to_dicts():
+                parent_uid = str(row.get(PARENT_CHANGE_UID_COL) or "").strip()
+                if parent_uid:
+                    existing_by_parent[parent_uid] = row
+        spot_lookup = self._spot_lookup()
+        out_rows: list[dict] = []
+        for row in rows:
+            if str(row.get(CHANGE_KIND_COL) or "").strip() != CHANGE_KIND_OPTION_EOM:
+                continue
+            asset = str(row.get("asset_rollup") or "").strip()
+            cp = str(row.get("optie_call_put") or "").strip().lower()
+            try:
+                strike = float(row.get("optie_strike"))
+                amount = abs(float(row.get("transactie_aantal") or 0.0))
+            except Exception:
+                continue
+            spot = spot_lookup.get(asset)
+            if spot is None:
+                continue
+            is_itm = (cp == "call" and spot > strike) or (cp == "put" and spot < strike)
+            if not is_itm:
+                continue
+            parent_uid = str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
+            existing = existing_by_parent.get(parent_uid, {})
+            bucket2_type = str(row.get("transactie_type") or "").strip().lower()
+            position_amount = -amount if bucket2_type == "koop" else amount
+            transactie_type = (
+                ("koop" if position_amount > 0 else "verkoop")
+                if cp == "call"
+                else ("verkoop" if position_amount > 0 else "koop")
+            )
+            out_rows.append(
+                {
+                    SCENARIO_ORDER_UID_COL: str(existing.get(SCENARIO_ORDER_UID_COL) or "").strip() or parent_uid,
+                    SOURCE_BUCKET_COL: BUCKET_3,
+                    SOURCE_TYPE_COL: SOURCE_TYPE_OPTION_EOM_CHILD,
+                    PARENT_CHANGE_UID_COL: parent_uid,
+                    CHANGE_KIND_COL: CHANGE_KIND_OPTION_EOM,
+                    "broker": row.get("broker"),
+                    "asset_rollup": row.get("asset_rollup"),
+                    "asset_type": "aandeel",
+                    "transactie_type": transactie_type,
+                    "transactie_aantal": amount,
+                    "transactie_prijs": strike,
+                    "optie_call_put": None,
+                    "optie_strike": None,
+                    "optie_exp_date": row.get("optie_exp_date"),
+                    "create_date": row.get("create_date"),
+                    "include": int(row.get("include") or 0),
+                }
+            )
+        self._bucket3_df = pl.from_dicts(out_rows, strict=False) if out_rows else pl.DataFrame()
+
+    def _on_bucket2_change_kind_changed(self, scenario_uid: str, change_kind: str) -> None:
+        uid = str(scenario_uid or "").strip()
+        if not uid:
+            return
+        lookup = self._option_price_lookup()
+        rows = self._bucket2_df.to_dicts() if self._bucket2_df is not None and not self._bucket2_df.is_empty() else []
+        changed = False
+        for row in rows:
+            if str(row.get(SCENARIO_ORDER_UID_COL) or "").strip() != uid:
+                continue
+            row[CHANGE_KIND_COL] = change_kind
+            row["transactie_prijs"] = (
+                0.0 if change_kind == CHANGE_KIND_OPTION_EOM else self._market_close_price_for_row(row, lookup)
+            )
+            changed = True
+            break
+        if not changed:
+            return
+        self._bucket2_df = pl.from_dicts(rows, strict=False) if rows else pl.DataFrame()
+        self._rebuild_bucket3_preview_from_bucket2()
+        self._render_tables_from_frames()
+
+    def _set_bucket2_change_kind_for_visible(self, change_kind: str) -> None:
+        visible_uids: set[str] = set()
+        for row in range(self.tableBucket2.rowCount()):
+            if self.tableBucket2.isRowHidden(row):
+                continue
+            item = self.tableBucket2.item(row, 0)
+            if item is None:
+                continue
+            uid = str(item.data(Qt.UserRole) or "").strip()
+            if uid:
+                visible_uids.add(uid)
+        if not visible_uids:
+            return
+        lookup = self._option_price_lookup()
+        rows = self._bucket2_df.to_dicts() if self._bucket2_df is not None and not self._bucket2_df.is_empty() else []
+        changed = False
+        for row in rows:
+            if str(row.get(SCENARIO_ORDER_UID_COL) or "").strip() not in visible_uids:
+                continue
+            row[CHANGE_KIND_COL] = change_kind
+            row["transactie_prijs"] = (
+                0.0 if change_kind == CHANGE_KIND_OPTION_EOM else self._market_close_price_for_row(row, lookup)
+            )
+            changed = True
+        if not changed:
+            return
+        self._bucket2_df = pl.from_dicts(rows, strict=False) if rows else pl.DataFrame()
+        self._rebuild_bucket3_preview_from_bucket2()
+        self._render_tables_from_frames()
+
     def _with_itm_otm(self, df: pl.DataFrame) -> pl.DataFrame:
         if df is None or df.is_empty():
             return pl.DataFrame() if df is None else df
@@ -775,6 +1046,19 @@ class GeneratedOptionOrdersDialog(QDialog):
                 row["include"] = 1 if (uid_item and uid_item.checkState() == Qt.Checked) else 0
             rows.append(row)
         return rows
+
+    def _current_generated_include_maps(self) -> tuple[dict[str, int], dict[str, int]]:
+        bucket2_map: dict[str, int] = {}
+        bucket3_map: dict[str, int] = {}
+        for row in self._table_rows_for_save(self.tableBucket2, self._bucket2_df):
+            uid = str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
+            if uid:
+                bucket2_map[uid] = int(row.get("include") or 0)
+        for row in self._table_rows_for_save(self.tableBucket3, self._bucket3_df):
+            uid = str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
+            if uid:
+                bucket3_map[uid] = int(row.get("include") or 0)
+        return bucket2_map, bucket3_map
 
     def _bucket2_checkstate_by_uid(self, scenario_uid: str) -> Qt.CheckState:
         suid = str(scenario_uid or "").strip()
@@ -870,6 +1154,29 @@ class GeneratedOptionOrdersDialog(QDialog):
             refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=enabled)
             refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=enabled)
 
+    def _persist_generated_bucket2_rows(self) -> None:
+        if self._bucket2_df is None or self._bucket2_df.is_empty():
+            return
+        by_asset: dict[str, list[dict]] = {}
+        for row in self._bucket2_df.to_dicts():
+            asset = str(row.get("asset_rollup") or "").strip()
+            if asset:
+                by_asset.setdefault(asset, []).append(dict(row))
+        for asset, bucket2_rows in by_asset.items():
+            existing_df = get_cached_orders(asset)
+            manual_rows: list[dict] = []
+            if existing_df is not None and not existing_df.is_empty():
+                manual_rows = [
+                    row for row in existing_df.to_dicts()
+                    if str(row.get(SOURCE_BUCKET_COL) or "").strip() not in {BUCKET_2, BUCKET_3}
+                ]
+            combined_rows = manual_rows + bucket2_rows
+            set_cached_orders_for_asset(
+                asset,
+                pl.from_dicts(combined_rows, strict=False) if combined_rows else pl.DataFrame(),
+            )
+        flush_dirty_test_orders_to_db()
+
     def _on_scenario_changed(self, _index: int) -> None:
         data = self.comboScenario.currentData()
         if data is None:
@@ -947,6 +1254,8 @@ class GeneratedOptionOrdersDialog(QDialog):
     def _on_sync_clicked(self) -> None:
         scenario_id = self._scenario_id or ensure_default_test_order_scenario()
         try:
+            bucket2_include_map, bucket3_include_map = self._current_generated_include_maps()
+            self._persist_generated_bucket2_rows()
             stats = sync_generated_option_orders()
             generated_df = get_test_orders(asset_rollup=None, scenario_id=None)
             if generated_df is not None and not generated_df.is_empty() and SOURCE_BUCKET_COL in generated_df.columns:
@@ -955,14 +1264,25 @@ class GeneratedOptionOrdersDialog(QDialog):
                     uid for uid, row in content_map.items()
                     if int(row.get("enabled") or 0) == 1
                 }
-                generated_df = generated_df.filter(
+                generated_rows: list[dict] = []
+                for row in generated_df.filter(
                     pl.col(SOURCE_BUCKET_COL).cast(pl.Utf8, strict=False).is_in([BUCKET_2, BUCKET_3])
-                ).with_columns(
-                    pl.col(SCENARIO_ORDER_UID_COL)
-                    .cast(pl.Utf8, strict=False)
-                    .map_elements(lambda uid: 1 if str(uid or "").strip() in enabled_uids else 0, return_dtype=pl.Int64)
-                    .alias("include")
-                )
+                ).to_dicts():
+                    uid = str(row.get(SCENARIO_ORDER_UID_COL) or "").strip()
+                    parent_uid = str(row.get(PARENT_CHANGE_UID_COL) or "").strip()
+                    bucket = str(row.get(SOURCE_BUCKET_COL) or "").strip()
+                    if bucket == BUCKET_2 and uid in bucket2_include_map:
+                        include = int(bucket2_include_map[uid])
+                    elif bucket == BUCKET_3 and uid in bucket3_include_map:
+                        include = int(bucket3_include_map[uid])
+                    elif bucket == BUCKET_3 and parent_uid in bucket2_include_map:
+                        include = int(bucket2_include_map[parent_uid])
+                    else:
+                        include = 1 if uid in enabled_uids else 0
+                    out = dict(row)
+                    out["include"] = include
+                    generated_rows.append(out)
+                generated_df = pl.from_dicts(generated_rows, strict=False) if generated_rows else pl.DataFrame()
                 if not generated_df.is_empty():
                     save_scenario_content_for_visible_rows(int(scenario_id), generated_df)
                     flush_dirty_test_order_scenarios_to_db()
@@ -985,6 +1305,8 @@ class GeneratedOptionOrdersDialog(QDialog):
 
     def _on_save_clicked(self) -> None:
         try:
+            self._persist_generated_bucket2_rows()
+            self._on_sync_clicked()
             self._persist_current_scenario()
         except Exception as exc:
             QMessageBox.warning(self, "Save mislukt", str(exc))
