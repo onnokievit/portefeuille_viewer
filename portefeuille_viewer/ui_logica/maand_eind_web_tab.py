@@ -77,6 +77,50 @@ def _iter_third_friday_dates(start_date: date, end_date: date) -> list[date]:
     return out
 
 
+def _last_day_of_month(year: int, month: int) -> date:
+    if month == 12:
+        return date(year + 1, 1, 1) - timedelta(days=1)
+    return date(year, month + 1, 1) - timedelta(days=1)
+
+
+def _iter_month_end_dates(start_date: date, end_date: date) -> list[date]:
+    out: list[date] = []
+    year = start_date.year
+    month = start_date.month
+    while (year, month) <= (end_date.year, end_date.month):
+        candidate = _last_day_of_month(year, month)
+        if start_date <= candidate <= end_date:
+            out.append(candidate)
+        if month == 12:
+            year += 1
+            month = 1
+        else:
+            month += 1
+    return out
+
+
+def _iter_quarter_end_dates(start_date: date, end_date: date) -> list[date]:
+    quarter_end_months = (3, 6, 9, 12)
+    out: list[date] = []
+    year = start_date.year
+    while year <= end_date.year:
+        for month in quarter_end_months:
+            candidate = _last_day_of_month(year, month)
+            if start_date <= candidate <= end_date:
+                out.append(candidate)
+        year += 1
+    return out
+
+
+def _iter_year_end_dates(start_date: date, end_date: date) -> list[date]:
+    out: list[date] = []
+    for year in range(start_date.year, end_date.year + 1):
+        candidate = date(year, 12, 31)
+        if start_date <= candidate <= end_date:
+            out.append(candidate)
+    return out
+
+
 def _schedule_dates(start_date: date, end_date: date, mode: str) -> list[date]:
     if end_date < start_date:
         start_date, end_date = end_date, start_date
@@ -84,7 +128,26 @@ def _schedule_dates(start_date: date, end_date: date, mode: str) -> list[date]:
         return _iter_daily_dates(start_date, end_date)
     if mode == "weekly_friday":
         return _iter_friday_dates(start_date, end_date)
+    if mode == "month_end":
+        return _iter_month_end_dates(start_date, end_date)
+    if mode == "quarter_end":
+        return _iter_quarter_end_dates(start_date, end_date)
+    if mode == "year_end":
+        return _iter_year_end_dates(start_date, end_date)
     return _iter_third_friday_dates(start_date, end_date)
+
+
+def _append_today_if_needed(schedule: list[date], end_date: date) -> list[date]:
+    today = date.today()
+    if end_date < today:
+        return schedule
+    if today not in schedule:
+        schedule = list(schedule) + [today]
+    return sorted(set(schedule))
+
+
+def _date_label(dt: date) -> str:
+    return f"{dt.day:02d}-{dt.month:02d}-{dt.year % 100:02d}"
 
 
 class MaandEindWebTab(QWidget):
@@ -236,11 +299,17 @@ class MaandEindWebTab(QWidget):
             },
         )
 
-    def _build_matrix(self, df_source: pl.DataFrame, schedule: list[date]) -> pl.DataFrame:
+    def _build_matrix(
+        self,
+        df_source: pl.DataFrame,
+        schedule: list[date],
+        group_keys: list[str],
+        apply_sector_filter: bool,
+    ) -> pl.DataFrame:
         if not schedule or df_source is None or df_source.is_empty():
-            return pl.DataFrame({"asset_rollup": []})
+            return pl.DataFrame({group_keys[0]: []})
         if "datum" not in df_source.columns or "asset_rollup" not in df_source.columns or "totaal_v2" not in df_source.columns:
-            return pl.DataFrame({"asset_rollup": []})
+            return pl.DataFrame({group_keys[0]: []})
 
         meta_df = self._metadata_df()
         eurusd = float(get_settings().get_eurusd() or 1.0)
@@ -266,16 +335,23 @@ class MaandEindWebTab(QWidget):
             work = work.filter(pl.col("regio") == self._filter_regio)
         if self._filter_value_grow:
             work = work.filter(pl.col("value_grow") == self._filter_value_grow)
-        if self._filter_sector:
+        if apply_sector_filter and self._filter_sector:
             work = work.filter(pl.col("sector") == self._filter_sector)
         work = work.select(["datum", "asset_rollup", "value_grow", "sector", "regio", "waarde"]).sort(["asset_rollup", "datum"])
         if work.is_empty():
-            return pl.DataFrame({"asset_rollup": []})
+            return pl.DataFrame({group_keys[0]: []})
+
+        if group_keys == ["sector"]:
+            work = (
+                work.group_by(["datum", "sector"])
+                .agg(pl.col("waarde").sum().alias("waarde"))
+                .sort(["sector", "datum"])
+            )
 
         assets = (
-            work.select(["asset_rollup", "value_grow", "sector", "regio"])
+            work.select(group_keys)
             .unique()
-            .sort("asset_rollup")
+            .sort(group_keys[0])
             .with_columns(pl.lit(1).alias("_k"))
         )
         schedule_df = (
@@ -287,45 +363,71 @@ class MaandEindWebTab(QWidget):
         )
         combined = (
             pl.concat([work.with_columns(pl.lit(0).alias("_is_schedule")), schedule_df], how="diagonal_relaxed")
-            .sort(["asset_rollup", "datum", "_is_schedule"])
-            .with_columns(pl.col("waarde").fill_null(strategy="forward").over("asset_rollup"))
+            .sort([group_keys[0], "datum", "_is_schedule"])
+            .with_columns(pl.col("waarde").fill_null(strategy="forward").over(group_keys[0]))
             .filter(pl.col("_is_schedule") == 1)
-            .sort(["asset_rollup", "datum"])
+            .sort([group_keys[0], "datum"])
         )
         if combined.is_empty():
-            return pl.DataFrame({"asset_rollup": []})
+            return pl.DataFrame({group_keys[0]: []})
 
-        pivot = combined.pivot(index=["asset_rollup", "value_grow", "sector", "regio"], on="datum", values="waarde")
+        pivot = combined.pivot(index=group_keys, on="datum", values="waarde")
         rename_map = {}
         for col in pivot.columns:
-            if col in {"asset_rollup", "value_grow", "sector", "regio"}:
+            if col in set(group_keys):
                 continue
             dt = _coerce_to_date(col)
             if dt is not None:
-                rename_map[col] = dt.strftime("%d-%m-%y")
+                rename_map[col] = _date_label(dt)
         if rename_map:
             pivot = pivot.rename(rename_map)
-        first_cols = ["asset_rollup", "value_grow", "sector", "regio"]
-        date_cols = [c for c in pivot.columns if c not in first_cols]
-        return pivot.select(first_cols + date_cols).sort("asset_rollup")
+        date_cols = [c for c in pivot.columns if c not in group_keys]
+        if group_keys == ["sector"]:
+            return (
+                pivot.with_columns(
+                    [
+                        pl.col("sector").alias("asset_rollup"),
+                        pl.lit("").alias("value_grow"),
+                        pl.lit("").alias("regio"),
+                    ]
+                )
+                .select(["asset_rollup", "value_grow", "sector", "regio"] + date_cols)
+                .sort("asset_rollup")
+            )
+        return pivot.select(group_keys + date_cols).sort(group_keys[0])
 
     def _publish_snapshot(self):
         if not self._is_active or not self._js_ready:
             return
-        schedule = _schedule_dates(self._start_date, self._end_date, self._frequency)
+        schedule = _append_today_if_needed(
+            _schedule_dates(self._start_date, self._end_date, self._frequency),
+            self._end_date,
+        )
         df_source = getattr(SNAPSHOT_STORE, "repository_snapshot_per_dag_asset_result_v2", None)
-        matrix = self._build_matrix(df_source, schedule)
-        rows = matrix.to_dicts() if hasattr(matrix, "to_dicts") else []
-        cols = list(matrix.columns)
+        asset_matrix = self._build_matrix(
+            df_source,
+            schedule,
+            group_keys=["asset_rollup", "value_grow", "sector", "regio"],
+            apply_sector_filter=True,
+        )
+        sector_matrix = self._build_matrix(
+            df_source,
+            schedule,
+            group_keys=["sector"],
+            apply_sector_filter=False,
+        )
         self._loaded_once = True
         self._call_js(
             "renderSnapshot",
             {
-                "rows": rows,
-                "cols": cols,
+                "asset_rows": asset_matrix.to_dicts() if hasattr(asset_matrix, "to_dicts") else [],
+                "asset_cols": list(asset_matrix.columns),
+                "sector_rows": sector_matrix.to_dicts() if hasattr(sector_matrix, "to_dicts") else [],
+                "sector_cols": list(sector_matrix.columns),
                 "meta": {
-                    "asset_count": int(matrix.height),
-                    "moment_count": max(int(matrix.width) - 4, 0),
+                    "asset_count": int(asset_matrix.height),
+                    "sector_count": int(sector_matrix.height),
+                    "moment_count": max(int(asset_matrix.width) - 4, 0),
                     "frequency": self._frequency,
                     "loaded_once": self._loaded_once,
                 },
@@ -348,7 +450,7 @@ class MaandEindWebTab(QWidget):
 
     def _set_frequency(self, value: str):
         mode = str(value or "").strip()
-        if mode not in {"daily", "weekly_friday", "third_friday"}:
+        if mode not in {"daily", "weekly_friday", "third_friday", "month_end", "quarter_end", "year_end"}:
             return
         self._frequency = mode
         self._schedule_publish()
@@ -397,19 +499,23 @@ class MaandEindWebTab(QWidget):
       .field input.filter{ min-width:220px; }
       .toolbar button{ height:34px; padding:0 14px; border:1px solid var(--line-strong); border-radius:8px; background:#8d7651; color:#fffdf8; cursor:pointer; font-weight:700; }
       .meta{ padding:0 2px; font-size:12px; color:var(--muted); }
-      .table-wrap{ border:1px solid var(--line); border-radius:14px; overflow:auto; background:var(--panel); max-height:78vh; box-shadow:0 12px 30px rgba(73,57,22,.08); }
+      .tables-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:start; }
+      .panel{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+      .section-title{ font-size:12px; font-weight:800; color:var(--muted); letter-spacing:.04em; text-transform:uppercase; margin:2px 2px -2px 2px; }
+      .table-wrap{ border:1px solid var(--line); border-radius:14px; overflow-x:scroll; overflow-y:auto; scrollbar-gutter:stable both-edges; background:var(--panel); max-height:62vh; box-shadow:0 12px 30px rgba(73,57,22,.08); }
+      .table-pad{ display:inline-block; min-width:100%; padding-right:56px; }
       table{ border-collapse:separate; border-spacing:0; min-width:max-content; width:max-content; font-size:12px; }
       thead th{ position:sticky; top:0; z-index:3; padding:7px 10px; background:var(--head); border-bottom:1px solid var(--line-strong); border-right:1px solid var(--line); white-space:nowrap; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; cursor:pointer; user-select:none; }
-      thead th.asset{ left:0; z-index:4; text-align:left; background:var(--head-2); min-width:160px; }
-      thead th.meta-col{ text-align:left; min-width:120px; }
+      thead th.asset{ left:0; z-index:4; text-align:left; background:var(--head-2); min-width:110px; max-width:110px; }
+      thead th.meta-col{ text-align:left; min-width:72px; max-width:72px; }
       thead th[data-sort="asc"]::after{ content:" ↑"; }
       thead th[data-sort="desc"]::after{ content:" ↓"; }
       tbody td{ padding:5px 10px; border-right:1px solid #e5dcc9; border-bottom:1px solid #ece4d4; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; background:#fbfaf6; }
-      tbody td.asset{ position:sticky; left:0; z-index:2; text-align:left; font-weight:700; background:#f3ecdd; min-width:160px; }
-      tbody td.meta-col{ text-align:left; }
+      tbody td.asset{ position:sticky; left:0; z-index:2; text-align:left; font-weight:700; background:#f3ecdd; min-width:110px; max-width:110px; overflow:hidden; text-overflow:ellipsis; }
+      tbody td.meta-col{ text-align:left; min-width:72px; max-width:72px; overflow:hidden; text-overflow:ellipsis; }
       tbody tr:nth-child(even) td{ background:#f8f4eb; }
       tbody tr:nth-child(even) td.asset{ background:#eee5d3; }
-      tbody tr.total-row td{ background:#e4d6b8 !important; font-weight:800; border-top:2px solid var(--line-strong); }
+      tbody tr.total-row td{ position:sticky; bottom:0; z-index:3; background:#e4d6b8 !important; font-weight:800; border-top:2px solid var(--line-strong); }
       tbody tr.total-row td.asset{ background:#d9c8a3 !important; }
       td.pos{ background:var(--pos-bg) !important; color:var(--pos-fg); font-weight:700; }
       td.neg{ background:var(--neg-bg) !important; color:var(--neg-fg); font-weight:700; }
@@ -432,6 +538,9 @@ class MaandEindWebTab(QWidget):
           <select id="frequency">
             <option value="third_friday">3e vrijdag maand</option>
             <option value="weekly_friday">Elke vrijdag</option>
+            <option value="month_end">Laatste dag maand</option>
+            <option value="quarter_end">Laatste dag kwartaal</option>
+            <option value="year_end">Laatste dag jaar</option>
             <option value="daily">Elke dag</option>
           </select>
         </div>
@@ -454,16 +563,63 @@ class MaandEindWebTab(QWidget):
         <button id="btn_refresh">Refresh</button>
       </div>
       <div class="meta" id="meta">Nog niet geladen.</div>
-      <div class="table-wrap">
-        <table id="tbl">
-          <thead><tr id="thead-row"></tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
+      <div class="tables-row">
+        <div class="panel">
+          <div class="section-title">Eindwaarden</div>
+          <div class="table-wrap" id="wrap-values">
+            <div class="table-pad">
+              <table id="tbl_values">
+                <thead><tr id="thead-row-values"></tr></thead>
+                <tbody id="tbody-values"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="section-title">Verschil Met Vorige Meetdatum</div>
+          <div class="table-wrap" id="wrap-diff">
+            <div class="table-pad">
+              <table id="tbl_diff">
+                <thead><tr id="thead-row-diff"></tr></thead>
+                <tbody id="tbody-diff"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tables-row">
+        <div class="panel">
+          <div class="section-title">Sector Totaal</div>
+          <div class="table-wrap" id="wrap-sector-values">
+            <div class="table-pad">
+              <table id="tbl_sector_values">
+                <thead><tr id="thead-row-sector-values"></tr></thead>
+                <tbody id="tbody-sector-values"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="section-title">Sector Diff</div>
+          <div class="table-wrap" id="wrap-sector-diff">
+            <div class="table-pad">
+              <table id="tbl_sector_diff">
+                <thead><tr id="thead-row-sector-diff"></tr></thead>
+                <tbody id="tbody-sector-diff"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <script>
-      const META_COLS = new Set(["asset_rollup","value_grow","sector","regio"]);
-      const state = { cols: [], rows: [], filters: { asset: "" }, sort: { col: "asset_rollup", dir: "asc" }, bridge: null };
+      const ASSET_META_COLS = new Set(["asset_rollup","value_grow","sector","regio"]);
+      const SECTOR_META_COLS = new Set(["asset_rollup","value_grow","sector","regio"]);
+      const DIFF_VISIBLE_ASSET_COLS = ["asset_rollup"];
+      const DIFF_VISIBLE_SECTOR_COLS = ["asset_rollup"];
+      const assetState = { cols: [], rows: [], filters: { asset: "" }, sort: { source: "values", col: "asset_rollup", dir: "asc" }, syncing:false };
+      const sectorState = { cols: [], rows: [], filters: {}, sort: { source: "values", col: "asset_rollup", dir: "asc" }, syncing:false };
+      const bridgeState = { bridge: null };
       function refillSelect(id, options, current, emptyLabel){
         const el=document.getElementById(id);
         if(!el) return;
@@ -492,8 +648,8 @@ class MaandEindWebTab(QWidget):
         if(v<0) return "neg";
         return "";
       }
-      function compareRows(a,b,col,dir){
-        if(META_COLS.has(col)){
+      function compareRows(a,b,col,dir, metaCols){
+        if(metaCols.has(col)){
           const cmp = String(a[col]||"").localeCompare(String(b[col]||""));
           return dir==="asc" ? cmp : -cmp;
         }
@@ -505,15 +661,17 @@ class MaandEindWebTab(QWidget):
         const cmp = av-bv;
         return dir==="asc" ? cmp : -cmp;
       }
-      function visibleRows(){
-        const needle=(state.filters.asset||"").trim().toLowerCase();
-        if(!needle) return state.rows;
-        return state.rows.filter(r => String(r.asset_rollup||"").toLowerCase().includes(needle));
+      function visibleRows(tableState, key){
+        const needle=(tableState.filters[key]||"").trim().toLowerCase();
+        if(!needle) return tableState.rows;
+        return tableState.rows.filter(r => String(r[key]||"").toLowerCase().includes(needle));
       }
-      function buildTotalRow(rows){
-        const out = { asset_rollup: "Totaal", value_grow: "", sector: "", regio: "" };
-        for(const col of state.cols){
-          if(META_COLS.has(col)) continue;
+      function buildTotalRow(rows, cols, labelKey, metaCols){
+        const out = {};
+        cols.forEach(c => out[c] = "");
+        out[labelKey] = "Totaal";
+        for(const col of cols){
+          if(metaCols.has(col)) continue;
           let total = 0;
           let hasAny = false;
           for(const row of rows){
@@ -524,48 +682,104 @@ class MaandEindWebTab(QWidget):
         }
         return out;
       }
-      function headerLabel(col){
+      function headerLabel(col, firstColLabel){
+        if(col==="asset_rollup" && firstColLabel) return firstColLabel;
         if(col==="asset_rollup") return "Asset";
         if(col==="value_grow") return "Value/Grow";
         if(col==="sector") return "Sector";
         if(col==="regio") return "Regio";
         return col;
       }
-      function renderHeader(){
-        const tr=document.getElementById("thead-row");
+      function visibleColsFor(tableState, source, metaCols, diffVisibleCols){
+        if(source==="diff"){
+          const dateCols = tableState.cols.filter(c => !metaCols.has(c));
+          return diffVisibleCols.concat(dateCols);
+        }
+        return tableState.cols;
+      }
+      function diffRows(sortedRows, cols, metaCols){
+        const dateCols = cols.filter(c => !metaCols.has(c));
+        return sortedRows.map(row => {
+          const out = {...row};
+          let prev = null;
+          for(const col of dateCols){
+            const cur = num(row[col]);
+            out[col] = (cur===null || prev===null) ? null : (cur - prev);
+            if(cur!==null) prev = cur;
+          }
+          return out;
+        });
+      }
+      function renderHeader(targetId, source, tableState, metaCols, diffVisibleCols, firstColLabel){
+        const tr=document.getElementById(targetId);
         tr.innerHTML="";
-        state.cols.forEach((col,idx)=>{
+        const cols = visibleColsFor(tableState, source, metaCols, diffVisibleCols);
+        cols.forEach((col,idx)=>{
           const th=document.createElement("th");
-          th.textContent=headerLabel(col);
+          th.textContent=headerLabel(col, idx===0 ? firstColLabel : "");
           if(idx===0) th.className="asset";
-          if(col!=="asset_rollup" && META_COLS.has(col)) th.classList.add("meta-col");
-          if(col===state.sort.col) th.dataset.sort = state.sort.dir;
+          if(col!=="asset_rollup" && col!=="sector" && metaCols.has(col)) th.classList.add("meta-col");
+          if(col===tableState.sort.col && tableState.sort.source===source) th.dataset.sort = tableState.sort.dir;
           th.onclick = ()=>{
-            if(state.sort.col===col){
-              state.sort.dir = state.sort.dir==="asc" ? "desc" : "asc";
+            if(tableState.sort.col===col && tableState.sort.source===source){
+              tableState.sort.dir = tableState.sort.dir==="asc" ? "desc" : "asc";
             } else {
-              state.sort.col = col;
-              state.sort.dir = META_COLS.has(col) ? "asc" : "desc";
+              tableState.sort.source = source;
+              tableState.sort.col = col;
+              tableState.sort.dir = metaCols.has(col) ? "asc" : "desc";
             }
-            renderHeader();
-            renderBody();
+            rerenderAll();
           };
           tr.appendChild(th);
         });
       }
-      function renderBody(){
-        const body=document.getElementById("tbody");
+      function syncVerticalPair(leftId, rightId, tableState){
+        const left=document.getElementById(leftId);
+        const right=document.getElementById(rightId);
+        if(!left || !right) return;
+        left.addEventListener("scroll", ()=>{
+          if(tableState.syncing) return;
+          tableState.syncing = true;
+          right.scrollTop = left.scrollTop;
+          tableState.syncing = false;
+        });
+        right.addEventListener("scroll", ()=>{
+          if(tableState.syncing) return;
+          tableState.syncing = true;
+          left.scrollTop = right.scrollTop;
+          tableState.syncing = false;
+        });
+      }
+      function syncHorizontalGroup(ids){
+        const nodes = ids.map(id => document.getElementById(id)).filter(Boolean);
+        if(nodes.length < 2) return;
+        const state = { syncing: false };
+        nodes.forEach(node => {
+          node.addEventListener("scroll", ()=>{
+            if(state.syncing) return;
+            state.syncing = true;
+            const left = node.scrollLeft;
+            nodes.forEach(other => {
+              if(other !== node) other.scrollLeft = left;
+            });
+            state.syncing = false;
+          });
+        });
+      }
+      function renderTableBody(bodyId, rows, source, tableState, metaCols, diffVisibleCols, labelKey){
+        const body=document.getElementById(bodyId);
+        if(!body) return;
+        const cols = visibleColsFor(tableState, source, metaCols, diffVisibleCols);
         body.innerHTML="";
-        const rows=visibleRows().slice().sort((a,b)=>compareRows(a,b,state.sort.col,state.sort.dir));
         for(const row of rows){
           const tr=document.createElement("tr");
-          state.cols.forEach((col,idx)=>{
+          cols.forEach((col,idx)=>{
             const td=document.createElement("td");
             const v=row[col];
             td.textContent=fmt(v);
             if(idx===0){
               td.className="asset";
-            }else if(META_COLS.has(col)){
+            }else if(metaCols.has(col)){
               td.classList.add("meta-col");
             }else{
               const cls=cssFor(v);
@@ -577,16 +791,16 @@ class MaandEindWebTab(QWidget):
           body.appendChild(tr);
         }
         if(rows.length){
-          const totalRow = buildTotalRow(rows);
+          const totalRow = buildTotalRow(rows, cols, labelKey, metaCols);
           const tr=document.createElement("tr");
           tr.className="total-row";
-          state.cols.forEach((col,idx)=>{
+          cols.forEach((col,idx)=>{
             const td=document.createElement("td");
             const v=totalRow[col];
             td.textContent=fmt(v);
             if(idx===0){
               td.className="asset";
-            }else if(META_COLS.has(col)){
+            }else if(metaCols.has(col)){
               td.classList.add("meta-col");
             }else{
               const cls=cssFor(v);
@@ -598,15 +812,40 @@ class MaandEindWebTab(QWidget):
           body.appendChild(tr);
         }
       }
+      function renderBody(tableState, metaCols, diffVisibleCols, valuesBodyId, diffBodyId, labelKey){
+        const baseRows=visibleRows(tableState, labelKey).slice();
+        const rowsForValues = baseRows.slice();
+        const rowsForDiff = diffRows(baseRows, tableState.cols, metaCols);
+        let order = baseRows.slice();
+        if(tableState.sort.source==="values"){
+          order = rowsForValues.slice().sort((a,b)=>compareRows(a,b,tableState.sort.col,tableState.sort.dir, metaCols));
+        } else {
+          const sortedDiff = rowsForDiff.slice().sort((a,b)=>compareRows(a,b,tableState.sort.col,tableState.sort.dir, metaCols));
+          const keyCols = Array.from(metaCols);
+          const keyOrder = sortedDiff.map(r => keyCols.map(k => String(r[k]||"")).join("__"));
+          const valueMap = new Map(rowsForValues.map(r => [keyCols.map(k => String(r[k]||"")).join("__"), r]));
+          order = keyOrder.map(k => valueMap.get(k)).filter(Boolean);
+        }
+        renderTableBody(valuesBodyId, order, "values", tableState, metaCols, diffVisibleCols, labelKey);
+        renderTableBody(diffBodyId, diffRows(order, tableState.cols, metaCols), "diff", tableState, metaCols, diffVisibleCols, labelKey);
+      }
+      function rerenderAll(){
+        renderHeader("thead-row-values","values", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "Asset");
+        renderHeader("thead-row-diff","diff", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "Asset");
+        renderBody(assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "tbody-values", "tbody-diff", "asset_rollup");
+        renderHeader("thead-row-sector-values","values", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "Sector");
+        renderHeader("thead-row-sector-diff","diff", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "Sector");
+        renderBody(sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "tbody-sector-values", "tbody-sector-diff", "asset_rollup");
+      }
       function bindUi(){
-        document.getElementById("asset_filter")?.addEventListener("input", (e)=>{ state.filters.asset=e.target.value||""; renderBody(); });
-        document.getElementById("btn_refresh")?.addEventListener("click", ()=> state.bridge?.refresh?.());
-        document.getElementById("start_date")?.addEventListener("change", (e)=> state.bridge?.setStartDate?.(e.target.value||""));
-        document.getElementById("end_date")?.addEventListener("change", (e)=> state.bridge?.setEndDate?.(e.target.value||""));
-        document.getElementById("frequency")?.addEventListener("change", (e)=> state.bridge?.setFrequency?.(e.target.value||""));
-        document.getElementById("filter_regio")?.addEventListener("change", (e)=> state.bridge?.setFilterRegio?.(e.target.value||""));
-        document.getElementById("filter_value_grow")?.addEventListener("change", (e)=> state.bridge?.setFilterValueGrow?.(e.target.value||""));
-        document.getElementById("filter_sector")?.addEventListener("change", (e)=> state.bridge?.setFilterSector?.(e.target.value||""));
+        document.getElementById("asset_filter")?.addEventListener("input", (e)=>{ assetState.filters.asset=e.target.value||""; rerenderAll(); });
+        document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
+        document.getElementById("start_date")?.addEventListener("change", (e)=> bridgeState.bridge?.setStartDate?.(e.target.value||""));
+        document.getElementById("end_date")?.addEventListener("change", (e)=> bridgeState.bridge?.setEndDate?.(e.target.value||""));
+        document.getElementById("frequency")?.addEventListener("change", (e)=> bridgeState.bridge?.setFrequency?.(e.target.value||""));
+        document.getElementById("filter_regio")?.addEventListener("change", (e)=> bridgeState.bridge?.setFilterRegio?.(e.target.value||""));
+        document.getElementById("filter_value_grow")?.addEventListener("change", (e)=> bridgeState.bridge?.setFilterValueGrow?.(e.target.value||""));
+        document.getElementById("filter_sector")?.addEventListener("change", (e)=> bridgeState.bridge?.setFilterSector?.(e.target.value||""));
       }
       window.syncControls = function(payload){
         if(!payload) return;
@@ -621,26 +860,40 @@ class MaandEindWebTab(QWidget):
         if(f) f.value = payload.frequency || "third_friday";
       };
       window.renderSnapshot = function(payload){
-        const rows=(payload&&payload.rows)?payload.rows:[];
-        const cols=(payload&&payload.cols)?payload.cols:[];
-        state.rows = rows;
-        state.cols = cols;
-        if(!state.cols.includes(state.sort.col)){
-          state.sort = { col: "asset_rollup", dir: "asc" };
-        }
-        renderHeader();
-        renderBody();
+        assetState.rows = (payload&&payload.asset_rows)?payload.asset_rows:[];
+        assetState.cols = (payload&&payload.asset_cols)?payload.asset_cols:[];
+        sectorState.rows = (payload&&payload.sector_rows)?payload.sector_rows:[];
+        sectorState.cols = (payload&&payload.sector_cols)?payload.sector_cols:[];
+        if(!assetState.cols.includes(assetState.sort.col)) assetState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
+        if(!sectorState.cols.includes(sectorState.sort.col)) sectorState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
+        rerenderAll();
         const meta=(payload&&payload.meta)?payload.meta:{};
-        const label = meta.frequency==="daily" ? "elke dag" : (meta.frequency==="weekly_friday" ? "elke vrijdag" : "3e vrijdag maand");
-        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.moment_count||0} meetmomenten | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
+        const labels = {
+          daily: "elke dag",
+          weekly_friday: "elke vrijdag",
+          third_friday: "3e vrijdag maand",
+          month_end: "laatste dag maand",
+          quarter_end: "laatste dag kwartaal",
+          year_end: "laatste dag jaar"
+        };
+        const label = labels[meta.frequency] || "3e vrijdag maand";
+        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.sector_count||0} sectoren | ${meta.moment_count||0} meetmomenten | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
       };
       if(window.qt && window.QWebChannel){
         new QWebChannel(qt.webChannelTransport, function(channel){
-          state.bridge = channel.objects.maandEindBridge || null;
+          bridgeState.bridge = channel.objects.maandEindBridge || null;
           bindUi();
+          syncVerticalPair("wrap-values","wrap-diff", assetState);
+          syncVerticalPair("wrap-sector-values","wrap-sector-diff", sectorState);
+          syncHorizontalGroup(["wrap-values", "wrap-sector-values"]);
+          syncHorizontalGroup(["wrap-diff", "wrap-sector-diff"]);
         });
       } else {
         bindUi();
+        syncVerticalPair("wrap-values","wrap-diff", assetState);
+        syncVerticalPair("wrap-sector-values","wrap-sector-diff", sectorState);
+        syncHorizontalGroup(["wrap-values", "wrap-sector-values"]);
+        syncHorizontalGroup(["wrap-diff", "wrap-sector-diff"]);
       }
     </script>
   </body>
