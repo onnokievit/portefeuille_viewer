@@ -38,6 +38,7 @@ class SnapshotStore:
         self.repository_snapshot_portfolio_value_total_combined_scenario: pl.DataFrame | None = None
         self.snapshot_aandelen_projection_v2_scenario: pl.DataFrame | None = None
         self.repository_portfolio_dividend: pl.DataFrame | None = None
+        self.repository_snapshot_historical_ohlcv: pl.DataFrame | None = None
         self.repository_snapshot_historical_close: pl.DataFrame | None = None
         self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
         self.repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None = None
@@ -92,6 +93,7 @@ class SnapshotStore:
         self.snapshot_aandelen_projection_v2_scenario = None
         self.repository_snapshot_optie_referentie_data = None
         self.repository_portfolio_dividend = None
+        self.repository_snapshot_historical_ohlcv = None
         self.repository_snapshot_historical_close = None
         self.repository_snapshot_historical_close_latest = None
         self.repository_snapshot_per_dag_asset_result_v2 = None
@@ -142,6 +144,7 @@ class SnapshotStore:
             self.repository_snapshot_portfolio_value_total_combined_scenario is not None,
             self.snapshot_aandelen_projection_v2_scenario is not None,
             self.repository_portfolio_dividend is not None,
+            self.repository_snapshot_historical_ohlcv is not None,
             self.repository_snapshot_historical_close is not None,
             self.repository_snapshot_historical_close_latest is not None,
             self.repository_snapshot_per_dag_asset_result_v2 is not None,
@@ -214,6 +217,8 @@ class SnapshotStore:
             )
         if self.repository_portfolio_dividend is not None:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
+        if self.repository_snapshot_historical_ohlcv is not None:
+            parts.append(f"Repository Historical OHLCV data: {len(self.repository_snapshot_historical_ohlcv)} rijen")
         if self.repository_snapshot_historical_close is not None:
             parts.append(f"Repository Historical Close data: {len(self.repository_snapshot_historical_close)} rijen")
         if self.repository_snapshot_historical_close_latest is not None:

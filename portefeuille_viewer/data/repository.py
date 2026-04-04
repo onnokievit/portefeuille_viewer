@@ -105,25 +105,31 @@ def load_asset_rollup_data() -> pl.DataFrame:
 
 def load_historical_close_snapshot() -> pl.DataFrame:
     """
-    Laad minimale historical close-data in memory voor snelle chart-opbouw.
+    Laad historical OHLCV-data in memory en publiceer tevens een afgeslankte close-snapshot.
     """
     sql = """
         SELECT
             datum,
             asset_rollup,
-            [close] AS close_price
+            [open] AS open_price,
+            [high] AS high_price,
+            [low] AS low_price,
+            [close] AS close_price,
+            [volume] AS volume_value
         FROM historical_data_correct
         WHERE asset_rollup IS NOT NULL
     """
     with get_connection() as conn:
         df = pl.read_database(sql, conn)
-    df = _prepare_historical_close_snapshot(df)
-    SNAPSHOT_STORE.safe_write("repository_snapshot_historical_close", df)
+    df_ohlcv = _prepare_historical_ohlcv_snapshot(df)
+    df_close = _build_historical_close_from_ohlcv(df_ohlcv)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_historical_ohlcv", df_ohlcv)
+    SNAPSHOT_STORE.safe_write("repository_snapshot_historical_close", df_close)
     SNAPSHOT_STORE.safe_write(
         "repository_snapshot_historical_close_latest",
-        _build_historical_close_latest_snapshot(df),
+        _build_historical_close_latest_snapshot(df_close),
     )
-    return compact_float64(df)
+    return compact_float64(df_close)
 
 
 def load_per_dag_asset_result_v2_snapshot() -> pl.DataFrame:
@@ -185,6 +191,40 @@ def _prepare_historical_close_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     if "close_price" in df.columns:
         df = df.with_columns(pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"))
     return compact_float64(df)
+
+
+def _prepare_historical_ohlcv_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(
+            schema={
+                "datum": pl.Date,
+                "asset_rollup": pl.Utf8,
+                "open_price": pl.Float64,
+                "high_price": pl.Float64,
+                "low_price": pl.Float64,
+                "close_price": pl.Float64,
+                "volume_value": pl.Float64,
+            }
+        )
+    df = _normalize_date_column(df, "datum")
+    df = _normalize_asset_rollup_column(df, "asset_rollup")
+    casts: list[pl.Expr] = []
+    for col in ("open_price", "high_price", "low_price", "close_price", "volume_value"):
+        if col in df.columns:
+            casts.append(pl.col(col).cast(pl.Float64, strict=False).alias(col))
+    if casts:
+        df = df.with_columns(casts)
+    return compact_float64(df)
+
+
+def _build_historical_close_from_ohlcv(df: pl.DataFrame) -> pl.DataFrame:
+    if df is None or df.is_empty():
+        return pl.DataFrame(schema={"datum": pl.Date, "asset_rollup": pl.Utf8, "close_price": pl.Float64})
+    cols = [c for c in ("datum", "asset_rollup", "close_price") if c in df.columns]
+    out = df.select(cols)
+    if "close_price" in out.columns:
+        out = out.with_columns(pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"))
+    return compact_float64(out)
 
 
 def _prepare_per_dag_asset_result_v2_snapshot(df: pl.DataFrame) -> pl.DataFrame:

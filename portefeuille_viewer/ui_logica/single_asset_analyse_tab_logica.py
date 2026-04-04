@@ -3,7 +3,7 @@ import math
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 import polars as pl
 import pyodbc
 import pyqtgraph as pg
@@ -461,7 +461,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         super().__init__(parent)
         self.setupUi(self)
         self._wrap_in_scroll_area()
-        self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5}
+        self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5, "chart_shift": 0.0}
         self._step_settings_by_asset: dict[str, dict[str, float]] = {}
         self._step_settings_dirty = False
         self._step_controls_loading = False
@@ -617,10 +617,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.stepSizeTick.setDecimals(2)
         self.stepSizeTick.setMinimum(0.01)
         self.stepSizeTick.setSingleStep(0.05)
+        if hasattr(self, "chartShift"):
+            self.chartShift.setLocale(QLocale(QLocale.C))
+            self.chartShift.setDecimals(2)
+            self.chartShift.setSingleStep(0.1)
         self._step_controls_loading = True
         self.stepSizeTick.setValue(float(self._step_defaults["step_size_tick"]))
         self.stepSizeBox.setSingleStep(float(self._step_defaults["step_size_tick"]))
         self.stepSizeBox.setValue(float(self._step_defaults["step_size"]))
+        if hasattr(self, "chartShift"):
+            self.chartShift.setValue(float(self._step_defaults["chart_shift"]))
         self._step_controls_loading = False
 
         
@@ -645,8 +651,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.endDate.dateChanged.connect(self.update_history_charts)
         self.checkBoxMarketDaysOnly.toggled.connect(self.update_history_charts)
 
+        self.priceAantalChart.setBackground("w")
+        self.resultaatChart.setBackground("w")
+
         # Initialiseer pyqtgraph plot_widget
         self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setBackground("w")
         self.layoutChart.addWidget(self.plot_widget)
         # PYQTGRAPH: alle margins uit
         self.plot_widget.setContentsMargins(0, 0, 0, 0)
@@ -668,6 +678,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._mpl_x_mapping = []  # mapping van x_scaled naar koerswaarde
         self._live_summary_asset = None
         self._live_summary_row = None
+        self._payoff_distribution_axis_ready = False
+        self._payoff_right_view = None
+        self._payoff_distribution_items = []
+        self._payoff_current_price_line = None
 
 
 
@@ -680,6 +694,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.stepSizeBox.valueChanged.connect(self.update_payoff_table)
         self.stepSizeBox.valueChanged.connect(self._on_step_size_changed)
         self.stepSizeTick.valueChanged.connect(self._on_step_tick_changed)
+        if hasattr(self, "chartShift"):
+            self.chartShift.valueChanged.connect(self._on_chart_shift_changed)
                 # Maak de rijhoogte compacter
         self._on_filter_changed()
         self.payoff_table.verticalHeader().setMinimumSectionSize(22)
@@ -1323,6 +1339,310 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         widget.setXRange(x_min, x_max, padding=padding)
         widget.setYRange(y_min, y_max, padding=padding)
+
+    def _ensure_payoff_distribution_axis(self):
+        if self._payoff_distribution_axis_ready:
+            return
+        pw = self.plot_widget
+        self._payoff_right_view = pg.ViewBox()
+        pw.plotItem.showAxis('right')
+        pw.plotItem.scene().addItem(self._payoff_right_view)
+        pw.plotItem.getAxis('right').linkToView(self._payoff_right_view)
+        self._payoff_right_view.setXLink(pw.plotItem)
+        pw.plotItem.getAxis('right').setLabel("Verdeling %")
+
+        def _sync_right_view_geometry():
+            if self._payoff_right_view is not None:
+                self._payoff_right_view.setGeometry(pw.plotItem.vb.sceneBoundingRect())
+
+        _sync_right_view_geometry()
+        pw.plotItem.vb.sigResized.connect(_sync_right_view_geometry)
+        self._payoff_distribution_axis_ready = True
+
+    @staticmethod
+    def _shift_months(base: date, months_back: int) -> date:
+        month = base.month - months_back
+        year = base.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        if month == 12:
+            days_in_month = 31
+        else:
+            days_in_month = (date(year, month + 1, 1) - date(year, month, 1)).days
+        return date(year, month, min(base.day, days_in_month))
+
+    def _load_asset_historical_ohlcv_12m(self, asset: str) -> list[dict]:
+        asset = str(asset or "").strip().upper()
+        if not asset:
+            return []
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None)
+        if df is None or df.is_empty():
+            return []
+        if "asset_rollup" not in df.columns or "datum" not in df.columns:
+            return []
+        work = df
+        try:
+            work = (
+                work.with_columns(
+                    [
+                        pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
+                        pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("asset_rollup"),
+                    ]
+                )
+                .filter(pl.col("asset_rollup") == asset)
+                .sort("datum")
+            )
+        except Exception:
+            return []
+        if work.is_empty():
+            return []
+        out: list[dict] = []
+        for row in work.to_dicts():
+            raw_date = row.get("datum")
+            if isinstance(raw_date, datetime):
+                datum = raw_date.date()
+            elif isinstance(raw_date, date):
+                datum = raw_date
+            else:
+                continue
+            out.append(
+                {
+                    "datum": datum,
+                    "open": self._as_finite_float(row.get("open_price")),
+                    "high": self._as_finite_float(row.get("high_price")),
+                    "low": self._as_finite_float(row.get("low_price")),
+                    "close": self._as_finite_float(row.get("close_price")),
+                    "volume": self._as_finite_float(row.get("volume_value")),
+                }
+            )
+        if not out:
+            return []
+        latest_date = max(item["datum"] for item in out if item.get("datum") is not None)
+        cutoff = self._shift_months(latest_date, 12)
+        return [item for item in out if item.get("datum") is not None and item["datum"] >= cutoff]
+
+    @staticmethod
+    def _filter_rows_last_months(rows: list[dict], months: int) -> list[dict]:
+        if not rows:
+            return []
+        valid_dates = [item.get("datum") for item in rows if isinstance(item.get("datum"), date)]
+        if not valid_dates:
+            return []
+        latest_date = max(valid_dates)
+        cutoff = SingleAssetAnalyseTab._shift_months(latest_date, int(months))
+        return [
+            item
+            for item in rows
+            if isinstance(item.get("datum"), date) and item["datum"] >= cutoff
+        ]
+
+    @staticmethod
+    def _row_price_range(row: dict) -> tuple[float, float] | None:
+        values = [row.get("open"), row.get("high"), row.get("low"), row.get("close")]
+        values = [float(v) for v in values if v is not None and math.isfinite(float(v))]
+        if not values:
+            return None
+        low = row.get("low")
+        high = row.get("high")
+        low = float(low) if low is not None and math.isfinite(float(low)) else min(values)
+        high = float(high) if high is not None and math.isfinite(float(high)) else max(values)
+        low = min(low, min(values))
+        high = max(high, max(values))
+        if high < low:
+            low, high = high, low
+        return low, high
+
+    @staticmethod
+    def _distribution_from_steps(rows: list[dict], x_values: list[float]) -> list[float]:
+        if not rows or not x_values:
+            return []
+        if len(x_values) < 2:
+            return [0.0 for _ in x_values]
+        diffs = [float(x_values[i + 1] - x_values[i]) for i in range(len(x_values) - 1)]
+        diffs = [abs(v) for v in diffs if math.isfinite(v) and abs(v) > 0]
+        if not diffs:
+            return [0.0 for _ in x_values]
+        diffs.sort()
+        width = diffs[len(diffs) // 2]
+        left_edge = float(x_values[0]) - width / 2.0
+        weights = [0.0 for _ in x_values]
+        used_rows = 0
+        for row in rows:
+            price_range = SingleAssetAnalyseTab._row_price_range(row)
+            if price_range is None:
+                continue
+            low, high = price_range
+            start_idx = int(math.floor((low - left_edge) / width))
+            end_idx = int(math.floor(((high - left_edge) / width) - 1e-9))
+            if end_idx < start_idx:
+                end_idx = start_idx
+            start_idx = max(0, start_idx)
+            end_idx = min(len(x_values) - 1, end_idx)
+            if end_idx < 0 or start_idx >= len(x_values):
+                continue
+            touched = end_idx - start_idx + 1
+            if touched <= 0:
+                continue
+            used_rows += 1
+            bucket_weight = 1.0 / touched
+            for idx in range(start_idx, end_idx + 1):
+                weights[idx] += bucket_weight
+        if used_rows <= 0:
+            return [0.0 for _ in x_values]
+        return [value * 100.0 / used_rows for value in weights]
+
+    @staticmethod
+    def _build_fine_distribution_grid(rows: list[dict], x_values: list[float]) -> tuple[list[float], float]:
+        if not rows or not x_values:
+            return [], 1.0
+        valid_ranges = [SingleAssetAnalyseTab._row_price_range(row) for row in rows]
+        valid_ranges = [r for r in valid_ranges if r is not None]
+        if not valid_ranges:
+            return [], 1.0
+
+        x_min = float(min(x_values))
+        x_max = float(max(x_values))
+        min_price = min(lo for lo, _hi in valid_ranges)
+        max_price = max(hi for _lo, hi in valid_ranges)
+        visible_min = min(x_min, min_price)
+        visible_max = max(x_max, max_price)
+        span = max(visible_max - visible_min, 1.0)
+
+        target_buckets = 72
+        raw_width = span / target_buckets
+        if raw_width <= 0:
+            raw_width = 1.0
+        exponent = math.floor(math.log10(raw_width)) if raw_width > 0 else 0
+        fraction = raw_width / (10 ** exponent)
+        if fraction <= 1:
+            nice = 1.0
+        elif fraction <= 2:
+            nice = 2.0
+        elif fraction <= 2.5:
+            nice = 2.5
+        elif fraction <= 5:
+            nice = 5.0
+        else:
+            nice = 10.0
+        width = nice * (10 ** exponent)
+        width = max(width, 0.01)
+
+        left_edge = math.floor((visible_min - width) / width) * width
+        right_edge = math.ceil((visible_max + width) / width) * width
+        bucket_count = max(24, int(math.ceil((right_edge - left_edge) / width)))
+        centers = [left_edge + (idx + 0.5) * width for idx in range(bucket_count)]
+        return centers, width
+
+    @staticmethod
+    def _distribution_from_bucket_centers(rows: list[dict], centers: list[float], width: float) -> list[float]:
+        if not rows or not centers or width <= 0:
+            return []
+        left_edge = float(centers[0]) - width / 2.0
+        weights = [0.0 for _ in centers]
+        used_rows = 0
+        for row in rows:
+            price_range = SingleAssetAnalyseTab._row_price_range(row)
+            if price_range is None:
+                continue
+            low, high = price_range
+            start_idx = int(math.floor((low - left_edge) / width))
+            end_idx = int(math.floor(((high - left_edge) / width) - 1e-9))
+            if end_idx < start_idx:
+                end_idx = start_idx
+            start_idx = max(0, start_idx)
+            end_idx = min(len(centers) - 1, end_idx)
+            if end_idx < 0 or start_idx >= len(centers):
+                continue
+            touched = end_idx - start_idx + 1
+            if touched <= 0:
+                continue
+            used_rows += 1
+            bucket_weight = 1.0 / touched
+            for idx in range(start_idx, end_idx + 1):
+                weights[idx] += bucket_weight
+        if used_rows <= 0:
+            return []
+        return [value * 100.0 / used_rows for value in weights]
+
+    def _render_payoff_distribution_overlay(self, x_values: list[float], chart_shift: float = 0.0) -> None:
+        self._ensure_payoff_distribution_axis()
+        if self._payoff_right_view is None:
+            return
+        for item in self._payoff_distribution_items:
+            with contextlib.suppress(Exception):
+                self._payoff_right_view.removeItem(item)
+        self._payoff_distribution_items = []
+        if self._payoff_current_price_line is not None:
+            with contextlib.suppress(Exception):
+                self.plot_widget.removeItem(self._payoff_current_price_line)
+            self._payoff_current_price_line = None
+
+        asset = self.asset_selector.currentText()
+        rows = self._load_asset_historical_ohlcv_12m(asset)
+        centers, bucket_width = self._build_fine_distribution_grid(rows, x_values)
+        distribution_12m = self._distribution_from_bucket_centers(rows, centers, bucket_width)
+        distribution_6m = self._distribution_from_bucket_centers(
+            self._filter_rows_last_months(rows, 6), centers, bucket_width
+        )
+        distribution_3m = self._distribution_from_bucket_centers(
+            self._filter_rows_last_months(rows, 3), centers, bucket_width
+        )
+        series_candidates = [
+            distribution_12m,
+            distribution_6m,
+            distribution_3m,
+        ]
+        if not distribution_12m or not any(v > 0 for v in distribution_12m):
+            self.plot_widget.showAxis('right', False)
+            return
+
+        self.plot_widget.showAxis('right', True)
+        max_y = max(
+            max(series)
+            for series in series_candidates
+            if series and any(v > 0 for v in series)
+        )
+        # Geef het histogram bewust extra headroom zodat de hoogste bar circa 50% van de plothoogte gebruikt.
+        self._payoff_right_view.setYRange(0.0, max(max_y * 2.0, 1.0), padding=0.0)
+
+        shifted_centers = [float(center) + float(chart_shift) for center in centers]
+
+        bars = pg.BarGraphItem(
+            x=shifted_centers,
+            height=distribution_12m,
+            width=bucket_width * 0.92,
+            brush=pg.mkBrush(181, 75, 216, 85),
+            pen=pg.mkPen(181, 75, 216, 130, width=1),
+        )
+        self._payoff_right_view.addItem(bars)
+        self._payoff_distribution_items.append(bars)
+
+        overlay_specs = [
+            (distribution_6m, "#f08c2e"),
+            (distribution_3m, "#4f7cf7"),
+        ]
+        for series, color in overlay_specs:
+            if not series or not any(v > 0 for v in series):
+                continue
+            curve = pg.PlotCurveItem(
+                shifted_centers,
+                series,
+                pen=pg.mkPen(color=color, width=2, style=Qt.DashLine),
+            )
+            self._payoff_right_view.addItem(curve)
+            self._payoff_distribution_items.append(curve)
+
+        live_row = self._get_live_summary_row(asset, refresh=False)
+        live_koers = self._as_finite_float(live_row.get("koers")) if live_row else None
+        if live_koers is not None:
+            self._payoff_current_price_line = pg.InfiniteLine(
+                pos=live_koers,
+                angle=90,
+                pen=pg.mkPen("#111111", width=2, style=Qt.DashLine),
+                movable=False,
+            )
+            self.plot_widget.addItem(self._payoff_current_price_line)
 
     @Slot(bool)
     def on_toggle_show_all_test_orders(self, checked):
@@ -3123,10 +3443,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     asset_rollup TEXT(64),
                     step_size DOUBLE,
                     step_size_tick DOUBLE,
+                    chart_shift DOUBLE,
                     updated_at DATETIME
                 )
                 """
             )
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE single_asset_stepsize_settings ADD COLUMN chart_shift DOUBLE")
         except Exception:
             pass
         try:
@@ -3141,7 +3466,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 cur = conn.cursor()
                 self._ensure_step_settings_table(cur)
                 rows = cur.execute(
-                    "SELECT asset_rollup, step_size, step_size_tick FROM single_asset_stepsize_settings"
+                    "SELECT asset_rollup, step_size, step_size_tick, chart_shift FROM single_asset_stepsize_settings"
                 ).fetchall()
             for row in rows:
                 asset = str(row[0] or "").strip()
@@ -3149,9 +3474,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     continue
                 step_size = self._safe_step_value(row[1], self._step_defaults["step_size"])
                 step_tick = self._safe_step_tick(row[2], self._step_defaults["step_size_tick"])
+                chart_shift = self._safe_chart_shift(row[3], self._step_defaults["chart_shift"])
                 self._step_settings_by_asset[asset] = {
                     "step_size": step_size,
                     "step_size_tick": step_tick,
+                    "chart_shift": chart_shift,
                 }
             self._step_settings_dirty = False
         except Exception as exc:
@@ -3172,15 +3499,27 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         v = self._safe_step_value(value, default)
         return 0.01 if v <= 0 else v
 
+    def _safe_chart_shift(self, value, default: float) -> float:
+        try:
+            v = float(value)
+            if math.isfinite(v):
+                return round(v, 4)
+        except Exception:
+            pass
+        return round(float(default), 4)
+
     def _apply_step_settings_for_asset(self, asset_rollup: str) -> None:
         cfg = self._step_settings_by_asset.get(asset_rollup) or self._step_defaults
         step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
         step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
+        chart_shift = self._safe_chart_shift(cfg.get("chart_shift"), self._step_defaults["chart_shift"])
         self._step_controls_loading = True
         try:
             self.stepSizeTick.setValue(step_tick)
             self.stepSizeBox.setSingleStep(step_tick)
             self.stepSizeBox.setValue(step_size)
+            if hasattr(self, "chartShift"):
+                self.chartShift.setValue(chart_shift)
         finally:
             self._step_controls_loading = False
 
@@ -3190,10 +3529,23 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
         step_size = self._safe_step_value(self.stepSizeBox.value(), self._step_defaults["step_size"])
         step_tick = self._safe_step_tick(self.stepSizeTick.value(), self._step_defaults["step_size_tick"])
+        chart_shift = self._safe_chart_shift(
+            self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
+            self._step_defaults["chart_shift"],
+        )
         prev = self._step_settings_by_asset.get(asset)
-        if prev and abs(prev.get("step_size", 0.0) - step_size) < 1e-9 and abs(prev.get("step_size_tick", 0.0) - step_tick) < 1e-9:
+        if (
+            prev
+            and abs(prev.get("step_size", 0.0) - step_size) < 1e-9
+            and abs(prev.get("step_size_tick", 0.0) - step_tick) < 1e-9
+            and abs(prev.get("chart_shift", 0.0) - chart_shift) < 1e-9
+        ):
             return
-        self._step_settings_by_asset[asset] = {"step_size": step_size, "step_size_tick": step_tick}
+        self._step_settings_by_asset[asset] = {
+            "step_size": step_size,
+            "step_size_tick": step_tick,
+            "chart_shift": chart_shift,
+        }
         self._step_settings_dirty = True
 
     def _on_step_tick_changed(self, _value: float) -> None:
@@ -3208,6 +3560,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
         self._store_step_settings_for_current_asset()
 
+    def _on_chart_shift_changed(self, _value: float) -> None:
+        if self._step_controls_loading:
+            return
+        self._store_step_settings_for_current_asset()
+        self.update_chart()
+
     def flush_step_settings_to_db(self) -> None:
         if not self._step_settings_dirty:
             return
@@ -3219,6 +3577,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 for asset, cfg in self._step_settings_by_asset.items():
                     step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
                     step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
+                    chart_shift = self._safe_chart_shift(cfg.get("chart_shift"), self._step_defaults["chart_shift"])
                     exists = cur.execute(
                         "SELECT TOP 1 asset_rollup FROM single_asset_stepsize_settings WHERE asset_rollup=?",
                         (asset,),
@@ -3227,18 +3586,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                         cur.execute(
                             """
                             UPDATE single_asset_stepsize_settings
-                            SET step_size=?, step_size_tick=?, updated_at=?
+                            SET step_size=?, step_size_tick=?, chart_shift=?, updated_at=?
                             WHERE asset_rollup=?
                             """,
-                            (step_size, step_tick, now, asset),
+                            (step_size, step_tick, chart_shift, now, asset),
                         )
                     else:
                         cur.execute(
                             """
-                            INSERT INTO single_asset_stepsize_settings (asset_rollup, step_size, step_size_tick, updated_at)
-                            VALUES (?, ?, ?, ?)
+                            INSERT INTO single_asset_stepsize_settings (asset_rollup, step_size, step_size_tick, chart_shift, updated_at)
+                            VALUES (?, ?, ?, ?, ?)
                             """,
-                            (asset, step_size, step_tick, now),
+                            (asset, step_size, step_tick, chart_shift, now),
                         )
                 conn.commit()
             self._step_settings_dirty = False
@@ -3569,6 +3928,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         #print("Updating payoff chart...")
         factor = getattr(self.logic, "currency_factor", 1.0)
         self.plot_widget.clear()
+        chart_shift = self._safe_chart_shift(
+            self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
+            self._step_defaults["chart_shift"],
+        )
         # x-as: koerswaarden uit de berekende stappen (niet uit de geformatteerde header)
         x_values = []
         steps = getattr(self, "_payoff_steps", None)
@@ -3581,6 +3944,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     x_values.append(float(header_item.text()))
                 except Exception:
                     x_values.append(i)
+        x_plot_values = [float(v) + chart_shift for v in x_values]
 
         # y-waarden uit de tabel
         y_totaal = []
@@ -3610,16 +3974,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if lower == upper:
                 upper = lower + 1
             self.plot_widget.setYRange(lower, upper)
-        if x_values:
-            x_min, x_max = min(x_values), max(x_values)
+        if x_plot_values:
+            x_min, x_max = min(x_plot_values), max(x_plot_values)
             if x_min == x_max:
                 x_max = x_min + 1.0
             self.plot_widget.setXRange(x_min, x_max, padding=0.02)
 
         # Plotten met pyqtgraph
-        self.plot_widget.plot(x_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")
-        self.plot_widget.plot(x_values, y_verschil, pen=pg.mkPen(color="#BFBFBF", width=2), name="Totaal - Open opties")
-        self.plot_widget.plot(x_values, y_open_opties, pen=pg.mkPen(color="#FF0000", width=2), name="Open opties")
+        self.plot_widget.plot(x_plot_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")
+        self.plot_widget.plot(x_plot_values, y_verschil, pen=pg.mkPen(color="#BFBFBF", width=2), name="Totaal - Open opties")
+        self.plot_widget.plot(x_plot_values, y_open_opties, pen=pg.mkPen(color="#FF0000", width=2), name="Open opties")
 
         label_col_width = self.payoff_table.verticalHeader().width()
         vb = self.plot_widget.getViewBox()
@@ -3633,6 +3997,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.plot_widget.setLabel('bottom', '')
         # self.plot_widget.setTitle('Payoff per koersstap')
         self.plot_widget.addLegend()
+        self._render_payoff_distribution_overlay(x_values, chart_shift)
 
     def sync_plot_with_table(self, *args):
         # Breedte linker label-kolom ophalen

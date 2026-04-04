@@ -123,7 +123,7 @@
        <rect>
         <x>10</x>
         <y>10</y>
-        <width>1181</width>
+        <width>1221</width>
         <height>31</height>
        </rect>
       </property>
@@ -149,6 +149,25 @@
        </item>
        <item>
         <widget class="QDoubleSpinBox" name="stepSizeTick">
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="decimals">
+          <number>6</number>
+         </property>
+         <property name="value">
+          <double>0.020000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDoubleSpinBox" name="chartShift">
          <property name="maximumSize">
           <size>
            <width>80</width>
@@ -940,6 +959,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
   <tabstop>asset_selector</tabstop>
   <tabstop>stepSizeBox</tabstop>
   <tabstop>stepSizeTick</tabstop>
+  <tabstop>chartShift</tabstop>
   <tabstop>startDate</tabstop>
   <tabstop>endDate</tabstop>
   <tabstop>comboBoxStatus</tabstop>
@@ -952,6 +972,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
   <tabstop>commentSearchCheckbox</tabstop>
   <tabstop>lineEditFilterOptiesOpen</tabstop>
   <tabstop>buttonClearFiltersOptiesOpen</tabstop>
+  <tabstop>comboboxScenarioSelector</tabstop>
  </tabstops>
  <resources/>
  <connections/>

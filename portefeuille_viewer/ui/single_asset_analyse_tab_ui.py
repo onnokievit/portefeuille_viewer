@@ -58,7 +58,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1181, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1221, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -79,6 +79,15 @@ class Ui_SingleAssetAnalyseTab(object):
         self.stepSizeTick.setValue(0.020000000000000)
 
         self.horizontalLayout.addWidget(self.stepSizeTick)
+
+        self.chartShift = QDoubleSpinBox(self.horizontalLayoutWidget)
+        self.chartShift.setObjectName(u"chartShift")
+        self.chartShift.setMaximumSize(QSize(80, 16777215))
+        self.chartShift.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+        self.chartShift.setDecimals(6)
+        self.chartShift.setValue(0.020000000000000)
+
+        self.horizontalLayout.addWidget(self.chartShift)
 
         self.startDate = QDateEdit(self.horizontalLayoutWidget)
         self.startDate.setObjectName(u"startDate")
@@ -337,7 +346,8 @@ class Ui_SingleAssetAnalyseTab(object):
 
         QWidget.setTabOrder(self.asset_selector, self.stepSizeBox)
         QWidget.setTabOrder(self.stepSizeBox, self.stepSizeTick)
-        QWidget.setTabOrder(self.stepSizeTick, self.startDate)
+        QWidget.setTabOrder(self.stepSizeTick, self.chartShift)
+        QWidget.setTabOrder(self.chartShift, self.startDate)
         QWidget.setTabOrder(self.startDate, self.endDate)
         QWidget.setTabOrder(self.endDate, self.comboBoxStatus)
         QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)
@@ -349,6 +359,7 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.checkBoxLiveResortOpenOpties, self.commentSearchCheckbox)
         QWidget.setTabOrder(self.commentSearchCheckbox, self.lineEditFilterOptiesOpen)
         QWidget.setTabOrder(self.lineEditFilterOptiesOpen, self.buttonClearFiltersOptiesOpen)
+        QWidget.setTabOrder(self.buttonClearFiltersOptiesOpen, self.comboboxScenarioSelector)
 
         self.retranslateUi(SingleAssetAnalyseTab)
 
