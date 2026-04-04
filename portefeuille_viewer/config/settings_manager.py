@@ -1,18 +1,20 @@
 # portefeuille_viewer/config/settings_manager.py
 """
-Centraal beheer voor alle applicatie settings via settings.ini.
+Centraal beheer voor applicatie settings via een gedeelde en lokale ini.
 """
 import configparser
 import json
 from pathlib import Path
 from typing import Dict, Optional
 
-# Legacy/default template config (alleen voor eenmalige backfill van missende keys)
-LEGACY_DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.ini"
+# Nieuwe configuratiebestanden
+SHARED_CONFIG_PATH = Path(__file__).parent / "settings_shared.ini"
+LOCAL_CONFIG_DIR = Path(__file__).parent / ".user_settings"
+LOCAL_CONFIG_PATH = LOCAL_CONFIG_DIR / "settings_local.ini"
 
-# Pad naar user config (in home directory)
-USER_CONFIG_DIR = Path(__file__).parent / ".user_settings"
-USER_CONFIG_PATH = USER_CONFIG_DIR / "settings.ini"
+# Legacy paden voor eenmalige migratie
+LEGACY_SHARED_CONFIG_PATH = Path(__file__).parent / "settings.ini"
+LEGACY_LOCAL_CONFIG_PATH = LOCAL_CONFIG_DIR / "settings.ini"
 
 DEFAULT_COMMENT_COLORS = [
     (4, "Rood", "#f8d7da", "#000000"),
@@ -21,6 +23,21 @@ DEFAULT_COMMENT_COLORS = [
     (1, "Grijs", "#bfbfbf", "#ffffff"),
     (0, "Geen", "", ""),
 ]
+
+LOCAL_ONLY_KEYS = {
+    "interactive_brokers": None,
+    "ui": {
+        "theme",
+        "font_size",
+        "table_header_bg",
+        "table_total_bg",
+        "tab_inactive_bg",
+        "tab_active_bg",
+        "tab_hover_bg",
+        "aandelen_web_col_widths",
+    },
+    "app": {"last_database"},
+}
 
 
 class SettingsManager:
@@ -40,52 +57,73 @@ class SettingsManager:
         self._load_config()
     
     def _load_config(self):
-        """Laad config uitsluitend uit user_settings/settings.ini.
+        """Laad config uit settings_shared.ini en settings_local.ini."""
+        LOCAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        self._migrate_legacy_configs_if_needed()
+        self._reload_from_disk()
+        print(f"Config geladen: shared={SHARED_CONFIG_PATH}, local={LOCAL_CONFIG_PATH}")
 
-        Eenmalige migratie:
-        - Bestaat user-config nog niet, dan initialiseren vanuit legacy default template.
-        - Bestaat user-config wel, dan worden missende keys uit legacy default toegevoegd.
-        """
-        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    def _reload_from_disk(self):
+        self.config = configparser.ConfigParser()
+        if SHARED_CONFIG_PATH.exists():
+            self.config.read(SHARED_CONFIG_PATH, encoding='utf-8')
+        if LOCAL_CONFIG_PATH.exists():
+            self.config.read(LOCAL_CONFIG_PATH, encoding='utf-8')
 
-        if USER_CONFIG_PATH.exists():
-            self.config.read(USER_CONFIG_PATH, encoding='utf-8')
-        else:
-            # Eerste init: maak user-config aan vanuit legacy default (indien aanwezig).
-            if LEGACY_DEFAULT_CONFIG_PATH.exists():
-                self.config.read(LEGACY_DEFAULT_CONFIG_PATH, encoding='utf-8')
-            self.save()
-
-        # Backfill: voeg alleen missende keys toe uit legacy default, zonder bestaande waarden te overschrijven.
-        self._backfill_missing_from_legacy_default()
-        print(f"Config geladen: {USER_CONFIG_PATH}")
-
-    def _backfill_missing_from_legacy_default(self):
-        if not LEGACY_DEFAULT_CONFIG_PATH.exists():
+    def _migrate_legacy_configs_if_needed(self):
+        if SHARED_CONFIG_PATH.exists() and LOCAL_CONFIG_PATH.exists():
             return
 
-        legacy = configparser.ConfigParser()
-        legacy.read(LEGACY_DEFAULT_CONFIG_PATH, encoding='utf-8')
-        changed = False
+        merged = configparser.ConfigParser()
+        legacy_present = False
+        if SHARED_CONFIG_PATH.exists():
+            merged.read(SHARED_CONFIG_PATH, encoding='utf-8')
+        elif LEGACY_SHARED_CONFIG_PATH.exists():
+            merged.read(LEGACY_SHARED_CONFIG_PATH, encoding='utf-8')
+            legacy_present = True
 
-        for section in legacy.sections():
-            if not self.config.has_section(section):
-                self.config.add_section(section)
-                changed = True
-            for key, value in legacy.items(section):
-                if not self.config.has_option(section, key):
-                    self.config.set(section, key, value)
-                    changed = True
+        if LOCAL_CONFIG_PATH.exists():
+            merged.read(LOCAL_CONFIG_PATH, encoding='utf-8')
+        elif LEGACY_LOCAL_CONFIG_PATH.exists():
+            merged.read(LEGACY_LOCAL_CONFIG_PATH, encoding='utf-8')
+            legacy_present = True
 
-        if changed:
-            self.save()
+        shared_cfg, local_cfg = self._split_config(merged)
+        if legacy_present or not SHARED_CONFIG_PATH.exists():
+            self._write_config(shared_cfg, SHARED_CONFIG_PATH)
+        if legacy_present or not LOCAL_CONFIG_PATH.exists():
+            self._write_config(local_cfg, LOCAL_CONFIG_PATH)
+
+    def _is_local_key(self, section: str, key: str) -> bool:
+        rule = LOCAL_ONLY_KEYS.get(section)
+        if rule is None and section in LOCAL_ONLY_KEYS:
+            return True
+        if isinstance(rule, set):
+            return key in rule
+        return False
+
+    def _split_config(self, source: configparser.ConfigParser) -> tuple[configparser.ConfigParser, configparser.ConfigParser]:
+        shared_cfg = configparser.ConfigParser()
+        local_cfg = configparser.ConfigParser()
+        for section in source.sections():
+            for key, value in source.items(section):
+                target = local_cfg if self._is_local_key(section, key) else shared_cfg
+                if not target.has_section(section):
+                    target.add_section(section)
+                target.set(section, key, value)
+        return shared_cfg, local_cfg
+
+    def _write_config(self, cfg: configparser.ConfigParser, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            cfg.write(f)
     
     def save(self):
-        """Sla huidige config op naar user directory."""
-        USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(USER_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            self.config.write(f)
-        print(f"Config opgeslagen: {USER_CONFIG_PATH}")
+        """Sla huidige config gesplitst op naar shared en local."""
+        shared_cfg, local_cfg = self._split_config(self.config)
+        self._write_config(shared_cfg, SHARED_CONFIG_PATH)
+        self._write_config(local_cfg, LOCAL_CONFIG_PATH)
+        print(f"Config opgeslagen: shared={SHARED_CONFIG_PATH}, local={LOCAL_CONFIG_PATH}")
     
     # === Interactive Brokers ===
     def get_ib_host(self) -> str:

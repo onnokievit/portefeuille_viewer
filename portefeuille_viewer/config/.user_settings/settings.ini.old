@@ -1,0 +1,54 @@
+[interactive_brokers]
+host = 127.0.0.1
+port = 7496
+client_id = 299
+
+[databases]
+onno-productie = C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb | white | #09890f | true
+muriel = C:/Users/onno/OneDrive/Beleggen/2025 - portefeuille database 02.03 - MURIEL.accdb | black | pink | false
+quinten = C:/Users/onno/OneDrive/Beleggen/2025 - portefeuille database 02.03 - QUINTEN.accdb | #ffffff | #2600ff | false
+onno-test = C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO - test.accdb | black | orange | false
+muriel-test = C:/Users/onno/OneDrive/Beleggen/2025 - portefeuille database 02.03 - MURIEL - test.accdb | black | lightblue | false
+
+[ui]
+theme = light
+font_size = 10
+table_header_bg = #d3d3d3
+table_total_bg = #dcdcdc
+tab_inactive_bg = #d9d9d9
+tab_active_bg = #b6b6b6
+tab_hover_bg = #f3eed7
+tab_focus_inset = 10
+aandelen_web_col_widths = {"asset_rollup": 96, "koers_prev": 70, "koers": 70, "pct_change": 60, "eq_aantal_bezit": 80, "open_sp_aantal": 113, "eq_total_result": 131, "clos_opt_transactie_euro_totaal": 139, "clos_sp_transactie_euro_totaal": 104, "open_opt_total_result": 143, "open_sp_result": 120, "div_en_bel": 159, "totaal_ex_fee": 99, "totaal_inc_fee": 93, "net_change": 92, "totaal_fee": 83, "regio": 70, "sector": 191, "value_grow": 111, "status": 102, "portfolio_total_waarde_lineair_pct": 73, "portfolio_total_waarde_delta_pct": 108, "optie_tijdswaarde_signed_eur": 106}
+tab_order = ["orders", "single_asset_analyse", "aandelen", "opties_open_live", "optie_tijdswaarde", "portfolio_value", "sector_analysis", "maand_eind", "sprinters_open", "optie_eind", "settings", "repository_tester"]
+
+[app]
+last_database = ONNO-PRODUCTIE
+eurusd = 1.151
+single_asset_analyse_start_date = 2026-01-02
+
+[comment_colors]
+4 = Rood,#f8d7da,#000000
+3 = Oranje,#ffeeba,#000000
+2 = Groen,#d4edda,#000000
+1 = Grijs,#8f8f8f,#ffffff
+0 = GrijsRood,#6b6b6b,#ff7d7d
+
+[brokers]
+list = interactive, lynx, degiro, deribit, test, test2
+
+[env_defaults]
+engine_core_snapshot_throttle_ms = 500
+ui_web_active_render_ms = 1000
+use_engine_core_runtime_v1 = 1
+engine_core_runtime_exclusive_v1 = 1
+pv_ui_aandelen_web_v1 = 1
+ui_aandelen_promoted_v1 = 1
+ui_opties_web_v1 = 1
+ui_opties_promoted_v1 = 1
+ui_optie_tijdswaarde_web_v1 = 1
+ui_optie_tijdswaarde_promoted_v1 = 1
+ui_sprinters_web_v1 = 1
+ui_sprinters_promoted_v1 = 1
+ui_single_asset_from_projection_v2 = 1
+

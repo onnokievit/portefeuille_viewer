@@ -20,4 +20,4 @@ venv_test/
 logs/
 development.txt
 
-portefeuille_viewer/config/.user_settings/
+portefeuille_viewer/config/.user_settings/settings_local.ini
