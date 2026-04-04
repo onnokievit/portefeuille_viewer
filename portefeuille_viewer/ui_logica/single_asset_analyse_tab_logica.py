@@ -620,6 +620,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if hasattr(self, "chartShift"):
             self.chartShift.setLocale(QLocale(QLocale.C))
             self.chartShift.setDecimals(2)
+            self.chartShift.setRange(-9999.0, 9999.0)
             self.chartShift.setSingleStep(0.1)
         self._step_controls_loading = True
         self.stepSizeTick.setValue(float(self._step_defaults["step_size_tick"]))
@@ -1422,6 +1423,52 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         cutoff = self._shift_months(latest_date, 12)
         return [item for item in out if item.get("datum") is not None and item["datum"] >= cutoff]
 
+    def _load_asset_historical_ohlcv(self, asset: str) -> list[dict]:
+        asset = str(asset or "").strip().upper()
+        if not asset:
+            return []
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None)
+        if df is None or df.is_empty():
+            return []
+        if "asset_rollup" not in df.columns or "datum" not in df.columns:
+            return []
+        work = df
+        try:
+            work = (
+                work.with_columns(
+                    [
+                        pl.col("datum").cast(pl.Date, strict=False).alias("datum"),
+                        pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("asset_rollup"),
+                    ]
+                )
+                .filter(pl.col("asset_rollup") == asset)
+                .sort("datum")
+            )
+        except Exception:
+            return []
+        if work.is_empty():
+            return []
+        out: list[dict] = []
+        for row in work.to_dicts():
+            raw_date = row.get("datum")
+            if isinstance(raw_date, datetime):
+                datum = raw_date.date()
+            elif isinstance(raw_date, date):
+                datum = raw_date
+            else:
+                continue
+            out.append(
+                {
+                    "datum": datum,
+                    "open": self._as_finite_float(row.get("open_price")),
+                    "high": self._as_finite_float(row.get("high_price")),
+                    "low": self._as_finite_float(row.get("low_price")),
+                    "close": self._as_finite_float(row.get("close_price")),
+                    "volume": self._as_finite_float(row.get("volume_value")),
+                }
+            )
+        return out
+
     @staticmethod
     def _filter_rows_last_months(rows: list[dict], months: int) -> list[dict]:
         if not rows:
@@ -1565,7 +1612,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return []
         return [value * 100.0 / used_rows for value in weights]
 
-    def _render_payoff_distribution_overlay(self, x_values: list[float], chart_shift: float = 0.0) -> None:
+    def _render_payoff_distribution_overlay(self, x_values: list[float]) -> None:
         self._ensure_payoff_distribution_axis()
         if self._payoff_right_view is None:
             return
@@ -1579,8 +1626,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._payoff_current_price_line = None
 
         asset = self.asset_selector.currentText()
-        rows = self._load_asset_historical_ohlcv_12m(asset)
+        all_rows = self._load_asset_historical_ohlcv(asset)
+        rows = self._filter_rows_last_months(all_rows, 12)
+        rows_24m = self._filter_rows_last_months(all_rows, 24)
         centers, bucket_width = self._build_fine_distribution_grid(rows, x_values)
+        distribution_24m = self._distribution_from_bucket_centers(rows_24m, centers, bucket_width)
         distribution_12m = self._distribution_from_bucket_centers(rows, centers, bucket_width)
         distribution_6m = self._distribution_from_bucket_centers(
             self._filter_rows_last_months(rows, 6), centers, bucket_width
@@ -1589,6 +1639,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._filter_rows_last_months(rows, 3), centers, bucket_width
         )
         series_candidates = [
+            distribution_24m,
             distribution_12m,
             distribution_6m,
             distribution_3m,
@@ -1606,10 +1657,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Geef het histogram bewust extra headroom zodat de hoogste bar circa 50% van de plothoogte gebruikt.
         self._payoff_right_view.setYRange(0.0, max(max_y * 2.0, 1.0), padding=0.0)
 
-        shifted_centers = [float(center) + float(chart_shift) for center in centers]
+        bars_24m = pg.BarGraphItem(
+            x=centers,
+            height=distribution_24m,
+            width=bucket_width * 0.92,
+            brush=pg.mkBrush(120, 190, 255, 128),
+            pen=pg.mkPen(120, 190, 255, 128, width=1),
+        )
+        self._payoff_right_view.addItem(bars_24m)
+        self._payoff_distribution_items.append(bars_24m)
 
         bars = pg.BarGraphItem(
-            x=shifted_centers,
+            x=centers,
             height=distribution_12m,
             width=bucket_width * 0.92,
             brush=pg.mkBrush(181, 75, 216, 85),
@@ -1626,7 +1685,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if not series or not any(v > 0 for v in series):
                 continue
             curve = pg.PlotCurveItem(
-                shifted_centers,
+                centers,
                 series,
                 pen=pg.mkPen(color=color, width=2, style=Qt.DashLine),
             )
@@ -3564,7 +3623,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if self._step_controls_loading:
             return
         self._store_step_settings_for_current_asset()
-        self.update_chart()
+        self.update_payoff_table()
 
     def flush_step_settings_to_db(self) -> None:
         if not self._step_settings_dirty:
@@ -3783,7 +3842,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             elif isinstance(price, (int, float)):
                 live_price = price
         
-        center = float(live_price)
+        chart_shift = self._safe_chart_shift(
+            self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
+            self._step_defaults["chart_shift"],
+        )
+        center = float(live_price) - chart_shift
 
         step_pct = self.stepSizeBox.value()
         step_size = step_pct / 100.0
@@ -3843,7 +3906,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         factor = getattr(self.logic, "currency_factor", 1.0)
 
-        middle_col = 8
+        current_price_col = min(range(len(steps)), key=lambda idx: abs(float(steps[idx]) - float(live_price)))
         sub_total_row = 7
         total_row = 9
         from PySide6.QtGui import QColor, QBrush, QFont
@@ -3881,7 +3944,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     item.setFont(normalfont)
                 if val < 0:
                     item.setForeground(QColor(220, 0, 0))
-                if col == middle_col:
+                if col == current_price_col:
                     item.setBackground(lightgrey)
                 self.payoff_table.setItem(row, col, item)
 
@@ -3928,10 +3991,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         #print("Updating payoff chart...")
         factor = getattr(self.logic, "currency_factor", 1.0)
         self.plot_widget.clear()
-        chart_shift = self._safe_chart_shift(
-            self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
-            self._step_defaults["chart_shift"],
-        )
         # x-as: koerswaarden uit de berekende stappen (niet uit de geformatteerde header)
         x_values = []
         steps = getattr(self, "_payoff_steps", None)
@@ -3944,7 +4003,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     x_values.append(float(header_item.text()))
                 except Exception:
                     x_values.append(i)
-        x_plot_values = [float(v) + chart_shift for v in x_values]
 
         # y-waarden uit de tabel
         y_totaal = []
@@ -3974,16 +4032,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if lower == upper:
                 upper = lower + 1
             self.plot_widget.setYRange(lower, upper)
-        if x_plot_values:
-            x_min, x_max = min(x_plot_values), max(x_plot_values)
+        if x_values:
+            x_min, x_max = min(x_values), max(x_values)
             if x_min == x_max:
                 x_max = x_min + 1.0
             self.plot_widget.setXRange(x_min, x_max, padding=0.02)
 
         # Plotten met pyqtgraph
-        self.plot_widget.plot(x_plot_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")
-        self.plot_widget.plot(x_plot_values, y_verschil, pen=pg.mkPen(color="#BFBFBF", width=2), name="Totaal - Open opties")
-        self.plot_widget.plot(x_plot_values, y_open_opties, pen=pg.mkPen(color="#FF0000", width=2), name="Open opties")
+        self.plot_widget.plot(x_values, y_totaal, pen=pg.mkPen(color="#C6EFCE", width=2), name="Totaal")
+        self.plot_widget.plot(x_values, y_verschil, pen=pg.mkPen(color="#BFBFBF", width=2), name="Totaal - Open opties")
+        self.plot_widget.plot(x_values, y_open_opties, pen=pg.mkPen(color="#FF0000", width=2), name="Open opties")
 
         label_col_width = self.payoff_table.verticalHeader().width()
         vb = self.plot_widget.getViewBox()
@@ -3997,7 +4055,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.plot_widget.setLabel('bottom', '')
         # self.plot_widget.setTitle('Payoff per koersstap')
         self.plot_widget.addLegend()
-        self._render_payoff_distribution_overlay(x_values, chart_shift)
+        self._render_payoff_distribution_overlay(x_values)
 
     def sync_plot_with_table(self, *args):
         # Breedte linker label-kolom ophalen
