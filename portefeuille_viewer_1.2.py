@@ -840,6 +840,7 @@ def refresh_everything():
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
     repository.load_historical_close_snapshot()
+    repository.load_asset_driver_beta_snapshot()
     repository.load_per_dag_asset_result_v2_snapshot()
     repository.load_optie_referentie_data()
     repository.build_repository_active_asset_rollup_data()
@@ -1024,6 +1025,12 @@ def main():
     # 2) finished(ok) -> daarna afgeleide snapshots verversen
     signals.stateRebuildRequested.connect(state_engine_runner.handle_rebuild_requested)
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
+    signals.priceUpdateFinished.connect(
+        lambda payload: (
+            repository.load_historical_close_snapshot(),
+            repository.load_asset_driver_beta_snapshot()
+        ) if (payload or {}).get("status") in {"ok", "skipped"} else None
+    )
     def _on_database_changed_refresh(db_name: str):
         _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
         refresh_everything()

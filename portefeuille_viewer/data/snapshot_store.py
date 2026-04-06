@@ -41,6 +41,7 @@ class SnapshotStore:
         self.repository_snapshot_historical_ohlcv: pl.DataFrame | None = None
         self.repository_snapshot_historical_close: pl.DataFrame | None = None
         self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
+        self.repository_snapshot_asset_driver_beta: pl.DataFrame | None = None
         self.repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None = None
         self.repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None = None
         self.live_prices: dict | None = None
@@ -52,6 +53,9 @@ class SnapshotStore:
         self.runtime_bucket23_dirty_reason: str | None = "startup"
         self.runtime_active_test_order_scenario_id: int | None = None
         self.runtime_test_orders_enabled: bool = False
+        self.runtime_price_shift_pct: float = 0.0
+        self.runtime_price_shift_driver: str | None = None
+        self.runtime_price_shift_lookback: str = "12m"
         self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
         self.repository_dirty_open_optie_comments: list = []
         self.snapshot_optie_timevalue_live: pl.DataFrame | None = None
@@ -96,6 +100,7 @@ class SnapshotStore:
         self.repository_snapshot_historical_ohlcv = None
         self.repository_snapshot_historical_close = None
         self.repository_snapshot_historical_close_latest = None
+        self.repository_snapshot_asset_driver_beta = None
         self.repository_snapshot_per_dag_asset_result_v2 = None
         self.repository_snapshot_per_dag_asset_result_v2_latest = None
         self.active_database_name = None
@@ -108,6 +113,9 @@ class SnapshotStore:
         self.runtime_bucket23_dirty_reason = "database_change"
         self.runtime_active_test_order_scenario_id = None
         self.runtime_test_orders_enabled = False
+        self.runtime_price_shift_pct = 0.0
+        self.runtime_price_shift_driver = None
+        self.runtime_price_shift_lookback = "12m"
         self.repository_snapshot_open_optie_comments = None
         self.repository_dirty_open_optie_comments = []
         self.snapshot_optie_timevalue_live = None

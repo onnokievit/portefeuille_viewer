@@ -243,6 +243,35 @@ class SettingsManager:
         self.config.set('ui', 'theme', theme)
         self.save()
 
+    # === Beta Settings ===
+    def get_beta_driver_enabled_map(self) -> Dict[str, bool]:
+        values: Dict[str, bool] = {}
+        if not self.config.has_section('beta'):
+            return values
+        for key, raw in self.config.items('beta'):
+            normalized = str(key).strip().upper()
+            text = str(raw).strip().lower()
+            values[normalized] = text in {'1', 'true', 'yes', 'on', 'ja'}
+        return values
+
+    def get_enabled_beta_drivers(self) -> list[str]:
+        mapping = self.get_beta_driver_enabled_map()
+        return sorted([key for key, enabled in mapping.items() if enabled])
+
+    def is_beta_driver_enabled(self, driver_symbol: str, default: bool = True) -> bool:
+        normalized = str(driver_symbol or '').strip().upper()
+        mapping = self.get_beta_driver_enabled_map()
+        return mapping.get(normalized, default)
+
+    def set_beta_driver_enabled(self, driver_symbol: str, enabled: bool) -> None:
+        if not self.config.has_section('beta'):
+            self.config.add_section('beta')
+        normalized = str(driver_symbol or '').strip().upper()
+        if not normalized:
+            return
+        self.config.set('beta', normalized, 'true' if enabled else 'false')
+        self.save()
+
     def get_table_header_bg(self) -> str:
         return self.config.get('ui', 'table_header_bg', fallback='#c6c6c6')
 

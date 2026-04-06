@@ -2,7 +2,7 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
-from portefeuille_viewer.data.price_utils import build_prices_df
+from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build_prices_df
 
 class LiveAggregatorSprinters(QObject):
     """
@@ -61,6 +61,7 @@ class LiveAggregatorSprinters(QObject):
             df = df.with_columns(pl.col("price").fill_null(0.0).alias("Koers")).drop("price")
         else:
             df = df.with_columns(pl.lit(0.0).alias("Koers"))
+        df = apply_runtime_beta_shift(df, "Koers")
 
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
         # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE

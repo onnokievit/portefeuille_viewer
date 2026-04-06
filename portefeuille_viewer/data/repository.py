@@ -8,6 +8,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database, get_settings
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.domain.engine import compact_float64
+from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
@@ -130,6 +131,65 @@ def load_historical_close_snapshot() -> pl.DataFrame:
         _build_historical_close_latest_snapshot(df_close),
     )
     return compact_float64(df_close)
+
+
+def load_asset_driver_beta_snapshot() -> pl.DataFrame:
+    sql = """
+        SELECT
+            asset_rollup,
+            home_index,
+            driver_index,
+            beta_value,
+            lookback_code,
+            return_interval,
+            n_obs,
+            r2,
+            updated_at
+        FROM asset_driver_beta_snapshot
+    """
+    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
+    with pyodbc.connect(conn_str_stock) as conn:
+        df = pl.read_database(sql, conn)
+    if df is None or df.is_empty():
+        out = pl.DataFrame(
+            schema={
+                "asset_rollup": pl.Utf8,
+                "home_index": pl.Utf8,
+                "driver_index": pl.Utf8,
+                "beta_value": pl.Float64,
+                "lookback_code": pl.Utf8,
+                "return_interval": pl.Utf8,
+                "n_obs": pl.Int64,
+                "r2": pl.Float64,
+                "updated_at": pl.Datetime,
+            }
+        )
+    else:
+        out = df.with_columns([
+            pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("asset_rollup"),
+            pl.col("home_index").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("home_index"),
+            pl.col("driver_index").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("driver_index"),
+            pl.col("lookback_code").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().alias("lookback_code"),
+            pl.col("return_interval").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().alias("return_interval"),
+            pl.col("beta_value").cast(pl.Float64, strict=False).alias("beta_value"),
+            pl.col("n_obs").cast(pl.Int64, strict=False).alias("n_obs"),
+            pl.col("r2").cast(pl.Float64, strict=False).alias("r2"),
+        ])
+    SNAPSHOT_STORE.safe_write("repository_snapshot_asset_driver_beta", out)
+    if getattr(SNAPSHOT_STORE, "runtime_price_shift_driver", None) in (None, "") and out is not None and not out.is_empty():
+        try:
+            drivers = sorted(
+                {
+                    str(v).strip().upper()
+                    for v in out["driver_index"].drop_nulls().to_list()
+                    if str(v).strip()
+                }
+            )
+        except Exception:
+            drivers = []
+        if drivers:
+            SNAPSHOT_STORE.runtime_price_shift_driver = "AEX" if "AEX" in drivers else drivers[0]
+    return compact_float64(out)
 
 
 def load_per_dag_asset_result_v2_snapshot() -> pl.DataFrame:
@@ -2001,6 +2061,7 @@ def refresh_all_snapshots():
     load_sprinter_referentie_data()
     load_dividend_data()
     load_historical_close_snapshot()
+    load_asset_driver_beta_snapshot()
     load_per_dag_asset_result_v2_snapshot()
     load_optie_referentie_data()
         

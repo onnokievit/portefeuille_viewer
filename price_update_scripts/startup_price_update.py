@@ -147,6 +147,7 @@ def main() -> int:
         ("1A_fetch_historical_futures.py", [str(payload["days_range"])]),
         ("1 B - stockprice merge into historical data correct.py", []),
         ("1 C - delete temp stock price table.py", []),
+        ("rebuild_asset_driver_beta_snapshot.py", []),
     ]:
         exit_code, stdout, stderr = run_script(script_dir, script_name, extra_args)
         stdout_parts.append(stdout)

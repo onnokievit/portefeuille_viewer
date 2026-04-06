@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from datetime import date, datetime
@@ -175,6 +176,23 @@ class AandelenWebPilotTab(QWidget):
         meta = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2_meta", None)
         if not isinstance(meta, dict):
             return
+        meta = dict(meta)
+        meta["price_shift_pct"] = float(getattr(SNAPSHOT_STORE, "runtime_price_shift_pct", 0.0) or 0.0)
+        meta["beta_driver"] = str(getattr(SNAPSHOT_STORE, "runtime_price_shift_driver", "") or "")
+        meta["beta_lookback"] = str(getattr(SNAPSHOT_STORE, "runtime_price_shift_lookback", "12m") or "12m")
+        beta_df = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_driver_beta", None)
+        driver_options: list[str] = []
+        if beta_df is not None and not beta_df.is_empty() and "driver_index" in beta_df.columns:
+            with contextlib.suppress(Exception):
+                driver_options = sorted(
+                    {
+                        str(v).strip().upper()
+                        for v in beta_df["driver_index"].drop_nulls().to_list()
+                        if str(v).strip()
+                    }
+                )
+        meta["beta_driver_options"] = driver_options
+        meta["beta_lookback_options"] = ["3m", "6m", "12m"]
         selected = meta.get("selected_brokers")
         if isinstance(selected, list):
             normalized = {str(x).strip().lower() for x in selected if str(x).strip()}
@@ -356,6 +374,73 @@ class AandelenWebPilotTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Export mislukt", str(exc))
 
+    def _set_price_shift_pct(self, value) -> None:
+        try:
+            pct = round(float(value), 1)
+        except Exception:
+            pct = 0.0
+        if abs(float(getattr(SNAPSHOT_STORE, "runtime_price_shift_pct", 0.0) or 0.0) - pct) < 1e-9:
+            self._publish_meta()
+            return
+        SNAPSHOT_STORE.runtime_price_shift_pct = pct
+        self._recompute_price_shift_chain()
+
+    def _set_beta_driver(self, value) -> None:
+        driver = str(value or "").strip().upper()
+        current = str(getattr(SNAPSHOT_STORE, "runtime_price_shift_driver", "") or "").strip().upper()
+        if driver == current:
+            self._publish_meta()
+            return
+        SNAPSHOT_STORE.runtime_price_shift_driver = driver or None
+        self._recompute_price_shift_chain()
+
+    def _set_beta_lookback(self, value) -> None:
+        lookback = str(value or "12m").strip().lower() or "12m"
+        if lookback not in {"3m", "6m", "12m"}:
+            lookback = "12m"
+        current = str(getattr(SNAPSHOT_STORE, "runtime_price_shift_lookback", "12m") or "12m").strip().lower()
+        if lookback == current:
+            self._publish_meta()
+            return
+        SNAPSHOT_STORE.runtime_price_shift_lookback = lookback
+        self._recompute_price_shift_chain()
+
+    def _recompute_price_shift_chain(self) -> None:
+        try:
+            engine = getattr(self.window(), "portfolio_engine", None)
+            if engine is not None:
+                with contextlib.suppress(Exception):
+                    engine.live_aggregator_aandelen.refresh_data()
+                with contextlib.suppress(Exception):
+                    engine.live_aggregator_opties.refresh_data()
+                with contextlib.suppress(Exception):
+                    engine.live_aggregator_sprinters.refresh_data()
+            from portefeuille_viewer.data.repository import (
+                portfolio_value_asset_rollup_aandelen,
+                portfolio_value_asset_rollup_combined,
+                portfolio_value_asset_rollup_opties_put,
+                portfolio_value_asset_rollup_sprinters,
+            )
+
+            portfolio_value_asset_rollup_opties_put()
+            portfolio_value_asset_rollup_aandelen()
+            portfolio_value_asset_rollup_sprinters()
+            portfolio_value_asset_rollup_combined()
+
+            scenario_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
+            if bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)) and scenario_id is not None:
+                from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
+                from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
+                from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
+
+                refresh_portfolio_value_scenario_overlay_snapshot(int(scenario_id), enabled=True)
+                refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=True)
+                refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=True)
+        except Exception as exc:
+            QMessageBox.warning(self, "Prijsverschuiving mislukt", str(exc))
+        finally:
+            self._publish_meta()
+
     @staticmethod
     def _json_default(value):
         if isinstance(value, Decimal):
@@ -511,6 +596,24 @@ class AandelenWebPilotTab(QWidget):
         Table live update
       </label>
       <button id="btn_export_snapshot">Export snapshot</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#33485f;">
+        <span>Driver</span>
+        <select id="f_beta_driver" style="min-width:88px;">
+          <option value="">Geen</option>
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#33485f;">
+        <span>Lookback</span>
+        <select id="f_beta_lookback" style="min-width:72px;">
+          <option value="3m">3m</option>
+          <option value="6m">6m</option>
+          <option value="12m" selected>12m</option>
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#33485f;">
+        <span>Prijs shift %</span>
+        <input id="f_price_shift_pct" type="number" step="0.1" value="0.0" style="width:72px;" />
+      </label>
       <button id="btn_generated_options">Generated options</button>
     </div>
     <div class="table-shell">
@@ -1139,6 +1242,30 @@ class AandelenWebPilotTab(QWidget):
             }
           });
         }
+        const shiftInput = document.getElementById("f_price_shift_pct");
+        if (shiftInput) {
+          shiftInput.addEventListener("change", () => {
+            if (state.bridge && state.bridge.setPriceShiftPct) {
+              try { state.bridge.setPriceShiftPct(String(shiftInput.value ?? "0")); } catch (_) {}
+            }
+          });
+        }
+        const betaDriverEl = document.getElementById("f_beta_driver");
+        if (betaDriverEl) {
+          betaDriverEl.addEventListener("change", () => {
+            if (state.bridge && state.bridge.setBetaDriver) {
+              try { state.bridge.setBetaDriver(String(betaDriverEl.value ?? "")); } catch (_) {}
+            }
+          });
+        }
+        const betaLookbackEl = document.getElementById("f_beta_lookback");
+        if (betaLookbackEl) {
+          betaLookbackEl.addEventListener("change", () => {
+            if (state.bridge && state.bridge.setBetaLookback) {
+              try { state.bridge.setBetaLookback(String(betaLookbackEl.value ?? "12m")); } catch (_) {}
+            }
+          });
+        }
       }
 
       window.renderMeta = function(meta) {
@@ -1169,6 +1296,26 @@ class AandelenWebPilotTab(QWidget):
         const b = Array.isArray(meta.selected_brokers) && meta.selected_brokers.length
           ? meta.selected_brokers.join(",")
           : "ALL";
+        const priceShiftPct = Number(meta.price_shift_pct ?? 0);
+        const shiftInput = document.getElementById("f_price_shift_pct");
+        if (shiftInput && document.activeElement !== shiftInput) {
+          shiftInput.value = Number.isFinite(priceShiftPct) ? priceShiftPct.toFixed(1) : "0.0";
+        }
+        const driverEl = document.getElementById("f_beta_driver");
+        if (driverEl) {
+          const options = Array.isArray(meta.beta_driver_options) ? meta.beta_driver_options : [];
+          const current = String(meta.beta_driver ?? "");
+          const html = ['<option value=\"\">Geen</option>']
+            .concat(options.map(v => `<option value=\"${String(v)}\">${String(v)}</option>`))
+            .join('');
+          if (driverEl.innerHTML !== html) driverEl.innerHTML = html;
+          if (driverEl.value !== current) driverEl.value = current;
+        }
+        const lookbackEl = document.getElementById("f_beta_lookback");
+        if (lookbackEl) {
+          const current = String(meta.beta_lookback ?? "12m");
+          if (lookbackEl.value !== current) lookbackEl.value = current;
+        }
         const txt = `Projection v${v} | rows: ${r} | changes: ${c} | updated: ${u} | reason: ${reason} | brokers: ${b} | perf q:${mQ}ms rec:${mRec}ms pub:${mPub}ms tot:${mTot}ms p95:${mP95}ms inflight:${mInflight} | diag k_null:${dkRel} (exp:${dkExp}) kp_null:${dkpRel} (exp:${dkpExp}) repaired:${dr}`;
         el.dataset.baseText = txt;
         el.textContent = txt;
@@ -1372,3 +1519,15 @@ class _AandelenWebBridge(QObject):
     @Slot()
     def openGeneratedOptionsEditor(self) -> None:
         self._tab._open_generated_option_orders_popup()
+
+    @Slot(str)
+    def setPriceShiftPct(self, value: str) -> None:
+        self._tab._set_price_shift_pct(value)
+
+    @Slot(str)
+    def setBetaDriver(self, value: str) -> None:
+        self._tab._set_beta_driver(value)
+
+    @Slot(str)
+    def setBetaLookback(self, value: str) -> None:
+        self._tab._set_beta_lookback(value)
