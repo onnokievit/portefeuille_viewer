@@ -232,7 +232,7 @@ def _asset_price_fallback_df(asset_rollup: str | None = None) -> pl.DataFrame:
 	if asset_rollup:
 		df_assets = _normalize_asset_rollup(df_assets)
 		df_assets = df_assets.filter(pl.col("asset_rollup") == str(asset_rollup).strip().upper())
-	prices_df = build_prices_df(SNAPSHOT_STORE.live_prices, _get_last_prices_cached())
+	prices_df = build_prices_df(SNAPSHOT_STORE.get_live_prices_snapshot(), _get_last_prices_cached())
 	if prices_df.is_empty():
 		return _empty_df({"asset_rollup": pl.Utf8, "koers_fallback": pl.Float64})
 	return (

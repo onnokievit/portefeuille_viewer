@@ -30,18 +30,29 @@ class ProjectionBus:
     def __init__(self):
         self._lock = threading.Lock()
         self._projections: dict[str, Projection] = {}
+        self._projection_accepts_changed_keys: dict[str, bool] = {}
 
     def register(self, projection: Projection) -> None:
+        accepts_changed_keys = True
+        recompute_fn = getattr(projection, "recompute", None)
+        if recompute_fn is not None:
+            try:
+                accepts_changed_keys = len(inspect.signature(recompute_fn).parameters) != 0
+            except (TypeError, ValueError):
+                accepts_changed_keys = True
         with self._lock:
             self._projections[projection.name] = projection
+            self._projection_accepts_changed_keys[projection.name] = accepts_changed_keys
 
     def unregister(self, name: str) -> None:
         with self._lock:
             self._projections.pop(name, None)
+            self._projection_accepts_changed_keys.pop(name, None)
 
     def run(self, changed_keys: set[str], topic: str | None = None) -> list[ProjectionRunResult]:
         with self._lock:
             projections = list(self._projections.values())
+            accepts_changed_keys_map = dict(self._projection_accepts_changed_keys)
         results: list[ProjectionRunResult] = []
         for projection in projections:
             if topic and projection.depends_on and topic not in projection.depends_on:
@@ -51,18 +62,10 @@ class ProjectionBus:
                 recompute_fn = getattr(projection, "recompute", None)
                 if recompute_fn is None:
                     raise AttributeError(f"{projection.name} has no recompute()")
-                try:
-                    sig = inspect.signature(recompute_fn)
-                    # Bound methods:
-                    # - recompute() -> 0 params
-                    # - recompute(changed_keys) -> 1 param
-                    if len(sig.parameters) == 0:
-                        recompute_fn()
-                    else:
-                        recompute_fn(changed_keys)
-                except (TypeError, ValueError):
-                    # Fallback: most projections in current codebase accept changed_keys.
+                if accepts_changed_keys_map.get(projection.name, True):
                     recompute_fn(changed_keys)
+                else:
+                    recompute_fn()
                 results.append(
                     ProjectionRunResult(
                         projection_name=projection.name,

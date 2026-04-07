@@ -3,7 +3,9 @@ import os
 import json
 import threading
 import builtins
-from typing import cast
+import contextlib
+from dataclasses import dataclass, field
+from typing import Any, Protocol, cast
 from collections import Counter
 from collections import deque
 from pathlib import Path
@@ -114,8 +116,6 @@ _AANDELEN_PROJECTION_METRICS = deque(maxlen=200)
 _AANDELEN_PROJECTION_METRICS_LOG = Path("logs") / "aandelen_projection_v2_metrics.jsonl"    
 _OPTIES_OPEN_PROJECTION_METRICS = deque(maxlen=200)
 _OPTIES_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "opties_open_projection_v2_metrics.jsonl"
-_LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT = None
-_LAST_PUBLISHED_OPTIES_OPEN_PATCH = None
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS = deque(maxlen=200)
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG = Path("logs") / "optie_tijdswaarde_projection_v2_metrics.jsonl"
 ENABLE_SPRINTERS_OPEN_PROJECTION_V2 = os.getenv("USE_SPRINTERS_OPEN_PROJECTION_V2", "1").strip() == "1"
@@ -177,6 +177,63 @@ for _projection in (
         engine_core_runtime.register_projection(_projection)
 _SPRINTERS_OPEN_PROJECTION_METRICS = deque(maxlen=200)
 _SPRINTERS_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "sprinters_open_projection_v2_metrics.jsonl"
+
+
+class SupportsProjectionRefresh(Protocol):
+    def recompute(self, *args: Any, **kwargs: Any) -> Any: ...
+    def snapshot(self) -> Any: ...
+    def last_patch(self) -> list | None: ...
+    def version(self) -> Any: ...
+    def meta(self) -> dict: ...
+
+
+@dataclass
+class ProjectionRefreshConfig:
+    projection_name: str
+    projection: SupportsProjectionRefresh | None
+    snapshot_key: str
+    metrics_deque: deque
+    metrics_log_path: Path
+    log_prefix: str
+    error_prefix: str
+    skip_unchanged_publish: bool = False
+    last_published_snapshot: object | None = field(default=None)
+    last_published_patch: list | None = field(default=None)
+
+
+_CFG_OPTIES = ProjectionRefreshConfig(
+    projection_name="opties_open_v2",
+    projection=opties_open_projection_v2,
+    snapshot_key="snapshot_opties_open_projection_v2",
+    metrics_deque=_OPTIES_OPEN_PROJECTION_METRICS,
+    metrics_log_path=_OPTIES_OPEN_PROJECTION_METRICS_LOG,
+    log_prefix="[opties-projection-v2-metrics]",
+    error_prefix="[opties-projection-v2]",
+    skip_unchanged_publish=True,
+)
+_CFG_TIJDSWAARDE = ProjectionRefreshConfig(
+    projection_name="optie_tijdswaarde_v2",
+    projection=optie_tijdswaarde_projection_v2,
+    snapshot_key="snapshot_optie_tijdswaarde_projection_v2",
+    metrics_deque=_OPTIE_TIJDSWAARDE_PROJECTION_METRICS,
+    metrics_log_path=_OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG,
+    log_prefix="[optie-tijdswaarde-projection-v2-metrics]",
+    error_prefix="[optie-tijdswaarde-projection-v2]",
+)
+_CFG_SPRINTERS = ProjectionRefreshConfig(
+    projection_name="sprinters_open_v2",
+    projection=sprinters_open_projection_v2,
+    snapshot_key="snapshot_sprinters_open_projection_v2",
+    metrics_deque=_SPRINTERS_OPEN_PROJECTION_METRICS,
+    metrics_log_path=_SPRINTERS_OPEN_PROJECTION_METRICS_LOG,
+    log_prefix="[sprinters-projection-v2-metrics]",
+    error_prefix="[sprinters-projection-v2]",
+)
+_PROJECTION_REFRESH_CONFIGS: dict[str, ProjectionRefreshConfig] = {
+    cfg.projection_name: cfg
+    for cfg in (_CFG_OPTIES, _CFG_TIJDSWAARDE, _CFG_SPRINTERS)
+}
+
 _AANDELEN_PROJECTION_ASYNC_ENABLED = False
 _AANDELEN_PROJECTION_REQ_LOCK = threading.Lock()
 _AANDELEN_PROJECTION_PENDING_LOCK = threading.Lock()
@@ -242,37 +299,10 @@ def _metrics_summary(samples: list[dict]) -> dict:
     }
 
 
-def _append_metrics_log(sample: dict) -> None:
+def _append_metrics_log_to(log_path: Path, sample: dict) -> None:
     try:
-        _AANDELEN_PROJECTION_METRICS_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with _AANDELEN_PROJECTION_METRICS_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-def _append_opties_metrics_log(sample: dict) -> None:
-    try:
-        _OPTIES_OPEN_PROJECTION_METRICS_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with _OPTIES_OPEN_PROJECTION_METRICS_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-def _append_optie_tijdswaarde_metrics_log(sample: dict) -> None:
-    try:
-        _OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with _OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(sample, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-def _append_sprinters_metrics_log(sample: dict) -> None:
-    try:
-        _SPRINTERS_OPEN_PROJECTION_METRICS_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with _SPRINTERS_OPEN_PROJECTION_METRICS_LOG.open("a", encoding="utf-8") as f:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
     except Exception:
         pass
@@ -287,6 +317,158 @@ def _df_equals(left, right) -> bool:
         return bool(left.equals(right))
     except Exception:
         return False
+
+
+def _append_projection_metrics(cfg: ProjectionRefreshConfig, sample: dict) -> dict:
+    projection = cfg.projection
+    if projection is None:
+        return {"last": sample, "summary": _metrics_summary([]), "samples": [sample]}
+    cfg.metrics_deque.append(sample)
+    samples = list(cfg.metrics_deque)
+    metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
+    SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_metrics", metrics_payload)
+    _append_metrics_log_to(cfg.metrics_log_path, sample)
+    meta = projection.meta()
+    meta["reason"] = sample["reason"]
+    meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
+    SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_meta", meta)
+    return metrics_payload
+
+
+def _empty_metrics_payload() -> dict:
+    return {"last": None, "summary": _metrics_summary([]), "samples": []}
+
+
+def _reset_projection_publish_caches() -> None:
+    for cfg in _PROJECTION_REFRESH_CONFIGS.values():
+        cfg.last_published_snapshot = None
+        cfg.last_published_patch = None
+
+
+def _invalidate_snapshots_for_database_change(
+    option_timevalue_service: OptionTimevalueService | None = None,
+) -> None:
+    empty_df = pl.DataFrame()
+    empty_metrics = _empty_metrics_payload()
+    _reset_projection_publish_caches()
+    SNAPSHOT_STORE.clear_live_prices()
+    live_aggregator_aandelen.reset_for_database_change()
+    live_aggregator_opties.reset_for_database_change()
+    live_aggregator_sprinters.reset_for_database_change()
+
+    empty_snapshot_writes: list[tuple[str, object]] = [
+        ("repository_snapshot_alle_transacties", empty_df),
+        ("repository_snapshot_aandelen", empty_df),
+        ("aggregator_snapshot_aandelen_live", empty_df),
+        ("repository_snapshot_load_open_opties", empty_df),
+        ("aggregator_snapshot_load_open_opties_from_tx_live", empty_df),
+        ("repository_snapshot_open_sprinters", empty_df),
+        ("aggregator_snapshot_open_sprinters_live", empty_df),
+        ("repository_snapshot_gesloten_opties", empty_df),
+        ("repository_snapshot_gesloten_opties_no_broker", empty_df),
+        ("repository_snapshot_gesloten_sprinters", empty_df),
+        ("repository_snapshot_gesloten_sprinters_no_asset_detail", empty_df),
+        ("repository_snapshot_asset_rollup_data", empty_df),
+        ("repository_snapshot_active_asset_rollup_data", empty_df),
+        ("repository_snapshot_sprinter_referentie_data", empty_df),
+        ("repository_snapshot_optie_referentie_data", empty_df),
+        ("repository_snapshot_portfolio_value_aandelen", empty_df),
+        ("repository_snapshot_portfolio_value_aandelen_scenario", empty_df),
+        ("repository_snapshot_portfolio_value_optie_call_put_detailed", empty_df),
+        ("repository_snapshot_portfolio_value_optie_call_put_detailed_scenario", empty_df),
+        ("repository_snapshot_portfolio_value_optie", empty_df),
+        ("repository_snapshot_portfolio_value_sprinters", empty_df),
+        ("repository_snapshot_portfolio_value_sprinters_scenario", empty_df),
+        ("repository_snapshot_portfolio_value_total_combined_put", empty_df),
+        ("repository_snapshot_portfolio_value_total_combined_scenario", empty_df),
+        ("snapshot_aandelen_projection_v2", empty_df),
+        ("snapshot_aandelen_projection_v2_patch", []),
+        ("snapshot_aandelen_projection_v2_metrics", empty_metrics),
+        ("snapshot_aandelen_projection_v2_meta", {}),
+        ("snapshot_aandelen_projection_v2_scenario", empty_df),
+        ("snapshot_opties_open_projection_v2", empty_df),
+        ("snapshot_opties_open_projection_v2_patch", []),
+        ("snapshot_opties_open_projection_v2_metrics", empty_metrics),
+        ("snapshot_opties_open_projection_v2_meta", {}),
+        ("snapshot_optie_tijdswaarde_projection_v2", empty_df),
+        ("snapshot_optie_tijdswaarde_projection_v2_patch", []),
+        ("snapshot_optie_tijdswaarde_projection_v2_metrics", empty_metrics),
+        ("snapshot_optie_tijdswaarde_projection_v2_meta", {}),
+        ("snapshot_sprinters_open_projection_v2", empty_df),
+        ("snapshot_sprinters_open_projection_v2_patch", []),
+        ("snapshot_sprinters_open_projection_v2_metrics", empty_metrics),
+        ("snapshot_sprinters_open_projection_v2_meta", {}),
+    ]
+    for attr_name, value in empty_snapshot_writes:
+        SNAPSHOT_STORE.safe_write(attr_name, value)
+    if option_timevalue_service is not None:
+        option_timevalue_service.reset_for_database_change()
+
+
+def _publish_projection_from_runtime(
+    cfg: ProjectionRefreshConfig,
+    recompute_ms: float,
+    reason: str,
+) -> None:
+    if cfg.projection is None:
+        return
+    snapshot_df = cfg.projection.snapshot()
+    patch_list = cfg.projection.last_patch() or []
+    if cfg.skip_unchanged_publish and _df_equals(cfg.last_published_snapshot, snapshot_df) and cfg.last_published_patch == patch_list:
+        return
+    SNAPSHOT_STORE.safe_write(cfg.snapshot_key, snapshot_df)
+    SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_patch", patch_list)
+    cfg.last_published_snapshot = snapshot_df.clone() if snapshot_df is not None else None
+    cfg.last_published_patch = list(patch_list)
+    sample = {
+        "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "reason": str(reason),
+        "recompute_ms": recompute_ms,
+        "publish_ms": 0.0,
+        "total_ms": recompute_ms,
+        "patch_size": len(patch_list),
+        "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
+        "version": cfg.projection.version(),
+    }
+    _append_projection_metrics(cfg, sample)
+
+
+def _refresh_projection_sync(cfg: ProjectionRefreshConfig, reason: str) -> None:
+    if cfg.projection is None:
+        return
+    try:
+        t0 = time.perf_counter()
+        cfg.projection.recompute()
+        snapshot_df = cfg.projection.snapshot()
+        patch_list = cfg.projection.last_patch() or []
+        t1 = time.perf_counter()
+        SNAPSHOT_STORE.safe_write(cfg.snapshot_key, snapshot_df)
+        SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_patch", patch_list)
+        t2 = time.perf_counter()
+        cfg.last_published_snapshot = snapshot_df.clone() if snapshot_df is not None else None
+        cfg.last_published_patch = list(patch_list)
+        recompute_ms = round((t1 - t0) * 1000.0, 3)
+        publish_ms = round((t2 - t1) * 1000.0, 3)
+        total_ms = round((t2 - t0) * 1000.0, 3)
+        sample = {
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "reason": str(reason),
+            "recompute_ms": recompute_ms,
+            "publish_ms": publish_ms,
+            "total_ms": total_ms,
+            "patch_size": len(patch_list),
+            "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
+            "version": cfg.projection.version(),
+        }
+        _append_projection_metrics(cfg, sample)
+        if PROJECTION_METRICS_LOG_CONSOLE:
+            print(
+                f"{cfg.log_prefix} reason={reason} recompute_ms={recompute_ms:.1f} "
+                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} "
+                f"patch={sample['patch_size']} rows={sample['snapshot_rows']}"
+            )
+    except Exception as exc:
+        print(f"{cfg.error_prefix} refresh failed: {exc}")
 
 
 def _reset_aandelen_tv_overlay_regime(reason: str) -> None:
@@ -422,7 +604,7 @@ def _publish_aandelen_projection_result(result: dict):
             "samples": samples,
         }
         SNAPSHOT_STORE.safe_write("snapshot_aandelen_projection_v2_metrics", metrics_payload)
-        _append_metrics_log(sample)
+        _append_metrics_log_to(_AANDELEN_PROJECTION_METRICS_LOG, sample)
         meta = result.get("meta") or aandelen_projection_v2.meta()
         meta["reason"] = result.get("reason", "unknown")
         meta["metrics"] = {
@@ -517,137 +699,18 @@ def refresh_aandelen_projection(reason: str, changed_keys: set[str] | None = Non
 
 
 def refresh_opties_open_projection(reason: str):
-    if opties_open_projection_v2 is None:
-        return
-    try:
-        t0 = time.perf_counter()
-        opties_open_projection_v2.recompute()
-        snapshot_df = opties_open_projection_v2.snapshot()
-        patch_list = opties_open_projection_v2.last_patch() or []
-        t1 = time.perf_counter()
-        SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2", snapshot_df)
-        SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_patch", patch_list)
-        t2 = time.perf_counter()
-        recompute_ms = round((t1 - t0) * 1000.0, 3)
-        publish_ms = round((t2 - t1) * 1000.0, 3)
-        total_ms = round((t2 - t0) * 1000.0, 3)
-        sample = {
-            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "reason": str(reason),
-            "recompute_ms": recompute_ms,
-            "publish_ms": publish_ms,
-            "total_ms": total_ms,
-            "patch_size": len(patch_list),
-            "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-            "version": opties_open_projection_v2.version(),
-        }
-        _OPTIES_OPEN_PROJECTION_METRICS.append(sample)
-        samples = list(_OPTIES_OPEN_PROJECTION_METRICS)
-        metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-        SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_metrics", metrics_payload)
-        _append_opties_metrics_log(sample)
-        meta = opties_open_projection_v2.meta()
-        meta["reason"] = reason
-        meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-        SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_meta", meta)
-        if PROJECTION_METRICS_LOG_CONSOLE:
-            print(
-                f"[opties-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-            )
-    except Exception as exc:
-        print(f"[opties-projection-v2] refresh failed: {exc}")
+    _refresh_projection_sync(_CFG_OPTIES, reason)
 
 
 def refresh_optie_tijdswaarde_projection(reason: str):
-    if optie_tijdswaarde_projection_v2 is None:
-        return
-    try:
-        t0 = time.perf_counter()
-        optie_tijdswaarde_projection_v2.recompute()
-        snapshot_df = optie_tijdswaarde_projection_v2.snapshot()
-        patch_list = optie_tijdswaarde_projection_v2.last_patch() or []
-        t1 = time.perf_counter()
-        SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2", snapshot_df)
-        SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_patch", patch_list)
-        t2 = time.perf_counter()
-        recompute_ms = round((t1 - t0) * 1000.0, 3)
-        publish_ms = round((t2 - t1) * 1000.0, 3)
-        total_ms = round((t2 - t0) * 1000.0, 3)
-        sample = {
-            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "reason": str(reason),
-            "recompute_ms": recompute_ms,
-            "publish_ms": publish_ms,
-            "total_ms": total_ms,
-            "patch_size": len(patch_list),
-            "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-            "version": optie_tijdswaarde_projection_v2.version(),
-        }
-        _OPTIE_TIJDSWAARDE_PROJECTION_METRICS.append(sample)
-        samples = list(_OPTIE_TIJDSWAARDE_PROJECTION_METRICS)
-        metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-        SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_metrics", metrics_payload)
-        _append_optie_tijdswaarde_metrics_log(sample)
-        meta = optie_tijdswaarde_projection_v2.meta()
-        meta["reason"] = reason
-        meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-        SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_meta", meta)
-        if PROJECTION_METRICS_LOG_CONSOLE:
-            print(
-                f"[optie-tijdswaarde-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-            )
-    except Exception as exc:
-        print(f"[optie-tijdswaarde-projection-v2] refresh failed: {exc}")
+    _refresh_projection_sync(_CFG_TIJDSWAARDE, reason)
 
 
 def refresh_sprinters_open_projection(reason: str):
-    if sprinters_open_projection_v2 is None:
-        return
-    try:
-        t0 = time.perf_counter()
-        sprinters_open_projection_v2.recompute()
-        snapshot_df = sprinters_open_projection_v2.snapshot()
-        patch_list = sprinters_open_projection_v2.last_patch() or []
-        t1 = time.perf_counter()
-        SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2", snapshot_df)
-        SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_patch", patch_list)
-        t2 = time.perf_counter()
-        recompute_ms = round((t1 - t0) * 1000.0, 3)
-        publish_ms = round((t2 - t1) * 1000.0, 3)
-        total_ms = round((t2 - t0) * 1000.0, 3)
-        sample = {
-            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "reason": str(reason),
-            "recompute_ms": recompute_ms,
-            "publish_ms": publish_ms,
-            "total_ms": total_ms,
-            "patch_size": len(patch_list),
-            "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-            "version": sprinters_open_projection_v2.version(),
-        }
-        _SPRINTERS_OPEN_PROJECTION_METRICS.append(sample)
-        samples = list(_SPRINTERS_OPEN_PROJECTION_METRICS)
-        metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-        SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_metrics", metrics_payload)
-        _append_sprinters_metrics_log(sample)
-        meta = sprinters_open_projection_v2.meta()
-        meta["reason"] = reason
-        meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-        SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_meta", meta)
-        if PROJECTION_METRICS_LOG_CONSOLE:
-            print(
-                f"[sprinters-projection-v2-metrics] reason={reason} recompute_ms={recompute_ms:.1f} "
-                f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']}"
-            )
-    except Exception as exc:
-        print(f"[sprinters-projection-v2] refresh failed: {exc}")
+    _refresh_projection_sync(_CFG_SPRINTERS, reason)
 
 
 def _publish_runtime_projection_results(results, reason: str):
-    global _LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT
-    global _LAST_PUBLISHED_OPTIES_OPEN_PATCH
     for res in results or []:
         if not getattr(res, "success", False):
             print(
@@ -672,84 +735,9 @@ def _publish_runtime_projection_results(results, reason: str):
                 }
             )
             continue
-        if pname == "opties_open_v2" and opties_open_projection_v2 is not None:
-            snapshot_df = opties_open_projection_v2.snapshot()
-            patch_list = opties_open_projection_v2.last_patch() or []
-            if _df_equals(_LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT, snapshot_df) and _LAST_PUBLISHED_OPTIES_OPEN_PATCH == patch_list:
-                continue
-            SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2", snapshot_df)
-            SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_patch", patch_list)
-            _LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT = snapshot_df.clone() if snapshot_df is not None else None
-            _LAST_PUBLISHED_OPTIES_OPEN_PATCH = list(patch_list)
-            sample = {
-                "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "reason": str(reason),
-                "recompute_ms": recompute_ms,
-                "publish_ms": 0.0,
-                "total_ms": recompute_ms,
-                "patch_size": len(patch_list),
-                "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-                "version": opties_open_projection_v2.version(),
-            }
-            _OPTIES_OPEN_PROJECTION_METRICS.append(sample)
-            samples = list(_OPTIES_OPEN_PROJECTION_METRICS)
-            metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-            SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_metrics", metrics_payload)
-            _append_opties_metrics_log(sample)
-            meta = opties_open_projection_v2.meta()
-            meta["reason"] = reason
-            meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-            SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_meta", meta)
-            continue
-        if pname == "optie_tijdswaarde_v2" and optie_tijdswaarde_projection_v2 is not None:
-            snapshot_df = optie_tijdswaarde_projection_v2.snapshot()
-            patch_list = optie_tijdswaarde_projection_v2.last_patch() or []
-            SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2", snapshot_df)
-            SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_patch", patch_list)
-            sample = {
-                "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "reason": str(reason),
-                "recompute_ms": recompute_ms,
-                "publish_ms": 0.0,
-                "total_ms": recompute_ms,
-                "patch_size": len(patch_list),
-                "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-                "version": optie_tijdswaarde_projection_v2.version(),
-            }
-            _OPTIE_TIJDSWAARDE_PROJECTION_METRICS.append(sample)
-            samples = list(_OPTIE_TIJDSWAARDE_PROJECTION_METRICS)
-            metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-            SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_metrics", metrics_payload)
-            _append_optie_tijdswaarde_metrics_log(sample)
-            meta = optie_tijdswaarde_projection_v2.meta()
-            meta["reason"] = reason
-            meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-            SNAPSHOT_STORE.safe_write("snapshot_optie_tijdswaarde_projection_v2_meta", meta)
-            continue
-        if pname == "sprinters_open_v2" and sprinters_open_projection_v2 is not None:
-            snapshot_df = sprinters_open_projection_v2.snapshot()
-            patch_list = sprinters_open_projection_v2.last_patch() or []
-            SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2", snapshot_df)
-            SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_patch", patch_list)
-            sample = {
-                "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "reason": str(reason),
-                "recompute_ms": recompute_ms,
-                "publish_ms": 0.0,
-                "total_ms": recompute_ms,
-                "patch_size": len(patch_list),
-                "snapshot_rows": snapshot_df.height if snapshot_df is not None else 0,
-                "version": sprinters_open_projection_v2.version(),
-            }
-            _SPRINTERS_OPEN_PROJECTION_METRICS.append(sample)
-            samples = list(_SPRINTERS_OPEN_PROJECTION_METRICS)
-            metrics_payload = {"last": sample, "summary": _metrics_summary(samples), "samples": samples}
-            SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_metrics", metrics_payload)
-            _append_sprinters_metrics_log(sample)
-            meta = sprinters_open_projection_v2.meta()
-            meta["reason"] = reason
-            meta["metrics"] = {"last": sample, "summary": metrics_payload["summary"]}
-            SNAPSHOT_STORE.safe_write("snapshot_sprinters_open_projection_v2_meta", meta)
+        cfg = _PROJECTION_REFRESH_CONFIGS.get(pname)
+        if cfg is not None:
+            _publish_projection_from_runtime(cfg, recompute_ms, reason)
 
 
 def _runtime_recompute_all(reason: str):
@@ -1127,6 +1115,7 @@ def main():
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
+    option_timevalue_service: OptionTimevalueService | None = None
     
     # Koppel signalen aan orchestrator:
     # 1) request -> alleen state-engine starten
@@ -1139,11 +1128,6 @@ def main():
             repository.load_asset_driver_beta_snapshot()
         ) if (payload or {}).get("status") in {"ok", "skipped"} else None
     )
-    def _on_database_changed_refresh(db_name: str):
-        _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
-        refresh_everything()
-
-    signals.databaseChanged.connect(_on_database_changed_refresh)
     signals.databaseChanged.connect(state_engine_runner.handle_database_changed)
     # Debounce snapshot refreshes: bij een wave van price_catchup jobs
     # willen we niet na elke asset-run opnieuw alle snapshots/aggregators herladen.
@@ -1152,6 +1136,9 @@ def main():
     refresh_timer = QTimer()
     refresh_timer.setSingleShot(True)
     refresh_timer.setInterval(2500)
+    db_change_refresh_timer = QTimer()
+    db_change_refresh_timer.setSingleShot(True)
+    db_change_refresh_timer.setInterval(0)
     opties_projection_refresh_timer = QTimer()
     opties_projection_refresh_timer.setSingleShot(True)
     opties_projection_refresh_timer.setInterval(5000)
@@ -1174,6 +1161,7 @@ def main():
             _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS[snapshot_key] = timer
     snapshot_counter_timer = QTimer()
     snapshot_counter_timer.setInterval(60_000)
+    orders_refresh_timer: QTimer | None = None
     def _run_debounced_refresh():
         refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
 
@@ -1231,6 +1219,28 @@ def main():
             print("[snapshot-count/min] no snapshotUpdated events")
         snapshot_counter.clear()
 
+    def _run_db_change_refresh():
+        refresh_everything()
+        if option_timevalue_service is not None:
+            option_timevalue_service.schedule_rebuild({"reason": "database_changed"})
+
+    def _on_database_changed_refresh(db_name: str):
+        _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
+        refresh_timer.stop()
+        opties_projection_refresh_timer.stop()
+        optie_tijdswaarde_projection_refresh_timer.stop()
+        sprinters_projection_refresh_timer.stop()
+        db_change_refresh_timer.stop()
+        if orders_refresh_timer is not None:
+            orders_refresh_timer.stop()
+        _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.clear()
+        for timer in _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS.values():
+            with contextlib.suppress(Exception):
+                timer.stop()
+        _invalidate_snapshots_for_database_change(option_timevalue_service)
+        db_change_refresh_timer.start()
+
+    db_change_refresh_timer.timeout.connect(_run_db_change_refresh)
     refresh_timer.timeout.connect(_run_debounced_refresh)
     opties_projection_refresh_timer.timeout.connect(_run_opties_projection_refresh)
     optie_tijdswaarde_projection_refresh_timer.timeout.connect(_run_optie_tijdswaarde_projection_refresh)
@@ -1245,7 +1255,8 @@ def main():
             pending_orders_refresh_payload.update({"reason": "orders_committed"})
             if isinstance(payload, dict):
                 pending_orders_refresh_payload.update(payload)
-            orders_refresh_timer.start()
+            if orders_refresh_timer is not None:
+                orders_refresh_timer.start()
         def _run_orders_refresh():
             refresh_transaction_derived_snapshots(dict(pending_orders_refresh_payload))
         orders_refresh_timer = QTimer()
@@ -1305,6 +1316,7 @@ def main():
         live_aggregator_sprinters=live_aggregator_sprinters,
     )
     option_timevalue_service = OptionTimevalueService(price_feed, STOCKDATA_DB_PATH)
+    signals.databaseChanged.connect(_on_database_changed_refresh)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
     setattr(w, "option_timevalue_service", option_timevalue_service)
     w.show()

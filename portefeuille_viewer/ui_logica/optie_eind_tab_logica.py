@@ -108,7 +108,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
     def __init__(self, broker=None, asset=None, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        self.live_prices = SNAPSHOT_STORE.live_prices or {}
+        self.live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
         self.last_prices = load_last_prices_dict()
         self.asset = asset
         self.active_db_name = "transacties_bron_data_test_accounts"
@@ -497,10 +497,11 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
 
         df = df_total.join(asset_map, on="asset_rollup", how="left")
 
+        live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
         df = df.with_columns([
             pl.struct(["ib_symbol", "ib_currency"]).map_elements(
                 lambda row: (
-                    self.live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and self.live_prices and self.live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
+                    live_prices.get((row["ib_symbol"], row["ib_currency"])) if row["ib_symbol"] and row["ib_currency"] and live_prices and live_prices.get((row["ib_symbol"], row["ib_currency"])) not in (None, 0.0)
                     else self.last_prices.get((row["ib_symbol"], row["ib_currency"]), 0.0) if row["ib_symbol"] and row["ib_currency"] and self.last_prices else 0.0
                 ),
                 return_dtype=pl.Float64

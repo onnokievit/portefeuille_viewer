@@ -1655,7 +1655,7 @@ def load_live_prices():
     """
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
     last_prices = load_last_prices_dict()
-    SNAPSHOT_STORE.live_prices = last_prices
+    SNAPSHOT_STORE.set_live_prices(last_prices)
 
 def build_repository_active_asset_rollup_data():
     """

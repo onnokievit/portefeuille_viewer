@@ -152,3 +152,10 @@ class LiveAggregatorSprinters(QObject):
         if self.df is not None and not self.df.is_empty():
             if self._save_to_snapshot_store():
                 self.sprintersUpdated.emit()
+
+    def reset_for_database_change(self):
+        self.df = pl.DataFrame()
+        self._last_published_df = None
+        self._last_publish_ts = 0.0
+        self.last_prices = load_last_prices_dict()
+        self.live_prices = {}

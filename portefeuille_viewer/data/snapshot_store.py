@@ -2,11 +2,17 @@ import contextlib
 import inspect
 import os
 import time
+import threading
 import polars as pl
 from typing import Any
 
 
 _SNAPSHOT_PERF_LOG = str(os.getenv("SNAPSHOT_PERF_LOG", "1")).strip() == "1"
+_SNAPSHOT_PERF_LOG_CALLER = str(os.getenv("SNAPSHOT_PERF_LOG_CALLER", "0")).strip() == "1"
+_SNAPSHOT_PERF_LOG_CALLER_SLOW_MS = max(
+    0.0,
+    float(os.getenv("SNAPSHOT_PERF_LOG_CALLER_SLOW_MS", "0")),
+)
 
 
 class SnapshotStore:
@@ -53,6 +59,9 @@ class SnapshotStore:
         self.live_prices: dict | None = None
         self.repository_snapshot_test_orders_cache: dict = {}
         self.repository_dirty_test_orders_assets: set = set()
+        self.repository_snapshot_test_order_scenarios: pl.DataFrame | None = None
+        self.repository_snapshot_test_order_scenario_content: dict = {}
+        self.repository_dirty_test_order_scenarios: bool = False
         self.repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None = None
         self.repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame] = {}
         self.runtime_bucket23_out_of_sync: bool = True
@@ -73,6 +82,7 @@ class SnapshotStore:
         self.active_database_name: str | None = None
         self.state_engine_runner: Any | None = None
         self._last_update_ts = {}
+        self._live_prices_lock = threading.Lock()
 
     def clear(self):
         """Reset alle snapshots naar leeg."""
@@ -113,6 +123,9 @@ class SnapshotStore:
         self.live_prices = None
         self.repository_snapshot_test_orders_cache = {}
         self.repository_dirty_test_orders_assets = set()
+        self.repository_snapshot_test_order_scenarios = None
+        self.repository_snapshot_test_order_scenario_content = {}
+        self.repository_dirty_test_order_scenarios = False
         self.repository_snapshot_active_scenario_orders_flat = None
         self.repository_snapshot_active_scenario_orders_by_asset = {}
         self.runtime_bucket23_out_of_sync = True
@@ -127,7 +140,33 @@ class SnapshotStore:
         self.snapshot_optie_timevalue_live = None
         self.snapshot_optie_timevalue_summary = None
         self.snapshot_optie_timevalue_meta = None
+        self.test_repository_load_input_test_dataframe = None
+        self.test_repository_load_output_test_dataframe = None
         self.state_engine_runner = None
+
+    def set_live_prices(self, prices: dict | None) -> None:
+        with self._live_prices_lock:
+            self.live_prices = dict(prices or {})
+
+    def update_live_prices(self, new_prices: dict) -> None:
+        if not new_prices:
+            return
+        with self._live_prices_lock:
+            if self.live_prices is None:
+                self.live_prices = {}
+            for k, v in new_prices.items():
+                if isinstance(k, tuple) and len(k) == 2:
+                    self.live_prices[k] = v
+                else:
+                    self.live_prices[(k, None)] = v
+
+    def clear_live_prices(self) -> None:
+        with self._live_prices_lock:
+            self.live_prices = {}
+
+    def get_live_prices_snapshot(self) -> dict:
+        with self._live_prices_lock:
+            return dict(self.live_prices or {})
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
@@ -282,16 +321,6 @@ class SnapshotStore:
         We importeren `signals` lokaal om circulaire import-problemen bij module-load te vermijden.
         """
         t0 = time.perf_counter()
-        caller = "unknown"
-        if _SNAPSHOT_PERF_LOG:
-            with contextlib.suppress(Exception):
-                frame = inspect.currentframe()
-                if frame is not None and frame.f_back is not None:
-                    caller_frame = frame.f_back
-                    caller = (
-                        f"{os.path.basename(caller_frame.f_code.co_filename)}:"
-                        f"{caller_frame.f_lineno}:{caller_frame.f_code.co_name}"
-                    )
         setattr(self, attr_name, value)
         # record timestamp
         with contextlib.suppress(Exception):
@@ -305,9 +334,25 @@ class SnapshotStore:
         if _SNAPSHOT_PERF_LOG:
             with contextlib.suppress(Exception):
                 elapsed_ms = (time.perf_counter() - t0) * 1000.0
-                print(
-                    f"[snapshot-write] key={attr_name} ms={elapsed_ms:.1f} caller={caller}"
+                should_log_caller = _SNAPSHOT_PERF_LOG_CALLER or (
+                    _SNAPSHOT_PERF_LOG_CALLER_SLOW_MS > 0.0
+                    and elapsed_ms >= _SNAPSHOT_PERF_LOG_CALLER_SLOW_MS
                 )
+                if should_log_caller:
+                    caller = "unknown"
+                    with contextlib.suppress(Exception):
+                        frame = inspect.currentframe()
+                        if frame is not None and frame.f_back is not None:
+                            caller_frame = frame.f_back
+                            caller = (
+                                f"{os.path.basename(caller_frame.f_code.co_filename)}:"
+                                f"{caller_frame.f_lineno}:{caller_frame.f_code.co_name}"
+                            )
+                    print(
+                        f"[snapshot-write] key={attr_name} ms={elapsed_ms:.1f} caller={caller}"
+                    )
+                else:
+                    print(f"[snapshot-write] key={attr_name} ms={elapsed_ms:.1f}")
 
 
 

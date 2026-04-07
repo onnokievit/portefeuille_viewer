@@ -9,7 +9,7 @@ def initialize_live_prices():
     Daarna kan deze dict live worden bijgewerkt met prijzen uit de price_feed.
     """
     last_prices = load_last_prices_dict()
-    SNAPSHOT_STORE.live_prices = last_prices.copy() if last_prices else {}
+    SNAPSHOT_STORE.set_live_prices(last_prices.copy() if last_prices else {})
 
 # Roep deze functie aan bij het opstarten van de app of voordat de price_feed wordt gestart.
 initialize_live_prices()
@@ -19,23 +19,13 @@ def update_live_prices(new_prices: dict):
     Update de centrale live_prices store.
     new_prices: dict met als key asset_id (bijv. ib_symbol, optie_id, etc.), value = prijs of dict met meer info.
     """
-    if SNAPSHOT_STORE.live_prices is None:
-        SNAPSHOT_STORE.live_prices = {}
-    # Verwacht: new_prices = {(asset_rollup, currency): prijs, ...}
-    # Zet alles om naar (asset_rollup, currency) als key
-    for k, v in new_prices.items():
-        if isinstance(k, tuple) and len(k) == 2:
-            SNAPSHOT_STORE.live_prices[k] = v
-        else:
-            # fallback: als key een string is, zet currency op None
-            SNAPSHOT_STORE.live_prices[(k, None)] = v
-    # Eventueel kun je hier extra logica toevoegen, zoals timestamp, logging, etc.
+    SNAPSHOT_STORE.update_live_prices(new_prices)
 
 def clear_live_prices():
     """
     Reset de centrale live_prices store.
     """
-    SNAPSHOT_STORE.live_prices = {}
+    SNAPSHOT_STORE.clear_live_prices()
 
 def start_live_price_updater(price_feed, interval_sec=2):
     stop_event = threading.Event()

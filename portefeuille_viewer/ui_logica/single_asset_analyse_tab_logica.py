@@ -473,6 +473,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._summary_reload_timer.setInterval(300)
         self._summary_reload_timer.setSingleShot(True)
         self._summary_reload_timer.timeout.connect(self._reload_summary_if_needed)
+        self._asset_selector_reload_timer = QTimer(self)
+        self._asset_selector_reload_timer.setInterval(200)
+        self._asset_selector_reload_timer.setSingleShot(True)
+        self._asset_selector_reload_timer.timeout.connect(self._reload_asset_selector_from_snapshots)
         self._opties_dirty = False
         self._opties_live_resort_enabled = (
             os.getenv("UI_SINGLE_ASSET_LIVE_RESORT_OPEN_OPTIES", "0").strip() == "1"
@@ -812,6 +816,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _schedule_snapshot_driven_views_for_active_asset(self):
         self._schedule_summary_reload()
         self._schedule_opties_reload()
+
+    def _reload_asset_selector_from_snapshots(self):
+        self._on_filter_changed()
+        current_asset = self.asset_selector.currentText()
+        self._refresh_test_orders_view_for_active_asset(current_asset)
+        if current_asset:
+            self.logic.set_asset(current_asset)
+            self._schedule_snapshot_driven_views_for_active_asset()
 
     def _refresh_snapshot_driven_views_immediately_for_active_asset(self):
         self.update_opties_open_table()
@@ -1224,6 +1236,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 self._schedule_opties_reload()
             else:
                 self._opties_dirty = True
+        elif snapshot_key in {
+            "repository_snapshot_active_asset_rollup_data",
+            "repository_snapshot_asset_rollup_data",
+        }:
+            self._asset_selector_reload_timer.start()
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -2650,11 +2667,17 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def update_aandelen_table(self):
         import polars as pl
         df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_aandelen_live", None)
-        if df is None or df.is_empty():
-            df = pl.DataFrame()
+        if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            self._update_summary_labels()
+            return
         asset = self.asset_selector.currentText()
         # Filter op asset_rollup en aantal_bezit
         df = df.filter(pl.col("asset_rollup") == asset)
+        if "aantal_bezit" not in df.columns:
+            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            self._update_summary_labels()
+            return
         df = df.filter(pl.col("aantal_bezit") != 0)
         # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
         if "koers" in df.columns and "aantal_bezit" in df.columns:
@@ -2662,6 +2685,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 pl.col("aantal_bezit").cast(pl.Float64),
                 (pl.col("koers") * pl.col("aantal_bezit")).alias("waarde_bezit")
             ])
+        required_cols = {"broker", "asset_rollup", "koers", "aantal_bezit", "waarde_bezit"}
+        if not required_cols.issubset(set(df.columns)):
+            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            self._update_summary_labels()
+            return
         # Selecteer de gewenste kolommen
         df = df.select([
             "broker",
@@ -3886,15 +3914,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 if row.height > 0:
                     ib_symbol = row["ib_symbol"][0] if "ib_symbol" in row.columns else None
                     ib_currency = row["ib_currency"][0] if "ib_currency" in row.columns else None
-        if hasattr(SNAPSHOT_STORE, "live_prices") and SNAPSHOT_STORE.live_prices:
+        live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
+        if live_prices:
             price = None
             if ib_symbol and ib_currency:
                 # print("Zoek prijs voor:", (ib_symbol, ib_currency)) # DEBUG chosen asset
-                price = SNAPSHOT_STORE.live_prices.get((ib_symbol, ib_currency))
+                price = live_prices.get((ib_symbol, ib_currency))
             if price is None and ib_symbol:
-                price = SNAPSHOT_STORE.live_prices.get(ib_symbol)
+                price = live_prices.get(ib_symbol)
             if price is None:
-                price = SNAPSHOT_STORE.live_prices.get(asset_rollup)
+                price = live_prices.get(asset_rollup)
             if isinstance(price, dict) and "last" in price:
                 live_price = price["last"]
             elif isinstance(price, (int, float)):
@@ -4298,34 +4327,19 @@ class SingleAssetAnalyseLogic:
 
     def set_asset(self, asset_rollup):
         store = SNAPSHOT_STORE
-        
-        self.df_open_opties = (
-            store.repository_snapshot_load_open_opties.filter(pl.col("asset_rollup") == asset_rollup)
-            if store.repository_snapshot_load_open_opties is not None
-            else None
-        )
 
-        
-        self.df_gesloten_opties = (
-            store.repository_snapshot_gesloten_opties.filter(pl.col("asset_rollup") == asset_rollup)
-            if store.repository_snapshot_gesloten_opties is not None
-            else None
-        )
-        self.df_open_sprinters = (
-            store.repository_snapshot_open_sprinters.filter(pl.col("asset_rollup") == asset_rollup)
-            if store.repository_snapshot_open_sprinters is not None
-            else None
-        )
-        self.df_gesloten_sprinters = (
-            store.repository_snapshot_gesloten_sprinters.filter(pl.col("asset_rollup") == asset_rollup)
-            if store.repository_snapshot_gesloten_sprinters is not None
-            else None
-        )
-        self.df_aandelen = (
-            store.repository_snapshot_aandelen.filter(pl.col("asset_rollup") == asset_rollup)
-            if store.repository_snapshot_aandelen is not None
-            else None
-        )
+        def _filter_asset(df: pl.DataFrame | None) -> pl.DataFrame | None:
+            if df is None:
+                return None
+            if "asset_rollup" not in df.columns:
+                return df.clear()
+            return df.filter(pl.col("asset_rollup") == asset_rollup)
+
+        self.df_open_opties = _filter_asset(store.repository_snapshot_load_open_opties)
+        self.df_gesloten_opties = _filter_asset(store.repository_snapshot_gesloten_opties)
+        self.df_open_sprinters = _filter_asset(store.repository_snapshot_open_sprinters)
+        self.df_gesloten_sprinters = _filter_asset(store.repository_snapshot_gesloten_sprinters)
+        self.df_aandelen = _filter_asset(store.repository_snapshot_aandelen)
 
   
         
@@ -4544,9 +4558,41 @@ class SingleAssetAnalyseLogic:
 
     def load_option_open_data(self):
         # print("Load open opties data for single asset analyse aangeroepen")
+        empty_result = pl.DataFrame(
+            schema={
+                "itm": pl.Utf8,
+                "broker": pl.Utf8,
+                "asset_rollup": pl.Utf8,
+                "optie_call_put": pl.Utf8,
+                "optie_exp_date": pl.Utf8,
+                "optie_strike": pl.Float64,
+                "Koers": pl.Float64,
+                "afwijking_pct": pl.Float64,
+                "aantal_bezit": pl.Float64,
+                "premie": pl.Float64,
+                "totaal_resultaat_optie": pl.Float64,
+                "totaal_fees": pl.Float64,
+                "itm_otm": pl.Float64,
+            }
+        )
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         if df is None:
-            return pl.DataFrame()
+            return empty_result
+        required_cols = {
+            "broker",
+            "asset_rollup",
+            "optie_call_put",
+            "optie_exp_date",
+            "optie_strike",
+            "Koers",
+            "SomVantransactie_aantal",
+            "SomVantransactie_euro_totaal",
+            "opt_total_result",
+            "SomVantransactie_fee",
+            "ITM_OTM",
+        }
+        if not required_cols.issubset(set(df.columns)):
+            return empty_result
         if "ITM_OTM" in df.columns:
             df = df.with_columns(
                 pl.when(pl.col("ITM_OTM") != 0)

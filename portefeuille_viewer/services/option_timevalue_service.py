@@ -182,6 +182,69 @@ class OptionTimevalueService(QObject):
         if self._full_publish_timer.isActive():
             self._full_publish_timer.stop()
 
+    def reset_for_database_change(self) -> None:
+        if self._rebuild_timer.isActive():
+            self._rebuild_timer.stop()
+        if self._publish_timer.isActive():
+            self._publish_timer.stop()
+        if self._full_publish_timer.isActive():
+            self._full_publish_timer.stop()
+        with self._lock:
+            self._rows = []
+            self._underlying_close = {}
+            self._ticks = {}
+        with self._state_lock:
+            self._rebuild_inflight = False
+            self._rebuild_queued = False
+            self._pending_rebuild_result = None
+        self._clear_unresolved("database_change")
+        SNAPSHOT_STORE.safe_write(
+            "snapshot_optie_timevalue_live",
+            pl.DataFrame(
+                schema={
+                    "broker": pl.Utf8,
+                    "asset": pl.Utf8,
+                    "exp": pl.Date,
+                    "c_p": pl.Utf8,
+                    "strike": pl.Float64,
+                    "qty_open": pl.Float64,
+                    "mult": pl.Float64,
+                    "ccy": pl.Utf8,
+                    "last_px": pl.Float64,
+                    "px_source": pl.Utf8,
+                    "bid": pl.Float64,
+                    "ask": pl.Float64,
+                    "und_px": pl.Float64,
+                    "intrinsic": pl.Float64,
+                    "time_per_unit": pl.Float64,
+                    "time_total": pl.Float64,
+                    "iv": pl.Float64,
+                    "delta": pl.Float64,
+                    "gamma": pl.Float64,
+                    "theta": pl.Float64,
+                    "series_id": pl.Int64,
+                    "conid": pl.Int64,
+                }
+            ),
+        )
+        SNAPSHOT_STORE.safe_write(
+            "snapshot_optie_timevalue_summary",
+            pl.DataFrame(schema={"ccy": pl.Utf8, "time_value_abs": pl.Float64}),
+        )
+        SNAPSHOT_STORE.safe_write(
+            "snapshot_optie_timevalue_meta",
+            pl.DataFrame(
+                schema={
+                    "ts": pl.Utf8,
+                    "priced": pl.Int64,
+                    "total": pl.Int64,
+                    "unresolved_count": pl.Int64,
+                    "unresolved_series": pl.Utf8,
+                }
+            ),
+        )
+        self._full_publish_timer.start()
+
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key in self._snapshot_rebuild_keys:
             if snapshot_key in self._snapshot_clear_unresolved_keys:
@@ -818,7 +881,7 @@ class OptionTimevalueService(QObject):
             if subs:
                 with contextlib.suppress(Exception):
                     self.price_feed.ensure_option_subscriptions(subs)
-            self._publish_timer.start()
+            self._publish_snapshot(trigger="rebuild_apply")
             self._log(
                 f"[option-timevalue] universe refreshed: open_series={len(self._rows)} "
                 f"subscribed={len(subs)} @ {_now_ts()}"
@@ -862,7 +925,7 @@ class OptionTimevalueService(QObject):
         by_ccy = defaultdict(float)
         priced = 0
         with self._lock:
-            live_prices = dict(getattr(SNAPSHOT_STORE, "live_prices", {}) or {})
+            live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
 
         def _live_underlying_px(symbol: str, ccy: str) -> float | None:
             sym = _clean(symbol).upper()
