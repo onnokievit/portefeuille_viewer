@@ -1,8 +1,13 @@
+import os
+import time
 from PySide6.QtCore import QObject, Signal, QTimer
 import polars as pl
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
+
+
+_PORTFOLIO_ENGINE_PERF_LOG = str(os.getenv("PORTFOLIO_ENGINE_PERF_LOG", "1")).strip() == "1"
 
 class PortfolioEngine(QObject):
     """
@@ -105,17 +110,26 @@ class PortfolioEngine(QObject):
         """Process all accumulated price updates in one batch."""
         if not self._pending_updates:
             return
-        
-        # print(f"PortfolioEngine: Processing batched updates...") # Debug log
-        
+        t0 = time.perf_counter()
+        t_eq0 = time.perf_counter()
         # Process updates for all aggregators
         self.live_aggregator_aandelen.process_live_update()
+        t_eq1 = time.perf_counter()
         self.live_aggregator_opties.process_live_update()
+        t_opt1 = time.perf_counter()
         if self.live_aggregator_sprinters:
             self.live_aggregator_sprinters.process_live_update()
+        t_end = time.perf_counter()
         
         self._pending_updates = False
-        # print(f"PortfolioEngine: Batch processing complete") # Debug log
+        if _PORTFOLIO_ENGINE_PERF_LOG:
+            print(
+                "[portfolio-engine] timer=_process_batched_updates "
+                f"total_ms={(t_end - t0) * 1000.0:.1f} "
+                f"aandelen_ms={(t_eq1 - t_eq0) * 1000.0:.1f} "
+                f"opties_ms={(t_opt1 - t_eq1) * 1000.0:.1f} "
+                f"sprinters_ms={(t_end - t_opt1) * 1000.0:.1f}"
+            )
     
     def start_subscriptions(self):
         """

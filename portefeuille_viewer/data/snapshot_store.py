@@ -1,6 +1,12 @@
 import contextlib
+import inspect
+import os
+import time
 import polars as pl
 from typing import Any
+
+
+_SNAPSHOT_PERF_LOG = str(os.getenv("SNAPSHOT_PERF_LOG", "1")).strip() == "1"
 
 
 class SnapshotStore:
@@ -275,8 +281,18 @@ class SnapshotStore:
 
         We importeren `signals` lokaal om circulaire import-problemen bij module-load te vermijden.
         """
+        t0 = time.perf_counter()
+        caller = "unknown"
+        if _SNAPSHOT_PERF_LOG:
+            with contextlib.suppress(Exception):
+                frame = inspect.currentframe()
+                if frame is not None and frame.f_back is not None:
+                    caller_frame = frame.f_back
+                    caller = (
+                        f"{os.path.basename(caller_frame.f_code.co_filename)}:"
+                        f"{caller_frame.f_lineno}:{caller_frame.f_code.co_name}"
+                    )
         setattr(self, attr_name, value)
-        import time
         # record timestamp
         with contextlib.suppress(Exception):
             self._last_update_ts[attr_name] = time.time()
@@ -286,6 +302,12 @@ class SnapshotStore:
 
             # Use queued emit helper to ensure main-thread delivery
             signals.queued_emit_snapshotUpdated(attr_name)
+        if _SNAPSHOT_PERF_LOG:
+            with contextlib.suppress(Exception):
+                elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                print(
+                    f"[snapshot-write] key={attr_name} ms={elapsed_ms:.1f} caller={caller}"
+                )
 
 
 

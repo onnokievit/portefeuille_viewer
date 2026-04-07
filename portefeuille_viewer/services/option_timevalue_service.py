@@ -19,6 +19,9 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 
 
+_OPTION_TIMEVALUE_PERF_LOG = str(os.getenv("OPTION_TIMEVALUE_PERF_LOG", "1")).strip() == "1"
+
+
 def _now_ts() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -124,14 +127,18 @@ class OptionTimevalueService(QObject):
         self._rebuild_timer = QTimer(self)
         self._rebuild_timer.setSingleShot(True)
         self._rebuild_timer.setInterval(350)
-        self._rebuild_timer.timeout.connect(self._rebuild_universe)
+        self._rebuild_timer.timeout.connect(self._on_rebuild_timer_fired)
         self._publish_timer = QTimer(self)
         self._publish_timer.setSingleShot(True)
-        self._publish_timer.setInterval(300)
-        self._publish_timer.timeout.connect(self._publish_snapshot)
+        self._publish_timer.setInterval(
+            max(250, int(os.getenv("OPTION_TIMEVALUE_PUBLISH_DEBOUNCE_MS", "5000")))
+        )
+        self._publish_timer.timeout.connect(self._on_publish_timer_fired)
         self._full_publish_timer = QTimer(self)
-        self._full_publish_timer.setInterval(1500)
-        self._full_publish_timer.timeout.connect(self._publish_snapshot)
+        self._full_publish_timer.setInterval(
+            max(1000, int(os.getenv("OPTION_TIMEVALUE_FULL_PUBLISH_MS", "60000")))
+        )
+        self._full_publish_timer.timeout.connect(self._on_full_publish_timer_fired)
         self._full_publish_timer.start()
 
         with contextlib.suppress(Exception):
@@ -144,6 +151,21 @@ class OptionTimevalueService(QObject):
     def _log(self, msg: str):
         if self._log_enabled:
             print(msg)
+
+    def _on_rebuild_timer_fired(self):
+        if _OPTION_TIMEVALUE_PERF_LOG:
+            print("[option-timevalue] timer=rebuild fired")
+        self._rebuild_universe()
+
+    def _on_publish_timer_fired(self):
+        if _OPTION_TIMEVALUE_PERF_LOG:
+            print("[option-timevalue] timer=publish fired")
+        self._publish_snapshot(trigger="publish_timer")
+
+    def _on_full_publish_timer_fired(self):
+        if _OPTION_TIMEVALUE_PERF_LOG:
+            print("[option-timevalue] timer=full_publish fired")
+        self._publish_snapshot(trigger="full_publish_timer")
 
     def schedule_rebuild(self, payload: dict | None = None):
         with self._state_lock:
@@ -796,7 +818,7 @@ class OptionTimevalueService(QObject):
             if subs:
                 with contextlib.suppress(Exception):
                     self.price_feed.ensure_option_subscriptions(subs)
-            self._publish_snapshot()
+            self._publish_timer.start()
             self._log(
                 f"[option-timevalue] universe refreshed: open_series={len(self._rows)} "
                 f"subscribed={len(subs)} @ {_now_ts()}"
@@ -810,7 +832,8 @@ class OptionTimevalueService(QObject):
         if queued:
             self._rebuild_timer.start()
 
-    def _publish_snapshot(self):
+    def _publish_snapshot(self, trigger: str = "direct"):
+        t0 = time.perf_counter()
         rows = self._rows or []
         if not rows:
             SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_live", pl.DataFrame())
@@ -829,6 +852,10 @@ class OptionTimevalueService(QObject):
                     ]
                 ),
             )
+            if _OPTION_TIMEVALUE_PERF_LOG:
+                print(
+                    f"[option-timevalue] publish trigger={trigger} total_ms={(time.perf_counter() - t0) * 1000.0:.1f} rows=0 priced=0"
+                )
             return
 
         output = []
@@ -980,3 +1007,7 @@ class OptionTimevalueService(QObject):
                 ]
             ),
         )
+        if _OPTION_TIMEVALUE_PERF_LOG:
+            print(
+                f"[option-timevalue] publish trigger={trigger} total_ms={(time.perf_counter() - t0) * 1000.0:.1f} rows={len(output)} priced={priced} unresolved={len(self._unresolved_series)}"
+            )

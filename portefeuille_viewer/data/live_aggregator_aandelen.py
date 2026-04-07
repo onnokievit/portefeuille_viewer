@@ -1,57 +1,56 @@
 from PySide6.QtCore import QObject, Signal
 import polars as pl
 import datetime
+import os
+import time
+
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
 from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build_prices_df
 
+
 class LiveAggregatorAandelen(QObject):
     """
-    Gespecialiseerde aggregator voor aandelen (stocks) live data processing.
-    Wordt getriggerd door PortfolioEngine wanneer nieuwe live prijzen binnenkomen.
+    Gespecialiseerde aggregator voor aandelen live data processing.
     """
+
     aandelenUpdated = Signal()
-    
+
     def __init__(self):
         super().__init__()
         self.df = None
+        self._last_published_df = None
+        self._last_publish_ts = 0.0
+        self._publish_min_interval_sec = max(
+            0.0,
+            float(os.getenv("LIVE_AANDELEN_PUBLISH_MIN_INTERVAL_SEC", "15.0")),
+        )
         self.last_prices = load_last_prices_dict()
-        self.live_prices = {}  # Dict om live prijzen bij te houden: {ib_symbol: price}
-        
+        self.live_prices = {}
         self._initialize_data()
-    
+
     def _initialize_data(self):
-        """Laad initiële data uit SnapshotStore en bereid DataFrame voor."""
         try:
             self.df = self._load_and_calculate()
             print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] LiveAggregatorAandelen: Initialized with {len(self.df)} rows")
-            # Save initial data to snapshot store for immediate UI display
             self._save_to_snapshot_store()
         except Exception as e:
             print(f"LiveAggregatorAandelen initialization error: {e}")
             self.df = pl.DataFrame()
-    
+
     def _load_and_prepare_data(self):
-        """Laad basisdata uit SnapshotStore en join met asset_map."""
         if SNAPSHOT_STORE.repository_snapshot_aandelen is None:
             raise ValueError("repository_snapshot_aandelen is niet geladen in SnapshotStore")
-        
-        # Laad asset_map voor IB symbolen
+
         asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map.is_empty():
             return pl.DataFrame()
-        
-        # Selecteer relevante velden uit asset_map
-        asset_map = asset_map.select([
-            "asset_rollup", "ib_symbol", "ib_currency", "prim_exchange","regio", "sector", "value_grow"
-        ])
-        
-        # Join met aandelen data
+
+        asset_map = asset_map.select(
+            ["asset_rollup", "ib_symbol", "ib_currency", "prim_exchange", "regio", "sector", "value_grow"]
+        )
         aandelen = SNAPSHOT_STORE.repository_snapshot_aandelen
         df = asset_map.join(aandelen, on="asset_rollup", how="left")
-        
-        # print("[DEBUG is live prices in live aggregator?] live_prices sample:", list(self.live_prices.items())[:5])
-        # print("[DEBUG is last prices in live aggregator?] last_prices sample:", list(self.last_prices.items())[:5])
 
         prices_df = build_prices_df(self.live_prices, self.last_prices)
         if not prices_df.is_empty():
@@ -60,112 +59,63 @@ class LiveAggregatorAandelen(QObject):
         else:
             df = df.with_columns(pl.lit(0.0).alias("Koers"))
         df = apply_runtime_beta_shift(df, "Koers")
-
         return df
-    
+
     def update_live_price(self, symbol, currency, price):
-        """
-        Update live prijs voor specifiek symbol.
-        
-        Args:
-            symbol: IB symbol (e.g. 'AAPL')
-            price: Nieuwe prijs
-        """
         if price is not None and price > 0:
-            self.live_prices[symbol,currency] = float(price)
-            # print(f"LiveAggregatorAandelen: Updated {symbol} = {price}")
-    
+            self.live_prices[(symbol, currency)] = float(price)
+
     def process_live_update(self):
-        """
-        Verwerk live update trigger van PortfolioEngine.
-        PortfolioEngine roept alleen deze methode aan - geen data doorgeven.
-        LiveAggregator laadt zelf repository_snapshot_aandelen en verwerkt het.
-        """
         try:
-            # 1. Laad fresh data uit SnapshotStore
             if SNAPSHOT_STORE.repository_snapshot_aandelen is None:
                 print("LiveAggregatorAandelen: snapshot_aandelen niet beschikbaar")
                 return
-            
-            # 2. Laad en bereken complete DataFrame
+
             self.df = self._load_and_calculate()
-            
-            # 3. Aggregeer en sla op in aggregator_snapshot_aandelen_live
-            self._save_to_snapshot_store()
-            
-            # 4. Signal UI dat aandelen data is geüpdatet
-            self.aandelenUpdated.emit()
-            
-            # print(f"LiveAggregatorAandelen: Processed live update with {len(self.df)} rows") # Debug log
-            
+            if self._save_to_snapshot_store():
+                self.aandelenUpdated.emit()
         except Exception as e:
             print(f"LiveAggregatorAandelen process error: {e}")
-    
+
     def _load_and_calculate(self):
-        """
-        Laad snapshot_aandelen en voeg alle berekende kolommen toe.
-        """
-        # Laad basisdata
         df = self._load_and_prepare_data()
-        
         if df.is_empty():
             return df
-        
-        # Voeg berekende kolommen toe
-        df = self._add_calculated_columns(df)
-        
-        return df
-    
+        return self._add_calculated_columns(df)
+
     def _add_calculated_columns(self, df):
-        """Voeg berekende kolommen toe op basis van Koers kolom."""
-        # Eerste stap: basisberekeningen
-        df = df.with_columns([
-            (pl.col("aantal_bezit") * pl.col("Koers")).alias("eq_bezit"),
-            (pl.col("euro_koop") / pl.col("aantal_koop").clip(lower_bound=1)).alias("avg_price"),
-            (pl.col("euro_verkoop") + pl.col("euro_koop")).alias("result_realised"),
-        ])
-        
-        # Tweede stap: gebruik avg_price
-        df = df.with_columns([
-            (pl.col("aantal_bezit") * pl.col("avg_price")).alias("eq_purchase"),
-        ])
-        
-        # Derde stap: niet-gerealiseerde winst/verlies
-        df = df.with_columns([
-            (pl.col("eq_bezit")).alias("result_non_realised"),
-            (pl.col("eq_bezit") + pl.col("result_realised")).alias("total_result"),
-        ])
-        
-
-
-
+        df = df.with_columns(
+            [
+                (pl.col("aantal_bezit") * pl.col("Koers")).alias("eq_bezit"),
+                (pl.col("euro_koop") / pl.col("aantal_koop").clip(lower_bound=1)).alias("avg_price"),
+                (pl.col("euro_verkoop") + pl.col("euro_koop")).alias("result_realised"),
+            ]
+        )
+        df = df.with_columns([(pl.col("aantal_bezit") * pl.col("avg_price")).alias("eq_purchase")])
+        df = df.with_columns(
+            [
+                pl.col("eq_bezit").alias("result_non_realised"),
+                (pl.col("eq_bezit") + pl.col("result_realised")).alias("total_result"),
+            ]
+        )
         return df
-    
 
     def get_not_aggregated(self):
-        """
-        Haal geaggregeerde dataset op, gegroepeerd per asset_rollup.
-        Gebruikt de data die al verwerkt is door PortfolioEngine.
-        
-        Returns:
-            pl.DataFrame: Geaggregeerde aandelen data
-        """
         if self.df is None or self.df.is_empty():
-            return pl.DataFrame({
-                "broker": [],
-                "asset_rollup": [],
-                "koers": [],
-                "aantal_bezit": [],
-                "eq_total_fee": [],
-                "total_result": [],
-                "regio": []
-            })
+            return pl.DataFrame(
+                {
+                    "broker": [],
+                    "asset_rollup": [],
+                    "koers": [],
+                    "aantal_bezit": [],
+                    "eq_total_fee": [],
+                    "total_result": [],
+                    "regio": [],
+                }
+            )
 
-        return self.df.group_by(
-            "broker", "asset_rollup", "regio", "sector", "value_grow"
-        ).agg(
+        return self.df.group_by("broker", "asset_rollup", "regio", "sector", "value_grow").agg(
             [
-                # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
                 pl.col("aantal_koop").sum(),
@@ -177,31 +127,22 @@ class LiveAggregatorAandelen(QObject):
             ]
         )
 
-
-
-    
     def get_aggregated(self):
-        """
-        Haal geaggregeerde dataset op, gegroepeerd per asset_rollup.
-        Gebruikt de data die al verwerkt is door PortfolioEngine.
-        
-        Returns:
-            pl.DataFrame: Geaggregeerde aandelen data
-        """
         if self.df is None or self.df.is_empty():
-            return pl.DataFrame({
-                "asset_rollup": [],
-                "koers": [],
-                "aantal_bezit": [],
-                "result_realised": [],
-                "result_non_realised": [],
-                "eq_total_fee": [],
-                "total_result": []
-            })
+            return pl.DataFrame(
+                {
+                    "asset_rollup": [],
+                    "koers": [],
+                    "aantal_bezit": [],
+                    "result_realised": [],
+                    "result_non_realised": [],
+                    "eq_total_fee": [],
+                    "total_result": [],
+                }
+            )
 
         return self.df.group_by("asset_rollup").agg(
             [
-                # Gebruik "Koers" zoals PortfolioEngine het heeft berekend
                 pl.col("Koers").max().alias("koers"),
                 pl.col("aantal_bezit").sum(),
                 pl.col("result_realised").sum(),
@@ -210,20 +151,34 @@ class LiveAggregatorAandelen(QObject):
                 pl.col("total_result").sum(),
             ]
         )
-    
-    def _save_to_snapshot_store(self):
-        """Sla geaggregeerde data op in SnapshotStore."""
+
+    def _df_changed(self, new_df: pl.DataFrame) -> bool:
+        old_df = self._last_published_df
+        if old_df is None:
+            return True
+        try:
+            return not old_df.equals(new_df)
+        except Exception:
+            return True
+
+    def _save_to_snapshot_store(self) -> bool:
         try:
             aggregated = self.get_not_aggregated()
+            if not self._df_changed(aggregated):
+                return False
+            now_ts = time.monotonic()
+            if self._last_publish_ts and (now_ts - self._last_publish_ts) < self._publish_min_interval_sec:
+                return False
             SNAPSHOT_STORE.safe_write("aggregator_snapshot_aandelen_live", aggregated)
+            self._last_published_df = aggregated.clone()
+            self._last_publish_ts = now_ts
+            return True
         except Exception as e:
             print(f"LiveAggregatorAandelen: Error saving to SnapshotStore: {e}")
-    
+            return False
+
     def refresh_data(self):
-        """Herlaad data uit SnapshotStore (voor manual refresh)."""
         self._initialize_data()
         if self.df is not None and not self.df.is_empty():
-            self._save_to_snapshot_store()
-            self.aandelenUpdated.emit()
-    
-
+            if self._save_to_snapshot_store():
+                self.aandelenUpdated.emit()

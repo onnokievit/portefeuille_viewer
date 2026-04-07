@@ -1,22 +1,31 @@
 import polars as pl
 from PySide6.QtCore import QObject, Signal
+import time
+import os
+
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
 from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build_prices_df
 
+
 class LiveAggregatorSprinters(QObject):
     """
     Specialized aggregator voor sprinters met live price updates.
-    Laadt data uit repository_snapshot_load_open_opties, koppelt met asset_rollup en sprinter_referentie_data,
-    voegt live koersen toe en berekent winst (placeholder).
     """
+
     sprintersUpdated = Signal()
 
     def __init__(self, verbose=False):
         super().__init__()
         self.df = None
+        self._last_published_df = None
+        self._last_publish_ts = 0.0
+        self._publish_min_interval_sec = max(
+            0.0,
+            float(os.getenv("LIVE_SPRINTERS_PUBLISH_MIN_INTERVAL_SEC", "15.0")),
+        )
         self.last_prices = load_last_prices_dict()
-        self.live_prices = {}  # Dict: {ib_symbol: koers}
+        self.live_prices = {}
         self.verbose = verbose
         self._initialize_data()
 
@@ -40,20 +49,12 @@ class LiveAggregatorSprinters(QObject):
         sprinter_ref = getattr(SNAPSHOT_STORE, "repository_snapshot_sprinter_referentie_data", None)
         if sprinter_ref is None or sprinter_ref.is_empty():
             raise ValueError("repository_snapshot_sprinter_referentie_data is niet geladen")
-        # Join met asset_map voor ib_symbol (zonder asset_detail)
+
         asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency"])
         df = SNAPSHOT_STORE.repository_snapshot_open_sprinters.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
-        # Join met sprinter_ref altijd op asset_detail (die hoort in df te zitten)
         sprinter_ref = sprinter_ref.select(["asset_detail", "sprinter_funding", "sprinter_ratio"])
         df = df.join(sprinter_ref, on="asset_detail", how="left")
-        # Voeg koers toe op basis van ib_symbol
-
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_load_input_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
 
         prices_df = build_prices_df(self.live_prices, self.last_prices)
         if not prices_df.is_empty():
@@ -62,106 +63,92 @@ class LiveAggregatorSprinters(QObject):
         else:
             df = df.with_columns(pl.lit(0.0).alias("Koers"))
         df = apply_runtime_beta_shift(df, "Koers")
-
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-        # from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-        # SNAPSHOT_STORE.test_repository_load_output_test_dataframe = df  # of df_sum als je de gesumde versie wilt zien
-        # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-
-
         return df
 
     def _load_and_calculate(self):
         df = self._load_and_prepare_data()
-
-        # Voeg placeholder winst kolom toe
-        df = df.with_columns([
-            pl.lit(0.0).alias("winst")  # Placeholder, later vervangen door echte berekening
-        ])
-        # Selecteer relevante kolommen
+        df = df.with_columns([pl.lit(0.0).alias("winst")])
         df = self._calculate_sprinter_resultaat(df)
-
         select_cols = [
-            "broker", "asset_rollup", "asset_detail", "Koers", "optie_exp_date", "optie_strike", "optie_call_put",
-            "sprinter_funding", "sprinter_ratio", "SomVantransactie_fee","SomVantransactie_aantal", "SomVantransactie_euro_totaal", "sp_result"
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "Koers",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put",
+            "sprinter_funding",
+            "sprinter_ratio",
+            "SomVantransactie_fee",
+            "SomVantransactie_aantal",
+            "SomVantransactie_euro_totaal",
+            "sp_result",
         ]
-        df = df.select([col for col in select_cols if col in df.columns])
-
-
-
-        return df
+        return df.select([col for col in select_cols if col in df.columns])
 
     def _calculate_sprinter_resultaat(self, df):
-        # Placeholder voor echte winstberekening
-        """
-        berekening winst op een sprinter:
-        - als koers > sprrinter_funding: sp_bruto_result = (Koers - sprinter_funding) *  SomVantransactie_aantal
-        
-        - als koers < sprinter_funding: sp_sp_bruto_result = 0
-        - sp_net_result = (sp_bruto_result + SomVantransactie_euro_totaal)/ sprinter_ratio
-        """
-
-
-        df = df.with_columns([
-            (pl.col("Koers").cast(pl.Float32) - pl.col("sprinter_funding").cast(pl.Float32)).alias("sp_diff")])
-        df = df.with_columns([
-            pl.when(pl.col("sp_diff") > 0)
-            .then((pl.col("sp_diff")/pl.col("sprinter_ratio")) * pl.col("SomVantransactie_aantal"))
-            .otherwise(0.0)
-            .alias("sp_bruto_result")
-        ])
-        
-        df = df.with_columns([
-            ((pl.col("sp_bruto_result") + pl.col("SomVantransactie_euro_totaal")) ).alias("sp_result")
-        ])
-
-
-        return df
-
-
+        df = df.with_columns(
+            [(pl.col("Koers").cast(pl.Float32) - pl.col("sprinter_funding").cast(pl.Float32)).alias("sp_diff")]
+        )
+        df = df.with_columns(
+            [
+                pl.when(pl.col("sp_diff") > 0)
+                .then((pl.col("sp_diff") / pl.col("sprinter_ratio")) * pl.col("SomVantransactie_aantal"))
+                .otherwise(0.0)
+                .alias("sp_bruto_result")
+            ]
+        )
+        return df.with_columns(
+            [((pl.col("sp_bruto_result") + pl.col("SomVantransactie_euro_totaal"))).alias("sp_result")]
+        )
 
     def update_live_price(self, symbol, currency, price):
         if price is not None and price > 0:
             self.live_prices[(symbol, currency)] = float(price)
 
     def process_live_update(self):
-        """
-        Verwerk live update trigger van PortfolioEngine.
-        PortfolioEngine roept alleen deze methode aan - geen data doorgeven.
-        LiveAggregator laadt zelf repository_snapshot_open_sprinters en verwerkt het.
-        """
         try:
             if SNAPSHOT_STORE.repository_snapshot_open_sprinters is None:
                 if self.verbose:
                     print("LiveAggregatorSprinters: repository_snapshot_open_sprinters niet beschikbaar")
                 return
             self.df = self._load_and_calculate()
-            self._save_to_snapshot_store()
-            self.sprintersUpdated.emit()
+            if self._save_to_snapshot_store():
+                self.sprintersUpdated.emit()
         except Exception as e:
             if self.verbose:
                 print(f"LiveAggregatorSprinters process error: {e}")
 
-    def _save_to_snapshot_store(self):
-        # Altijd een DataFrame in de snapshot zetten, ook als deze leeg is
-        if self.df is not None:
-            SNAPSHOT_STORE.safe_write("aggregator_snapshot_open_sprinters_live", self.df.clone())
-            if self.df.is_empty() and self.verbose:
-                print("LiveAggregatorSprinters: Geen data om op te slaan (lege DataFrame opgeslagen)")
-        else:
-            SNAPSHOT_STORE.safe_write("aggregator_snapshot_open_sprinters_live", pl.DataFrame())
-            if self.verbose:
-                print("LiveAggregatorSprinters: Geen data om op te slaan (None, lege DataFrame opgeslagen)")
+    def _df_changed(self, new_df: pl.DataFrame) -> bool:
+        old_df = self._last_published_df
+        if old_df is None:
+            return True
+        try:
+            return not old_df.equals(new_df)
+        except Exception:
+            return True
+
+    def _save_to_snapshot_store(self) -> bool:
+        frame = self.df.clone() if self.df is not None else pl.DataFrame()
+        if not self._df_changed(frame):
+            return False
+        now_ts = time.monotonic()
+        if self._last_publish_ts and (now_ts - self._last_publish_ts) < self._publish_min_interval_sec:
+            return False
+        SNAPSHOT_STORE.safe_write("aggregator_snapshot_open_sprinters_live", frame)
+        self._last_published_df = frame.clone()
+        self._last_publish_ts = now_ts
+        if frame.is_empty() and self.verbose:
+            print("LiveAggregatorSprinters: Geen data om op te slaan (lege DataFrame opgeslagen)")
+        return True
 
     def on_scroll(self, _value):
         sb = self.table.verticalScrollBar()
-        # marge van ~50 pixels voor ‘bijna onderaan’
         if sb.value() >= sb.maximum() - 50:
             self.load_more_records()
 
     def refresh_data(self):
-        """Herlaad data uit SnapshotStore (voor manual refresh)."""
         self._initialize_data()
         if self.df is not None and not self.df.is_empty():
-            self._save_to_snapshot_store()
-            self.sprintersUpdated.emit()
+            if self._save_to_snapshot_store():
+                self.sprintersUpdated.emit()

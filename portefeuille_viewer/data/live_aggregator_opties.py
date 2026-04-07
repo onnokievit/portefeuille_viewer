@@ -1,5 +1,8 @@
 import polars as pl
 from PySide6.QtCore import QObject, Signal
+import time
+import os
+
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import load_last_prices_dict
 from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build_prices_df
@@ -8,46 +11,41 @@ from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build
 class LiveAggregatorOpties(QObject):
     """
     Specialized aggregator voor opties met live price updates.
-    Laadt data uit snapshot_load_open_opties_from_tx en voegt live koersen toe.
     """
-    
-    # Signal voor UI updates
+
     optiesUpdated = Signal()
-    
+
     def __init__(self):
         super().__init__()
         self.df = None
+        self._last_published_df = None
+        self._last_publish_ts = 0.0
+        self._publish_min_interval_sec = max(
+            0.0,
+            float(os.getenv("LIVE_OPTIES_PUBLISH_MIN_INTERVAL_SEC", "15.0")),
+        )
         self.last_prices = load_last_prices_dict()
-        self.live_prices = {}  # Dict: {asset_rollup: koers}
+        self.live_prices = {}
         self._initialize_data()
-    
+
     def _initialize_data(self):
-        """Laad initiële data uit SnapshotStore en bereid DataFrame voor."""
         try:
             self.df = self._load_and_calculate()
             print(f"LiveAggregatorOpties: Initialized with {len(self.df)} rows")
-            # Save initial data to snapshot store for immediate UI display
             self._save_to_snapshot_store()
         except Exception as e:
             print(f"LiveAggregatorOpties initialization error: {e}")
             self.df = pl.DataFrame()
-    
+
     def _load_and_prepare_data(self):
-        """Laad basisdata uit SnapshotStore en join met asset_map voor IB symbolen."""
         if SNAPSHOT_STORE.repository_snapshot_load_open_opties is None:
             raise ValueError("snapshot_load_open_opties_from_tx is niet geladen in SnapshotStore")
-        
-        # Laad asset_map voor IB symbolen
+
         asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         if asset_map is None or asset_map.is_empty():
             raise ValueError("repository_snapshot_asset_rollup_data is niet geladen")
-        
-        # Selecteer relevante velden uit asset_map
-        asset_map = asset_map.select([
-            "asset_rollup", "ib_symbol", "ib_currency"
-        ])
-        
-        # Haal opties data op en join met asset_map
+
+        asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency"])
         df = SNAPSHOT_STORE.repository_snapshot_load_open_opties.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
 
@@ -58,135 +56,82 @@ class LiveAggregatorOpties(QObject):
         else:
             df = df.with_columns(pl.lit(0.0).alias("Koers"))
         df = apply_runtime_beta_shift(df, "Koers")
-        
         return df
-    
 
-    
-    
-    
-    
     def _load_and_calculate(self):
-        """
-        Laad snapshot_load_open_opties_from_tx en voeg berekende kolommen toe.
-        """
-        # Laad basisdata met Koers kolom
         df = self._load_and_prepare_data()
-        
-        # Bereken ITM/OTM waarde
         df = self._calculate_itm_otm(df)
-        
-        # Bereken W/V (Winst/Verlies) = SomVantransactie_euro_totaal - ITM_OTM
-        df = df.with_columns([
-            (pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("opt_total_result")
-        ])
+        df = df.with_columns(
+            [(pl.col("SomVantransactie_euro_totaal") + pl.col("ITM_OTM")).alias("opt_total_result")]
+        )
+        return df.select(
+            [
+                "broker",
+                "asset_rollup",
+                "ib_symbol",
+                "Koers",
+                "optie_call_put",
+                "optie_strike",
+                "optie_exp_date",
+                "SomVantransactie_aantal",
+                "SomVantransactie_euro_totaal",
+                "ITM_OTM",
+                "opt_total_result",
+                "SomVantransactie_fee",
+            ]
+        )
 
-        # Selecteer en herorden kolommen volgens screenshot
-        df = df.select([
-            #"transactie_oorsprong",
-            "broker",
-            "asset_rollup", 
-            "ib_symbol",
-            "Koers",
-            "optie_call_put",
-            "optie_strike",
-            "optie_exp_date",
-            "SomVantransactie_aantal",
-            "SomVantransactie_euro_totaal",
-            
-            "ITM_OTM",
-            "opt_total_result",
-            "SomVantransactie_fee",
-            #"ITM"
-        ])
-        
-        return df
-    
     def _calculate_itm_otm(self, df):
-        """
-        Bereken ITM/OTM waarde voor opties.
-        
-        Logica:
-        - CALL optie: 
-            - Als koers > strike: ITM_OTM = koers - strike
-            - Anders: ITM_OTM = 0
-        - PUT optie:
-            - Als koers < strike: ITM_OTM = strike - koers
-            - Anders: ITM_OTM = 0
-        
-        Returns:
-            pl.DataFrame: DataFrame met toegevoegde ITM_OTM kolom
-        """
-        df = df.with_columns([
-            pl.when(
-                (pl.col("optie_call_put") == "call") & (pl.col("Koers") > pl.col("optie_strike"))
-            ).then(
-                (pl.col("Koers") - pl.col("optie_strike"))*pl.col("SomVantransactie_aantal")
-            ).when(
-                (pl.col("optie_call_put") == "put") & (pl.col("Koers") < pl.col("optie_strike"))
-            ).then(
-                (pl.col("optie_strike") - pl.col("Koers"))*pl.col("SomVantransactie_aantal")
-            ).otherwise(
-                0.0
-            ).alias("ITM_OTM")
-        ])
-        # if "ITM_OTM" in df.columns:
-        #     df = df.with_columns(
-        #         (pl.col("ITM_OTM") != 0).cast(pl.Int8).alias("ITM")
-        #     )
-        
+        return df.with_columns(
+            [
+                pl.when((pl.col("optie_call_put") == "call") & (pl.col("Koers") > pl.col("optie_strike")))
+                .then((pl.col("Koers") - pl.col("optie_strike")) * pl.col("SomVantransactie_aantal"))
+                .when((pl.col("optie_call_put") == "put") & (pl.col("Koers") < pl.col("optie_strike")))
+                .then((pl.col("optie_strike") - pl.col("Koers")) * pl.col("SomVantransactie_aantal"))
+                .otherwise(0.0)
+                .alias("ITM_OTM")
+            ]
+        )
 
-
-        return df
-    
     def update_live_price(self, symbol, currency, price):
-        """
-        Update live prijs voor specifiek symbol (asset_rollup).
-        
-        Args:
-            symbol: Asset symbol (e.g. 'ASML', 'AAPL')
-            price: Nieuwe prijs
-        """
         if price is not None and price > 0:
-            self.live_prices[symbol,currency] = float(price)
-            # print(f"LiveAggregatorOpties: Updated {symbol} = {price}") # Debug log
-    
+            self.live_prices[(symbol, currency)] = float(price)
+
     def process_live_update(self):
-        """
-        Verwerk live update trigger van PortfolioEngine.
-        PortfolioEngine roept alleen deze methode aan - geen data doorgeven.
-        LiveAggregator laadt zelf snapshot_load_open_opties_from_tx en verwerkt het.
-        """
         try:
-            # 1. Laad fresh data uit SnapshotStore
             if SNAPSHOT_STORE.repository_snapshot_load_open_opties is None:
                 print("LiveAggregatorOpties: snapshot_load_open_opties_from_tx niet beschikbaar")
                 return
-            
-            # 2. Laad en bereken complete DataFrame
+
             self.df = self._load_and_calculate()
-            
-            # 3. Sla op in aggregator_snapshot_load_open_opties_from_tx_live
-            self._save_to_snapshot_store()
-            
-            # 4. Signal UI dat opties data is geüpdatet
-            self.optiesUpdated.emit()
-            
-            # print(f"LiveAggregatorOpties: Processed live update with {len(self.df)} rows") # Debug log
+            if self._save_to_snapshot_store():
+                self.optiesUpdated.emit()
         except Exception as e:
             print(f"LiveAggregatorOpties process error: {e}")
-    
-    def _save_to_snapshot_store(self):
-        """Sla verwerkte DataFrame op in SnapshotStore."""
-        if self.df is not None and not self.df.is_empty():
-            SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", self.df.clone())
-        else:
-            # Schrijf een lege frame zodat subscribers niet wachten op een niet-bestaande key
-            SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", pl.DataFrame())
-    
+
+    def _df_changed(self, new_df: pl.DataFrame) -> bool:
+        old_df = self._last_published_df
+        if old_df is None:
+            return True
+        try:
+            return not old_df.equals(new_df)
+        except Exception:
+            return True
+
+    def _save_to_snapshot_store(self) -> bool:
+        frame = self.df.clone() if self.df is not None and not self.df.is_empty() else pl.DataFrame()
+        if not self._df_changed(frame):
+            return False
+        now_ts = time.monotonic()
+        if self._last_publish_ts and (now_ts - self._last_publish_ts) < self._publish_min_interval_sec:
+            return False
+        SNAPSHOT_STORE.safe_write("aggregator_snapshot_load_open_opties_from_tx_live", frame)
+        self._last_published_df = frame.clone()
+        self._last_publish_ts = now_ts
+        return True
+
     def refresh_data(self):
-        """Herlaad data uit SnapshotStore (voor manual refresh)."""
         self._initialize_data()
         if self.df is not None and not self.df.is_empty():
-            self._save_to_snapshot_store()
-            self.optiesUpdated.emit()
+            if self._save_to_snapshot_store():
+                self.optiesUpdated.emit()

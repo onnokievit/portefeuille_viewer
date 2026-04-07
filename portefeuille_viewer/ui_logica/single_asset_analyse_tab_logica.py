@@ -506,8 +506,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.logic.enable_test_orders = self.enable_test_orders
 
         # pas hier de connecties
-        self.checkBoxAssetOrdersOnly.toggled.connect(self.on_toggle_show_all_test_orders)
-        self.checkBoxEnableTestOrders.toggled.connect(self.on_toggle_enable_test_orders)
+        self.checkBoxAssetOrdersOnly.toggled.connect(self._handle_toggle_show_all_test_orders)
+        self.checkBoxEnableTestOrders.toggled.connect(self._handle_toggle_enable_test_orders)
 
         self.tableView = self.tableViewOptiesOpen
         self._fill_filter_comboboxes()
@@ -552,9 +552,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         
         
         self.df_test_orders = {}
-        self.testOrdersTable.cellChanged.connect(self.on_test_orders_changed)
+        self.testOrdersTable.cellChanged.connect(self._handle_test_orders_changed)
         self.buttonAddTestOrder.clicked.connect(self.add_empty_row)  # als je een knop hebt
-        self.buttonDeleteTestOrder.clicked.connect(self.on_delete_test_order_clicked)
+        self.buttonDeleteTestOrder.clicked.connect(self._handle_delete_test_order_clicked)
         if hasattr(self, "buttonEditScenarios"):
             self.buttonEditScenarios.clicked.connect(self._open_scenario_builder)
 
@@ -1710,7 +1710,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.plot_widget.addItem(self._payoff_current_price_line)
 
     @Slot(bool)
-    def on_toggle_show_all_test_orders(self, checked):
+    def _handle_toggle_show_all_test_orders(self, checked):
         self.show_all_test_orders = not checked  # checked = alleen huidig asset
         asset = self.asset_selector.currentText()
         if self.show_all_test_orders:
@@ -1721,7 +1721,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.fill_test_orders_table(self._manual_test_orders_only(df))
 
     @Slot(bool)
-    def on_toggle_enable_test_orders(self, checked):
+    def _handle_toggle_enable_test_orders(self, checked):
         self.enable_test_orders = checked
         self.logic.enable_test_orders = checked
         SNAPSHOT_STORE.runtime_test_orders_enabled = bool(checked)
@@ -1775,8 +1775,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _load_initial_records(self):
         self.apply_filters_opties_open()
     
-    @Slot()
-    def on_test_orders_changed(self, row, col):
+    @Slot(int, int)
+    def _handle_test_orders_changed(self, row, col):
         if self.testOrdersTable.signalsBlocked():
             return
 
@@ -2162,7 +2162,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
 
     @Slot()
-    def on_delete_test_order_clicked(self):
+    def _handle_delete_test_order_clicked(self):
         idx = self.testOrdersTable.currentRow()
         if idx < 0:
             return
@@ -3116,12 +3116,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         header_all.setSectionResizeMode(QHeaderView.Interactive)
         # Bij handmatige sort click sorteren we 1x en bevriezen daarna de rij-volgorde
         # zolang live-resort uit staat.
-        with contextlib.suppress(Exception):
-            header_all.sortIndicatorChanged.disconnect(self._on_open_opties_sort_indicator_changed)
-        header_all.sortIndicatorChanged.connect(self._on_open_opties_sort_indicator_changed)
-        with contextlib.suppress(Exception):
-            header_all.sectionClicked.disconnect(self._on_open_opties_header_section_clicked)
-        header_all.sectionClicked.connect(self._on_open_opties_header_section_clicked)
+        if not getattr(self, "_open_opties_header_handlers_connected", False):
+            header_all.sortIndicatorChanged.connect(self._on_open_opties_sort_indicator_changed)
+            header_all.sectionClicked.connect(self._on_open_opties_header_section_clicked)
+            self._open_opties_header_handlers_connected = True
         def apply_widths_all():
             for i, col in enumerate(df_all.columns):
                 if col in kolombreedtes:

@@ -1,4 +1,5 @@
 import contextlib
+import os
 import time
 import threading
 from datetime import datetime
@@ -6,6 +7,9 @@ from typing import Dict, Tuple, Optional, List
 
 import pandas as pd
 from PySide6.QtCore import QObject, Signal, Slot
+
+
+_PRICE_FEED_PERF_LOG = str(os.getenv("PRICE_FEED_PERF_LOG", "1")).strip() == "1"
 
 
 # ------------------------------------------------------------
@@ -621,6 +625,12 @@ class PriceFeedService(QObject):
         self._feed.optionTickUpdated.connect(self._on_option_tick)
         self._option_lock = threading.Lock()
         self._option_prices: Dict[int, dict] = {}
+        self._asset_save_state_lock = threading.Lock()
+        self._asset_save_inflight = False
+        self._asset_save_pending = False
+        self._option_save_state_lock = threading.Lock()
+        self._option_save_inflight = False
+        self._option_save_pending = False
         self._load_option_last_prices_from_db()
 
         # Timer voor periodiek opslaan
@@ -762,10 +772,10 @@ class PriceFeedService(QObject):
         with self._option_lock:
             self._option_prices = loaded
 
-    def save_last_prices_to_db(self):
+    def _save_last_prices_to_db_sync(self, prices: dict[tuple[str, str], float]):
         from portefeuille_viewer.data.repository import get_connection
         import datetime
-        prices = self.store.snapshot()
+        t0 = time.perf_counter()
         now = datetime.datetime.now()
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -780,11 +790,16 @@ class PriceFeedService(QObject):
                         (sym, cur, price, now)
                     )
             conn.commit()
+        if _PRICE_FEED_PERF_LOG:
+            print(
+                f"[price-feed] timer=save_last_prices_to_db rows={len(prices)} total_ms={(time.perf_counter() - t0) * 1000.0:.1f}"
+            )
 
-    def save_option_last_prices_to_db(self):
-        with self._option_lock:
-            rows = [dict(v) for v in self._option_prices.values()]
+    def _save_option_last_prices_to_db_sync(self, rows: list[dict]):
+        t0 = time.perf_counter()
         if not rows:
+            if _PRICE_FEED_PERF_LOG:
+                print("[price-feed] timer=save_option_last_prices_to_db rows=0 total_ms=0.0")
             return
         now = datetime.now()
         with self._connect_option_last_prices_db() as conn:
@@ -945,6 +960,61 @@ class PriceFeedService(QObject):
                             ),
                         )
             conn.commit()
+        if _PRICE_FEED_PERF_LOG:
+            print(
+                f"[price-feed] timer=save_option_last_prices_to_db rows={len(rows)} total_ms={(time.perf_counter() - t0) * 1000.0:.1f}"
+            )
+
+    def _run_asset_save_worker(self):
+        try:
+            while True:
+                prices = self.store.snapshot()
+                self._save_last_prices_to_db_sync(prices)
+                with self._asset_save_state_lock:
+                    if self._asset_save_pending:
+                        self._asset_save_pending = False
+                        continue
+                    self._asset_save_inflight = False
+                    break
+        except Exception as exc:
+            with self._asset_save_state_lock:
+                self._asset_save_inflight = False
+            print(f"[price-feed] asset last-price save failed: {exc}")
+
+    def _run_option_save_worker(self):
+        try:
+            while True:
+                with self._option_lock:
+                    rows = [dict(v) for v in self._option_prices.values()]
+                self._save_option_last_prices_to_db_sync(rows)
+                with self._option_save_state_lock:
+                    if self._option_save_pending:
+                        self._option_save_pending = False
+                        continue
+                    self._option_save_inflight = False
+                    break
+        except Exception as exc:
+            with self._option_save_state_lock:
+                self._option_save_inflight = False
+            print(f"[price-feed] option last-price save failed: {exc}")
+
+    def save_last_prices_to_db(self):
+        with self._asset_save_state_lock:
+            if self._asset_save_inflight:
+                self._asset_save_pending = True
+                return
+            self._asset_save_inflight = True
+            self._asset_save_pending = False
+        threading.Thread(target=self._run_asset_save_worker, daemon=True).start()
+
+    def save_option_last_prices_to_db(self):
+        with self._option_save_state_lock:
+            if self._option_save_inflight:
+                self._option_save_pending = True
+                return
+            self._option_save_inflight = True
+            self._option_save_pending = False
+        threading.Thread(target=self._run_option_save_worker, daemon=True).start()
 
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float):
@@ -1012,6 +1082,8 @@ class PriceFeedService(QObject):
                 self._save_timer.stop()
             if hasattr(self, "_option_save_timer") and self._option_save_timer.isActive():
                 self._option_save_timer.stop()
-            self.save_last_prices_to_db()
-            self.save_option_last_prices_to_db()
+            self._save_last_prices_to_db_sync(self.store.snapshot())
+            with self._option_lock:
+                rows = [dict(v) for v in self._option_prices.values()]
+            self._save_option_last_prices_to_db_sync(rows)
         self._feed.shutdown()

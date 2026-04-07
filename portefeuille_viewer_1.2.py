@@ -2,6 +2,9 @@ import sys
 import os
 import json
 import threading
+import builtins
+from typing import cast
+from collections import Counter
 from collections import deque
 from pathlib import Path
 import polars as pl
@@ -39,6 +42,27 @@ from portefeuille_viewer.projections import (
 
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
 import time
+
+# Prefix all process-local print logs with a timestamp so bursts are easier to read.
+_ORIGINAL_PRINT = builtins.print
+
+
+def _install_timestamped_print() -> None:
+    if getattr(builtins.print, "__name__", "") == "_timestamped_print":
+        return
+
+    def _timestamped_print(*args, **kwargs):
+        ts = time.strftime("%H:%M:%S")
+        prefix = f"[{ts}]"
+        if args:
+            _ORIGINAL_PRINT(prefix, *args, **kwargs)
+        else:
+            _ORIGINAL_PRINT(prefix, **kwargs)
+
+    builtins.print = _timestamped_print
+
+
+_install_timestamped_print()
 
 # Qt warning filter: onderdruk specifieke QSortFilterProxyModel warning
 def qt_message_handler(mode, context, message):
@@ -90,6 +114,8 @@ _AANDELEN_PROJECTION_METRICS = deque(maxlen=200)
 _AANDELEN_PROJECTION_METRICS_LOG = Path("logs") / "aandelen_projection_v2_metrics.jsonl"    
 _OPTIES_OPEN_PROJECTION_METRICS = deque(maxlen=200)
 _OPTIES_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "opties_open_projection_v2_metrics.jsonl"
+_LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT = None
+_LAST_PUBLISHED_OPTIES_OPEN_PATCH = None
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS = deque(maxlen=200)
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG = Path("logs") / "optie_tijdswaarde_projection_v2_metrics.jsonl"
 ENABLE_SPRINTERS_OPEN_PROJECTION_V2 = os.getenv("USE_SPRINTERS_OPEN_PROJECTION_V2", "1").strip() == "1"
@@ -111,6 +137,23 @@ PROJECTION_METRICS_LOG_CONSOLE = (
 PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC = (
     os.getenv("PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC", "0").strip() == "1"
 )
+APP_PERF_LOG = os.getenv("APP_PERF_LOG", "1").strip() == "1"
+_EXCLUSIVE_LIVE_RECOMPUTE_INTERVAL_MS = {
+    "aggregator_snapshot_load_open_opties_from_tx_live": max(
+        0,
+        int(os.getenv("EXCLUSIVE_LIVE_OPTIES_RECOMPUTE_MS", "30000")),
+    ),
+    "snapshot_optie_timevalue_live": max(
+        0,
+        int(os.getenv("EXCLUSIVE_LIVE_TIMEVALUE_RECOMPUTE_MS", "5000")),
+    ),
+    "aggregator_snapshot_open_sprinters_live": max(
+        0,
+        int(os.getenv("EXCLUSIVE_LIVE_SPRINTERS_RECOMPUTE_MS", "15000")),
+    ),
+}
+_EXCLUSIVE_LIVE_RECOMPUTE_TIMERS: dict[str, QTimer] = {}
+_EXCLUSIVE_LIVE_RECOMPUTE_PENDING: dict[str, set[str]] = {}
 
 
 def _engine_core_logger(message: str) -> None:
@@ -148,6 +191,9 @@ _AANDELEN_TV_WARMUP_WINDOW_SEC = 60.0
 _AANDELEN_TV_WARMUP_INTERVAL_SEC = 5.0
 _AANDELEN_TV_OVERLAY_LOCKED = False
 _AANDELEN_TV_LOCK_TOL_EUR = 1.0
+ENABLE_AANDELEN_TV_OVERLAY_FROM_LIVE = (
+    os.getenv("ENABLE_AANDELEN_TV_OVERLAY_FROM_LIVE", "0").strip() == "1"
+)
 
 
 def _p95(values: list[float]) -> float:
@@ -230,6 +276,17 @@ def _append_sprinters_metrics_log(sample: dict) -> None:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+def _df_equals(left, right) -> bool:
+    if left is right:
+        return True
+    if left is None or right is None:
+        return False
+    try:
+        return bool(left.equals(right))
+    except Exception:
+        return False
 
 
 def _reset_aandelen_tv_overlay_regime(reason: str) -> None:
@@ -589,6 +646,8 @@ def refresh_sprinters_open_projection(reason: str):
 
 
 def _publish_runtime_projection_results(results, reason: str):
+    global _LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT
+    global _LAST_PUBLISHED_OPTIES_OPEN_PATCH
     for res in results or []:
         if not getattr(res, "success", False):
             print(
@@ -616,8 +675,12 @@ def _publish_runtime_projection_results(results, reason: str):
         if pname == "opties_open_v2" and opties_open_projection_v2 is not None:
             snapshot_df = opties_open_projection_v2.snapshot()
             patch_list = opties_open_projection_v2.last_patch() or []
+            if _df_equals(_LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT, snapshot_df) and _LAST_PUBLISHED_OPTIES_OPEN_PATCH == patch_list:
+                continue
             SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2", snapshot_df)
             SNAPSHOT_STORE.safe_write("snapshot_opties_open_projection_v2_patch", patch_list)
+            _LAST_PUBLISHED_OPTIES_OPEN_SNAPSHOT = snapshot_df.clone() if snapshot_df is not None else None
+            _LAST_PUBLISHED_OPTIES_OPEN_PATCH = list(patch_list)
             sample = {
                 "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "reason": str(reason),
@@ -752,12 +815,34 @@ def _runtime_recompute_selected(
     _publish_runtime_projection_results(results, reason=reason)
 
 
+def _run_exclusive_live_recompute(snapshot_key: str):
+    pending = _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.pop(snapshot_key, set())
+    if not pending:
+        return
+    _runtime_recompute_selected(pending, reason=f"snapshot:{snapshot_key}:debounced")
+
+
+def _queue_exclusive_live_recompute(snapshot_key: str, projection_names: set[str]):
+    selected = {str(name).strip() for name in (projection_names or set()) if str(name).strip()}
+    if not selected:
+        return
+    timer = _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS.get(snapshot_key)
+    if timer is None:
+        _runtime_recompute_selected(selected, reason=f"snapshot:{snapshot_key}")
+        return
+    pending = _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.setdefault(snapshot_key, set())
+    pending.update(selected)
+    timer.start()
+
+
 def _on_snapshot_updated_engine_core(snapshot_key: str):
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
     global _AANDELEN_TV_SEED_TS
     global _AANDELEN_TV_OVERLAY_LOCKED
     if (
+        ENABLE_AANDELEN_TV_OVERLAY_FROM_LIVE
+        and
         snapshot_key == "snapshot_optie_timevalue_live"
         and aandelen_projection_v2 is not None
     ):
@@ -810,13 +895,16 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
                 )
                 _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
     if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
-        allowed_live_topics = {
-            "aggregator_snapshot_load_open_opties_from_tx_live",
-            "snapshot_optie_timevalue_live",
-            "aggregator_snapshot_open_sprinters_live",
+        live_topic_targets = {
+            "aggregator_snapshot_load_open_opties_from_tx_live": {"opties_open_v2"},
+            "snapshot_optie_timevalue_live": {"optie_tijdswaarde_v2"},
+            "aggregator_snapshot_open_sprinters_live": {"sprinters_open_v2"},
         }
-        if snapshot_key not in allowed_live_topics:
+        targets = live_topic_targets.get(snapshot_key)
+        if targets is None:
             return
+        _queue_exclusive_live_recompute(snapshot_key, targets)
+        return
     results = engine_core_runtime.publish_snapshot_update(
         snapshot_key,
         source="signal.snapshotUpdated",
@@ -987,6 +1075,10 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
         f"types={sorted(raw_asset_types) if raw_asset_types else ['ALL']} "
         f"broad={broad_refresh} | {timing_str}"
     )
+    if APP_PERF_LOG:
+        print(
+            f"[perf] timer=refresh_transaction_derived_snapshots total_ms={elapsed_time * 1000.0:.1f} reason={reason}"
+        )
 
 
 def run_startup_db_migrations():
@@ -1010,6 +1102,22 @@ def main():
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
     global _AANDELEN_TV_SEED_TS
+    import faulthandler
+    faulthandler.enable()
+    existing_app = QApplication.instance()
+    app = cast(QApplication | None, existing_app)
+    if app is None:
+        app = QApplication(sys.argv)
+    _AANDELEN_PROJECTION_ASYNC_ENABLED = True
+    signals.projectionPublishTick.connect(
+        lambda key: _drain_aandelen_projection_pending() if key == "aandelen_v2" else None
+    )
+    font = QFont()
+    font.setPointSize(9)
+    demi_bold = getattr(getattr(QFont, "Weight", None), "DemiBold", None)
+    if demi_bold is not None:
+        font.setWeight(demi_bold)
+    app.setFont(font)
     run_startup_db_migrations()
     if ENABLE_ENGINE_CORE_RUNTIME:
         print("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
@@ -1040,18 +1148,32 @@ def main():
     # Debounce snapshot refreshes: bij een wave van price_catchup jobs
     # willen we niet na elke asset-run opnieuw alle snapshots/aggregators herladen.
     pending_refresh_payload: dict = {"reason": "unknown"}
+    snapshot_counter: Counter[str] = Counter()
     refresh_timer = QTimer()
     refresh_timer.setSingleShot(True)
-    refresh_timer.setInterval(1200)
+    refresh_timer.setInterval(2500)
     opties_projection_refresh_timer = QTimer()
     opties_projection_refresh_timer.setSingleShot(True)
-    opties_projection_refresh_timer.setInterval(500)
+    opties_projection_refresh_timer.setInterval(5000)
     optie_tijdswaarde_projection_refresh_timer = QTimer()
     optie_tijdswaarde_projection_refresh_timer.setSingleShot(True)
-    optie_tijdswaarde_projection_refresh_timer.setInterval(500)
+    optie_tijdswaarde_projection_refresh_timer.setInterval(5000)
     sprinters_projection_refresh_timer = QTimer()
     sprinters_projection_refresh_timer.setSingleShot(True)
-    sprinters_projection_refresh_timer.setInterval(500)
+    sprinters_projection_refresh_timer.setInterval(5000)
+    if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
+        _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS.clear()
+        _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.clear()
+        for snapshot_key, interval_ms in _EXCLUSIVE_LIVE_RECOMPUTE_INTERVAL_MS.items():
+            timer = QTimer()
+            timer.setSingleShot(True)
+            timer.setInterval(interval_ms)
+            timer.timeout.connect(
+                lambda sk=snapshot_key: _run_exclusive_live_recompute(sk)
+            )
+            _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS[snapshot_key] = timer
+    snapshot_counter_timer = QTimer()
+    snapshot_counter_timer.setInterval(60_000)
     def _run_debounced_refresh():
         refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
 
@@ -1093,10 +1215,28 @@ def main():
             return
         sprinters_projection_refresh_timer.start()
 
+    def _on_snapshot_updated_counter(snapshot_key: str):
+        snapshot_counter[str(snapshot_key or "")] += 1
+
+    def _flush_snapshot_counter():
+        if not APP_PERF_LOG:
+            snapshot_counter.clear()
+            return
+        if snapshot_counter:
+            top = ", ".join(
+                f"{key}={count}" for key, count in snapshot_counter.most_common(20)
+            )
+            print(f"[snapshot-count/min] {top}")
+        else:
+            print("[snapshot-count/min] no snapshotUpdated events")
+        snapshot_counter.clear()
+
     refresh_timer.timeout.connect(_run_debounced_refresh)
     opties_projection_refresh_timer.timeout.connect(_run_opties_projection_refresh)
     optie_tijdswaarde_projection_refresh_timer.timeout.connect(_run_optie_tijdswaarde_projection_refresh)
     sprinters_projection_refresh_timer.timeout.connect(_run_sprinters_projection_refresh)
+    snapshot_counter_timer.timeout.connect(_flush_snapshot_counter)
+    snapshot_counter_timer.start()
     signals.ordersCommitted.connect(lambda payload=None: _reset_aandelen_tv_overlay_regime("orders_committed"))
     if ENABLE_ORDERS_COMMIT_FULL_REFRESH:
         pending_orders_refresh_payload: dict = {"reason": "orders_committed"}
@@ -1117,6 +1257,7 @@ def main():
     else:
         print("[orders-refresh] disabled (no full refresh on ordersCommitted)")
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
+    signals.snapshotUpdated.connect(_on_snapshot_updated_counter)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         signals.snapshotUpdated.connect(_on_snapshot_updated_for_opties_projection)
         signals.snapshotUpdated.connect(_on_snapshot_updated_for_optie_tijdswaarde_projection)
@@ -1150,19 +1291,6 @@ def main():
     signals.priceUpdateFailed.connect(
         lambda message: print(f"[price-update] failed: {message}")
     )
-    import faulthandler
-    faulthandler.enable()
-    app = QApplication(sys.argv)
-    _AANDELEN_PROJECTION_ASYNC_ENABLED = True
-    signals.projectionPublishTick.connect(
-        lambda key: _drain_aandelen_projection_pending() if key == "aandelen_v2" else None
-    )
-    font = QFont()
-    font.setPointSize(9)
-    demi_bold = getattr(getattr(QFont, "Weight", None), "DemiBold", None)
-    if demi_bold is not None:
-        font.setWeight(demi_bold)
-    app.setFont(font)
     settings = get_settings()
     price_feed = PriceFeedService(
         settings.get_ib_host(),
