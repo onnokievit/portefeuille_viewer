@@ -461,8 +461,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         super().__init__(parent)
         self.setupUi(self)
         self._wrap_in_scroll_area()
-        self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5, "chart_shift": 0.0}
-        self._step_settings_by_asset: dict[str, dict[str, float]] = {}
+        self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5, "chart_shift": 0.0, "price_decimals": 2}
+        self._step_settings_by_asset: dict[str, dict[str, object]] = {}
         self._step_settings_dirty = False
         self._step_controls_loading = False
         self._current_step_asset = ""
@@ -622,12 +622,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.chartShift.setDecimals(2)
             self.chartShift.setRange(-9999.0, 9999.0)
             self.chartShift.setSingleStep(0.1)
+        if hasattr(self, "assetDecimal"):
+            self.assetDecimal.setRange(0, 6)
         self._step_controls_loading = True
         self.stepSizeTick.setValue(float(self._step_defaults["step_size_tick"]))
         self.stepSizeBox.setSingleStep(float(self._step_defaults["step_size_tick"]))
         self.stepSizeBox.setValue(float(self._step_defaults["step_size"]))
         if hasattr(self, "chartShift"):
             self.chartShift.setValue(float(self._step_defaults["chart_shift"]))
+        if hasattr(self, "assetDecimal"):
+            self.assetDecimal.setValue(int(self._step_defaults["price_decimals"]))
         self._step_controls_loading = False
 
         
@@ -697,6 +701,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.stepSizeTick.valueChanged.connect(self._on_step_tick_changed)
         if hasattr(self, "chartShift"):
             self.chartShift.valueChanged.connect(self._on_chart_shift_changed)
+        if hasattr(self, "assetDecimal"):
+            self.assetDecimal.valueChanged.connect(self._on_price_decimals_changed)
                 # Maak de rijhoogte compacter
         self._on_filter_changed()
         self.payoff_table.verticalHeader().setMinimumSectionSize(22)
@@ -2884,12 +2890,13 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         koers_prev_val = row.get("koers_prev") if row else None
         koers_val = row.get("koers") if row else None
+        price_decimals = self._current_price_decimals()
 
         if hasattr(self, "lbKoersPrev"):
-            self.lbKoersPrev.setText(self._format_number(koers_prev_val))
+            self.lbKoersPrev.setText(self._format_number(koers_prev_val, decimals=price_decimals))
             self._set_label_bg(self.lbKoersPrev, QColor(221, 235, 247))
         if hasattr(self, "lblKoers"):
-            self.lblKoers.setText(self._format_number(koers_val))
+            self.lblKoers.setText(self._format_number(koers_val, decimals=price_decimals))
             koers_color = None
             try:
                 if koers_val is not None and koers_prev_val is not None:
@@ -3503,6 +3510,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     step_size DOUBLE,
                     step_size_tick DOUBLE,
                     chart_shift DOUBLE,
+                    price_decimals LONG,
                     updated_at DATETIME
                 )
                 """
@@ -3511,6 +3519,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             pass
         try:
             cur.execute("ALTER TABLE single_asset_stepsize_settings ADD COLUMN chart_shift DOUBLE")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE single_asset_stepsize_settings ADD COLUMN price_decimals LONG")
         except Exception:
             pass
         try:
@@ -3525,7 +3537,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 cur = conn.cursor()
                 self._ensure_step_settings_table(cur)
                 rows = cur.execute(
-                    "SELECT asset_rollup, step_size, step_size_tick, chart_shift FROM single_asset_stepsize_settings"
+                    "SELECT asset_rollup, step_size, step_size_tick, chart_shift, price_decimals FROM single_asset_stepsize_settings"
                 ).fetchall()
             for row in rows:
                 asset = str(row[0] or "").strip()
@@ -3534,10 +3546,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 step_size = self._safe_step_value(row[1], self._step_defaults["step_size"])
                 step_tick = self._safe_step_tick(row[2], self._step_defaults["step_size_tick"])
                 chart_shift = self._safe_chart_shift(row[3], self._step_defaults["chart_shift"])
+                price_decimals = self._safe_price_decimals(row[4], self._infer_default_price_decimals(asset))
                 self._step_settings_by_asset[asset] = {
                     "step_size": step_size,
                     "step_size_tick": step_tick,
                     "chart_shift": chart_shift,
+                    "price_decimals": price_decimals,
                 }
             self._step_settings_dirty = False
         except Exception as exc:
@@ -3567,11 +3581,33 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             pass
         return round(float(default), 4)
 
+    def _safe_price_decimals(self, value, default: int) -> int:
+        try:
+            v = int(value)
+            return max(0, min(6, v))
+        except Exception:
+            return max(0, min(6, int(default)))
+
+    def _infer_default_price_decimals(self, asset_rollup: str) -> int:
+        _ = asset_rollup
+        return int(self._step_defaults.get("price_decimals", 2))
+
+    def _current_price_decimals(self) -> int:
+        if hasattr(self, "assetDecimal"):
+            return self._safe_price_decimals(self.assetDecimal.value(), self._step_defaults["price_decimals"])
+        asset = str(self._current_step_asset or "").strip()
+        cfg = self._step_settings_by_asset.get(asset) or {}
+        return self._safe_price_decimals(cfg.get("price_decimals"), self._infer_default_price_decimals(asset))
+
     def _apply_step_settings_for_asset(self, asset_rollup: str) -> None:
-        cfg = self._step_settings_by_asset.get(asset_rollup) or self._step_defaults
+        cfg = self._step_settings_by_asset.get(asset_rollup) or {}
         step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
         step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
         chart_shift = self._safe_chart_shift(cfg.get("chart_shift"), self._step_defaults["chart_shift"])
+        price_decimals = self._safe_price_decimals(
+            cfg.get("price_decimals"),
+            self._infer_default_price_decimals(asset_rollup),
+        )
         self._step_controls_loading = True
         try:
             self.stepSizeTick.setValue(step_tick)
@@ -3579,6 +3615,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.stepSizeBox.setValue(step_size)
             if hasattr(self, "chartShift"):
                 self.chartShift.setValue(chart_shift)
+            if hasattr(self, "assetDecimal"):
+                self.assetDecimal.setValue(price_decimals)
         finally:
             self._step_controls_loading = False
 
@@ -3592,18 +3630,24 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
             self._step_defaults["chart_shift"],
         )
+        price_decimals = self._safe_price_decimals(
+            self.assetDecimal.value() if hasattr(self, "assetDecimal") else self._step_defaults["price_decimals"],
+            self._infer_default_price_decimals(asset),
+        )
         prev = self._step_settings_by_asset.get(asset)
         if (
             prev
             and abs(prev.get("step_size", 0.0) - step_size) < 1e-9
             and abs(prev.get("step_size_tick", 0.0) - step_tick) < 1e-9
             and abs(prev.get("chart_shift", 0.0) - chart_shift) < 1e-9
+            and int(prev.get("price_decimals", self._step_defaults["price_decimals"])) == price_decimals
         ):
             return
         self._step_settings_by_asset[asset] = {
             "step_size": step_size,
             "step_size_tick": step_tick,
             "chart_shift": chart_shift,
+            "price_decimals": price_decimals,
         }
         self._step_settings_dirty = True
 
@@ -3625,6 +3669,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._store_step_settings_for_current_asset()
         self.update_payoff_table()
 
+    def _on_price_decimals_changed(self, _value: int) -> None:
+        if self._step_controls_loading:
+            return
+        self._store_step_settings_for_current_asset()
+        asset = self.asset_selector.currentText() if hasattr(self, "asset_selector") else ""
+        if asset:
+            self._get_live_summary_row(asset, refresh=False)
+        self.update_payoff_table()
+        self.update_chart()
+
     def flush_step_settings_to_db(self) -> None:
         if not self._step_settings_dirty:
             return
@@ -3637,6 +3691,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                     step_size = self._safe_step_value(cfg.get("step_size"), self._step_defaults["step_size"])
                     step_tick = self._safe_step_tick(cfg.get("step_size_tick"), self._step_defaults["step_size_tick"])
                     chart_shift = self._safe_chart_shift(cfg.get("chart_shift"), self._step_defaults["chart_shift"])
+                    price_decimals = self._safe_price_decimals(
+                        cfg.get("price_decimals"),
+                        self._infer_default_price_decimals(asset),
+                    )
                     exists = cur.execute(
                         "SELECT TOP 1 asset_rollup FROM single_asset_stepsize_settings WHERE asset_rollup=?",
                         (asset,),
@@ -3645,18 +3703,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                         cur.execute(
                             """
                             UPDATE single_asset_stepsize_settings
-                            SET step_size=?, step_size_tick=?, chart_shift=?, updated_at=?
+                            SET step_size=?, step_size_tick=?, chart_shift=?, price_decimals=?, updated_at=?
                             WHERE asset_rollup=?
                             """,
-                            (step_size, step_tick, chart_shift, now, asset),
+                            (step_size, step_tick, chart_shift, price_decimals, now, asset),
                         )
                     else:
                         cur.execute(
                             """
-                            INSERT INTO single_asset_stepsize_settings (asset_rollup, step_size, step_size_tick, chart_shift, updated_at)
-                            VALUES (?, ?, ?, ?, ?)
+                            INSERT INTO single_asset_stepsize_settings (asset_rollup, step_size, step_size_tick, chart_shift, price_decimals, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
                             """,
-                            (asset, step_size, step_tick, chart_shift, now),
+                            (asset, step_size, step_tick, chart_shift, price_decimals, now),
                         )
                 conn.commit()
             self._step_settings_dirty = False
@@ -3848,6 +3906,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
             self._step_defaults["chart_shift"],
         )
+        price_decimals = self._current_price_decimals()
 
         step_pct = self.stepSizeBox.value()
         step_size = step_pct / 100.0
@@ -3859,7 +3918,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         shift_columns = int(round(chart_shift / bucket_width))
         current_price_col = max(0, min(column_count - 1, middle_col + shift_columns))
         steps = [
-            round(live_price + ((i - current_price_col) * bucket_width), 2)
+            round(live_price + ((i - current_price_col) * bucket_width), price_decimals)
             for i in range(column_count)
         ]
         self._payoff_steps = steps
@@ -3869,7 +3928,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 if abs(val) >= 1000:
                     text = f"{val:,.0f}"
                 else:
-                    text = f"{val:,.2f}"
+                    text = f"{val:,.{price_decimals}f}"
                 return text.replace(",", "X").replace(".", ",").replace("X", ".")
             except Exception:
                 return str(val)

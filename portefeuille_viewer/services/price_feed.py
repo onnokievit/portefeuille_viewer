@@ -16,13 +16,29 @@ class PriceStore:
     def __init__(self):
         self._cache: dict[tuple[str, str], float] = {}
 
+    @staticmethod
+    def _fx_aliases(sym: str, cur: str) -> list[tuple[str, str]]:
+        sym_s = str(sym or "").strip().upper()
+        cur_s = str(cur or "").strip().upper()
+        aliases: list[tuple[str, str]] = []
+        if len(sym_s) == 3 and len(cur_s) == 3 and sym_s.isalpha() and cur_s.isalpha():
+            aliases.append((f"{sym_s}.{cur_s}", cur_s))
+            aliases.append((f"{sym_s}{cur_s}", cur_s))
+        return aliases
+
     def set(self, sym: str, cur: str, px: float):
         """Voeg of update prijs in de cache."""
-        self._cache[(sym, cur)] = px
+        sym_s = str(sym or "").strip().upper()
+        cur_s = str(cur or "").strip().upper()
+        self._cache[(sym_s, cur_s)] = px
+        for alias in self._fx_aliases(sym_s, cur_s):
+            self._cache[alias] = px
 
     def get(self, sym: str, cur: str) -> Optional[float]:
         """Haal prijs op, of None."""
-        return self._cache.get((sym, cur))
+        sym_s = str(sym or "").strip().upper()
+        cur_s = str(cur or "").strip().upper()
+        return self._cache.get((sym_s, cur_s))
 
     def snapshot(self) -> dict[tuple[str, str], float]:
         """Geeft dict (sym,cur)->prijs terug."""
@@ -351,6 +367,33 @@ class PriceFeedIB(QObject):
             c.primaryExchange = primaryExchange
         return c
 
+    @staticmethod
+    def _parse_cash_pair(symbol: str, currency: str) -> tuple[str, str]:
+        sym = str(symbol or "").strip().upper()
+        cur = str(currency or "").strip().upper()
+
+        parts = [p for p in sym.replace("-", ".").replace("_", ".").split(".") if p]
+        if len(parts) == 2 and all(len(p) == 3 and p.isalpha() for p in parts):
+            return parts[0], parts[1]
+
+        compact = "".join(ch for ch in sym if ch.isalpha()).upper()
+        if len(compact) == 6:
+            return compact[:3], compact[3:]
+
+        if len(sym) == 3 and len(cur) == 3 and sym.isalpha() and cur.isalpha():
+            return sym, cur
+
+        return sym, cur
+
+    def _make_cash(self, symbol, currency, exchange, primaryExchange):
+        base_ccy, quote_ccy = self._parse_cash_pair(symbol, currency)
+        c = self._Contract()
+        c.symbol = base_ccy
+        c.secType = "CASH"
+        c.currency = quote_ccy
+        c.exchange = (exchange or primaryExchange or "IDEALPRO").upper()
+        return c
+
     def _build_contract(
         self,
         symbol: str,
@@ -364,6 +407,8 @@ class PriceFeedIB(QObject):
         t = (asset_type or "").strip().lower()
         if t == "index":
             c = self._make_index(symbol, currency, exchange, primary_exchange)
+        elif t in {"cash", "fx", "forex"}:
+            c = self._make_cash(symbol, currency, exchange, primary_exchange)
         elif t in {"future", "fut"}:
             c = self._make_future(symbol, currency, exchange, primary_exchange)
         else:

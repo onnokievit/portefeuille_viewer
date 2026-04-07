@@ -11,6 +11,7 @@ import polars as pl
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
+from portefeuille_viewer.services.asset_display_settings import load_price_decimals_map
 
 
 class AandelenProjectionV2:
@@ -273,6 +274,16 @@ class AandelenProjectionV2:
 
     def meta(self) -> dict[str, Any]:
         with self._lock:
+            asset_rollups: list[str] = []
+            if self._snapshot is not None and not self._snapshot.is_empty() and "asset_rollup" in self._snapshot.columns:
+                try:
+                    asset_rollups = [
+                        str(v).strip()
+                        for v in self._snapshot["asset_rollup"].to_list()
+                        if str(v).strip()
+                    ]
+                except Exception:
+                    asset_rollups = []
             return {
                 "view": "aandelen",
                 "version": self._version,
@@ -282,6 +293,7 @@ class AandelenProjectionV2:
                 "changes": len(self._last_patch),
                 "selected_brokers": sorted(self._selected_brokers) if self._selected_brokers else [],
                 "broker_cache_count": len(self._broker_cache),
+                "asset_price_decimals": load_price_decimals_map(asset_rollups),
                 "diag": dict(self._diag or {}),
             }
 

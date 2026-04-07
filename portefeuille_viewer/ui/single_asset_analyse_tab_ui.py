@@ -89,6 +89,15 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addWidget(self.chartShift)
 
+        self.assetDecimal = QDoubleSpinBox(self.horizontalLayoutWidget)
+        self.assetDecimal.setObjectName(u"assetDecimal")
+        self.assetDecimal.setMaximumSize(QSize(60, 16777215))
+        self.assetDecimal.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+        self.assetDecimal.setDecimals(0)
+        self.assetDecimal.setValue(0.000000000000000)
+
+        self.horizontalLayout.addWidget(self.assetDecimal)
+
         self.startDate = QDateEdit(self.horizontalLayoutWidget)
         self.startDate.setObjectName(u"startDate")
         self.startDate.setMaximumSize(QSize(120, 16777215))
@@ -347,7 +356,8 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.asset_selector, self.stepSizeBox)
         QWidget.setTabOrder(self.stepSizeBox, self.stepSizeTick)
         QWidget.setTabOrder(self.stepSizeTick, self.chartShift)
-        QWidget.setTabOrder(self.chartShift, self.startDate)
+        QWidget.setTabOrder(self.chartShift, self.assetDecimal)
+        QWidget.setTabOrder(self.assetDecimal, self.startDate)
         QWidget.setTabOrder(self.startDate, self.endDate)
         QWidget.setTabOrder(self.endDate, self.comboBoxStatus)
         QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)

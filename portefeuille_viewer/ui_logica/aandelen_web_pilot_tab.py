@@ -685,6 +685,7 @@ class AandelenWebPilotTab(QWidget):
       const state = {
         cols: [],
         rows: new Map(),
+        assetPriceDecimals: {},
         sortCol: "asset_rollup",
         sortDir: "asc",
         liveSortEnabled: false,
@@ -739,11 +740,19 @@ class AandelenWebPilotTab(QWidget):
         });
       }
 
-      function fmtCell(col, v) {
+      function _rowPriceDecimals(row) {
+        const asset = String(row?.asset_rollup ?? "").trim();
+        const raw = Number(state.assetPriceDecimals?.[asset]);
+        if (Number.isFinite(raw)) return Math.max(0, Math.min(6, Math.trunc(raw)));
+        return 2;
+      }
+
+      function fmtCell(row, col, v) {
         if (v === null || v === undefined) return "";
         if (!isNum(v)) return String(v);
         if (PCT_COLS.has(col)) return `${fmtNlNumber(v * 100, 2)}%`;
         if (QTY_COLS.has(col)) return fmtNlNumber(v, 3);
+        if (col === "koers" || col === "koers_prev") return fmtNlNumber(v, _rowPriceDecimals(row));
         if (MONEY_COLS.has(col)) return fmtNlNumber(v, 2);
         return fmtNlNumber(v, 2);
       }
@@ -990,7 +999,7 @@ class AandelenWebPilotTab(QWidget):
             td.style.minWidth = `${cw}px`;
             td.style.maxWidth = `${cw}px`;
             const v = row[col];
-            td.textContent = fmtCell(col, v);
+            td.textContent = fmtCell(row, col, v);
             if (isNum(v)) td.classList.add("num");
             applyCellStyle(td, col, v);
             tr.appendChild(td);
@@ -1123,7 +1132,7 @@ class AandelenWebPilotTab(QWidget):
                 hasNum = true;
               }
             }
-            td.textContent = hasNum ? fmtCell(col, sum) : "";
+            td.textContent = hasNum ? fmtCell(null, col, sum) : "";
             if (hasNum) td.classList.add("num");
           }
           tr.appendChild(td);
@@ -1316,6 +1325,9 @@ class AandelenWebPilotTab(QWidget):
           const current = String(meta.beta_lookback ?? "12m");
           if (lookbackEl.value !== current) lookbackEl.value = current;
         }
+        state.assetPriceDecimals = (meta.asset_price_decimals && typeof meta.asset_price_decimals === "object")
+          ? meta.asset_price_decimals
+          : {};
         const txt = `Projection v${v} | rows: ${r} | changes: ${c} | updated: ${u} | reason: ${reason} | brokers: ${b} | perf q:${mQ}ms rec:${mRec}ms pub:${mPub}ms tot:${mTot}ms p95:${mP95}ms inflight:${mInflight} | diag k_null:${dkRel} (exp:${dkExp}) kp_null:${dkpRel} (exp:${dkpExp}) repaired:${dr}`;
         el.dataset.baseText = txt;
         el.textContent = txt;
@@ -1381,7 +1393,7 @@ class AandelenWebPilotTab(QWidget):
         }
         const td = document.getElementById("c_" + rowId(rid) + "_" + field);
         if (td) {
-          td.textContent = fmtCell(field, value);
+          td.textContent = fmtCell(row, field, value);
           if (isNum(value)) td.classList.add("num");
           else td.classList.remove("num");
           applyCellStyle(td, field, value);

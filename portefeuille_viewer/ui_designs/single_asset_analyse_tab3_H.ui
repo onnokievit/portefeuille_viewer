@@ -186,6 +186,25 @@
         </widget>
        </item>
        <item>
+        <widget class="QDoubleSpinBox" name="assetDecimal">
+         <property name="maximumSize">
+          <size>
+           <width>60</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(230, 230, 230);</string>
+         </property>
+         <property name="decimals">
+          <number>0</number>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QDateEdit" name="startDate">
          <property name="maximumSize">
           <size>
@@ -960,6 +979,7 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
   <tabstop>stepSizeBox</tabstop>
   <tabstop>stepSizeTick</tabstop>
   <tabstop>chartShift</tabstop>
+  <tabstop>assetDecimal</tabstop>
   <tabstop>startDate</tabstop>
   <tabstop>endDate</tabstop>
   <tabstop>comboBoxStatus</tabstop>
