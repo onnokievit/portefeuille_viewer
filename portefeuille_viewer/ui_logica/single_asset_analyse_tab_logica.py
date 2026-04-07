@@ -3819,6 +3819,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # Gebaseerd op oude code, maar nu via self.logic
         asset_rollup = self.asset_selector.currentText()
         live_price = 100
+        column_count = 17
+        middle_col = column_count // 2
 
         ib_symbol = ib_currency = None
         df_rollup = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
@@ -3846,11 +3848,20 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self.chartShift.value() if hasattr(self, "chartShift") else self._step_defaults["chart_shift"],
             self._step_defaults["chart_shift"],
         )
-        center = float(live_price) - chart_shift
 
         step_pct = self.stepSizeBox.value()
         step_size = step_pct / 100.0
-        steps = [round(center * (i - 8) * step_size + center, 2) for i in range(17)]
+        live_price = float(live_price)
+        bucket_width = abs(live_price) * step_size
+        if bucket_width <= 0:
+            bucket_width = max(abs(live_price) * 0.01, 0.01)
+
+        shift_columns = int(round(chart_shift / bucket_width))
+        current_price_col = max(0, min(column_count - 1, middle_col + shift_columns))
+        steps = [
+            round(live_price + ((i - current_price_col) * bucket_width), 2)
+            for i in range(column_count)
+        ]
         self._payoff_steps = steps
 
         def _format_step(val: float) -> str:
@@ -3906,7 +3917,6 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         factor = getattr(self.logic, "currency_factor", 1.0)
 
-        current_price_col = min(range(len(steps)), key=lambda idx: abs(float(steps[idx]) - float(live_price)))
         sub_total_row = 7
         total_row = 9
         from PySide6.QtGui import QColor, QBrush, QFont
