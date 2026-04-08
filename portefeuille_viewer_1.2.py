@@ -45,32 +45,19 @@ from portefeuille_viewer.projections import (
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
 import time
 
-# Prefix all process-local print logs with a timestamp so bursts are easier to read.
-_ORIGINAL_PRINT = builtins.print
-
-
-def _install_timestamped_print() -> None:
-    if getattr(builtins.print, "__name__", "") == "_timestamped_print":
-        return
-
-    def _timestamped_print(*args, **kwargs):
-        ts = time.strftime("%H:%M:%S")
-        prefix = f"[{ts}]"
-        if args:
-            _ORIGINAL_PRINT(prefix, *args, **kwargs)
-        else:
-            _ORIGINAL_PRINT(prefix, **kwargs)
-
-    builtins.print = _timestamped_print
-
-
-_install_timestamped_print()
+def _log(*args, **kwargs) -> None:
+    ts = time.strftime("%H:%M:%S")
+    prefix = f"[{ts}]"
+    if args:
+        builtins.print(prefix, *args, **kwargs)
+    else:
+        builtins.print(prefix, **kwargs)
 
 # Qt warning filter: onderdruk specifieke QSortFilterProxyModel warning
 def qt_message_handler(mode, context, message):
     if "QSortFilterProxyModel: index from wrong model passed to mapToSource" in message:
         return
-    print(message)
+    _log(message)
 
 qInstallMessageHandler(qt_message_handler)
 
@@ -78,7 +65,7 @@ qInstallMessageHandler(qt_message_handler)
 # sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-print("✅ Repository geladen uit:", repository.__file__)
+_log("✅ Repository geladen uit:", repository.__file__)
 
 
 def _apply_env_defaults_from_settings() -> None:
@@ -95,7 +82,7 @@ def _apply_env_defaults_from_settings() -> None:
                 continue
             os.environ.setdefault(env_key, env_val)
     except Exception as exc:
-        print(f"[env-defaults] could not apply defaults: {exc}")
+        _log(f"[env-defaults] could not apply defaults: {exc}")
 
 
 _apply_env_defaults_from_settings()
@@ -160,7 +147,7 @@ def _engine_core_logger(message: str) -> None:
     msg = str(message or "")
     if "[engine-core] topic=" in msg and not ENGINE_CORE_LOG_TOPICS:
         return
-    print(msg)
+    _log(msg)
 
 
 engine_core_runtime = EngineCoreRuntime(
@@ -462,13 +449,13 @@ def _refresh_projection_sync(cfg: ProjectionRefreshConfig, reason: str) -> None:
         }
         _append_projection_metrics(cfg, sample)
         if PROJECTION_METRICS_LOG_CONSOLE:
-            print(
+            _log(
                 f"{cfg.log_prefix} reason={reason} recompute_ms={recompute_ms:.1f} "
                 f"publish_ms={publish_ms:.1f} total_ms={total_ms:.1f} "
                 f"patch={sample['patch_size']} rows={sample['snapshot_rows']}"
             )
     except Exception as exc:
-        print(f"{cfg.error_prefix} refresh failed: {exc}")
+        _log(f"{cfg.error_prefix} refresh failed: {exc}")
 
 
 def _reset_aandelen_tv_overlay_regime(reason: str) -> None:
@@ -480,7 +467,7 @@ def _reset_aandelen_tv_overlay_regime(reason: str) -> None:
     _AANDELEN_TV_LAST_OVERLAY_TS = 0.0
     _AANDELEN_TV_SEED_TS = 0.0
     _AANDELEN_TV_OVERLAY_LOCKED = False
-    print(f"[projection-v2] timevalue overlay regime reset ({reason})")
+    _log(f"[projection-v2] timevalue overlay regime reset ({reason})")
 
 
 def _aandelen_tv_totals_in_sync() -> bool:
@@ -617,13 +604,13 @@ def _publish_aandelen_projection_result(result: dict):
         if PROJECTION_METRICS_LOG_CONSOLE and (
             PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC or not is_timevalue_topic
         ):
-            print(
+            _log(
                 f"[projection-v2-metrics] reason={sample['reason']} queue_wait_ms={sample['queue_wait_ms']:.1f} "
                 f"recompute_ms={sample['recompute_ms']:.1f} publish_ms={publish_ms:.1f} "
                 f"total_ms={total_ms:.1f} patch={sample['patch_size']} rows={sample['snapshot_rows']} inflight={sample['inflight']}"
             )
     except Exception as exc:
-        print(f"[projection-v2] aandelen refresh failed: {exc}")
+        _log(f"[projection-v2] aandelen refresh failed: {exc}")
 
 
 def _run_aandelen_projection_compute(request: dict):
@@ -651,7 +638,7 @@ def _run_aandelen_projection_compute(request: dict):
             _AANDELEN_PROJECTION_PENDING_RESULT = result
         signals.queued_emit_projectionPublishTick("aandelen_v2")
     except Exception as exc:
-        print(f"[projection-v2] aandelen compute failed: {exc}")
+        _log(f"[projection-v2] aandelen compute failed: {exc}")
     finally:
         with _AANDELEN_PROJECTION_REQ_LOCK:
             next_req = _AANDELEN_PROJECTION_QUEUED_REQ
@@ -713,7 +700,7 @@ def refresh_sprinters_open_projection(reason: str):
 def _publish_runtime_projection_results(results, reason: str):
     for res in results or []:
         if not getattr(res, "success", False):
-            print(
+            _log(
                 f"[engine-core] projection failed: {getattr(res, 'projection_name', 'unknown')} ({getattr(res, 'error', 'n/a')})"
             )
             continue
@@ -861,11 +848,11 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
                 _AANDELEN_TV_STARTUP_SEEDED = True
                 _AANDELEN_TV_SEED_TS = now_ts
                 _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
-                print("[projection-v2] startup timevalue seed applied")
+                _log("[projection-v2] startup timevalue seed applied")
         elif tv_ready and _AANDELEN_TV_STARTUP_SEEDED:
             if not _AANDELEN_TV_OVERLAY_LOCKED and _aandelen_tv_totals_in_sync():
                 _AANDELEN_TV_OVERLAY_LOCKED = True
-                print("[projection-v2] timevalue overlay locked (totals in sync)")
+                _log("[projection-v2] timevalue overlay locked (totals in sync)")
             if _AANDELEN_TV_OVERLAY_LOCKED:
                 tv_ready = False
             interval = _AANDELEN_TV_OVERLAY_MIN_INTERVAL_SEC
@@ -884,6 +871,7 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
                 _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
     if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         live_topic_targets = {
+            "aggregator_snapshot_aandelen_live": {"aandelen_v2"},
             "aggregator_snapshot_load_open_opties_from_tx_live": {"opties_open_v2"},
             "snapshot_optie_timevalue_live": {"optie_tijdswaarde_v2"},
             "aggregator_snapshot_open_sprinters_live": {"sprinters_open_v2"},
@@ -901,10 +889,12 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
         _publish_runtime_projection_results(results, reason=f"snapshot:{snapshot_key}")
 
 
-def refresh_everything():
-    start_time = time.time()
+def _refresh_phase_test_orders() -> None:
     flush_dirty_test_orders_to_db()
     load_test_orders_cache_from_db()
+
+
+def _refresh_phase_repository_core() -> None:
     repository.load_alle_transacties()
     repository.load_aandelen_from_tx()
     repository.load_open_opties_from_tx()
@@ -920,23 +910,41 @@ def refresh_everything():
     repository.load_per_dag_asset_result_v2_snapshot()
     repository.load_optie_referentie_data()
     repository.build_repository_active_asset_rollup_data()
+
+
+def _refresh_phase_live_aggregators() -> None:
     live_aggregator_aandelen.process_live_update()
     live_aggregator_opties.process_live_update()
+
+
+def _refresh_phase_portfolio_values() -> None:
     repository.portfolio_value_asset_rollup_opties_put()
     repository.portfolio_value_asset_rollup_aandelen()
     repository.portfolio_value_asset_rollup_sprinters()
-    repository.portfolio_value_asset_rollup_combined()  
+    repository.portfolio_value_asset_rollup_combined()
+
+
+def _refresh_phase_projections(reason: str) -> None:
     if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
-        _runtime_recompute_all("refresh_everything")
+        _runtime_recompute_all(reason)
     else:
-        refresh_aandelen_projection("refresh_everything")
-        refresh_opties_open_projection("refresh_everything")
-        refresh_optie_tijdswaarde_projection("refresh_everything")
-        refresh_sprinters_open_projection("refresh_everything")
+        refresh_aandelen_projection(reason)
+        refresh_opties_open_projection(reason)
+        refresh_optie_tijdswaarde_projection(reason)
+        refresh_sprinters_open_projection(reason)
+
+
+def refresh_everything():
+    start_time = time.time()
+    _refresh_phase_test_orders()
+    _refresh_phase_repository_core()
+    _refresh_phase_live_aggregators()
+    _refresh_phase_portfolio_values()
+    _refresh_phase_projections("refresh_everything")
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(SNAPSHOT_STORE.snapshot_store_summary())
-    print(f"Datasets geladen in {elapsed_time:.2f} seconden.")
+    _log(SNAPSHOT_STORE.snapshot_store_summary())
+    _log(f"Datasets geladen in {elapsed_time:.2f} seconden.")
 
 
 def refresh_transaction_derived_snapshots(payload: dict | None = None):
@@ -1052,19 +1060,19 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
                 refresh_sprinters_open_projection("transaction_derived")
                 _mark("refresh_sprinters_open_projection", stage_start)
     except Exception as exc:
-        print(f"[snapshot-refresh] failed: {exc}")
+        _log(f"[snapshot-refresh] failed: {exc}")
         raise
     elapsed_time = time.perf_counter() - start_time
     reason = (payload or {}).get("reason", "unknown")
     timing_str = ", ".join(f"{name}={duration * 1000:.1f}ms" for name, duration in timings)
-    print(
+    _log(
         "[snapshot-refresh] transaction-derived snapshots refreshed "
         f"in {elapsed_time:.2f}s ({reason}) "
         f"types={sorted(raw_asset_types) if raw_asset_types else ['ALL']} "
         f"broad={broad_refresh} | {timing_str}"
     )
     if APP_PERF_LOG:
-        print(
+        _log(
             f"[perf] timer=refresh_transaction_derived_snapshots total_ms={elapsed_time * 1000.0:.1f} reason={reason}"
         )
 
@@ -1074,14 +1082,14 @@ def run_startup_db_migrations():
     results = svc.migrate_all_user_dbs()
     ok = sum(1 for r in results if r.success)
     fail = len(results) - ok
-    print(f"[db-migrate] completed: ok={ok}, failed={fail}")
+    _log(f"[db-migrate] completed: ok={ok}, failed={fail}")
     for r in results:
         if r.success:
-            print(
+            _log(
                 f"[db-migrate] {r.database_name}: v{r.old_version} -> v{r.new_version}"
             )
         else:
-            print(f"[db-migrate] {r.database_name}: FAILED ({r.error})")
+            _log(f"[db-migrate] {r.database_name}: FAILED ({r.error})")
     
 
 
@@ -1108,9 +1116,9 @@ def main():
     app.setFont(font)
     run_startup_db_migrations()
     if ENABLE_ENGINE_CORE_RUNTIME:
-        print("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
+        _log("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
         if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
-            print("[engine-core] exclusive mode enabled via ENGINE_CORE_RUNTIME_EXCLUSIVE_V1=1")
+            _log("[engine-core] exclusive mode enabled via ENGINE_CORE_RUNTIME_EXCLUSIVE_V1=1")
     refresh_everything()
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
@@ -1214,9 +1222,9 @@ def main():
             top = ", ".join(
                 f"{key}={count}" for key, count in snapshot_counter.most_common(20)
             )
-            print(f"[snapshot-count/min] {top}")
+            _log(f"[snapshot-count/min] {top}")
         else:
-            print("[snapshot-count/min] no snapshotUpdated events")
+            _log("[snapshot-count/min] no snapshotUpdated events")
         snapshot_counter.clear()
 
     def _run_db_change_refresh():
@@ -1264,9 +1272,9 @@ def main():
         orders_refresh_timer.setInterval(250)
         orders_refresh_timer.timeout.connect(_run_orders_refresh)
         signals.ordersCommitted.connect(_schedule_orders_refresh)
-        print("[orders-refresh] enabled via ORDERS_COMMIT_FULL_REFRESH_V1=1")
+        _log("[orders-refresh] enabled via ORDERS_COMMIT_FULL_REFRESH_V1=1")
     else:
-        print("[orders-refresh] disabled (no full refresh on ordersCommitted)")
+        _log("[orders-refresh] disabled (no full refresh on ordersCommitted)")
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
     signals.snapshotUpdated.connect(_on_snapshot_updated_counter)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
@@ -1284,23 +1292,23 @@ def main():
         else:
             selected = set()
         aandelen_projection_v2.set_selected_brokers(selected or None)
-        print(f"[projection-v2] broker_filter_change selected={sorted(selected) if selected else ['ALL']}")
+        _log(f"[projection-v2] broker_filter_change selected={sorted(selected) if selected else ['ALL']}")
         refresh_aandelen_projection("broker_filter_change", force_sync=True)
     signals.aandelenProjectionFilterChanged.connect(_on_aandelen_projection_filter_changed)
     signals.stateRebuildFinished.connect(
-        lambda payload: print(f"[state-engine] rebuild finished: {payload}")
+        lambda payload: _log(f"[state-engine] rebuild finished: {payload}")
     )
     signals.stateRebuildFailed.connect(
-        lambda message: print(f"[state-engine] rebuild failed: {message}")
+        lambda message: _log(f"[state-engine] rebuild failed: {message}")
     )
     signals.priceUpdateStarted.connect(
-        lambda payload: print(f"[price-update] started: {payload}")
+        lambda payload: _log(f"[price-update] started: {payload}")
     )
     signals.priceUpdateFinished.connect(
-        lambda payload: print(f"[price-update] finished: {payload.get('status')} ({payload.get('fetch_start_date', 'n/a')} -> today)")
+        lambda payload: _log(f"[price-update] finished: {payload.get('status')} ({payload.get('fetch_start_date', 'n/a')} -> today)")
     )
     signals.priceUpdateFailed.connect(
-        lambda message: print(f"[price-update] failed: {message}")
+        lambda message: _log(f"[price-update] failed: {message}")
     )
     settings = get_settings()
     price_feed = PriceFeedService(

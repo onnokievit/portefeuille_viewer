@@ -10,7 +10,7 @@ import pyqtgraph as pg
 
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator
-from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression
+from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression, QSignalBlocker
 
 # from streamlit import columns
 
@@ -517,6 +517,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._fill_filter_comboboxes()
         self._table_model = None  # voor de mixin
         self._col_filters = {}    # voor de mixin
+        self._test_order_col_filters = {}
         self.payoff_matrix = None
         asset_rollups = []
         df_rollups = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
@@ -545,6 +546,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         header_test_orders = self.testOrdersTable.horizontalHeader()
         header_test_orders.setSectionResizeMode(QHeaderView.Interactive)
         header_test_orders.setStretchLastSection(False)
+        header_test_orders.setContextMenuPolicy(Qt.CustomContextMenu)
+        header_test_orders.customContextMenuRequested.connect(self._on_test_orders_header_menu)
         self._apply_test_orders_column_widths()
         self._apply_test_orders_styling()
         self.testOrdersTable.setSortingEnabled(True)
@@ -2027,6 +2030,62 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not self.commentFlushTimer.isActive():
             self.commentFlushTimer.start()
 
+    def _on_test_orders_header_menu(self, pos) -> None:
+        header = self.testOrdersTable.horizontalHeader()
+        section = header.logicalIndexAt(pos)
+        if section < 0 or section >= len(self.test_order_columns):
+            return
+        colname = self.test_order_columns[section]
+        if colname != "optie_comment":
+            return
+
+        menu = QMenu(self)
+        a_color_filter = menu.addAction("Filter op kleur...")
+        a_clear = menu.addAction("Filter wissen")
+        act = menu.exec(header.mapToGlobal(pos))
+        if not act:
+            return
+        if act == a_color_filter:
+            self._open_test_orders_comment_color_popup(header.mapToGlobal(pos))
+            return
+        if act == a_clear:
+            self._test_order_col_filters.pop("optie_comment_color", None)
+            self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+
+    def _open_test_orders_comment_color_popup(self, global_pos) -> None:
+        color_defs = get_settings().get_comment_colors() or []
+        values = [bg_hex for _prio, _label, bg_hex, _fg_hex in color_defs if bg_hex]
+        if "" not in values:
+            values.insert(0, "")
+        label_map = {"": "Geen kleur"}
+        for _prio, label, bg_hex, _fg_hex in color_defs:
+            if bg_hex:
+                label_map[bg_hex] = label
+
+        pre = set()
+        if "optie_comment_color" in self._test_order_col_filters:
+            pre = set(self._test_order_col_filters["optie_comment_color"].get("in", []))
+
+        pop = ColumnFilterPopup(
+            "Filter testorders: comment kleur",
+            values,
+            pre_selected=pre,
+            parent=self,
+            label_map=label_map,
+        )
+        pop.move(global_pos)
+        pop.acceptedSelection.connect(self._apply_test_order_comment_color_filter)
+        pop.cleared.connect(self._clear_test_order_comment_color_filter)
+        pop.show()
+
+    def _apply_test_order_comment_color_filter(self, selected: set) -> None:
+        self._test_order_col_filters["optie_comment_color"] = {"in": set(selected or set())}
+        self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+
+    def _clear_test_order_comment_color_filter(self) -> None:
+        self._test_order_col_filters.pop("optie_comment_color", None)
+        self._refresh_test_orders_view_for_active_asset(self.asset_selector.currentText())
+
 
 
 
@@ -2059,6 +2118,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.testOrdersTable.setSortingEnabled(False)
         self.testOrdersTable.blockSignals(True)
         self.testOrdersTable.setRowCount(0)
+        has_comment_color_filter = "optie_comment_color" in (self._test_order_col_filters or {})
+        selected_comment_colors = set(
+            (self._test_order_col_filters.get("optie_comment_color") or {}).get("in", set())
+        )
 
         if df is None or getattr(df, "is_empty", lambda: True)():
             self.add_empty_row()
@@ -2089,6 +2152,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 print(f"[comments] ophalen comments voor test-orders faalde: {exc}")
 
             for row_data in rows:
+                row_color = color_by_id.get(row_data.get("_uniek_id", ""), "")
+                if has_comment_color_filter and row_color not in selected_comment_colors:
+                    continue
                 row = self.testOrdersTable.rowCount()
                 self.testOrdersTable.insertRow(row)
                 asset_type = (row_data.get("asset_type") or "").strip().lower()
@@ -2118,7 +2184,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                         if name in {"transactie_aantal", "transactie_prijs", "optie_strike"}:
                             item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                         if name == "optie_comment":
-                            color_hex = color_by_id.get(row_data.get("_uniek_id", ""), "")
+                            color_hex = row_color
                             text_hex = textcolor_by_id.get(row_data.get("_uniek_id", ""), "")
                             if color_hex:
                                 item.setData(Qt.UserRole, color_hex)
@@ -2127,6 +2193,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                                 if fg:
                                     item.setForeground(QColor(fg))
                     self.testOrdersTable.setItem(row, c, item)
+
+            if self.testOrdersTable.rowCount() == 0 and not has_comment_color_filter:
+                self.add_empty_row()
 
         self.testOrdersTable.blockSignals(False)
         self._apply_test_orders_styling()
@@ -2406,15 +2475,21 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         sector = sector if sector else None
         assets = self.logic.load_assets(regio=regio, status=status, value_grow=value_grow, sector=sector)
         assets = self._apply_asset_sorting(assets)
-        self.asset_selector.clear()
-        self.asset_selector.addItems(assets)
-        if current_asset and current_asset in assets:
-            self.asset_selector.setCurrentText(current_asset)
-        elif current_asset and self._allow_inactive_asset_in_selector:
-            self._ensure_asset_in_selector_and_select(current_asset)
-        elif assets:
-            self.asset_selector.setCurrentIndex(0)
-            self.on_asset_selected(assets[0])
+        target_asset = ""
+        with QSignalBlocker(self.asset_selector):
+            self.asset_selector.clear()
+            self.asset_selector.addItems(assets)
+            if current_asset and current_asset in assets:
+                target_asset = current_asset
+                self.asset_selector.setCurrentText(current_asset)
+            elif current_asset and self._allow_inactive_asset_in_selector:
+                target_asset = current_asset
+                self._ensure_asset_in_selector_and_select(current_asset)
+            elif assets:
+                target_asset = assets[0]
+                self.asset_selector.setCurrentIndex(0)
+        if target_asset:
+            QTimer.singleShot(0, lambda asset=target_asset: self.on_asset_selected(asset))
 
     def _init_sort_comboboxes(self):
         self.comboBoxSortering.clear()
@@ -2620,6 +2695,20 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             asset = self.asset_selector.currentText()
             df = df.filter(pl.col("asset_rollup") == asset)
+        required_cols = {
+            "broker",
+            "asset_rollup",
+            "asset_detail",
+            "optie_exp_date",
+            "optie_strike",
+            "optie_call_put",
+            "Koers",
+            "SomVantransactie_aantal",
+            "sp_result",
+        }
+        if not required_cols.issubset(set(df.columns)):
+            self.tableViewSprinters.setModel(None)
+            return
         
         # Filter op asset_rollup
         
@@ -2672,8 +2761,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._update_summary_labels()
             return
         asset = self.asset_selector.currentText()
-        # Filter op asset_rollup en aantal_bezit
-        df = df.filter(pl.col("asset_rollup") == asset)
+        df = self.logic._filter_asset_snapshot(df, asset)
+        if df is None or df.is_empty():
+            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            self._update_summary_labels()
+            return
         if "aantal_bezit" not in df.columns:
             self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
             self._update_summary_labels()
@@ -3907,13 +3999,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         middle_col = column_count // 2
 
         ib_symbol = ib_currency = None
-        df_rollup = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
-        if df_rollup is not None and hasattr(df_rollup, "filter"):
-            with contextlib.suppress(Exception):
-                row = df_rollup.filter(pl.col("asset_rollup") == asset_rollup)
-                if row.height > 0:
-                    ib_symbol = row["ib_symbol"][0] if "ib_symbol" in row.columns else None
-                    ib_currency = row["ib_currency"][0] if "ib_currency" in row.columns else None
+        row = self.logic._get_asset_rollup_row(asset_rollup)
+        if row:
+            ib_symbol = row.get("ib_symbol")
+            ib_currency = row.get("ib_currency")
         live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
         if live_prices:
             price = None
@@ -4325,21 +4414,31 @@ class SingleAssetAnalyseLogic:
 
 
 
+    def _filter_asset_snapshot(self, df: pl.DataFrame | None, asset_rollup: str) -> pl.DataFrame | None:
+        if df is None:
+            return None
+        if "asset_rollup" not in df.columns:
+            return df.clear()
+        return df.filter(pl.col("asset_rollup") == asset_rollup)
+
+    def _get_asset_rollup_row(self, asset_rollup: str) -> dict | None:
+        df = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
+        if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+            return None
+        with contextlib.suppress(Exception):
+            row = df.filter(pl.col("asset_rollup") == asset_rollup)
+            if row.height > 0:
+                return row.to_dicts()[0]
+        return None
+
     def set_asset(self, asset_rollup):
         store = SNAPSHOT_STORE
 
-        def _filter_asset(df: pl.DataFrame | None) -> pl.DataFrame | None:
-            if df is None:
-                return None
-            if "asset_rollup" not in df.columns:
-                return df.clear()
-            return df.filter(pl.col("asset_rollup") == asset_rollup)
-
-        self.df_open_opties = _filter_asset(store.repository_snapshot_load_open_opties)
-        self.df_gesloten_opties = _filter_asset(store.repository_snapshot_gesloten_opties)
-        self.df_open_sprinters = _filter_asset(store.repository_snapshot_open_sprinters)
-        self.df_gesloten_sprinters = _filter_asset(store.repository_snapshot_gesloten_sprinters)
-        self.df_aandelen = _filter_asset(store.repository_snapshot_aandelen)
+        self.df_open_opties = self._filter_asset_snapshot(store.repository_snapshot_load_open_opties, asset_rollup)
+        self.df_gesloten_opties = self._filter_asset_snapshot(store.repository_snapshot_gesloten_opties, asset_rollup)
+        self.df_open_sprinters = self._filter_asset_snapshot(store.repository_snapshot_open_sprinters, asset_rollup)
+        self.df_gesloten_sprinters = self._filter_asset_snapshot(store.repository_snapshot_gesloten_sprinters, asset_rollup)
+        self.df_aandelen = self._filter_asset_snapshot(store.repository_snapshot_aandelen, asset_rollup)
 
   
         
@@ -4356,14 +4455,10 @@ class SingleAssetAnalyseLogic:
 
         
         
-        df = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
         factor = 1.0
-        if df is not None and df.height > 0:
-            row = df.filter(pl.col("asset_rollup") == asset_rollup)
-            if row.height > 0 and "ib_currency" in row.columns:
-                if row["ib_currency"][0] == "USD":
-                    
-                    factor = get_settings().get_eurusd()
+        row = self._get_asset_rollup_row(asset_rollup)
+        if row and str(row.get("ib_currency") or "").strip().upper() == "USD":
+            factor = get_settings().get_eurusd()
         self.currency_factor = factor
 
     def payoff_open_opties(self, koers):

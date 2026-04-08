@@ -22,127 +22,140 @@ class SnapshotStore:
     maar bevat zelf geen laadlogica meer.
     """
 
+    repository_snapshot_alle_transacties: pl.DataFrame | None
+    repository_snapshot_aandelen: pl.DataFrame | None
+    aggregator_snapshot_aandelen_live: pl.DataFrame | None
+    repository_snapshot_load_open_opties: pl.DataFrame | None
+    aggregator_snapshot_load_open_opties_from_tx_live: pl.DataFrame | None
+    repository_snapshot_open_sprinters: pl.DataFrame | None
+    aggregator_snapshot_open_sprinters_live: pl.DataFrame | None
+    repository_snapshot_gesloten_opties: pl.DataFrame | None
+    repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None
+    repository_snapshot_gesloten_sprinters: pl.DataFrame | None
+    repository_snapshot_gesloten_sprinters_no_asset_detail: pl.DataFrame | None
+    repository_snapshot_asset_rollup_data: pl.DataFrame | None
+    repository_snapshot_active_asset_rollup_data: pl.DataFrame | None
+    repository_snapshot_sprinter_referentie_data: pl.DataFrame | None
+    repository_snapshot_optie_referentie_data: pl.DataFrame | None
+    repository_snapshot_portfolio_value_aandelen: pl.DataFrame | None
+    repository_snapshot_portfolio_value_aandelen_scenario: pl.DataFrame | None
+    repository_snapshot_portfolio_value_optie_call_put_detailed: pl.DataFrame | None
+    repository_snapshot_portfolio_value_optie_call_put_detailed_scenario: pl.DataFrame | None
+    repository_snapshot_portfolio_value_optie: pl.DataFrame | None
+    repository_snapshot_portfolio_value_sprinters: pl.DataFrame | None
+    repository_snapshot_portfolio_value_sprinters_scenario: pl.DataFrame | None
+    repository_snapshot_portfolio_value_total_combined_put: pl.DataFrame | None
+    repository_snapshot_portfolio_value_total_combined_scenario: pl.DataFrame | None
+    snapshot_aandelen_projection_v2_scenario: pl.DataFrame | None
+    repository_portfolio_dividend: pl.DataFrame | None
+    repository_snapshot_historical_ohlcv: pl.DataFrame | None
+    repository_snapshot_historical_close: pl.DataFrame | None
+    repository_snapshot_historical_close_latest: pl.DataFrame | None
+    repository_snapshot_asset_driver_beta: pl.DataFrame | None
+    repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None
+    repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None
+    live_prices: dict | None
+    repository_snapshot_test_orders_cache: dict
+    repository_dirty_test_orders_assets: set
+    repository_snapshot_test_order_scenarios: pl.DataFrame | None
+    repository_snapshot_test_order_scenario_content: dict
+    repository_dirty_test_order_scenarios: bool
+    repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None
+    repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame]
+    runtime_bucket23_out_of_sync: bool
+    runtime_bucket23_dirty_reason: str | None
+    runtime_active_test_order_scenario_id: int | None
+    runtime_test_orders_enabled: bool
+    runtime_price_shift_pct: float
+    runtime_price_shift_driver: str | None
+    runtime_price_shift_lookback: str
+    repository_snapshot_open_optie_comments: pl.DataFrame | None
+    repository_dirty_open_optie_comments: list
+    snapshot_optie_timevalue_live: pl.DataFrame | None
+    snapshot_optie_timevalue_summary: pl.DataFrame | None
+    snapshot_optie_timevalue_meta: pl.DataFrame | None
+    test_repository_load_input_test_dataframe: pl.DataFrame | None
+    test_repository_load_output_test_dataframe: pl.DataFrame | None
+    snapshot_aggregated_portfolio: pl.DataFrame | None
+    active_database_name: str | None
+    state_engine_runner: Any | None
+    _last_update_ts: dict[str, float]
+    _live_prices_lock: threading.Lock
+
     def __init__(self):
-        # Polars DataFrames (standaard leeg)
-        self.repository_snapshot_alle_transacties: pl.DataFrame | None = None
-        self.repository_snapshot_aandelen: pl.DataFrame | None = None
-        self.aggregator_snapshot_aandelen_live: pl.DataFrame | None = None  # NIEUW: live geaggregeerde aandelen data
-        self.repository_snapshot_load_open_opties: pl.DataFrame | None = None
-        self.aggregator_snapshot_load_open_opties_from_tx_live: pl.DataFrame | None = None  # NIEUW: live opties data met koersen
-        self.repository_snapshot_open_sprinters: pl.DataFrame | None = None
-        self.aggregator_snapshot_open_sprinters_live: pl.DataFrame | None = None  # NIEUW: live sprinters data met koersen met broker
-        self.repository_snapshot_gesloten_opties: pl.DataFrame | None = None
-        self.repository_snapshot_gesloten_opties_no_broker: pl.DataFrame | None = None
-        self.repository_snapshot_gesloten_sprinters: pl.DataFrame | None = None
-        self.repository_snapshot_gesloten_sprinters_no_asset_detail: pl.DataFrame | None = None
-        self.repository_snapshot_asset_rollup_data: pl.DataFrame | None = None
-        self.repository_snapshot_active_asset_rollup_data: pl.DataFrame | None = None  # NIEUW: live asset rollup data met koersen
-        self.repository_snapshot_sprinter_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor sprinters
-        self.repository_snapshot_optie_referentie_data: pl.DataFrame | None = None  # NIEUW: referentie data voor opties
-        self.repository_snapshot_portfolio_value_aandelen: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_aandelen_scenario: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_optie_call_put_detailed: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_optie_call_put_detailed_scenario: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_optie: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_sprinters: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_sprinters_scenario: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_total_combined_put: pl.DataFrame | None = None
-        self.repository_snapshot_portfolio_value_total_combined_scenario: pl.DataFrame | None = None
-        self.snapshot_aandelen_projection_v2_scenario: pl.DataFrame | None = None
-        self.repository_portfolio_dividend: pl.DataFrame | None = None
-        self.repository_snapshot_historical_ohlcv: pl.DataFrame | None = None
-        self.repository_snapshot_historical_close: pl.DataFrame | None = None
-        self.repository_snapshot_historical_close_latest: pl.DataFrame | None = None
-        self.repository_snapshot_asset_driver_beta: pl.DataFrame | None = None
-        self.repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None = None
-        self.repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None = None
-        self.live_prices: dict | None = None
-        self.repository_snapshot_test_orders_cache: dict = {}
-        self.repository_dirty_test_orders_assets: set = set()
-        self.repository_snapshot_test_order_scenarios: pl.DataFrame | None = None
-        self.repository_snapshot_test_order_scenario_content: dict = {}
-        self.repository_dirty_test_order_scenarios: bool = False
-        self.repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None = None
-        self.repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame] = {}
-        self.runtime_bucket23_out_of_sync: bool = True
-        self.runtime_bucket23_dirty_reason: str | None = "startup"
-        self.runtime_active_test_order_scenario_id: int | None = None
-        self.runtime_test_orders_enabled: bool = False
-        self.runtime_price_shift_pct: float = 0.0
-        self.runtime_price_shift_driver: str | None = None
-        self.runtime_price_shift_lookback: str = "12m"
-        self.repository_snapshot_open_optie_comments: pl.DataFrame | None = None
-        self.repository_dirty_open_optie_comments: list = []
-        self.snapshot_optie_timevalue_live: pl.DataFrame | None = None
-        self.snapshot_optie_timevalue_summary: pl.DataFrame | None = None
-        self.snapshot_optie_timevalue_meta: pl.DataFrame | None = None
-        self.test_repository_load_input_test_dataframe: pl.DataFrame | None = None
-        self.test_repository_load_output_test_dataframe: pl.DataFrame | None = None  # DEBUG: tijdelijk voor UI debug
-        self.snapshot_aggregated_portfolio: pl.DataFrame | None = None
-        self.active_database_name: str | None = None
-        self.state_engine_runner: Any | None = None
-        self._last_update_ts = {}
         self._live_prices_lock = threading.Lock()
+        self._apply_defaults(bucket_reason="startup")
+
+    @staticmethod
+    def _build_default_state(bucket_reason: str | None) -> dict[str, Any]:
+        return {
+            "repository_snapshot_alle_transacties": None,
+            "repository_snapshot_aandelen": None,
+            "aggregator_snapshot_aandelen_live": None,
+            "repository_snapshot_load_open_opties": None,
+            "aggregator_snapshot_load_open_opties_from_tx_live": None,
+            "repository_snapshot_open_sprinters": None,
+            "aggregator_snapshot_open_sprinters_live": None,
+            "repository_snapshot_gesloten_opties": None,
+            "repository_snapshot_gesloten_opties_no_broker": None,
+            "repository_snapshot_gesloten_sprinters": None,
+            "repository_snapshot_gesloten_sprinters_no_asset_detail": None,
+            "repository_snapshot_asset_rollup_data": None,
+            "repository_snapshot_active_asset_rollup_data": None,
+            "repository_snapshot_sprinter_referentie_data": None,
+            "repository_snapshot_optie_referentie_data": None,
+            "repository_snapshot_portfolio_value_aandelen": None,
+            "repository_snapshot_portfolio_value_aandelen_scenario": None,
+            "repository_snapshot_portfolio_value_optie_call_put_detailed": None,
+            "repository_snapshot_portfolio_value_optie_call_put_detailed_scenario": None,
+            "repository_snapshot_portfolio_value_optie": None,
+            "repository_snapshot_portfolio_value_sprinters": None,
+            "repository_snapshot_portfolio_value_sprinters_scenario": None,
+            "repository_snapshot_portfolio_value_total_combined_put": None,
+            "repository_snapshot_portfolio_value_total_combined_scenario": None,
+            "snapshot_aandelen_projection_v2_scenario": None,
+            "repository_portfolio_dividend": None,
+            "repository_snapshot_historical_ohlcv": None,
+            "repository_snapshot_historical_close": None,
+            "repository_snapshot_historical_close_latest": None,
+            "repository_snapshot_asset_driver_beta": None,
+            "repository_snapshot_per_dag_asset_result_v2": None,
+            "repository_snapshot_per_dag_asset_result_v2_latest": None,
+            "live_prices": None,
+            "repository_snapshot_test_orders_cache": {},
+            "repository_dirty_test_orders_assets": set(),
+            "repository_snapshot_test_order_scenarios": None,
+            "repository_snapshot_test_order_scenario_content": {},
+            "repository_dirty_test_order_scenarios": False,
+            "repository_snapshot_active_scenario_orders_flat": None,
+            "repository_snapshot_active_scenario_orders_by_asset": {},
+            "runtime_bucket23_out_of_sync": True,
+            "runtime_bucket23_dirty_reason": bucket_reason,
+            "runtime_active_test_order_scenario_id": None,
+            "runtime_test_orders_enabled": False,
+            "runtime_price_shift_pct": 0.0,
+            "runtime_price_shift_driver": None,
+            "runtime_price_shift_lookback": "12m",
+            "repository_snapshot_open_optie_comments": None,
+            "repository_dirty_open_optie_comments": [],
+            "snapshot_optie_timevalue_live": None,
+            "snapshot_optie_timevalue_summary": None,
+            "snapshot_optie_timevalue_meta": None,
+            "test_repository_load_input_test_dataframe": None,
+            "test_repository_load_output_test_dataframe": None,
+            "snapshot_aggregated_portfolio": None,
+            "active_database_name": None,
+            "state_engine_runner": None,
+            "_last_update_ts": {},
+        }
+
+    def _apply_defaults(self, bucket_reason: str | None) -> None:
+        for attr_name, value in self._build_default_state(bucket_reason).items():
+            setattr(self, attr_name, value)
 
     def clear(self):
         """Reset alle snapshots naar leeg."""
-        self.repository_snapshot_alle_transacties = None
-        self.repository_snapshot_aandelen = None
-        self.aggregator_snapshot_aandelen_live = None
-        self.repository_snapshot_load_open_opties = None
-        self.aggregator_snapshot_load_open_opties_from_tx_live = None
-        self.repository_snapshot_open_sprinters = None
-        self.aggregator_snapshot_open_sprinters_live = None
-        self.repository_snapshot_gesloten_opties = None
-        self.repository_snapshot_gesloten_opties_no_broker = None
-        self.repository_snapshot_gesloten_sprinters = None
-        self.repository_snapshot_gesloten_sprinters_no_asset_detail = None
-        self.snapshot_aggregated_portfolio = None
-        self.repository_snapshot_asset_rollup_data = None
-        self.repository_snapshot_active_asset_rollup_data = None
-        self.repository_snapshot_sprinter_referentie_data = None
-        self.repository_snapshot_portfolio_value_aandelen = None
-        self.repository_snapshot_portfolio_value_aandelen_scenario = None
-        self.repository_snapshot_portfolio_value_optie_call_put_detailed = None
-        self.repository_snapshot_portfolio_value_optie_call_put_detailed_scenario = None
-        self.repository_snapshot_portfolio_value_optie = None
-        self.repository_snapshot_portfolio_value_sprinters = None
-        self.repository_snapshot_portfolio_value_sprinters_scenario = None
-        self.repository_snapshot_portfolio_value_total_combined_put = None
-        self.repository_snapshot_portfolio_value_total_combined_scenario = None
-        self.snapshot_aandelen_projection_v2_scenario = None
-        self.repository_snapshot_optie_referentie_data = None
-        self.repository_portfolio_dividend = None
-        self.repository_snapshot_historical_ohlcv = None
-        self.repository_snapshot_historical_close = None
-        self.repository_snapshot_historical_close_latest = None
-        self.repository_snapshot_asset_driver_beta = None
-        self.repository_snapshot_per_dag_asset_result_v2 = None
-        self.repository_snapshot_per_dag_asset_result_v2_latest = None
-        self.active_database_name = None
-        self.live_prices = None
-        self.repository_snapshot_test_orders_cache = {}
-        self.repository_dirty_test_orders_assets = set()
-        self.repository_snapshot_test_order_scenarios = None
-        self.repository_snapshot_test_order_scenario_content = {}
-        self.repository_dirty_test_order_scenarios = False
-        self.repository_snapshot_active_scenario_orders_flat = None
-        self.repository_snapshot_active_scenario_orders_by_asset = {}
-        self.runtime_bucket23_out_of_sync = True
-        self.runtime_bucket23_dirty_reason = "database_change"
-        self.runtime_active_test_order_scenario_id = None
-        self.runtime_test_orders_enabled = False
-        self.runtime_price_shift_pct = 0.0
-        self.runtime_price_shift_driver = None
-        self.runtime_price_shift_lookback = "12m"
-        self.repository_snapshot_open_optie_comments = None
-        self.repository_dirty_open_optie_comments = []
-        self.snapshot_optie_timevalue_live = None
-        self.snapshot_optie_timevalue_summary = None
-        self.snapshot_optie_timevalue_meta = None
-        self.test_repository_load_input_test_dataframe = None
-        self.test_repository_load_output_test_dataframe = None
-        self.state_engine_runner = None
+        self._apply_defaults(bucket_reason="database_change")
 
     def set_live_prices(self, prices: dict | None) -> None:
         with self._live_prices_lock:
@@ -170,44 +183,47 @@ class SnapshotStore:
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""
-        return any([
-            self.repository_snapshot_alle_transacties is not None,
-            self.repository_snapshot_aandelen is not None,
-            self.aggregator_snapshot_aandelen_live is not None,
-            self.repository_snapshot_load_open_opties is not None,
-            self.aggregator_snapshot_load_open_opties_from_tx_live is not None,
-            self.repository_snapshot_open_sprinters is not None,
-            self.aggregator_snapshot_open_sprinters_live is not None,
-            self.repository_snapshot_gesloten_opties is not None,
-            self.repository_snapshot_gesloten_opties_no_broker is not None,
-            self.repository_snapshot_gesloten_sprinters is not None,
-            self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None,
-            self.repository_snapshot_asset_rollup_data is not None,
-            self.repository_snapshot_active_asset_rollup_data is not None,
-            self.repository_snapshot_sprinter_referentie_data is not None,
-            self.repository_snapshot_optie_referentie_data is not None,
-            self.repository_snapshot_portfolio_value_aandelen is not None,
-            self.repository_snapshot_portfolio_value_aandelen_scenario is not None,
-            self.repository_snapshot_portfolio_value_optie_call_put_detailed is not None,
-            self.repository_snapshot_portfolio_value_optie_call_put_detailed_scenario is not None,
-            self.repository_snapshot_portfolio_value_optie is not None,
-            self.repository_snapshot_portfolio_value_sprinters is not None,
-            self.repository_snapshot_portfolio_value_sprinters_scenario is not None,
-            self.repository_snapshot_portfolio_value_total_combined_put is not None,
-            self.repository_snapshot_portfolio_value_total_combined_scenario is not None,
-            self.snapshot_aandelen_projection_v2_scenario is not None,
-            self.repository_portfolio_dividend is not None,
-            self.repository_snapshot_historical_ohlcv is not None,
-            self.repository_snapshot_historical_close is not None,
-            self.repository_snapshot_historical_close_latest is not None,
-            self.repository_snapshot_per_dag_asset_result_v2 is not None,
-            self.repository_snapshot_per_dag_asset_result_v2_latest is not None,
-            self.live_prices is not None,
-            self.repository_snapshot_test_orders_cache is not None,
-            self.repository_dirty_test_orders_assets is not None,
-            self.repository_snapshot_active_scenario_orders_flat is not None,
-            self.snapshot_optie_timevalue_live is not None,
-        ])
+        return any(
+            value
+            for value in (
+                self.repository_snapshot_alle_transacties is not None,
+                self.repository_snapshot_aandelen is not None,
+                self.aggregator_snapshot_aandelen_live is not None,
+                self.repository_snapshot_load_open_opties is not None,
+                self.aggregator_snapshot_load_open_opties_from_tx_live is not None,
+                self.repository_snapshot_open_sprinters is not None,
+                self.aggregator_snapshot_open_sprinters_live is not None,
+                self.repository_snapshot_gesloten_opties is not None,
+                self.repository_snapshot_gesloten_opties_no_broker is not None,
+                self.repository_snapshot_gesloten_sprinters is not None,
+                self.repository_snapshot_gesloten_sprinters_no_asset_detail is not None,
+                self.repository_snapshot_asset_rollup_data is not None,
+                self.repository_snapshot_active_asset_rollup_data is not None,
+                self.repository_snapshot_sprinter_referentie_data is not None,
+                self.repository_snapshot_optie_referentie_data is not None,
+                self.repository_snapshot_portfolio_value_aandelen is not None,
+                self.repository_snapshot_portfolio_value_aandelen_scenario is not None,
+                self.repository_snapshot_portfolio_value_optie_call_put_detailed is not None,
+                self.repository_snapshot_portfolio_value_optie_call_put_detailed_scenario is not None,
+                self.repository_snapshot_portfolio_value_optie is not None,
+                self.repository_snapshot_portfolio_value_sprinters is not None,
+                self.repository_snapshot_portfolio_value_sprinters_scenario is not None,
+                self.repository_snapshot_portfolio_value_total_combined_put is not None,
+                self.repository_snapshot_portfolio_value_total_combined_scenario is not None,
+                self.snapshot_aandelen_projection_v2_scenario is not None,
+                self.repository_portfolio_dividend is not None,
+                self.repository_snapshot_historical_ohlcv is not None,
+                self.repository_snapshot_historical_close is not None,
+                self.repository_snapshot_historical_close_latest is not None,
+                self.repository_snapshot_per_dag_asset_result_v2 is not None,
+                self.repository_snapshot_per_dag_asset_result_v2_latest is not None,
+                self.live_prices is not None,
+                self.repository_snapshot_test_orders_cache is not None,
+                self.repository_dirty_test_orders_assets is not None,
+                self.repository_snapshot_active_scenario_orders_flat is not None,
+                self.snapshot_optie_timevalue_live is not None,
+            )
+        )
 
     def snapshot_store_summary(self) -> str:
         """Korte tekstuele samenvatting voor debug/log."""

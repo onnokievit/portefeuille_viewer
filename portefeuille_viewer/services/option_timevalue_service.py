@@ -102,6 +102,9 @@ class OptionTimevalueService(QObject):
         "repository_snapshot_asset_rollup_data",
         "repository_snapshot_optie_referentie_data",
     }
+    _snapshot_publish_keys = {
+        "aggregator_snapshot_aandelen_live",
+    }
     _snapshot_clear_unresolved_keys = {
         "aggregator_snapshot_load_open_opties_from_tx_live",
         "repository_snapshot_optie_referentie_data",
@@ -250,6 +253,9 @@ class OptionTimevalueService(QObject):
             if snapshot_key in self._snapshot_clear_unresolved_keys:
                 self._clear_unresolved("snapshot_update")
             self.schedule_rebuild()
+            return
+        if snapshot_key in self._snapshot_publish_keys:
+            self._publish_timer.start()
 
     def _clear_unresolved(self, reason: str):
         if self._unresolved_series:
