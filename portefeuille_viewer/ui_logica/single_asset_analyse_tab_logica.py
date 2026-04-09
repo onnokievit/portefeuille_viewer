@@ -3160,18 +3160,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "optie_comment_color": 60,
         }
 
+        open_v_scroll = self.tableViewOptiesOpen.verticalScrollBar().value()
+        open_h_scroll = self.tableViewOptiesOpen.horizontalScrollBar().value()
+
         # Alle opties (volledige tabel, geen asset-filter)
-        model_all = CommentablePolarsTableModel(
-            df_all_filtered,
-            kleur_kolommen,
-            kleur_func,
-            self,
-            editable_cols={"optie_comment"},
-            commit_callback=self._on_comment_commit,
-        )
         color_priority_map = get_settings().get_comment_color_priority_map()
-        model_all.set_color_priority_map(color_priority_map)
-        model_all.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         display_headers = {
             "asset_rollup": "asset",
             "optie_call_put": "c/p",
@@ -3185,21 +3178,42 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "optie_comment": "comment",
             "optie_comment_updated_at": "updated",
         }
+
+        model_all = getattr(self, "_model_opties_all", None)
+        proxy_model = getattr(self, "_proxy_model_opties_all", None)
+        reuse_open_table = isinstance(model_all, CommentablePolarsTableModel) and isinstance(proxy_model, CommentSortProxy)
+
+        if not reuse_open_table:
+            model_all = CommentablePolarsTableModel(
+                df_all_filtered,
+                kleur_kolommen,
+                kleur_func,
+                self,
+                editable_cols={"optie_comment"},
+                commit_callback=self._on_comment_commit,
+            )
+            proxy_model = CommentSortProxy(self)
+            proxy_model.setSourceModel(model_all)
+            self.tableViewOptiesOpen.setModel(proxy_model)
+        else:
+            model_all.kleur_kolommen = kleur_kolommen
+            model_all.kleur_func = kleur_func
+            model_all.set_df(df_all_filtered)
+
+        model_all.set_color_priority_map(color_priority_map)
+        model_all.set_comment_color_text_map(get_settings().get_comment_color_text_map())
         model_all.set_display_headers(display_headers)
         self._table_model = model_all  # model_all is je hoofdmodel voor de tabel
         self._model_opties_all = model_all
-        proxy_model = CommentSortProxy(self)
-        proxy_model.setSourceModel(model_all)
+        self._proxy_model_opties_all = proxy_model
         proxy_model.setSortRole(Qt.UserRole)
         proxy_model.setDynamicSortFilter(self._opties_live_resort_enabled)
-        #print("Disconnecting click handler, replacing model")
-        # self.tableViewOptiesOpen.clicked.disconnect(self._on_table_cell_clicked)
+
         # Behoud huidige sort-indicator alleen als live resort aan staat.
         header_prev = self.tableViewOptiesOpen.horizontalHeader()
         prev_section = header_prev.sortIndicatorSection() if header_prev is not None else -1
         prev_order = header_prev.sortIndicatorOrder() if header_prev is not None else Qt.AscendingOrder
         self.tableViewOptiesOpen.setSortingEnabled(False)
-        self.tableViewOptiesOpen.setModel(proxy_model)
         if self._opties_live_resort_enabled:
             self.tableViewOptiesOpen.setSortingEnabled(True)
             if prev_section >= 0:
@@ -3244,8 +3258,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             for i, col in enumerate(df_all.columns):
                 if col in kolombreedtes:
                     header_all.resizeSection(i, kolombreedtes[col])
-        model_all.modelReset.connect(apply_widths_all)
-        model_all.layoutChanged.connect(apply_widths_all)
+        if not getattr(self, "_open_opties_model_handlers_connected", False):
+            model_all.modelReset.connect(apply_widths_all)
+            model_all.layoutChanged.connect(apply_widths_all)
+            self._open_opties_model_handlers_connected = True
         apply_widths_all()
         self.tableViewOptiesOpen.verticalHeader().setDefaultSectionSize(10)
         self.tableViewOptiesOpen.verticalHeader().setVisible(False)
@@ -3258,6 +3274,16 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if "optie_comment_textcolor" in df_all.columns:
             idx_text = df_all.columns.index("optie_comment_textcolor")
             self.tableViewOptiesOpen.setColumnHidden(idx_text, True)
+
+        def restore_open_scroll():
+            with contextlib.suppress(Exception):
+                v_scroll = self.tableViewOptiesOpen.verticalScrollBar()
+                h_scroll = self.tableViewOptiesOpen.horizontalScrollBar()
+                v_scroll.setValue(min(open_v_scroll, v_scroll.maximum()))
+                h_scroll.setValue(min(open_h_scroll, h_scroll.maximum()))
+
+        restore_open_scroll()
+        QTimer.singleShot(0, restore_open_scroll)
 
         # Put opties (wel asset-filter)
         model_put = CommentablePolarsTableModel(

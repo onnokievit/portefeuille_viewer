@@ -986,7 +986,21 @@ class OptiesOpenWebPilotTab(QWidget):
       }
       function renderHeader(){ const tr=document.getElementById("thead-row"); tr.innerHTML=""; const W=_calcWidths(); state.cols.forEach(col=>{ const th=document.createElement("th"); th.textContent=col; const w=W[col]||90; th.style.width=w+"px"; th.style.minWidth=w+"px"; th.style.maxWidth=w+"px"; if(col===state.sortCol) th.className=state.sortDir==="asc"?"sorted-asc":"sorted-desc"; th.onclick=()=>{ if(state.sortCol===col) state.sortDir=state.sortDir==="asc"?"desc":"asc"; else {state.sortCol=col; state.sortDir="asc";} if(!state.liveSortEnabled){ _seedFrozenOrderFromCurrentSort(); } renderHeader(); renderBody(); }; tr.appendChild(th); }); }
       function sortedRows(){ const rows=visibleRows(); if(state.liveSortEnabled){ rows.sort((a,b)=>compareRows(a,b,state.sortCol,state.sortDir)); return rows; } if(!state.frozenOrder.length){ _seedFrozenOrderFromCurrentSort(); } rows.sort((a,b)=>{ const ka=rowStableKey(a), kb=rowStableKey(b); const pa=Object.prototype.hasOwnProperty.call(state.frozenPos, ka)?state.frozenPos[ka]:Number.MAX_SAFE_INTEGER; const pb=Object.prototype.hasOwnProperty.call(state.frozenPos, kb)?state.frozenPos[kb]:Number.MAX_SAFE_INTEGER; if(pa!==pb) return pa-pb; return compareRows(a,b,state.sortCol,state.sortDir); }); return rows; }
-      function renderBody(){
+      function _captureTableScroll(){
+        const wrap=document.getElementById("table_wrap");
+        if(!wrap) return {top:0,left:0};
+        return {top:wrap.scrollTop||0,left:wrap.scrollLeft||0};
+      }
+      function _restoreTableScroll(pos){
+        const wrap=document.getElementById("table_wrap");
+        if(!wrap || !pos) return;
+        wrap.scrollTop = Math.max(0, Math.min(Number(pos.top||0), wrap.scrollHeight - wrap.clientHeight));
+        wrap.scrollLeft = Math.max(0, Math.min(Number(pos.left||0), wrap.scrollWidth - wrap.clientWidth));
+      }
+      function renderBody(scrollPos=null){
+        if(scrollPos===null){
+          scrollPos=_captureTableScroll();
+        }
         const body=document.getElementById("tbody");
         body.innerHTML="";
         const rows=sortedRows();
@@ -1037,6 +1051,7 @@ class OptiesOpenWebPilotTab(QWidget):
           body.appendChild(tr);
         }
         renderTimevalueSummary(rows);
+        _restoreTableScroll(scrollPos);
       }
       function renderTimevalueSummary(rows){
         let eur=0.0, usd=0.0;
@@ -1300,7 +1315,7 @@ class OptiesOpenWebPilotTab(QWidget):
           list.appendChild(li);
         }
       };
-      window.renderSnapshot = function(payload){ const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; state.frozenOrder=[]; state.frozenPos={}; _syncExpButton(); _refreshCommentColorFilterOptions(); renderHeader(); renderBody(); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } } const panelOpen = !!document.getElementById("exp_panel")?.classList.contains("open"); const keep=state.expSelected; const keepDraft = panelOpen ? new Set(Array.from(state.expDraft)) : null; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = panelOpen ? new Set(Array.from(keepDraft||[]).filter(v=>state.expOptions.includes(v))) : new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _refreshCommentColorFilterOptions(); _ensureSelection(); renderHeader(); renderBody(); };
+      window.renderSnapshot = function(payload){ const scrollPos=_captureTableScroll(); const rows=(payload&&payload.rows)?payload.rows:[]; state.rows.clear(); if(rows.length===0){ state.cols=[]; state.hasSnapshot=false; state.expOptions=[]; state.expSelected=new Set(); state.expDraft=new Set(); state.selectedRowId=null; state.selectedColIdx=0; state.frozenOrder=[]; state.frozenPos={}; _syncExpButton(); _refreshCommentColorFilterOptions(); renderHeader(); renderBody(scrollPos); renderTimevalueSummary([]); return; } for(const row of rows){ if(!row||!row.row_id) continue; state.rows.set(String(row.row_id), row); } const payloadCols=(payload&&Array.isArray(payload.cols))?payload.cols:[]; state.cols=payloadCols.length?payloadCols:["itm","broker","asset_rollup","optie_call_put","optie_exp_date","optie_strike","Koers","afwijking_pct","koers_prev","pct_change_prev","aantal_bezit","premie","totaal_resultaat_optie","time_per_unit","time_value","optie_comment","optie_comment_updated_at"]; if(!state.cols.includes(state.sortCol)) state.sortCol=state.cols.includes("asset_rollup")?"asset_rollup":state.cols[0]; if(!state.liveSortEnabled){ if(state.frozenOrder.length>0){ _syncFrozenOrderWithRows(); } else { _seedFrozenOrderFromCurrentSort(); } } const panelOpen = !!document.getElementById("exp_panel")?.classList.contains("open"); const keep=state.expSelected; const keepDraft = panelOpen ? new Set(Array.from(state.expDraft)) : null; state.expOptions=Array.from(new Set(Array.from(state.rows.values()).map(r=>_canonExp(r.optie_exp_date)).filter(Boolean))).sort(); state.expSelected=new Set(Array.from(keep).filter(v=>state.expOptions.includes(v))); state.expDraft = panelOpen ? new Set(Array.from(keepDraft||[]).filter(v=>state.expOptions.includes(v))) : new Set(Array.from(state.expSelected)); state.hasSnapshot=true; _syncExpButton(); _renderExpList(); _refreshCommentColorFilterOptions(); _ensureSelection(); renderHeader(); renderBody(scrollPos); };
       window.applyPatch = function(payload){};
       if (window.qt && window.QWebChannel) {
         new QWebChannel(qt.webChannelTransport, function(channel) {

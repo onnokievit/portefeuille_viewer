@@ -106,14 +106,14 @@ class LiveAggregatorSprinters(QObject):
         if price is not None and price > 0:
             self.live_prices[(symbol, currency)] = float(price)
 
-    def process_live_update(self):
+    def process_live_update(self, *, force_publish: bool = False):
         try:
             if SNAPSHOT_STORE.repository_snapshot_open_sprinters is None:
                 if self.verbose:
                     print("LiveAggregatorSprinters: repository_snapshot_open_sprinters niet beschikbaar")
                 return
             self.df = self._load_and_calculate()
-            if self._save_to_snapshot_store():
+            if self._save_to_snapshot_store(force_publish=force_publish):
                 self.sprintersUpdated.emit()
         except Exception as e:
             if self.verbose:
@@ -128,12 +128,16 @@ class LiveAggregatorSprinters(QObject):
         except Exception:
             return True
 
-    def _save_to_snapshot_store(self) -> bool:
+    def _save_to_snapshot_store(self, *, force_publish: bool = False) -> bool:
         frame = self.df.clone() if self.df is not None else pl.DataFrame()
         if not self._df_changed(frame):
             return False
         now_ts = time.monotonic()
-        if self._last_publish_ts and (now_ts - self._last_publish_ts) < self._publish_min_interval_sec:
+        if (
+            not force_publish
+            and self._last_publish_ts
+            and (now_ts - self._last_publish_ts) < self._publish_min_interval_sec
+        ):
             return False
         SNAPSHOT_STORE.safe_write("aggregator_snapshot_open_sprinters_live", frame)
         self._last_published_df = frame.clone()
@@ -147,10 +151,10 @@ class LiveAggregatorSprinters(QObject):
         if sb.value() >= sb.maximum() - 50:
             self.load_more_records()
 
-    def refresh_data(self):
+    def refresh_data(self, *, force_publish: bool = False):
         self._initialize_data()
         if self.df is not None and not self.df.is_empty():
-            if self._save_to_snapshot_store():
+            if self._save_to_snapshot_store(force_publish=force_publish):
                 self.sprintersUpdated.emit()
 
     def reset_for_database_change(self):

@@ -5,7 +5,7 @@ import threading
 import builtins
 import contextlib
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from collections import Counter
 from collections import deque
 from pathlib import Path
@@ -26,6 +26,9 @@ from portefeuille_viewer.services.historical_price_update_runner import STOCKDAT
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
 from portefeuille_viewer.services.db_migration_service import DbMigrationService
+from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
+from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
+from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
 from portefeuille_viewer.domain.portfolio_engine import PortfolioEngine
 from portefeuille_viewer.domain.engine_core_runtime import EngineCoreRuntime
 from portefeuille_viewer.domain.projection_bus import ProjectionRunResult
@@ -121,6 +124,9 @@ ENGINE_CORE_LOG_TOPICS = os.getenv("ENGINE_CORE_LOG_TOPICS", "0").strip() == "1"
 PROJECTION_METRICS_LOG_CONSOLE = (
     os.getenv("PROJECTION_METRICS_LOG_CONSOLE", "0").strip() == "1"
 )
+PROJECTION_METRICS_LOG_FILE = (
+    os.getenv("PROJECTION_METRICS_LOG_FILE", "0").strip() == "1"
+)
 PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC = (
     os.getenv("PROJECTION_METRICS_LOG_TIMEVALUE_TOPIC", "0").strip() == "1"
 )
@@ -168,10 +174,15 @@ _SPRINTERS_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "sprinters_open_projecti
 
 class SupportsProjectionRefresh(Protocol):
     def recompute(self, *args: Any, **kwargs: Any) -> Any: ...
-    def snapshot(self) -> Any: ...
-    def last_patch(self) -> list | None: ...
+    def snapshot(self) -> pl.DataFrame: ...
+    def last_patch(self) -> list[dict[str, Any]] | None: ...
     def version(self) -> Any: ...
-    def meta(self) -> dict: ...
+    def meta(self) -> dict[str, Any]: ...
+
+
+ProjectionPatch = list[dict[str, Any]]
+ProjectionMetricsSample = dict[str, Any]
+ProjectionDedupePolicy = Literal["always_publish", "skip_unchanged"]
 
 
 @dataclass
@@ -179,13 +190,13 @@ class ProjectionRefreshConfig:
     projection_name: str
     projection: SupportsProjectionRefresh | None
     snapshot_key: str
-    metrics_deque: deque
+    metrics_deque: deque[ProjectionMetricsSample]
     metrics_log_path: Path
     log_prefix: str
     error_prefix: str
-    skip_unchanged_publish: bool = False
-    last_published_snapshot: object | None = field(default=None)
-    last_published_patch: list | None = field(default=None)
+    dedupe_policy: ProjectionDedupePolicy = "always_publish"
+    last_published_snapshot: pl.DataFrame | None = field(default=None)
+    last_published_patch: ProjectionPatch | None = field(default=None)
 
 
 _CFG_OPTIES = ProjectionRefreshConfig(
@@ -196,7 +207,7 @@ _CFG_OPTIES = ProjectionRefreshConfig(
     metrics_log_path=_OPTIES_OPEN_PROJECTION_METRICS_LOG,
     log_prefix="[opties-projection-v2-metrics]",
     error_prefix="[opties-projection-v2]",
-    skip_unchanged_publish=True,
+    dedupe_policy="skip_unchanged",
 )
 _CFG_TIJDSWAARDE = ProjectionRefreshConfig(
     projection_name="optie_tijdswaarde_v2",
@@ -287,6 +298,8 @@ def _metrics_summary(samples: list[dict]) -> dict:
 
 
 def _append_metrics_log_to(log_path: Path, sample: dict) -> None:
+    if not PROJECTION_METRICS_LOG_FILE:
+        return
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("a", encoding="utf-8") as f:
@@ -306,7 +319,25 @@ def _df_equals(left, right) -> bool:
         return False
 
 
-def _append_projection_metrics(cfg: ProjectionRefreshConfig, sample: dict) -> dict:
+def _should_publish_projection(
+    cfg: ProjectionRefreshConfig,
+    snapshot_df: pl.DataFrame | None,
+    patch_list: ProjectionPatch,
+) -> bool:
+    if cfg.dedupe_policy == "always_publish":
+        return True
+    if cfg.dedupe_policy == "skip_unchanged":
+        return not (
+            _df_equals(cfg.last_published_snapshot, snapshot_df)
+            and cfg.last_published_patch == patch_list
+        )
+    return True
+
+
+def _append_projection_metrics(
+    cfg: ProjectionRefreshConfig,
+    sample: ProjectionMetricsSample,
+) -> dict[str, Any]:
     projection = cfg.projection
     if projection is None:
         return {"last": sample, "summary": _metrics_summary([]), "samples": [sample]}
@@ -322,7 +353,7 @@ def _append_projection_metrics(cfg: ProjectionRefreshConfig, sample: dict) -> di
     return metrics_payload
 
 
-def _empty_metrics_payload() -> dict:
+def _empty_metrics_payload() -> dict[str, Any]:
     return {"last": None, "summary": _metrics_summary([]), "samples": []}
 
 
@@ -400,8 +431,8 @@ def _publish_projection_from_runtime(
     if cfg.projection is None:
         return
     snapshot_df = cfg.projection.snapshot()
-    patch_list = cfg.projection.last_patch() or []
-    if cfg.skip_unchanged_publish and _df_equals(cfg.last_published_snapshot, snapshot_df) and cfg.last_published_patch == patch_list:
+    patch_list: ProjectionPatch = cfg.projection.last_patch() or []
+    if not _should_publish_projection(cfg, snapshot_df, patch_list):
         return
     SNAPSHOT_STORE.safe_write(cfg.snapshot_key, snapshot_df)
     SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_patch", patch_list)
@@ -427,7 +458,7 @@ def _refresh_projection_sync(cfg: ProjectionRefreshConfig, reason: str) -> None:
         t0 = time.perf_counter()
         cfg.projection.recompute()
         snapshot_df = cfg.projection.snapshot()
-        patch_list = cfg.projection.last_patch() or []
+        patch_list: ProjectionPatch = cfg.projection.last_patch() or []
         t1 = time.perf_counter()
         SNAPSHOT_STORE.safe_write(cfg.snapshot_key, snapshot_df)
         SNAPSHOT_STORE.safe_write(f"{cfg.snapshot_key}_patch", patch_list)
@@ -912,9 +943,10 @@ def _refresh_phase_repository_core() -> None:
     repository.build_repository_active_asset_rollup_data()
 
 
-def _refresh_phase_live_aggregators() -> None:
-    live_aggregator_aandelen.process_live_update()
-    live_aggregator_opties.process_live_update()
+def _refresh_phase_live_aggregators(*, force_publish: bool = False) -> None:
+    live_aggregator_aandelen.process_live_update(force_publish=force_publish)
+    live_aggregator_opties.process_live_update(force_publish=force_publish)
+    live_aggregator_sprinters.process_live_update(force_publish=force_publish)
 
 
 def _refresh_phase_portfolio_values() -> None:
@@ -934,13 +966,24 @@ def _refresh_phase_projections(reason: str) -> None:
         refresh_sprinters_open_projection(reason)
 
 
-def refresh_everything():
+def _refresh_active_scenario_overlays() -> None:
+    scenario_id = getattr(SNAPSHOT_STORE, "runtime_active_test_order_scenario_id", None)
+    enabled = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False))
+    if scenario_id is None:
+        return
+    refresh_portfolio_value_scenario_overlay_snapshot(int(scenario_id), enabled=enabled)
+    refresh_sector_scenario_overlay_snapshots(int(scenario_id), enabled=enabled)
+    refresh_aandelen_scenario_overlay_snapshot(int(scenario_id), enabled=enabled)
+
+
+def refresh_everything(*, force_live_publish: bool = False):
     start_time = time.time()
     _refresh_phase_test_orders()
     _refresh_phase_repository_core()
-    _refresh_phase_live_aggregators()
+    _refresh_phase_live_aggregators(force_publish=force_live_publish)
     _refresh_phase_portfolio_values()
     _refresh_phase_projections("refresh_everything")
+    _refresh_active_scenario_overlays()
     end_time = time.time()
     elapsed_time = end_time - start_time
     _log(SNAPSHOT_STORE.snapshot_store_summary())
@@ -1005,12 +1048,17 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
         _mark("build_repository_active_asset_rollup_data", stage_start)
         if needs_aandelen:
             stage_start = time.perf_counter()
-            live_aggregator_aandelen.process_live_update()
+            live_aggregator_aandelen.process_live_update(force_publish=True)
             _mark("live_aggregator_aandelen.process_live_update", stage_start)
         if needs_opties:
             stage_start = time.perf_counter()
-            live_aggregator_opties.process_live_update()
+            live_aggregator_opties.process_live_update(force_publish=True)
             _mark("live_aggregator_opties.process_live_update", stage_start)
+        if needs_sprinters:
+            stage_start = time.perf_counter()
+            live_aggregator_sprinters.process_live_update(force_publish=True)
+            _mark("live_aggregator_sprinters.process_live_update", stage_start)
+        if needs_opties:
             stage_start = time.perf_counter()
             repository.portfolio_value_asset_rollup_opties_put()
             _mark("portfolio_value_asset_rollup_opties_put", stage_start)
@@ -1196,6 +1244,30 @@ def main():
         # Restart timer so bursts collapse into one refresh.
         refresh_timer.start()
 
+    def _refresh_asset_result_snapshots(payload: dict | None):
+        if (payload or {}).get("status") != "ok":
+            return
+        engine_class = str((payload or {}).get("engine_class") or "").strip().lower()
+        if engine_class != "asset_result_v2":
+            return
+        repository.load_per_dag_asset_result_v2_snapshot()
+        changed_keys = {
+            "repository_snapshot_per_dag_asset_result_v2",
+            "repository_snapshot_per_dag_asset_result_v2_latest",
+        }
+        if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
+            _runtime_recompute_selected(
+                {"aandelen_v2"},
+                reason="state_engine_asset_result_v2",
+                changed_keys=changed_keys,
+            )
+        else:
+            refresh_aandelen_projection(
+                "state_engine_asset_result_v2",
+                changed_keys=changed_keys,
+                force_sync=True,
+            )
+
     def _on_snapshot_updated_for_opties_projection(snapshot_key: str):
         if snapshot_key != "aggregator_snapshot_load_open_opties_from_tx_live":
             return
@@ -1228,7 +1300,9 @@ def main():
         snapshot_counter.clear()
 
     def _run_db_change_refresh():
-        refresh_everything()
+        refresh_everything(force_live_publish=True)
+        with contextlib.suppress(Exception):
+            portfolio_engine.start_subscriptions()
         if option_timevalue_service is not None:
             option_timevalue_service.schedule_rebuild({"reason": "database_changed"})
 
@@ -1276,6 +1350,7 @@ def main():
     else:
         _log("[orders-refresh] disabled (no full refresh on ordersCommitted)")
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
+    signals.stateRebuildFinished.connect(_refresh_asset_result_snapshots)
     signals.snapshotUpdated.connect(_on_snapshot_updated_counter)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         signals.snapshotUpdated.connect(_on_snapshot_updated_for_opties_projection)
