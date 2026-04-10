@@ -410,11 +410,11 @@ class AandelenWebPilotTab(QWidget):
             engine = getattr(self.window(), "portfolio_engine", None)
             if engine is not None:
                 with contextlib.suppress(Exception):
-                    engine.live_aggregator_aandelen.refresh_data()
+                    engine.live_aggregator_aandelen.refresh_data(force_publish=True)
                 with contextlib.suppress(Exception):
-                    engine.live_aggregator_opties.refresh_data()
+                    engine.live_aggregator_opties.refresh_data(force_publish=True)
                 with contextlib.suppress(Exception):
-                    engine.live_aggregator_sprinters.refresh_data()
+                    engine.live_aggregator_sprinters.refresh_data(force_publish=True)
             from portefeuille_viewer.data.repository import (
                 portfolio_value_asset_rollup_aandelen,
                 portfolio_value_asset_rollup_combined,

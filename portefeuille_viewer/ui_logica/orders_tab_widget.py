@@ -816,6 +816,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.EDIT_ID2 = None
         self._load_initial_records()
         self.reset_form()
+        self.toggle_order2_fields()
 
         return
 
@@ -1296,7 +1297,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
         widgets = [
             "datum","broker","asset_rollup","asset_type","trans_type","aantal","prijs","fee",
-            #"lbl_exp","exp","lbl_strike","strike","lbl_cp","cp","detail",
+            "detail","exp","strike","cp",
         ]
         for key in widgets:
             if self.order2[key] is not None:  # Skip None values (like lbl_detail)
@@ -1304,6 +1305,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
 
         if visible:
             self.toggle_order2_fields()
+        else:
+            for w in [self.labelDetail, self.labelOptieExp, self.labelOptieStrike, self.labelOptieCP]:
+                if w is not None:
+                    w.setVisible(False)
 
     def toggle_order1_fields(self):
         at = self.order1["asset_type"].currentText()

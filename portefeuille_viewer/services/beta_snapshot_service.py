@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -99,16 +99,23 @@ def _read_sql_dataframe(conn: pyodbc.Connection, sql: str) -> pd.DataFrame:
     cur = conn.cursor()
     rows = cur.execute(sql).fetchall()
     columns = [col[0] for col in cur.description] if cur.description else []
-    return pd.DataFrame.from_records(rows, columns=columns)
+    # pyodbc.Row is runtime-compatible with pandas, but Pylance does not
+    # recognize it as a supported record shape for from_records.
+    normalized_rows = [tuple(row) for row in rows]
+    return pd.DataFrame.from_records(normalized_rows, columns=columns)
 
 
 def _prepare_meta(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    asset_type_series = cast(pd.Series, out["asset_type"] if "asset_type" in out.columns else pd.Series(dtype="object"))
+    regio_series = cast(pd.Series, out["regio"] if "regio" in out.columns else pd.Series(dtype="object"))
+    sector_series = cast(pd.Series, out["sector"] if "sector" in out.columns else pd.Series(dtype="object"))
+    incl_excl_series = cast(pd.Series, out["INCL_EXCL"] if "INCL_EXCL" in out.columns else pd.Series(dtype="object"))
     out["asset_rollup"] = out["asset_rollup"].astype(str).str.strip().str.upper()
-    out["asset_type"] = out.get("asset_type", pd.Series(dtype="object")).fillna("").astype(str).str.strip().str.lower()
-    out["regio"] = out.get("regio", pd.Series(dtype="object")).fillna("").astype(str).str.strip().str.upper()
-    out["sector"] = out.get("sector", pd.Series(dtype="object")).fillna("").astype(str).str.strip()
-    out["INCL_EXCL"] = pd.to_numeric(out.get("INCL_EXCL"), errors="coerce").fillna(0).astype(int)
+    out["asset_type"] = asset_type_series.fillna("").astype(str).str.strip().str.lower()
+    out["regio"] = regio_series.fillna("").astype(str).str.strip().str.upper()
+    out["sector"] = sector_series.fillna("").astype(str).str.strip()
+    out["INCL_EXCL"] = pd.to_numeric(incl_excl_series, errors="coerce").fillna(0).astype(int)
     out = out.drop_duplicates(subset=["asset_rollup"], keep="last")
     return out
 
