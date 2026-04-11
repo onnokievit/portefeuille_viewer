@@ -169,6 +169,25 @@ def load_sprinter_reference(conn) -> pl.DataFrame:
     )
 
 
+def load_asset_quote_unit(conn) -> pl.DataFrame:
+    sql = """
+        SELECT
+            asset_rollup,
+            quote_unit
+        FROM asset_rollup_data
+        WHERE asset_rollup IS NOT NULL
+    """
+    return (
+        pl.read_database(sql, conn)
+        .with_columns(
+            pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars().str.to_uppercase(),
+            pl.col("quote_unit").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().fill_null(""),
+        )
+        .select(["asset_rollup", "quote_unit"])
+        .unique(subset=["asset_rollup"])
+    )
+
+
 def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
     sql = """
         SELECT asset_rollup, datum, close
@@ -301,19 +320,37 @@ def attach_effective_close(df_daily: pl.DataFrame, df_prices: pl.DataFrame) -> p
     )
 
 
-def compute_sprinter_values(df_daily: pl.DataFrame, df_ref: pl.DataFrame) -> pl.DataFrame:
+def compute_sprinter_values(
+    df_daily: pl.DataFrame,
+    df_ref: pl.DataFrame,
+    df_quote_unit: pl.DataFrame,
+) -> pl.DataFrame:
     if df_daily.is_empty():
         return df_daily
     df = (
-        df_daily.join(df_ref, on="asset_detail", how="left")
+        df_daily
+        .with_columns(pl.col("asset_rollup").cast(pl.Utf8).str.strip_chars().str.to_uppercase())
+        .join(df_ref, on="asset_detail", how="left")
+        .join(df_quote_unit, on="asset_rollup", how="left")
         .with_columns(
             pl.col("sprinter_funding").fill_null(0.0),
             pl.col("sprinter_ratio").fill_null(1.0),
             pl.col("asset_close_raw").fill_null(0.0),
             pl.col("multiplier_close_price").fill_null(1.0),
+            pl.col("quote_unit").fill_null(""),
         )
         .with_columns(
-            (pl.col("asset_close_raw") * pl.col("multiplier_close_price")).alias("asset_close_effective")
+            pl.when(pl.col("quote_unit") == "pence")
+            .then(pl.lit(0.01))
+            .otherwise(pl.lit(1.0))
+            .alias("price_multiplier"),
+        )
+        .with_columns(
+            (
+                pl.col("asset_close_raw")
+                * pl.col("multiplier_close_price")
+                * pl.col("price_multiplier")
+            ).alias("asset_close_effective")
         )
         .with_columns(
             pl.when(pl.col("sprinter_ratio") == 0.0).then(1.0).otherwise(pl.col("sprinter_ratio")).alias("sprinter_ratio")
@@ -326,6 +363,7 @@ def compute_sprinter_values(df_daily: pl.DataFrame, df_ref: pl.DataFrame) -> pl.
             ).alias("sprinter_resultaat"),
             (pl.col("transactie_aantal") / pl.col("sprinter_ratio")).alias("sprinter_aantal_bezit"),
         )
+        .drop(["quote_unit", "price_multiplier"])
     )
     return df
 
@@ -543,6 +581,8 @@ def main() -> None:
 
         df_ref = load_sprinter_reference(conn)
         timer.mark(f"load_sprinter_reference ({df_ref.height} rows)")
+        df_quote_unit = load_asset_quote_unit(conn)
+        timer.mark(f"load_asset_quote_unit ({df_quote_unit.height} rows)")
         df_prices = load_price_history(conn, scope)
         timer.mark(f"load_price_history ({df_prices.height} rows)")
         df_state_intervals = build_state_intervals(df_tx, scope)
@@ -560,7 +600,7 @@ def main() -> None:
 
         df_final = attach_effective_close(df_daily, df_prices)
         timer.mark("attach_effective_close")
-        df_final = compute_sprinter_values(df_final, df_ref)
+        df_final = compute_sprinter_values(df_final, df_ref, df_quote_unit)
         timer.mark("compute_sprinter_values")
         df_final = normalize_for_access(df_final)
         timer.mark("normalize_for_access")
