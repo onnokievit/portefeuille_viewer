@@ -423,6 +423,22 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
     def reload_table(self):
         self.load_data()
 
+    def _set_empty_table_model(self) -> None:
+        empty_cols = [
+            "datum", "broker", "asset_rollup", "asset_detail", "asset_type", "transactie_type",
+            "aantal", "transactie_prijs", "optie_exp_date", "optie_strike", "optie_call_put",
+            "transactie_oorsprong", "order_id", "order_id_number", "optie_comment",
+            "optie_comment_color", "optie_comment_textcolor", "transactie_oorsprong_detail", "include"
+        ]
+        empty_df = pd.DataFrame(columns=empty_cols)
+        self.model = OptieEindTableModel(empty_df)
+        self._table_proxy = OptieEindSortProxy(self)
+        self._table_proxy.setSourceModel(self.model)
+        self._table_proxy.setSortRole(Qt.UserRole)
+        self.tblOptieEind.setModel(self._table_proxy)
+        self.tblOptieEind.setSortingEnabled(True)
+        self._update_include_button_label()
+
     def load_data(self):
         start_select = self.dateOptieStart.date().toPython()
         print("Start selectie datum:", start_select)
@@ -430,6 +446,18 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         print("Eind selectie datum:", eind_select)
         transactie_datum = self.dateTransactie.date().toPython()
         transactie_optie_input = SNAPSHOT_STORE.repository_snapshot_alle_transacties
+
+        if (
+            transactie_optie_input is None
+            or not hasattr(transactie_optie_input, "columns")
+            or "optie_exp_date" not in transactie_optie_input.columns
+        ):
+            self._set_empty_table_model()
+            return
+
+        if hasattr(transactie_optie_input, "is_empty") and transactie_optie_input.is_empty():
+            self._set_empty_table_model()
+            return
 
         df_transacties = transactie_optie_input.filter(
             (pl.col("optie_exp_date") >= start_select) & (pl.col("optie_exp_date") <= eind_select)

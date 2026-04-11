@@ -138,6 +138,20 @@ def load_asset_driver_beta_snapshot() -> pl.DataFrame:
         SELECT
             asset_rollup,
             home_index,
+            beta_mode,
+            driver_index,
+            beta_value,
+            lookback_code,
+            return_interval,
+            n_obs,
+            r2,
+            updated_at
+        FROM asset_driver_beta_snapshot
+    """
+    legacy_sql = """
+        SELECT
+            asset_rollup,
+            home_index,
             driver_index,
             beta_value,
             lookback_code,
@@ -149,12 +163,18 @@ def load_asset_driver_beta_snapshot() -> pl.DataFrame:
     """
     conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
     with pyodbc.connect(conn_str_stock) as conn:
-        df = pl.read_database(sql, conn)
+        try:
+            df = pl.read_database(sql, conn)
+        except Exception:
+            df = pl.read_database(legacy_sql, conn)
+            if df is not None and "beta_mode" not in df.columns:
+                df = df.with_columns(pl.lit("").cast(pl.Utf8).alias("beta_mode"))
     if df is None or df.is_empty():
         out = pl.DataFrame(
             schema={
                 "asset_rollup": pl.Utf8,
                 "home_index": pl.Utf8,
+                "beta_mode": pl.Utf8,
                 "driver_index": pl.Utf8,
                 "beta_value": pl.Float64,
                 "lookback_code": pl.Utf8,
@@ -168,6 +188,7 @@ def load_asset_driver_beta_snapshot() -> pl.DataFrame:
         out = df.with_columns([
             pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("asset_rollup"),
             pl.col("home_index").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("home_index"),
+            pl.col("beta_mode").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().alias("beta_mode"),
             pl.col("driver_index").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase().alias("driver_index"),
             pl.col("lookback_code").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().alias("lookback_code"),
             pl.col("return_interval").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().alias("return_interval"),

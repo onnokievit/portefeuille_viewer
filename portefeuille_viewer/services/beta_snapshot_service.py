@@ -78,7 +78,7 @@ def rebuild_asset_driver_beta_snapshot(stock_db_path: str) -> dict[str, Any]:
 
 def _load_asset_metadata(conn: pyodbc.Connection) -> pd.DataFrame:
     sql = """
-        SELECT asset_rollup, [type] AS asset_type, regio, sector, INCL_EXCL
+        SELECT asset_rollup, [type] AS asset_type, regio, sector, INCL_EXCL, home_index, beta_mode
         FROM asset_rollup_data
         WHERE asset_rollup IS NOT NULL
     """
@@ -111,11 +111,15 @@ def _prepare_meta(df: pd.DataFrame) -> pd.DataFrame:
     regio_series = cast(pd.Series, out["regio"] if "regio" in out.columns else pd.Series(dtype="object"))
     sector_series = cast(pd.Series, out["sector"] if "sector" in out.columns else pd.Series(dtype="object"))
     incl_excl_series = cast(pd.Series, out["INCL_EXCL"] if "INCL_EXCL" in out.columns else pd.Series(dtype="object"))
+    home_index_series = cast(pd.Series, out["home_index"] if "home_index" in out.columns else pd.Series(dtype="object"))
+    beta_mode_series = cast(pd.Series, out["beta_mode"] if "beta_mode" in out.columns else pd.Series(dtype="object"))
     out["asset_rollup"] = out["asset_rollup"].astype(str).str.strip().str.upper()
     out["asset_type"] = asset_type_series.fillna("").astype(str).str.strip().str.lower()
     out["regio"] = regio_series.fillna("").astype(str).str.strip().str.upper()
     out["sector"] = sector_series.fillna("").astype(str).str.strip()
     out["INCL_EXCL"] = pd.to_numeric(incl_excl_series, errors="coerce").fillna(0).astype(int)
+    out["home_index"] = home_index_series.fillna("").astype(str).str.strip().str.upper()
+    out["beta_mode"] = beta_mode_series.fillna("").astype(str).str.strip().str.lower()
     out = out.drop_duplicates(subset=["asset_rollup"], keep="last")
     return out
 
@@ -201,10 +205,12 @@ def _build_snapshot_rows(meta: pd.DataFrame, returns_wide: pd.DataFrame, drivers
                 r2 = (corr * corr) if np.isfinite(corr) else None
                 meta_row = meta_by_asset.loc[asset_rollup] if asset_rollup in meta_by_asset.index else None
                 home_index = _infer_home_index(meta_row, driver_set)
+                beta_mode = str(meta_row.get("beta_mode") or "").strip().lower() if meta_row is not None else ""
                 rows.append(
                     (
                         asset_rollup,
                         home_index,
+                        beta_mode,
                         driver,
                         float(beta_value),
                         lookback_code,
@@ -223,6 +229,9 @@ def _infer_home_index(meta_row: pd.Series | None, driver_set: set[str]) -> str |
     asset_rollup = str(meta_row.get("asset_rollup") or "").strip().upper()
     if asset_rollup in driver_set:
         return asset_rollup
+    manual = str(meta_row.get("home_index") or "").strip().upper()
+    if manual:
+        return manual
     region = str(meta_row.get("regio") or "").strip().upper()
     sector = str(meta_row.get("sector") or "").strip().upper()
     if region == "US":
@@ -242,6 +251,7 @@ def _ensure_beta_snapshot_table(conn: pyodbc.Connection) -> None:
                 Id AUTOINCREMENT PRIMARY KEY,
                 asset_rollup TEXT(64),
                 home_index TEXT(64),
+                beta_mode TEXT(32),
                 driver_index TEXT(64),
                 beta_value DOUBLE,
                 lookback_code TEXT(16),
@@ -259,6 +269,7 @@ def _ensure_beta_snapshot_table(conn: pyodbc.Connection) -> None:
         cols = set()
     for col_name, ddl in [
         ("home_index", f"ALTER TABLE {BETA_SNAPSHOT_TABLE} ADD COLUMN home_index TEXT(64)"),
+        ("beta_mode", f"ALTER TABLE {BETA_SNAPSHOT_TABLE} ADD COLUMN beta_mode TEXT(32)"),
         ("driver_index", f"ALTER TABLE {BETA_SNAPSHOT_TABLE} ADD COLUMN driver_index TEXT(64)"),
         ("beta_value", f"ALTER TABLE {BETA_SNAPSHOT_TABLE} ADD COLUMN beta_value DOUBLE"),
         ("lookback_code", f"ALTER TABLE {BETA_SNAPSHOT_TABLE} ADD COLUMN lookback_code TEXT(16)"),
@@ -293,8 +304,8 @@ def _replace_snapshot_rows(conn: pyodbc.Connection, rows: list[tuple]) -> None:
     cur.executemany(
         f"""
         INSERT INTO {BETA_SNAPSHOT_TABLE}
-            (asset_rollup, home_index, driver_index, beta_value, lookback_code, return_interval, n_obs, r2, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (asset_rollup, home_index, beta_mode, driver_index, beta_value, lookback_code, return_interval, n_obs, r2, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
     )

@@ -309,7 +309,7 @@ class GeneratedOptionOrdersDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Generated Option Orders")
+        self.setWindowTitle("Optie Scenario")
         self.setWindowFlag(Qt.Window, True)
         self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)

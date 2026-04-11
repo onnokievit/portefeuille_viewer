@@ -67,7 +67,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 self._on_put_otm_ratio_changed(self.putOTMRatio.value())
             except Exception:
                 pass
-        self.btnGeneratedOptions = QPushButton("Generated options", self)
+        self.btnGeneratedOptions = QPushButton("Optie Scenario", self)
         self.btnGeneratedOptions.setGeometry(10, 34, 150, 28)
         self.btnGeneratedOptions.clicked.connect(self._open_generated_options_dialog)
         self.checkEnableTestOrders = QCheckBox("Enable", self)

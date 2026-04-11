@@ -235,7 +235,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.btnClearFilter = getattr(self.ui, "btnClearFilter", None) or getattr(self.ui, "pushButton_2", None)
         if self.btnClearFilter is not None:
             self.btnClearFilter.clicked.connect(self._on_clear_filters_clicked)
-            self.btnGeneratedOptions = QPushButton("Generated options", self.ui.widget)
+            self.btnGeneratedOptions = QPushButton("Optie Scenario", self.ui.widget)
             self.checkEnableTestOrders = QCheckBox("Enable", self.ui.widget)
             self.checkEnableTestOrders.setChecked(bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)))
             parent_layout = self.btnClearFilter.parentWidget().layout() if self.btnClearFilter.parentWidget() is not None else None

@@ -62,13 +62,18 @@ class SnapshotStore:
     repository_dirty_test_order_scenarios: bool
     repository_snapshot_active_scenario_orders_flat: pl.DataFrame | None
     repository_snapshot_active_scenario_orders_by_asset: dict[str, pl.DataFrame]
+    repository_snapshot_beta_shift_scenarios: pl.DataFrame | None
+    repository_snapshot_beta_shift_scenario_content: dict[int, dict[str, float]]
     runtime_bucket23_out_of_sync: bool
     runtime_bucket23_dirty_reason: str | None
     runtime_active_test_order_scenario_id: int | None
+    runtime_active_beta_shift_scenario_id: int | None
     runtime_test_orders_enabled: bool
+    runtime_beta_shift_enabled: bool
     runtime_price_shift_pct: float
     runtime_price_shift_driver: str | None
     runtime_price_shift_lookback: str
+    runtime_price_shift_by_index: dict[str, float]
     repository_snapshot_open_optie_comments: pl.DataFrame | None
     repository_dirty_open_optie_comments: list
     snapshot_optie_timevalue_live: pl.DataFrame | None
@@ -129,13 +134,18 @@ class SnapshotStore:
             "repository_dirty_test_order_scenarios": False,
             "repository_snapshot_active_scenario_orders_flat": None,
             "repository_snapshot_active_scenario_orders_by_asset": {},
+            "repository_snapshot_beta_shift_scenarios": None,
+            "repository_snapshot_beta_shift_scenario_content": {},
             "runtime_bucket23_out_of_sync": True,
             "runtime_bucket23_dirty_reason": bucket_reason,
             "runtime_active_test_order_scenario_id": None,
+            "runtime_active_beta_shift_scenario_id": None,
             "runtime_test_orders_enabled": False,
+            "runtime_beta_shift_enabled": False,
             "runtime_price_shift_pct": 0.0,
             "runtime_price_shift_driver": None,
             "runtime_price_shift_lookback": "12m",
+            "runtime_price_shift_by_index": {},
             "repository_snapshot_open_optie_comments": None,
             "repository_dirty_open_optie_comments": [],
             "snapshot_optie_timevalue_live": None,
