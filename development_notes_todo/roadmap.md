@@ -755,6 +755,8 @@ Deze informatie blijft alleen als archief/context bestaan.
 2026-03-29
 
 
+
+
 ## 8. Scenario-context voor vervolggesprekken
 Voor een nieuw gesprek of nieuwe engineer zijn de drie belangrijkste documenten nu:
 - `development_notes_todo/development_notes.md`: huidige architectuur van de app en scenario-opzet;
@@ -766,3 +768,24 @@ De kernboodschap voor vervolgwerk is:
 - scenario-simulatie gebruikt niet meer de oude transactietabelinjectie als hoofdroute;
 - de huidige simulatie-V1 is functioneel voor bucket 1 en generated optie-buckets 2/3;
 - de eerstvolgende logische simulatie-uitbreiding is `Sprinters Open`.
+
+
+### 9. sprinter state_engine updaten naar gebruik van de stock split tabel in plaats van de close_multiplier
+
+- nu close multiplier nog in gebruik bij de sprinter v2 tabel
+- dit moet omgezet worden naar optie methode. 
+- checken of dat bij sprinters goed gaat met looptijden van oude sprinters / nieuwe sprinters
+- mogelijk: hele sprinter state engine vervangen door de optie state engine, en daar ratio en pence inbouwen, runnen op test data of de stock split multiplier goed meegenomen wordt
+- zie document sprinters_gbp_oplossing.md
+
+## 10. single asset analyse splitsen naar broker
+- 
+
+
+## 11. net_change in aandelen correct maken voor broker. (bij selectie broker, moet net_change netjes meerrekenen.)
+
+- mogelijke opzet, broker aan: kolom wordt toegevoegd, en voor elk asset een rij voor elke broker 
+- (dus 3 rijen abn, rij resultaat degiro, resultaat lynx etc)
+- en/of de filter gebruiken
+
+

@@ -1,10 +1,11 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui_logica.state_engine_tasks_dialog import StateEngineTasksDialog
 
 class SettingsTab(QWidget, Ui_SettingsTab):
 
@@ -12,6 +13,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         super().__init__(parent)
         self.setupUi(self)
         self.settings_manager = get_settings()
+        self._state_engine_tasks_dialog = None
         # Laad EUR/USD waarde uit settings.ini
         eurusd = self.settings_manager.get_eurusd()
         self.txtEURUSD.setText(str(eurusd))
@@ -31,6 +33,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
             self.load_comment_colors()
 
         self._init_ui_color_settings()
+        self._init_state_engine_task_controls()
 
     def _init_ui_color_settings(self):
         if not hasattr(self, "groupBox_2"):
@@ -78,6 +81,31 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._refresh_tab_inactive_button()
         self._refresh_tab_active_button()
         self._refresh_tab_hover_button()
+
+    def _init_state_engine_task_controls(self):
+        group = QGroupBox("State Engine")
+        layout = QVBoxLayout(group)
+        row = QHBoxLayout()
+        label = QLabel("Handmatige rebuild taken klaarzetten en draaien via dezelfde queue-flow.")
+        row.addWidget(label)
+        row.addStretch(1)
+        self._button_state_engine_tasks = QPushButton("State Engine Tasks")
+        self._button_state_engine_tasks.clicked.connect(self._open_state_engine_tasks_dialog)
+        row.addWidget(self._button_state_engine_tasks)
+        layout.addLayout(row)
+
+        insert_index = max(0, self.verticalLayout_main.count() - 1)
+        self.verticalLayout_main.insertWidget(insert_index, group)
+
+    def _open_state_engine_tasks_dialog(self):
+        if self._state_engine_tasks_dialog is None:
+            self._state_engine_tasks_dialog = StateEngineTasksDialog(self)
+            self._state_engine_tasks_dialog.destroyed.connect(
+                lambda *_args: setattr(self, "_state_engine_tasks_dialog", None)
+            )
+        self._state_engine_tasks_dialog.show()
+        self._state_engine_tasks_dialog.raise_()
+        self._state_engine_tasks_dialog.activateWindow()
 
     def _refresh_header_color_button(self):
         color = self.settings_manager.get_table_header_bg()

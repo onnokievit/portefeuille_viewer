@@ -78,6 +78,25 @@ class StateEngineRunner(QObject):
         self.handle_rebuild_requested(payload)
         return True
 
+    def queue_pending_rebuild(self, payload: dict) -> bool:
+        normalized = self._normalize_payload(payload)
+        if not normalized:
+            print(f"[state-engine-runner] ignored manual pending payload (empty/invalid): {payload}")
+            return False
+        self._enqueue_order_rebuild_payload(normalized)
+        return True
+
+    def get_runtime_status(self) -> dict:
+        payload = dict(self._current_payload or {})
+        return {
+            "running": self._process is not None,
+            "payload": payload,
+            "engine_class": payload.get("engine_class"),
+            "from_date": payload.get("from_date"),
+            "affected_assets": list(payload.get("affected_assets") or []),
+            "reason": payload.get("reason"),
+        }
+
     def get_pending_order_rebuild_summary(self) -> dict:
         db_path = getattr(repository, "db_path", None)
         if not db_path:
@@ -931,6 +950,8 @@ class StateEngineRunner(QObject):
         process.setArguments(arguments)
         process.finished.connect(self._on_process_finished)
         process.errorOccurred.connect(self._on_process_error)
+        process.readyReadStandardOutput.connect(self._on_process_stdout)
+        process.readyReadStandardError.connect(self._on_process_stderr)
         self._process = process
         process.start()
 
@@ -1090,6 +1111,38 @@ class StateEngineRunner(QObject):
         self._current_payload = None
         signals.stateRebuildFailed.emit(f"State-engine procesfout: {process_error}. payload={payload}")
         self._start_next()
+
+    def _emit_process_output(self, stream: str, text: str) -> None:
+        payload = dict(self._current_payload or {})
+        cleaned = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        for line in cleaned.split("\n"):
+            message = line.strip()
+            if not message:
+                continue
+            signals.queued_emit_stateRebuildOutput(
+                {
+                    "stream": stream,
+                    "text": message,
+                    "engine_class": payload.get("engine_class"),
+                    "reason": payload.get("reason"),
+                    "from_date": payload.get("from_date"),
+                    "affected_assets": list(payload.get("affected_assets") or []),
+                }
+            )
+
+    def _on_process_stdout(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        text = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self._emit_process_output("stdout", text)
+
+    def _on_process_stderr(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        text = bytes(process.readAllStandardError()).decode("utf-8", errors="replace")
+        self._emit_process_output("stderr", text)
 
     def _start_run_journal(self, payload: dict) -> None:
         db_path = getattr(repository, "db_path", None)

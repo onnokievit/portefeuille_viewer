@@ -75,7 +75,7 @@ Doel:
 ## Fase 3: Legacy removal matrix
 - [x] legacy tabs en bijbehorende logica in kaart
 - [x] per legacy component afhankelijkheden bepalen
-- [x] removal waves definiëren
+- [x] removal waves definiï¿½ren
 
 ## Fase 4: Gefaseerde verwijdering
 - [x] wave 1
@@ -2386,3 +2386,4 @@ Nog niet als vervolg opgepakt:
 - beoordelen of Optie Tijdswaarde nog scenario-aware moet worden
 - eventuele inhoudelijke validatie van overlaylogica per assettype op grotere scenario-sets
 - lichte cleanup van overlay-services en logging nu de architectuurrichting vaststaat
+

@@ -31,6 +31,9 @@ class Signals(QObject):
     # Emitted when a state-engine rebuild fails. Payload: error message.
     stateRebuildFailed = Signal(str)
 
+    # Emitted while a state-engine rebuild process writes output. Payload: dict
+    stateRebuildOutput = Signal(dict)
+
     # Emitted when a historical price update is requested. Payload: dict with scope/context.
     priceUpdateRequested = Signal(dict)
 
@@ -68,6 +71,7 @@ class Signals(QObject):
     _stateRebuildStartedRequested = Signal(dict)
     _stateRebuildFinishedRequested = Signal(dict)
     _stateRebuildFailedRequested = Signal(str)
+    _stateRebuildOutputRequested = Signal(dict)
     _priceUpdateRequestedRequested = Signal(dict)
     _priceUpdateStartedRequested = Signal(dict)
     _priceUpdateFinishedRequested = Signal(dict)
@@ -85,6 +89,7 @@ class Signals(QObject):
         self._stateRebuildStartedRequested.connect(self._emit_stateRebuildStarted, Qt.QueuedConnection)
         self._stateRebuildFinishedRequested.connect(self._emit_stateRebuildFinished, Qt.QueuedConnection)
         self._stateRebuildFailedRequested.connect(self._emit_stateRebuildFailed, Qt.QueuedConnection)
+        self._stateRebuildOutputRequested.connect(self._emit_stateRebuildOutput, Qt.QueuedConnection)
         self._priceUpdateRequestedRequested.connect(self._emit_priceUpdateRequested, Qt.QueuedConnection)
         self._priceUpdateStartedRequested.connect(self._emit_priceUpdateStarted, Qt.QueuedConnection)
         self._priceUpdateFinishedRequested.connect(self._emit_priceUpdateFinished, Qt.QueuedConnection)
@@ -130,6 +135,10 @@ class Signals(QObject):
     @Slot(str)
     def _emit_stateRebuildFailed(self, message: str):
         self.stateRebuildFailed.emit(message)
+
+    @Slot(dict)
+    def _emit_stateRebuildOutput(self, payload: dict):
+        self.stateRebuildOutput.emit(payload)
 
     @Slot(dict)
     def _emit_priceUpdateRequested(self, payload: dict):
@@ -180,6 +189,9 @@ class Signals(QObject):
 
     def queued_emit_stateRebuildFailed(self, message: str):
         self._stateRebuildFailedRequested.emit(message)
+
+    def queued_emit_stateRebuildOutput(self, payload: dict):
+        self._stateRebuildOutputRequested.emit(payload)
 
     def queued_emit_priceUpdateRequested(self, payload: dict):
         self._priceUpdateRequestedRequested.emit(payload)
