@@ -788,4 +788,9 @@ De kernboodschap voor vervolgwerk is:
 - (dus 3 rijen abn, rij resultaat degiro, resultaat lynx etc)
 - en/of de filter gebruiken
 
+## portfolio review lezen op chatgpt (discusssie) en finding implementeren
 
+- vega heatmap
+- theta per kapitaal set (rendementsefficientie)
+- beta adjusted exposure
+(ongeveer bij 1/3 van de chat)
