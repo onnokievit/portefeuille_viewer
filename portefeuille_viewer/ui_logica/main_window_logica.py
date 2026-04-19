@@ -1,6 +1,6 @@
 import contextlib
 from PySide6.QtWidgets import QMainWindow, QProxyStyle, QTabBar
-from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtGui import QShortcut, QKeySequence, QGuiApplication
 from PySide6.QtCore import Qt
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
 from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
@@ -36,6 +36,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self._register_tabs()
         self._apply_saved_tab_order()
+        self._restore_geometry()
 
         self.tabWidget.currentChanged.connect(self._on_tab_changed)
         self._on_tab_changed(self.tabWidget.currentIndex())
@@ -49,6 +50,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shortcut_focus_tabbar.activated.connect(lambda: self.tabWidget.tabBar().setFocus())
 
     
+    def _restore_geometry(self):
+        geo = get_settings().get_main_window_geometry()
+        if geo:
+            screens = QGuiApplication.screens()
+            on_screen = any(s.geometry().contains(geo['x'] + 50, geo['y'] + 50) for s in screens)
+            if on_screen:
+                self.setGeometry(geo['x'], geo['y'], geo['w'], geo['h'])
+                state = geo.get('state', 'normal')
+                if state == 'fullscreen':
+                    self.showFullScreen()
+                elif state == 'maximized':
+                    self.showMaximized()
+                return
+        self.resize(1280, 800)
+
     def eventFilter(self, obj, event):
         from PySide6.QtCore import QEvent, Qt
         if event.type() == QEvent.KeyPress:
@@ -211,6 +227,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         with contextlib.suppress(Exception):
             if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "flush_step_settings_to_db"):
                 self.single_asset_analyse_tab.flush_step_settings_to_db()
+
+        # Save window geometry and state
+        with contextlib.suppress(Exception):
+            ws = self.windowState()
+            if ws & Qt.WindowFullScreen:
+                state = 'fullscreen'
+            elif ws & Qt.WindowMaximized:
+                state = 'maximized'
+            else:
+                state = 'normal'
+            g = self.geometry()
+            get_settings().set_main_window_geometry(g.x(), g.y(), g.width(), g.height(), state)
 
         print("closeEvent triggered!")
         super().closeEvent(event)

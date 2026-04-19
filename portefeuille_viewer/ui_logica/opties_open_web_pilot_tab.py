@@ -95,7 +95,7 @@ class OptiesOpenWebPilotTab(QWidget):
         from portefeuille_viewer.ui_logica.timevalue_chart_web_dialog import TimeValueChartWebDialog
         dialog = getattr(self, "_timevalue_chart_web_dialog", None)
         if dialog is None:
-            dialog = TimeValueChartWebDialog(self)
+            dialog = TimeValueChartWebDialog(None)
             self._timevalue_chart_web_dialog = dialog
         dialog.show()
         dialog.raise_()

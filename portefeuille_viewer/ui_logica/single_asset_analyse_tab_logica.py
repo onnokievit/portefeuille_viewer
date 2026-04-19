@@ -1110,7 +1110,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _open_scenario_builder(self):
         dialog = getattr(self, "_generated_option_orders_dialog", None)
         if dialog is None:
-            dialog = GeneratedOptionOrdersDialog(self)
+            dialog = GeneratedOptionOrdersDialog(None)
             dialog.setModal(False)
             self._generated_option_orders_dialog = dialog
         dialog.show()

@@ -35,6 +35,12 @@ LOCAL_ONLY_KEYS = {
         "tab_active_bg",
         "tab_hover_bg",
         "aandelen_web_col_widths",
+        "laatste_transacties_col_widths",
+        "theta_window_geometry",
+        "laatste_transacties_window_geometry",
+        "scenario_editor_window_geometry",
+        "main_window_geometry",
+        "beta_scenario_window_geometry",
     },
     "app": {"last_database"},
 }
@@ -353,6 +359,119 @@ class SettingsManager:
             if iv > 0:
                 clean[key] = iv
         self.config.set('ui', 'aandelen_web_col_widths', json.dumps(clean, ensure_ascii=False))
+        self.save()
+
+    def get_laatste_transacties_col_widths(self) -> Dict[str, int]:
+        raw = self.config.get('ui', 'laatste_transacties_col_widths', fallback='{}')
+        try:
+            obj = json.loads(raw)
+            if not isinstance(obj, dict):
+                return {}
+            return {str(k).strip(): int(v) for k, v in obj.items() if str(k).strip() and int(v) > 0}
+        except Exception:
+            return {}
+
+    def set_laatste_transacties_col_widths(self, widths: Dict[str, int]):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean = {str(k).strip(): int(v) for k, v in (widths or {}).items()
+                 if str(k).strip() and int(v) > 0}
+        self.config.set('ui', 'laatste_transacties_col_widths', json.dumps(clean, ensure_ascii=False))
+        self.save()
+
+    def get_theta_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'theta_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            obj = json.loads(raw)
+            if all(k in obj for k in ('x', 'y', 'w', 'h')):
+                return obj
+        except Exception:
+            pass
+        return None
+
+    def set_theta_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'theta_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_laatste_transacties_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'laatste_transacties_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            obj = json.loads(raw)
+            if all(k in obj for k in ('x', 'y', 'w', 'h')):
+                return obj
+        except Exception:
+            pass
+        return None
+
+    def set_laatste_transacties_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'laatste_transacties_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_scenario_editor_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'scenario_editor_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            obj = json.loads(raw)
+            if all(k in obj for k in ('x', 'y', 'w', 'h')):
+                return obj
+        except Exception:
+            pass
+        return None
+
+    def set_scenario_editor_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'scenario_editor_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_main_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'main_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if all(k in data for k in ('x', 'y', 'w', 'h')):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_main_window_geometry(self, x: int, y: int, w: int, h: int, state: str = 'normal'):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'main_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h, 'state': state}))
+        self.save()
+
+    def get_beta_scenario_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'beta_scenario_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if all(k in data for k in ('x', 'y', 'w', 'h')):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_beta_scenario_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'beta_scenario_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
         self.save()
 
     def get_tab_order(self) -> list[str]:

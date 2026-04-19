@@ -255,6 +255,11 @@ class Ui_OrdersTabUI(object):
 
         self.horizontalLayoutButtons.addWidget(self.comboDatabase)
 
+        self.buttonLaatsteTransacties = QPushButton(OrdersTabUI)
+        self.buttonLaatsteTransacties.setObjectName(u"buttonLaatsteTransacties")
+
+        self.horizontalLayoutButtons.addWidget(self.buttonLaatsteTransacties)
+
         self.horizontalSpacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.horizontalLayoutButtons.addItem(self.horizontalSpacer)
@@ -339,6 +344,7 @@ class Ui_OrdersTabUI(object):
         self.buttonReset.setText(QCoreApplication.translate("OrdersTabUI", u"Reset", None))
         self.buttonDelete.setText(QCoreApplication.translate("OrdersTabUI", u"Verwijderen", None))
         self.labelDatabase.setText(QCoreApplication.translate("OrdersTabUI", u"Database:", None))
+        self.buttonLaatsteTransacties.setText(QCoreApplication.translate("OrdersTabUI", u"Laatste transacties", None))
         self.labelFilter.setText(QCoreApplication.translate("OrdersTabUI", u"Filter:", None))
         self.buttonClearFilters.setText(QCoreApplication.translate("OrdersTabUI", u"Filters wissen", None))
         pass

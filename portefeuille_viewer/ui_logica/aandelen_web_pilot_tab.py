@@ -8,6 +8,7 @@ from decimal import Decimal
 import polars as pl
 
 from PySide6.QtCore import QObject, Qt, QTimer, Slot
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -423,7 +424,6 @@ class AandelenWebPilotTab(QWidget):
         dialog = getattr(self, "_beta_scenario_dialog", None)
         if dialog is None:
             dialog = BetaScenarioWebDialog(self)
-            dialog.setModal(False)
             self._beta_scenario_dialog = dialog
         dialog.show()
         dialog.raise_()
@@ -1788,7 +1788,7 @@ class AandelenWebPilotTab(QWidget):
 
 class BetaScenarioWebDialog(QDialog):
     def __init__(self, tab: AandelenWebPilotTab):
-        super().__init__(tab)
+        super().__init__(None)
         self._tab = tab
         self._js_ready = False
         self._pending_meta: dict | None = None
@@ -1798,7 +1798,7 @@ class BetaScenarioWebDialog(QDialog):
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
         self.setWindowFlag(Qt.WindowCloseButtonHint, True)
         self.setModal(False)
-        self.resize(760, 680)
+        self._restore_geometry()
         layout = QVBoxLayout(self)
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
@@ -1812,6 +1812,24 @@ class BetaScenarioWebDialog(QDialog):
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_loaded)
         self.web.setHtml(self._html_template())
+
+    def _restore_geometry(self):
+        from portefeuille_viewer.config import get_settings
+        geo = get_settings().get_beta_scenario_window_geometry()
+        if geo:
+            screens = QGuiApplication.screens()
+            on_screen = any(s.geometry().contains(geo['x'] + 50, geo['y'] + 50) for s in screens)
+            if on_screen:
+                self.setGeometry(geo['x'], geo['y'], geo['w'], geo['h'])
+                return
+        self.resize(760, 680)
+
+    def closeEvent(self, event):
+        from portefeuille_viewer.config import get_settings
+        g = self.geometry()
+        get_settings().set_beta_scenario_window_geometry(g.x(), g.y(), g.width(), g.height())
+        event.ignore()
+        self.hide()
 
     def _on_loaded(self, ok: bool) -> None:
         self._js_ready = bool(ok)

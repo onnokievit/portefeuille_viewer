@@ -215,6 +215,7 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.buttonSave.clicked.connect(self.on_save_clicked)
         self.buttonReset.clicked.connect(self.on_reset_clicked)
         self.buttonDelete.clicked.connect(self.on_delete_clicked)
+        self.buttonLaatsteTransacties.clicked.connect(self._on_laatste_transacties_clicked)
         self.comboAssetType1.currentTextChanged.connect(self.on_asset_type1_changed)
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)
@@ -1475,6 +1476,17 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         }}
         """
         self.comboDatabase.setStyleSheet(css)
+
+    def _on_laatste_transacties_clicked(self):
+        from portefeuille_viewer.ui_logica.laatste_transacties_dialog import LaatstTransactiesDialog
+        if not hasattr(self, "_laatste_transacties_dlg") or self._laatste_transacties_dlg is None:
+            self._laatste_transacties_dlg = LaatstTransactiesDialog(None)
+            self._laatste_transacties_dlg.finished.connect(
+                lambda: setattr(self, "_laatste_transacties_dlg", None)
+            )
+        self._laatste_transacties_dlg.show()
+        self._laatste_transacties_dlg.raise_()
+        self._laatste_transacties_dlg.activateWindow()
 
     def set_items(self, items):
         items_sorted = sorted([str(x) for x in items], key=str.lower)

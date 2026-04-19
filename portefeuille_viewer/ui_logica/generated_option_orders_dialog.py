@@ -3,6 +3,7 @@ from __future__ import annotations
 import polars as pl
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -315,7 +316,7 @@ class GeneratedOptionOrdersDialog(QDialog):
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
         self.setWindowFlag(Qt.WindowCloseButtonHint, True)
         self.setSizeGripEnabled(True)
-        self.resize(1180, 760)
+        self._restore_geometry()
         self._scenario_id: int | None = None
         self._bucket1_df = pl.DataFrame()
         self._bucket2_df = pl.DataFrame()
@@ -616,7 +617,16 @@ class GeneratedOptionOrdersDialog(QDialog):
         self._itm_filter_options = sorted({str(r.get("itm_otm") or "").strip() for r in rows if str(r.get("itm_otm") or "").strip()})
         self._itm_filter_selected = {v for v in self._itm_filter_selected if v in self._itm_filter_options}
         self._fill_filter_combo(self.filterCp, sorted({str(r.get("optie_call_put") or "").strip() for r in rows if str(r.get("optie_call_put") or "").strip()}))
-        self._exp_filter_options = sorted({str(r.get("optie_exp_date") or "").strip() for r in rows if str(r.get("optie_exp_date") or "").strip()})
+        def _exp_sort_key(s: str):
+            try:
+                d, m, y = s.split("-")
+                return (int(y), int(m), int(d))
+            except Exception:
+                return (9999, 99, 99)
+        self._exp_filter_options = sorted(
+            {str(r.get("optie_exp_date") or "").strip() for r in rows if str(r.get("optie_exp_date") or "").strip()},
+            key=_exp_sort_key,
+        )
         self._exp_filter_selected = {v for v in self._exp_filter_selected if v in self._exp_filter_options}
         self._sync_broker_button()
         self._sync_asset_button()
@@ -1313,3 +1323,24 @@ class GeneratedOptionOrdersDialog(QDialog):
             return
         self._reload_tables()
         self.labelStatus.setText(f"Scenario {self.comboScenario.currentText()} opgeslagen.")
+
+    def _restore_geometry(self):
+        from portefeuille_viewer.config import get_settings
+        geo = get_settings().get_scenario_editor_window_geometry()
+        if geo:
+            screens = QGuiApplication.screens()
+            on_screen = any(
+                s.geometry().contains(geo['x'] + 50, geo['y'] + 50)
+                for s in screens
+            )
+            if on_screen:
+                self.setGeometry(geo['x'], geo['y'], geo['w'], geo['h'])
+                return
+        self.resize(1180, 760)
+
+    def closeEvent(self, event):
+        from portefeuille_viewer.config import get_settings
+        g = self.geometry()
+        get_settings().set_scenario_editor_window_geometry(g.x(), g.y(), g.width(), g.height())
+        event.ignore()
+        self.hide()
