@@ -41,6 +41,10 @@ LOCAL_ONLY_KEYS = {
         "scenario_editor_window_geometry",
         "main_window_geometry",
         "beta_scenario_window_geometry",
+        "month_end_chart_window_geometry",
+        "month_end_chart_state",
+        "month_end_diff_chart_window_geometry",
+        "month_end_diff_chart_state",
     },
     "app": {"last_database"},
 }
@@ -472,6 +476,80 @@ class SettingsManager:
             self.config.add_section('ui')
         self.config.set('ui', 'beta_scenario_window_geometry',
                         json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_month_end_chart_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'month_end_chart_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if all(k in data for k in ('x', 'y', 'w', 'h')):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_month_end_chart_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'month_end_chart_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_month_end_chart_state(self) -> dict | None:
+        raw = self.config.get('ui', 'month_end_chart_state', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_month_end_chart_state(self, state: dict):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'month_end_chart_state', json.dumps(state, ensure_ascii=False))
+        self.save()
+
+    def get_month_end_diff_chart_window_geometry(self) -> dict | None:
+        raw = self.config.get('ui', 'month_end_diff_chart_window_geometry', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if all(k in data for k in ('x', 'y', 'w', 'h')):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_month_end_diff_chart_window_geometry(self, x: int, y: int, w: int, h: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'month_end_diff_chart_window_geometry',
+                        json.dumps({'x': x, 'y': y, 'w': w, 'h': h}))
+        self.save()
+
+    def get_month_end_diff_chart_state(self) -> dict | None:
+        raw = self.config.get('ui', 'month_end_diff_chart_state', fallback='')
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+        return None
+
+    def set_month_end_diff_chart_state(self, state: dict):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'month_end_diff_chart_state', json.dumps(state, ensure_ascii=False))
         self.save()
 
     def get_tab_order(self) -> list[str]:

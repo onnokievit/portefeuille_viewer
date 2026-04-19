@@ -279,7 +279,10 @@ class LaatstTransactiesDialog(QDialog):
 
     def closeEvent(self, event):
         self._save_geometry()
-        super().closeEvent(event)
+        if getattr(self, '_force_close', False):
+            event.accept()
+        else:
+            event.accept()  # deze dialog sluit normaal bij X
 
     # ------------------------------------------------------------------
     # Kolombreedte persistentie

@@ -9,7 +9,7 @@ from portefeuille_viewer.ui.sector_tab import Ui_Form
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.models import PolarsTableModel
-from portefeuille_viewer.ui_logica.generated_option_orders_dialog import GeneratedOptionOrdersDialog
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_scenario_dialog
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
@@ -83,14 +83,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 pass
 
     def _open_generated_options_dialog(self) -> None:
-        dialog = getattr(self, "_generated_option_orders_dialog", None)
-        if dialog is None:
-            dialog = GeneratedOptionOrdersDialog(self)
-            dialog.setModal(False)
-            self._generated_option_orders_dialog = dialog
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        open_scenario_dialog()
 
     def _apply_test_orders_enabled_state(self, checked: bool) -> None:
         SNAPSHOT_STORE.runtime_test_orders_enabled = bool(checked)

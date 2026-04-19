@@ -1342,5 +1342,44 @@ class GeneratedOptionOrdersDialog(QDialog):
         from portefeuille_viewer.config import get_settings
         g = self.geometry()
         get_settings().set_scenario_editor_window_geometry(g.x(), g.y(), g.width(), g.height())
-        event.ignore()
-        self.hide()
+        if getattr(self, '_force_close', False):
+            global _SCENARIO_DIALOG_INSTANCE
+            _SCENARIO_DIALOG_INSTANCE = None
+            event.accept()
+        else:
+            event.ignore()
+            self.hide()
+
+
+# --- Singleton toegangspunt ---
+
+_SCENARIO_DIALOG_INSTANCE: "GeneratedOptionOrdersDialog | None" = None
+
+
+def open_scenario_dialog() -> None:
+    global _SCENARIO_DIALOG_INSTANCE
+    if _SCENARIO_DIALOG_INSTANCE is not None:
+        try:
+            _SCENARIO_DIALOG_INSTANCE.isVisible()
+        except RuntimeError:
+            _SCENARIO_DIALOG_INSTANCE = None
+    if _SCENARIO_DIALOG_INSTANCE is None:
+        _SCENARIO_DIALOG_INSTANCE = GeneratedOptionOrdersDialog(None)
+    dlg = _SCENARIO_DIALOG_INSTANCE
+    if dlg.windowState() & Qt.WindowMinimized:
+        dlg.setWindowState(dlg.windowState() & ~Qt.WindowMinimized | Qt.WindowActive)
+        dlg.showNormal()
+    dlg.show()
+    dlg.raise_()
+    dlg.activateWindow()
+
+
+def close_scenario_dialog() -> None:
+    global _SCENARIO_DIALOG_INSTANCE
+    if _SCENARIO_DIALOG_INSTANCE is not None:
+        try:
+            _SCENARIO_DIALOG_INSTANCE._force_close = True
+            _SCENARIO_DIALOG_INSTANCE.close()
+        except RuntimeError:
+            pass
+        _SCENARIO_DIALOG_INSTANCE = None

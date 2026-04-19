@@ -34,7 +34,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.services.scenario_aandelen_overlay import build_aandelen_scenario_overlay_df
 from portefeuille_viewer.ui_logica.generated_option_orders_dialog import (
-    GeneratedOptionOrdersDialog,
+    open_scenario_dialog,
 )
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 
@@ -571,14 +571,7 @@ class AandelenWebPilotTab(QWidget):
             print(f"[aandelen-web] save column widths failed: {exc}")
 
     def _open_generated_option_orders_popup(self) -> None:
-        dialog = getattr(self, "_generated_option_orders_dialog", None)
-        if dialog is None:
-            dialog = GeneratedOptionOrdersDialog(self)
-            dialog.setModal(False)
-            self._generated_option_orders_dialog = dialog
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        open_scenario_dialog()
 
     def _export_snapshot(self):
         df = self._current_snapshot_df()
@@ -1793,15 +1786,12 @@ class BetaScenarioWebDialog(QDialog):
         self._js_ready = False
         self._pending_meta: dict | None = None
         self.setWindowTitle("Beta scenario")
-        self.setWindowFlag(Qt.Window, True)
-        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
-        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
-        self.setWindowFlag(Qt.WindowCloseButtonHint, True)
+        self.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
         self.setModal(False)
-        self._restore_geometry()
         layout = QVBoxLayout(self)
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
+            self._restore_geometry()
             return
         self.web = QWebEngineView(self)
         layout.addWidget(self.web)
@@ -1812,6 +1802,7 @@ class BetaScenarioWebDialog(QDialog):
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_loaded)
         self.web.setHtml(self._html_template())
+        self._restore_geometry()
 
     def _restore_geometry(self):
         from portefeuille_viewer.config import get_settings
@@ -1828,8 +1819,11 @@ class BetaScenarioWebDialog(QDialog):
         from portefeuille_viewer.config import get_settings
         g = self.geometry()
         get_settings().set_beta_scenario_window_geometry(g.x(), g.y(), g.width(), g.height())
-        event.ignore()
-        self.hide()
+        if getattr(self, '_force_close', False):
+            event.accept()
+        else:
+            event.ignore()
+            self.hide()
 
     def _on_loaded(self, ok: bool) -> None:
         self._js_ready = bool(ok)

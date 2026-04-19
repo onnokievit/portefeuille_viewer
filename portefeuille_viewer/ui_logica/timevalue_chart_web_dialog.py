@@ -492,5 +492,8 @@ class TimeValueChartWebDialog(QDialog):
 
     def closeEvent(self, event):
         self._save_geometry()
-        event.ignore()
-        self.hide()
+        if getattr(self, '_force_close', False):
+            event.accept()
+        else:
+            event.ignore()
+            self.hide()

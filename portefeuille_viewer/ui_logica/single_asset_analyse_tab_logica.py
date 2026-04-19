@@ -48,7 +48,7 @@ from portefeuille_viewer.services.scenario_generated_option_sync import (
     mark_bucket23_out_of_sync,
 )
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
-from portefeuille_viewer.ui_logica.generated_option_orders_dialog import GeneratedOptionOrdersDialog
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_scenario_dialog
 from portefeuille_viewer.data.test_order_repository import delete_test_order
 from portefeuille_viewer.data.test_order_repository import (
     BUCKET_1,
@@ -1108,14 +1108,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.update_chart()
 
     def _open_scenario_builder(self):
-        dialog = getattr(self, "_generated_option_orders_dialog", None)
-        if dialog is None:
-            dialog = GeneratedOptionOrdersDialog(None)
-            dialog.setModal(False)
-            self._generated_option_orders_dialog = dialog
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        open_scenario_dialog()
 
     def _refresh_selection_driven_views_for_active_asset(self, asset_rollup):
         # Deze subviews volgen direct uit de gekozen asset en lokale caches, niet uit centrale snapshot timers.

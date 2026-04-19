@@ -16,6 +16,9 @@ from portefeuille_viewer.ui_logica.maand_eind_web_tab import MaandEindWebTab
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
 from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
+from portefeuille_viewer.ui_logica.maand_eind_chart_dialog import close_month_end_chart_dialog
+from portefeuille_viewer.ui_logica.maand_eind_diff_chart_dialog import close_month_end_diff_chart_dialog
+from portefeuille_viewer.ui_logica.generated_option_orders_dialog import close_scenario_dialog
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
 
@@ -192,7 +195,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if key in {"tab_inactive_bg", "tab_active_bg", "tab_hover_bg"}:
             self._apply_tab_style()
 
+    def _close_standalone_dialogs(self):
+        candidates = [
+            (self.orders_tab, '_laatste_transacties_dlg'),
+            (self.opties_open_tab, '_timevalue_chart_web_dialog'),
+            (self.aandelen_tab, '_beta_scenario_dialog'),
+        ]
+        for tab, attr in candidates:
+            with contextlib.suppress(Exception):
+                dlg = getattr(tab, attr, None)
+                if dlg is not None:
+                    dlg._force_close = True
+                    dlg.close()
+        with contextlib.suppress(Exception):
+            close_month_end_chart_dialog()
+        with contextlib.suppress(Exception):
+            close_month_end_diff_chart_dialog()
+        with contextlib.suppress(Exception):
+            close_scenario_dialog()
+
     def closeEvent(self, event):
+        self._close_standalone_dialogs()
         # Stop hier je services, threads, timers, etc.
         if hasattr(self, 'price_feed'):
             with contextlib.suppress(Exception):

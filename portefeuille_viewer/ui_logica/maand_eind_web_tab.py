@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.ui_logica.maand_eind_chart_dialog import open_month_end_chart_dialog
+from portefeuille_viewer.ui_logica.maand_eind_diff_chart_dialog import open_month_end_diff_chart_dialog
 
 try:
     from PySide6.QtWebChannel import QWebChannel
@@ -467,6 +469,26 @@ class MaandEindWebTab(QWidget):
         self._filter_sector = str(value or "").strip()
         self._schedule_publish()
 
+    def _open_end_value_chart_dialog(self) -> None:
+        open_month_end_chart_dialog(
+            self._start_date,
+            self._end_date,
+            self._frequency,
+            self._filter_sector,
+            self._filter_regio,
+            self._filter_value_grow,
+        )
+
+    def _open_diff_value_chart_dialog(self) -> None:
+        open_month_end_diff_chart_dialog(
+            self._start_date,
+            self._end_date,
+            self._frequency,
+            self._filter_sector,
+            self._filter_regio,
+            self._filter_value_grow,
+        )
+
     def _html_template(self) -> str:
         return """
 <!doctype html>
@@ -561,6 +583,8 @@ class MaandEindWebTab(QWidget):
           <input id="asset_filter" class="filter" placeholder="Zoek asset_rollup" />
         </div>
         <button id="btn_refresh">Refresh</button>
+        <button id="btn_endvalue_chart">Eindwaarde Chart</button>
+        <button id="btn_diff_chart">Verschil Chart</button>
       </div>
       <div class="meta" id="meta">Nog niet geladen.</div>
       <div class="tables-row">
@@ -838,10 +862,24 @@ class MaandEindWebTab(QWidget):
         renderBody(sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "tbody-sector-values", "tbody-sector-diff", "asset_rollup");
       }
       function bindUi(){
+        function bindDateCommit(id, setter){
+          const el = document.getElementById(id);
+          if(!el) return;
+          const commit = () => setter?.(el.value || "");
+          el.addEventListener("blur", commit);
+          el.addEventListener("keydown", (e) => {
+            if(e.key === "Enter"){
+              commit();
+              el.blur();
+            }
+          });
+        }
         document.getElementById("asset_filter")?.addEventListener("input", (e)=>{ assetState.filters.asset=e.target.value||""; rerenderAll(); });
         document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
-        document.getElementById("start_date")?.addEventListener("change", (e)=> bridgeState.bridge?.setStartDate?.(e.target.value||""));
-        document.getElementById("end_date")?.addEventListener("change", (e)=> bridgeState.bridge?.setEndDate?.(e.target.value||""));
+        document.getElementById("btn_endvalue_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openEndValueChart?.());
+        document.getElementById("btn_diff_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openDiffValueChart?.());
+        bindDateCommit("start_date", (value)=> bridgeState.bridge?.setStartDate?.(value));
+        bindDateCommit("end_date", (value)=> bridgeState.bridge?.setEndDate?.(value));
         document.getElementById("frequency")?.addEventListener("change", (e)=> bridgeState.bridge?.setFrequency?.(e.target.value||""));
         document.getElementById("filter_regio")?.addEventListener("change", (e)=> bridgeState.bridge?.setFilterRegio?.(e.target.value||""));
         document.getElementById("filter_value_grow")?.addEventListener("change", (e)=> bridgeState.bridge?.setFilterValueGrow?.(e.target.value||""));
@@ -933,3 +971,11 @@ class _MaandEindWebBridge(QObject):
     @Slot()
     def refresh(self) -> None:
         self._tab._publish_snapshot()
+
+    @Slot()
+    def openEndValueChart(self) -> None:
+        self._tab._open_end_value_chart_dialog()
+
+    @Slot()
+    def openDiffValueChart(self) -> None:
+        self._tab._open_diff_value_chart_dialog()
