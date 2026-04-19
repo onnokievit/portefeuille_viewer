@@ -75,6 +75,7 @@ class OptiesOpenWebPilotTab(QWidget):
         ]
 
         layout = QVBoxLayout(self)
+
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
             return
@@ -89,6 +90,17 @@ class OptiesOpenWebPilotTab(QWidget):
         self.web.loadFinished.connect(self._on_web_loaded)
         self.web.setHtml(self._html_template())
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
+
+    def _open_timevalue_chart_web(self) -> None:
+        from portefeuille_viewer.ui_logica.timevalue_chart_web_dialog import TimeValueChartWebDialog
+        dialog = getattr(self, "_timevalue_chart_web_dialog", None)
+        if dialog is None:
+            dialog = TimeValueChartWebDialog(self)
+            self._timevalue_chart_web_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        dialog.refresh()
 
     def _on_web_loaded(self, ok: bool):
         self._js_ready = bool(ok)
@@ -740,6 +752,7 @@ class OptiesOpenWebPilotTab(QWidget):
       <div class="tv-inline"><span class="tv-code">USD</span><div class="tv-mini" id="tv_total_usd">0,00</div></div>
       <label class="chk"><input id="f_table_live_update" type="checkbox" />Table live update</label>
       <button id="btn_export_snapshot">Export snapshot</button>
+      <button id="btn_tv_chart_web">Theta Analyse</button>
     </div>
     <details class="unresolved" id="unresolved_box">
       <summary id="unresolved_summary">Unresolved: 0</summary>
@@ -1276,6 +1289,14 @@ class OptiesOpenWebPilotTab(QWidget):
             }
           };
         }
+        const btnTvWeb=document.getElementById("btn_tv_chart_web");
+        if(btnTvWeb){
+          btnTvWeb.onclick = () => {
+            if(state.bridge && state.bridge.openTimevalueChartWeb){
+              state.bridge.openTimevalueChartWeb();
+            }
+          };
+        }
         const us=document.getElementById("unresolved_summary");
         if(us){
           us.onclick = (e) => {
@@ -1352,6 +1373,10 @@ class _OptiesOpenWebBridge(QObject):
     @Slot()
     def openResolverDialog(self) -> None:
         self._tab._open_manual_resolver_dialog()
+
+    @Slot()
+    def openTimevalueChartWeb(self) -> None:
+        self._tab._open_timevalue_chart_web()
 
     @Slot(bool)
     def commentEditing(self, editing: bool) -> None:
