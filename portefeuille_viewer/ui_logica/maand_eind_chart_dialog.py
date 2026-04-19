@@ -684,12 +684,51 @@ class MaandEindChartDialog(QDialog):
         height:100vh;
         min-height:0;
       }
+      .shell.sidebar-collapsed{
+        grid-template-columns:32px minmax(0,1fr);
+      }
       .sidebar{
         border-right:1px solid var(--line);
         background:rgba(251,250,247,.94);
         padding:14px;
         overflow:auto;
         min-height:0;
+      }
+      .shell.sidebar-collapsed .sidebar{
+        padding:8px 4px;
+        overflow:hidden;
+      }
+      .sidebar-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin-bottom:10px;
+      }
+      .sidebar-toggle{
+        width:24px;
+        height:24px;
+        border:1px solid var(--line);
+        border-radius:7px;
+        background:#f3ead8;
+        color:var(--text);
+        cursor:pointer;
+        font-size:12px;
+        font-weight:800;
+        line-height:1;
+      }
+      .sidebar-content{
+        display:block;
+      }
+      .shell.sidebar-collapsed .sidebar-content{
+        display:none;
+      }
+      .shell.sidebar-collapsed .panel-title{
+        display:none;
+      }
+      .shell.sidebar-collapsed .sidebar-head{
+        margin-bottom:0;
+        justify-content:center;
       }
       .main{
         display:flex;
@@ -820,6 +859,21 @@ class MaandEindChartDialog(QDialog):
         letter-spacing:.06em;
         color:var(--muted);
       }
+      .filter-header{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        margin-bottom:8px;
+      }
+      .filter-header h3{
+        margin:0;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        flex:1 1 auto;
+        gap:8px;
+      }
       .tog{
         display:flex;
         gap:6px;
@@ -919,15 +973,21 @@ class MaandEindChartDialog(QDialog):
   <body>
     <div class="shell">
       <div class="sidebar">
-        <div class="panel-title">Filters</div>
+        <div class="sidebar-head">
+          <div class="panel-title">Filters</div>
+          <button id="sidebar_toggle" class="sidebar-toggle" type="button" aria-expanded="true" title="Filters inklappen">◂</button>
+        </div>
+        <div class="sidebar-content">
         <div class="filter-group">
-          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span>Sector</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
-              <input id="split_sector" type="checkbox" />
-              <span>Split</span>
-            </label>
-          </h3>
+          <div class="filter-header">
+            <h3>
+              <span>Sector</span>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
+                <input id="split_sector" type="checkbox" />
+                <span>Split</span>
+              </label>
+            </h3>
+          </div>
           <div class="tog">
             <button onclick="setAll('sector', true)">Alles</button>
             <button onclick="setAll('sector', false)">Niets</button>
@@ -935,13 +995,15 @@ class MaandEindChartDialog(QDialog):
           <select id="items-sector" class="multi-select" multiple></select>
         </div>
         <div class="filter-group">
-          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span>Value/Grow</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
-              <input id="split_value_grow" type="checkbox" />
-              <span>Split</span>
-            </label>
-          </h3>
+          <div class="filter-header">
+            <h3>
+              <span>Value/Grow</span>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
+                <input id="split_value_grow" type="checkbox" />
+                <span>Split</span>
+              </label>
+            </h3>
+          </div>
           <div class="tog">
             <button onclick="setAll('value_grow', true)">Alles</button>
             <button onclick="setAll('value_grow', false)">Niets</button>
@@ -949,18 +1011,21 @@ class MaandEindChartDialog(QDialog):
           <select id="items-value-grow" class="multi-select" multiple></select>
         </div>
         <div class="filter-group">
-          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span>Regio</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
-              <input id="split_regio" type="checkbox" />
-              <span>Split</span>
-            </label>
-          </h3>
+          <div class="filter-header">
+            <h3>
+              <span>Regio</span>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--muted);">
+                <input id="split_regio" type="checkbox" />
+                <span>Split</span>
+              </label>
+            </h3>
+          </div>
           <div class="tog">
             <button onclick="setAll('regio', true)">Alles</button>
             <button onclick="setAll('regio', false)">Niets</button>
           </div>
           <select id="items-regio" class="multi-select" multiple></select>
+        </div>
         </div>
       </div>
       <div class="main">
@@ -1088,12 +1153,26 @@ class MaandEindChartDialog(QDialog):
         });
       }
       function bindUi(){
+        const shell = document.querySelector(".shell");
         document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
         bindDateCommit("start_date", (value) => bridgeState.bridge?.setStartDate?.(value));
         bindDateCommit("end_date", (value) => bridgeState.bridge?.setEndDate?.(value));
         document.getElementById("frequency")?.addEventListener("change", (e)=> bridgeState.bridge?.setFrequency?.(e.target.value || ""));
         document.getElementById("assets_toggle")?.addEventListener("click", toggleAssetsPanel);
         document.getElementById("asset_count")?.addEventListener("click", toggleAssetsPanel);
+        document.getElementById("sidebar_toggle")?.addEventListener("click", () => {
+          if(!shell) return;
+          const collapsed = shell.classList.toggle("sidebar-collapsed");
+          const btn = document.getElementById("sidebar_toggle");
+          if(btn){
+            btn.textContent = collapsed ? "▸" : "◂";
+            btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+            btn.setAttribute("title", collapsed ? "Filters uitklappen" : "Filters inklappen");
+          }
+          if(state.points && state.points.length){
+            drawChart(state.points, state.sectorSeries);
+          }
+        });
         document.getElementById("split_sector")?.addEventListener("change", (e)=> bridgeState.bridge?.setSplitSector?.(!!e.target.checked));
         document.getElementById("split_value_grow")?.addEventListener("change", (e)=> bridgeState.bridge?.setSplitValueGrow?.(!!e.target.checked));
         document.getElementById("split_regio")?.addEventListener("change", (e)=> bridgeState.bridge?.setSplitRegio?.(!!e.target.checked));

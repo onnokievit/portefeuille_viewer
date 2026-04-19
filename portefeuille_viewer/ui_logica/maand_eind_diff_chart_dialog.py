@@ -91,28 +91,48 @@ class MaandEindDiffChartDialog(MaandEindChartDialog):
 
     def _build_series_payload(self) -> dict[str, object]:
         base = super()._build_series_payload()
+        def _to_diff_points(points: list[dict]) -> tuple[list[dict[str, object]], float | None]:
+            diff_points: list[dict[str, object]] = []
+            prev_val = None
+            latest_value = None
+            for point in points:
+                cur = point.get("value")
+                if cur is None:
+                    diff_val = None
+                elif prev_val is None:
+                    diff_val = float(cur)
+                else:
+                    diff_val = float(cur) - float(prev_val)
+                if diff_val is not None:
+                    latest_value = diff_val
+                diff_points.append(
+                    {
+                        "date": point.get("date"),
+                        "label": point.get("label"),
+                        "value": diff_val,
+                    }
+                )
+                if cur is not None:
+                    prev_val = cur
+            return diff_points, latest_value
+
         points = base.get("points") or []
-        diff_points: list[dict[str, object]] = []
-        prev_val = None
-        latest_value = None
-        for point in points:
-            cur = point.get("value")
-            if cur is None or prev_val is None:
-                diff_val = None
-            else:
-                diff_val = float(cur) - float(prev_val)
-            if diff_val is not None:
-                latest_value = diff_val
-            diff_points.append(
+        diff_points, latest_value = _to_diff_points(points)
+        split_series = base.get("split_series") or []
+        diff_split_series: list[dict[str, object]] = []
+        for series in split_series:
+            series_points, _ = _to_diff_points(series.get("points") or [])
+            diff_split_series.append(
                 {
-                    "date": point.get("date"),
-                    "label": point.get("label"),
-                    "value": diff_val,
+                    "name": series.get("name"),
+                    "label": series.get("label"),
+                    "dash": series.get("dash"),
+                    "points": series_points,
                 }
             )
-            if cur is not None:
-                prev_val = cur
+
         base["points"] = diff_points
+        base["split_series"] = diff_split_series
         meta = dict(base.get("meta") or {})
         meta["latest_value"] = latest_value
         base["meta"] = meta
