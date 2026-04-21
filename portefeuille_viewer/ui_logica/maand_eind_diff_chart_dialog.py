@@ -90,7 +90,23 @@ class MaandEindDiffChartDialog(MaandEindChartDialog):
             get_settings().set_month_end_diff_chart_window_geometry(g.x(), g.y(), g.width(), g.height())
 
     def _build_series_payload(self) -> dict[str, object]:
-        base = super()._build_series_payload()
+        schedule_probe = _append_today_if_needed([self._end_date], self._end_date)
+        work = self._filtered_work_df(schedule_probe)
+        min_visible_date = self._start_date
+        full_series_start = self._start_date
+        if not work.is_empty() and "datum" in work.columns:
+            with contextlib.suppress(Exception):
+                earliest_values = [value for value in work.get_column("datum").drop_nulls().to_list() if value is not None]
+                if earliest_values:
+                    full_series_start = min(earliest_values)
+
+        original_start_date = self._start_date
+        try:
+            self._start_date = full_series_start
+            base = super()._build_series_payload()
+        finally:
+            self._start_date = original_start_date
+
         def _to_diff_points(points: list[dict]) -> tuple[list[dict[str, object]], float | None]:
             diff_points: list[dict[str, object]] = []
             prev_val = None
@@ -116,12 +132,19 @@ class MaandEindDiffChartDialog(MaandEindChartDialog):
                     prev_val = cur
             return diff_points, latest_value
 
+        def _is_visible(point: dict[str, object]) -> bool:
+            point_date = _coerce_to_date(point.get("date"))
+            return point_date is not None and point_date >= min_visible_date
+
         points = base.get("points") or []
-        diff_points, latest_value = _to_diff_points(points)
+        all_diff_points, _ = _to_diff_points(points)
+        diff_points = [point for point in all_diff_points if _is_visible(point)]
+        latest_value = next((point.get("value") for point in reversed(diff_points) if point.get("value") is not None), None)
         split_series = base.get("split_series") or []
         diff_split_series: list[dict[str, object]] = []
         for series in split_series:
-            series_points, _ = _to_diff_points(series.get("points") or [])
+            all_series_points, _ = _to_diff_points(series.get("points") or [])
+            series_points = [point for point in all_series_points if _is_visible(point)]
             diff_split_series.append(
                 {
                     "name": series.get("name"),
@@ -135,6 +158,7 @@ class MaandEindDiffChartDialog(MaandEindChartDialog):
         base["split_series"] = diff_split_series
         meta = dict(base.get("meta") or {})
         meta["latest_value"] = latest_value
+        meta["moment_count"] = len(diff_points)
         base["meta"] = meta
         return base
 
