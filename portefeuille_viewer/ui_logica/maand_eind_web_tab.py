@@ -398,9 +398,85 @@ class MaandEindWebTab(QWidget):
             )
         return pivot.select(group_keys + date_cols).sort(group_keys[0])
 
+    def _build_year_performance_matrix(
+        self,
+        df_source: pl.DataFrame,
+        anchor_date: date,
+        group_keys: list[str],
+        apply_sector_filter: bool,
+    ) -> pl.DataFrame:
+        schedule = sorted(
+            {
+                anchor_date - timedelta(days=365),
+                anchor_date - timedelta(days=365 * 2),
+                anchor_date - timedelta(days=365 * 3),
+                anchor_date - timedelta(days=365 * 4),
+                anchor_date - timedelta(days=365 * 5),
+                anchor_date,
+            }
+        )
+        base = self._build_matrix(
+            df_source,
+            schedule,
+            group_keys=group_keys,
+            apply_sector_filter=apply_sector_filter,
+        )
+        if base is None or base.is_empty():
+            return pl.DataFrame({group_keys[0]: []})
+
+        anchor_col = _date_label(anchor_date)
+        compare_cols = {
+            "perf_1y": _date_label(anchor_date - timedelta(days=365)),
+            "perf_2y": _date_label(anchor_date - timedelta(days=365 * 2)),
+            "perf_3y": _date_label(anchor_date - timedelta(days=365 * 3)),
+            "perf_4y": _date_label(anchor_date - timedelta(days=365 * 4)),
+            "perf_5y": _date_label(anchor_date - timedelta(days=365 * 5)),
+        }
+        meta_cols = ["asset_rollup", "value_grow", "sector", "regio"]
+        available_meta = [c for c in meta_cols if c in base.columns]
+        if anchor_col not in base.columns:
+            return base.select(available_meta).with_columns(
+                [
+                    pl.lit(None).cast(pl.Float64).alias("perf_1y"),
+                    pl.lit(None).cast(pl.Float64).alias("perf_2y"),
+                    pl.lit(None).cast(pl.Float64).alias("perf_3y"),
+                    pl.lit(None).cast(pl.Float64).alias("perf_4y"),
+                    pl.lit(None).cast(pl.Float64).alias("perf_5y"),
+                ]
+            )
+
+        exprs = []
+        for out_col, compare_col in compare_cols.items():
+            months = {"perf_1y": 12.0, "perf_2y": 24.0, "perf_3y": 36.0, "perf_4y": 48.0, "perf_5y": 60.0}[out_col]
+            if compare_col in base.columns:
+                exprs.append(
+                    pl.when(pl.col(anchor_col).is_not_null())
+                    .then(
+                        (
+                            pl.col(anchor_col).cast(pl.Float64, strict=False)
+                            - pl.col(compare_col).cast(pl.Float64, strict=False).fill_null(0.0)
+                        )
+                        / months
+                    )
+                    .otherwise(None)
+                    .alias(out_col)
+                )
+            else:
+                exprs.append(
+                    pl.when(pl.col(anchor_col).is_not_null())
+                    .then(pl.col(anchor_col).cast(pl.Float64, strict=False) / months)
+                    .otherwise(None)
+                    .alias(out_col)
+                )
+        return base.select(available_meta + [anchor_col] + [c for c in compare_cols.values() if c in base.columns]).with_columns(exprs).select(
+            available_meta + ["perf_1y", "perf_2y", "perf_3y", "perf_4y", "perf_5y"]
+        )
+
     def _publish_snapshot(self):
         if not self._is_active or not self._js_ready:
             return
+        today = date.today()
+        anchor_date = min(self._end_date, today)
         schedule = _append_today_if_needed(
             _schedule_dates(self._start_date, self._end_date, self._frequency),
             self._end_date,
@@ -418,19 +494,36 @@ class MaandEindWebTab(QWidget):
             group_keys=["sector"],
             apply_sector_filter=False,
         )
+        asset_year_perf = self._build_year_performance_matrix(
+            df_source,
+            anchor_date,
+            group_keys=["asset_rollup", "value_grow", "sector", "regio"],
+            apply_sector_filter=True,
+        )
+        sector_year_perf = self._build_year_performance_matrix(
+            df_source,
+            anchor_date,
+            group_keys=["sector"],
+            apply_sector_filter=False,
+        )
         self._loaded_once = True
         self._call_js(
             "renderSnapshot",
             {
                 "asset_rows": asset_matrix.to_dicts() if hasattr(asset_matrix, "to_dicts") else [],
                 "asset_cols": list(asset_matrix.columns),
+                "asset_year_rows": asset_year_perf.to_dicts() if hasattr(asset_year_perf, "to_dicts") else [],
+                "asset_year_cols": list(asset_year_perf.columns),
                 "sector_rows": sector_matrix.to_dicts() if hasattr(sector_matrix, "to_dicts") else [],
                 "sector_cols": list(sector_matrix.columns),
+                "sector_year_rows": sector_year_perf.to_dicts() if hasattr(sector_year_perf, "to_dicts") else [],
+                "sector_year_cols": list(sector_year_perf.columns),
                 "meta": {
                     "asset_count": int(asset_matrix.height),
                     "sector_count": int(sector_matrix.height),
                     "moment_count": max(int(asset_matrix.width) - 4, 0),
                     "frequency": self._frequency,
+                    "year_perf_anchor": anchor_date.isoformat(),
                     "loaded_once": self._loaded_once,
                 },
             },
@@ -521,7 +614,7 @@ class MaandEindWebTab(QWidget):
       .field input.filter{ min-width:220px; }
       .toolbar button{ height:34px; padding:0 14px; border:1px solid var(--line-strong); border-radius:8px; background:#8d7651; color:#fffdf8; cursor:pointer; font-weight:700; }
       .meta{ padding:0 2px; font-size:12px; color:var(--muted); }
-      .tables-row{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:start; }
+      .tables-row{ display:grid; grid-template-columns:minmax(0,4fr) minmax(0,4fr) minmax(0,2fr); gap:12px; align-items:start; }
       .panel{ display:flex; flex-direction:column; gap:6px; min-width:0; }
       .section-title{ font-size:12px; font-weight:800; color:var(--muted); letter-spacing:.04em; text-transform:uppercase; margin:2px 2px -2px 2px; }
       .table-wrap{ border:1px solid var(--line); border-radius:14px; overflow-x:scroll; overflow-y:auto; scrollbar-gutter:stable both-edges; background:var(--panel); max-height:62vh; box-shadow:0 12px 30px rgba(73,57,22,.08); }
@@ -610,6 +703,17 @@ class MaandEindWebTab(QWidget):
             </div>
           </div>
         </div>
+        <div class="panel">
+          <div class="section-title">Performance Per Jaar</div>
+          <div class="table-wrap" id="wrap-year-perf">
+            <div class="table-pad">
+              <table id="tbl_year_perf">
+                <thead><tr id="thead-row-year-perf"></tr></thead>
+                <tbody id="tbody-year-perf"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="tables-row">
         <div class="panel">
@@ -634,6 +738,17 @@ class MaandEindWebTab(QWidget):
             </div>
           </div>
         </div>
+        <div class="panel">
+          <div class="section-title">Sector Performance Per Jaar</div>
+          <div class="table-wrap" id="wrap-sector-year-perf">
+            <div class="table-pad">
+              <table id="tbl_sector_year_perf">
+                <thead><tr id="thead-row-sector-year-perf"></tr></thead>
+                <tbody id="tbody-sector-year-perf"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <script>
@@ -641,8 +756,11 @@ class MaandEindWebTab(QWidget):
       const SECTOR_META_COLS = new Set(["asset_rollup","value_grow","sector","regio"]);
       const DIFF_VISIBLE_ASSET_COLS = ["asset_rollup"];
       const DIFF_VISIBLE_SECTOR_COLS = ["asset_rollup"];
+      const YEAR_PERF_VISIBLE_COLS = ["asset_rollup","perf_1y","perf_2y","perf_3y","perf_4y","perf_5y"];
       const assetState = { cols: [], rows: [], filters: { asset: "" }, sort: { source: "values", col: "asset_rollup", dir: "asc" }, syncing:false };
       const sectorState = { cols: [], rows: [], filters: {}, sort: { source: "values", col: "asset_rollup", dir: "asc" }, syncing:false };
+      const assetYearState = { cols: [], rows: [], filters: { asset: "" }, sort: { source: "year", col: "asset_rollup", dir: "asc" }, syncing:false };
+      const sectorYearState = { cols: [], rows: [], filters: {}, sort: { source: "year", col: "asset_rollup", dir: "asc" }, syncing:false };
       const bridgeState = { bridge: null };
       function refillSelect(id, options, current, emptyLabel){
         const el=document.getElementById(id);
@@ -712,12 +830,20 @@ class MaandEindWebTab(QWidget):
         if(col==="value_grow") return "Value/Grow";
         if(col==="sector") return "Sector";
         if(col==="regio") return "Regio";
+        if(col==="perf_1y") return "1Y / mnd";
+        if(col==="perf_2y") return "2Y / mnd";
+        if(col==="perf_3y") return "3Y / mnd";
+        if(col==="perf_4y") return "4Y / mnd";
+        if(col==="perf_5y") return "5Y / mnd";
         return col;
       }
       function visibleColsFor(tableState, source, metaCols, diffVisibleCols){
         if(source==="diff"){
           const dateCols = tableState.cols.filter(c => !metaCols.has(c));
           return diffVisibleCols.concat(dateCols);
+        }
+        if(source==="year"){
+          return YEAR_PERF_VISIBLE_COLS.filter(c => tableState.cols.includes(c));
         }
         return tableState.cols;
       }
@@ -745,6 +871,14 @@ class MaandEindWebTab(QWidget):
           if(col!=="asset_rollup" && col!=="sector" && metaCols.has(col)) th.classList.add("meta-col");
           if(col===tableState.sort.col && tableState.sort.source===source) th.dataset.sort = tableState.sort.dir;
           th.onclick = ()=>{
+            const isSectorHeader = targetId.includes("sector");
+            if(source !== "year"){
+              if(isSectorHeader){
+                sectorYearState.sort = { source: "", col: "", dir: "asc" };
+              } else {
+                assetYearState.sort = { source: "", col: "", dir: "asc" };
+              }
+            }
             if(tableState.sort.col===col && tableState.sort.source===source){
               tableState.sort.dir = tableState.sort.dir==="asc" ? "desc" : "asc";
             } else {
@@ -772,6 +906,21 @@ class MaandEindWebTab(QWidget):
           tableState.syncing = true;
           left.scrollTop = right.scrollTop;
           tableState.syncing = false;
+        });
+      }
+      function syncVerticalGroup(ids, tableState){
+        const nodes = ids.map(id => document.getElementById(id)).filter(Boolean);
+        if(nodes.length < 2) return;
+        nodes.forEach(node => {
+          node.addEventListener("scroll", ()=>{
+            if(tableState.syncing) return;
+            tableState.syncing = true;
+            const top = node.scrollTop;
+            nodes.forEach(other => {
+              if(other !== node) other.scrollTop = top;
+            });
+            tableState.syncing = false;
+          });
         });
       }
       function syncHorizontalGroup(ids){
@@ -836,6 +985,61 @@ class MaandEindWebTab(QWidget):
           body.appendChild(tr);
         }
       }
+      function renderYearTableBody(bodyId, orderedRows, yearRows, source, tableState, metaCols, diffVisibleCols, labelKey){
+        const body=document.getElementById(bodyId);
+        if(!body) return;
+        const cols = visibleColsFor(tableState, source, metaCols, diffVisibleCols);
+        const byKey = new Map((yearRows||[]).map(r => [String(r[labelKey]||""), r]));
+        const rows = orderedRows.map(r => byKey.get(String(r[labelKey]||"")) || {[labelKey]: r[labelKey]}).filter(Boolean);
+        body.innerHTML="";
+        for(const row of rows){
+          const tr=document.createElement("tr");
+          cols.forEach((col,idx)=>{
+            const td=document.createElement("td");
+            const v=row[col];
+            td.textContent=fmt(v);
+            if(idx===0){
+              td.className="asset";
+            }else{
+              const cls=cssFor(v);
+              if(cls) td.classList.add(cls);
+            }
+            if(v===null||v===undefined||v==="") td.classList.add("empty");
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        }
+        if(rows.length){
+          const totalRow = buildTotalRow(rows, cols, labelKey, new Set([labelKey]));
+          const tr=document.createElement("tr");
+          tr.className="total-row";
+          cols.forEach((col,idx)=>{
+            const td=document.createElement("td");
+            const v=totalRow[col];
+            td.textContent=fmt(v);
+            if(idx===0){
+              td.className="asset";
+            }else{
+              const cls=cssFor(v);
+              if(cls) td.classList.add(cls);
+            }
+            if(v===null||v===undefined||v==="") td.classList.add("empty");
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        }
+      }
+      function orderByYearTable(baseRows, yearState, labelKey){
+        const byKey = new Map((yearState.rows||[]).map(r => [String(r[labelKey]||""), r]));
+        if(yearState.sort.source !== "year" || !yearState.sort.col){
+          return baseRows;
+        }
+        return baseRows.slice().sort((a,b)=>{
+          const ar = byKey.get(String(a[labelKey]||"")) || {};
+          const br = byKey.get(String(b[labelKey]||"")) || {};
+          return compareRows(ar, br, yearState.sort.col, yearState.sort.dir, new Set([labelKey]));
+        });
+      }
       function renderBody(tableState, metaCols, diffVisibleCols, valuesBodyId, diffBodyId, labelKey){
         const baseRows=visibleRows(tableState, labelKey).slice();
         const rowsForValues = baseRows.slice();
@@ -852,14 +1056,29 @@ class MaandEindWebTab(QWidget):
         }
         renderTableBody(valuesBodyId, order, "values", tableState, metaCols, diffVisibleCols, labelKey);
         renderTableBody(diffBodyId, diffRows(order, tableState.cols, metaCols), "diff", tableState, metaCols, diffVisibleCols, labelKey);
+        return order;
       }
       function rerenderAll(){
         renderHeader("thead-row-values","values", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "Asset");
         renderHeader("thead-row-diff","diff", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "Asset");
-        renderBody(assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "tbody-values", "tbody-diff", "asset_rollup");
+        renderHeader("thead-row-year-perf","year", assetYearState, new Set(["asset_rollup"]), [], "Asset");
+        let orderedAssets = renderBody(assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "tbody-values", "tbody-diff", "asset_rollup");
+        if(assetYearState.sort.source === "year"){
+          orderedAssets = orderByYearTable(visibleRows(assetState, "asset_rollup").slice(), assetYearState, "asset_rollup");
+          renderTableBody("tbody-values", orderedAssets, "values", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "asset_rollup");
+          renderTableBody("tbody-diff", diffRows(orderedAssets, assetState.cols, ASSET_META_COLS), "diff", assetState, ASSET_META_COLS, DIFF_VISIBLE_ASSET_COLS, "asset_rollup");
+        }
+        renderYearTableBody("tbody-year-perf", orderedAssets, assetYearState.rows, "year", assetYearState, new Set(["asset_rollup"]), [], "asset_rollup");
         renderHeader("thead-row-sector-values","values", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "Sector");
         renderHeader("thead-row-sector-diff","diff", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "Sector");
-        renderBody(sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "tbody-sector-values", "tbody-sector-diff", "asset_rollup");
+        renderHeader("thead-row-sector-year-perf","year", sectorYearState, new Set(["asset_rollup"]), [], "Sector");
+        let orderedSectors = renderBody(sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "tbody-sector-values", "tbody-sector-diff", "asset_rollup");
+        if(sectorYearState.sort.source === "year"){
+          orderedSectors = orderByYearTable(visibleRows(sectorState, "asset_rollup").slice(), sectorYearState, "asset_rollup");
+          renderTableBody("tbody-sector-values", orderedSectors, "values", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "asset_rollup");
+          renderTableBody("tbody-sector-diff", diffRows(orderedSectors, sectorState.cols, SECTOR_META_COLS), "diff", sectorState, SECTOR_META_COLS, DIFF_VISIBLE_SECTOR_COLS, "asset_rollup");
+        }
+        renderYearTableBody("tbody-sector-year-perf", orderedSectors, sectorYearState.rows, "year", sectorYearState, new Set(["asset_rollup"]), [], "asset_rollup");
       }
       function bindUi(){
         function bindDateCommit(id, setter){
@@ -874,7 +1093,11 @@ class MaandEindWebTab(QWidget):
             }
           });
         }
-        document.getElementById("asset_filter")?.addEventListener("input", (e)=>{ assetState.filters.asset=e.target.value||""; rerenderAll(); });
+        document.getElementById("asset_filter")?.addEventListener("input", (e)=>{
+          assetState.filters.asset=e.target.value||"";
+          assetYearState.filters.asset=e.target.value||"";
+          rerenderAll();
+        });
         document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
         document.getElementById("btn_endvalue_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openEndValueChart?.());
         document.getElementById("btn_diff_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openDiffValueChart?.());
@@ -900,8 +1123,12 @@ class MaandEindWebTab(QWidget):
       window.renderSnapshot = function(payload){
         assetState.rows = (payload&&payload.asset_rows)?payload.asset_rows:[];
         assetState.cols = (payload&&payload.asset_cols)?payload.asset_cols:[];
+        assetYearState.rows = (payload&&payload.asset_year_rows)?payload.asset_year_rows:[];
+        assetYearState.cols = (payload&&payload.asset_year_cols)?payload.asset_year_cols:[];
         sectorState.rows = (payload&&payload.sector_rows)?payload.sector_rows:[];
         sectorState.cols = (payload&&payload.sector_cols)?payload.sector_cols:[];
+        sectorYearState.rows = (payload&&payload.sector_year_rows)?payload.sector_year_rows:[];
+        sectorYearState.cols = (payload&&payload.sector_year_cols)?payload.sector_year_cols:[];
         if(!assetState.cols.includes(assetState.sort.col)) assetState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
         if(!sectorState.cols.includes(sectorState.sort.col)) sectorState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
         rerenderAll();
@@ -915,21 +1142,21 @@ class MaandEindWebTab(QWidget):
           year_end: "laatste dag jaar"
         };
         const label = labels[meta.frequency] || "3e vrijdag maand";
-        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.sector_count||0} sectoren | ${meta.moment_count||0} meetmomenten | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
+        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.sector_count||0} sectoren | ${meta.moment_count||0} meetmomenten | jaarperformance t/m ${meta.year_perf_anchor||""} | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
       };
       if(window.qt && window.QWebChannel){
         new QWebChannel(qt.webChannelTransport, function(channel){
           bridgeState.bridge = channel.objects.maandEindBridge || null;
           bindUi();
-          syncVerticalPair("wrap-values","wrap-diff", assetState);
-          syncVerticalPair("wrap-sector-values","wrap-sector-diff", sectorState);
+          syncVerticalGroup(["wrap-values","wrap-diff","wrap-year-perf"], assetState);
+          syncVerticalGroup(["wrap-sector-values","wrap-sector-diff","wrap-sector-year-perf"], sectorState);
           syncHorizontalGroup(["wrap-values", "wrap-sector-values"]);
           syncHorizontalGroup(["wrap-diff", "wrap-sector-diff"]);
         });
       } else {
         bindUi();
-        syncVerticalPair("wrap-values","wrap-diff", assetState);
-        syncVerticalPair("wrap-sector-values","wrap-sector-diff", sectorState);
+        syncVerticalGroup(["wrap-values","wrap-diff","wrap-year-perf"], assetState);
+        syncVerticalGroup(["wrap-sector-values","wrap-sector-diff","wrap-sector-year-perf"], sectorState);
         syncHorizontalGroup(["wrap-values", "wrap-sector-values"]);
         syncHorizontalGroup(["wrap-diff", "wrap-sector-diff"]);
       }
