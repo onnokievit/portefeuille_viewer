@@ -1237,6 +1237,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "repository_snapshot_asset_rollup_data",
         }:
             self._asset_selector_reload_timer.start()
+        elif snapshot_key == "repository_snapshot_asset_dividend_calendar":
+            self._update_dividend_labels(self.asset_selector.currentText())
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -2492,6 +2494,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.comboBoxSortering.addItem("net_change")
         self.comboBoxSortering.addItem("portfolio_total_waarde_lineair_pct")
         self.comboBoxSortering.addItem("portfolio_total_waarde_delta_pct")
+        self.comboBoxSortering.addItem("dividend date")
 
         self.comboBoxSortDirection.clear()
         self.comboBoxSortDirection.addItem("ASC")
@@ -2507,6 +2510,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         if not sort_key or sort_key.lower() in {"alfabetisch", "alphabetisch"}:
             return sorted(assets, reverse=desc)
+
+        if sort_key.lower() in {"dividend date", "dividend_date", "dividend datum"}:
+            return self._sort_assets_by_dividend_date(assets, desc=desc)
 
         df_sum = self._get_summary_source_df()
         if df_sum is None or df_sum.is_empty() or sort_key not in df_sum.columns:
@@ -2529,6 +2535,32 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if v is None:
                 return (1, 0.0)
             return (0, -v if desc else v)
+
+        return sorted(assets, key=_key)
+
+    def _sort_assets_by_dividend_date(self, assets: list[str], *, desc: bool = False) -> list[str]:
+        df_div = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_dividend_calendar", None)
+        if df_div is None or df_div.is_empty() or not {"asset_rollup", "next_dividend_date"}.issubset(set(df_div.columns)):
+            return sorted(assets, reverse=desc)
+
+        date_map: dict[str, date | None] = {}
+        with contextlib.suppress(Exception):
+            for row in df_div.select(["asset_rollup", "next_dividend_date"]).to_dicts():
+                asset = str(row.get("asset_rollup") or "").strip().upper()
+                if not asset:
+                    continue
+                date_map[asset] = self._coerce_date_value(row.get("next_dividend_date"))
+
+        today = date.today()
+
+        def _key(asset: str):
+            div_date = date_map.get(str(asset or "").strip().upper())
+            if div_date is None:
+                return (2, date.max, str(asset))
+            if div_date < today:
+                return (1, date.max, str(asset))
+            sort_date = date.max - (div_date - date.min) if desc else div_date
+            return (0, sort_date, str(asset))
 
         return sorted(assets, key=_key)
 
@@ -2818,11 +2850,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "lblNetChange",
             "lblPctLineair",
             "lblPctDelta",
+            "labelDivAmount",
         ]
         for name in labels:
             label = getattr(self, name, None)
             if label is not None:
                 label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        div_date_label = getattr(self, "labelDivDate", None)
+        if div_date_label is not None:
+            div_date_label.setAlignment(Qt.AlignCenter)
 
     def _format_number(self, val, decimals=2):
         if val is None:
@@ -2840,13 +2876,89 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         except Exception:
             return str(val)
 
+    def _format_currency_amount(self, val, currency: str | None = None, decimals=2) -> str:
+        if val is None:
+            return "-"
+        text = self._format_number(val, decimals=decimals)
+        code = str(currency or "").strip().upper()
+        symbol = {
+            "EUR": "€",
+            "USD": "$",
+            "GBP": "£",
+            "JPY": "¥",
+            "HKD": "HK$",
+            "INR": "₹",
+        }.get(code)
+        if symbol:
+            return f"{symbol} {text}"
+        return f"{text} {code}" if code else text
+
     def _set_label_bg(self, label, color: QColor | None):
         if label is None:
             return
         if color is None:
-            label.setStyleSheet("")
+            label.setStyleSheet("background-color: transparent; color: #000000;")
             return
-        label.setStyleSheet(f"background-color: {color.name()};")
+        text_color = " color: #FFFFFF;" if color.name().upper() == "#FF0000" else " color: #000000;"
+        label.setStyleSheet(f"background-color: {color.name()};{text_color}")
+
+    def _format_date_label(self, value) -> str:
+        if value is None:
+            return "-"
+        if isinstance(value, datetime):
+            return value.date().strftime("%d-%m-%Y")
+        if isinstance(value, date):
+            return value.strftime("%d-%m-%Y")
+        text = str(value or "").strip()
+        if not text:
+            return "-"
+        for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y%m%d"):
+            with contextlib.suppress(Exception):
+                return datetime.strptime(text[:19] if "%H" in fmt else text, fmt).date().strftime("%d-%m-%Y")
+        return text
+
+    def _coerce_date_value(self, value) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        text = str(value or "").strip()
+        if not text:
+            return None
+        for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y%m%d"):
+            with contextlib.suppress(Exception):
+                return datetime.strptime(text[:19] if "%H" in fmt else text, fmt).date()
+        return None
+
+    def _dividend_label_color(self, div_date: date | None, div_amount) -> QColor | None:
+        if div_date is None or div_amount is None:
+            return QColor("#D9D9D9")
+        days = (div_date - date.today()).days
+        if days < 0:
+            return QColor("#D9D9D9")
+        if days <= 7:
+            return QColor("#FF0000")
+        if days <= 30:
+            return QColor("#FFFF00")
+        return None
+
+    def _update_dividend_labels(self, asset_rollup: str | None = None) -> None:
+        asset = str(asset_rollup or self.asset_selector.currentText() or "").strip()
+        row = self.logic.get_next_dividend_projection(asset) if asset else None
+        div_date = row.get("next_dividend_date") if row else None
+        div_amount = row.get("next_dividend_amount") if row else None
+        div_currency = row.get("ib_currency") if row else None
+        coerced_date = self._coerce_date_value(div_date)
+        color = self._dividend_label_color(coerced_date, div_amount)
+
+        if hasattr(self, "labelDivDate"):
+            self.labelDivDate.setText(self._format_date_label(coerced_date))
+            self._set_label_bg(self.labelDivDate, color)
+        if hasattr(self, "labelDivAmount"):
+            self.labelDivAmount.setText(self._format_currency_amount(div_amount, div_currency, decimals=2))
+            self._set_label_bg(self.labelDivAmount, color)
 
     def _color_green_red(self, val):
         try:
@@ -3043,6 +3155,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 self.lblPctDelta,
                 self._get_portfolio_value_pct_color(asset, "portfolio_total_waarde_delta_pct"),
             )
+        self._update_dividend_labels(asset)
 
 
 
@@ -3622,6 +3735,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.logic.set_asset(asset_rollup)
         self._current_step_asset = str(asset_rollup or "")
         self._apply_step_settings_for_asset(self._current_step_asset)
+        self._update_dividend_labels(self._current_step_asset)
         self._get_live_summary_row(asset_rollup, refresh=True)
         # Asset-selectie combineert selection-driven subviews met directe snapshot-driven redraw.
         try:
@@ -4520,6 +4634,19 @@ class SingleAssetAnalyseLogic:
                 if rows.height > 0 and "div_en_bel" in rows.columns:
                     dividend_val = float(rows["div_en_bel"].sum())
         return dividend_val
+
+    def get_next_dividend_projection(self, asset_rollup: str) -> dict | None:
+        asset = str(asset_rollup or "").strip().upper()
+        if not asset:
+            return None
+        df_div = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_dividend_calendar", None)
+        if df_div is None or df_div.is_empty() or "asset_rollup" not in df_div.columns:
+            return None
+        with contextlib.suppress(Exception):
+            rows = df_div.filter(pl.col("asset_rollup").cast(pl.Utf8).str.to_uppercase() == asset)
+            if rows.height > 0:
+                return rows.to_dicts()[0]
+        return None
 
     def get_fees(self, steps):
         fee_aandelen = 0.0

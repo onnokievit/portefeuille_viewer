@@ -52,6 +52,7 @@ class SnapshotStore:
     repository_snapshot_historical_close: pl.DataFrame | None
     repository_snapshot_historical_close_latest: pl.DataFrame | None
     repository_snapshot_asset_driver_beta: pl.DataFrame | None
+    repository_snapshot_asset_dividend_calendar: pl.DataFrame | None
     repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None
     repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None
     live_prices: dict | None
@@ -124,6 +125,7 @@ class SnapshotStore:
             "repository_snapshot_historical_close": None,
             "repository_snapshot_historical_close_latest": None,
             "repository_snapshot_asset_driver_beta": None,
+            "repository_snapshot_asset_dividend_calendar": None,
             "repository_snapshot_per_dag_asset_result_v2": None,
             "repository_snapshot_per_dag_asset_result_v2_latest": None,
             "live_prices": None,
@@ -226,6 +228,7 @@ class SnapshotStore:
                 self.repository_snapshot_historical_close is not None,
                 self.repository_snapshot_historical_close_latest is not None,
                 self.repository_snapshot_per_dag_asset_result_v2 is not None,
+                self.repository_snapshot_asset_dividend_calendar is not None,
                 self.repository_snapshot_per_dag_asset_result_v2_latest is not None,
                 self.live_prices is not None,
                 self.repository_snapshot_test_orders_cache is not None,
@@ -307,6 +310,11 @@ class SnapshotStore:
         if self.repository_snapshot_per_dag_asset_result_v2 is not None:
             parts.append(
                 f"Repository Per Dag Asset Result V2 data: {len(self.repository_snapshot_per_dag_asset_result_v2)} rijen"
+            )
+        if self.repository_snapshot_asset_dividend_calendar is not None:
+            parts.append(
+                "Repository Asset Dividend Calendar data: "
+                f"{len(self.repository_snapshot_asset_dividend_calendar)} rijen"
             )
         if self.repository_snapshot_per_dag_asset_result_v2_latest is not None:
             parts.append(

@@ -11,6 +11,14 @@ import pyodbc
 
 OVERLAP_DAYS = 5
 STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from portefeuille_viewer.data.update_run_repository import (  # noqa: E402
+    has_successful_run_today as has_successful_update_run_today,
+    log_update_run_once,
+)
 
 
 def get_oldest_last_price_date() -> date | None:
@@ -52,6 +60,12 @@ def _connect():
 
 
 def has_successful_run_today(run_reason: str) -> bool:
+    try:
+        if has_successful_update_run_today(run_reason):
+            return True
+    except Exception as exc:
+        print(f"[startup-price-update] update_runs check failed: {exc}", file=sys.stderr)
+
     today = date.today()
     with _connect() as conn:
         cur = conn.cursor()
@@ -94,6 +108,23 @@ def log_price_update_run(payload: dict, status: str, message: str = "") -> None:
             message[:32000] if message else "",
         )
         conn.commit()
+    try:
+        log_update_run_once(
+            task_name=str(payload.get("reason") or "startup_price_update"),
+            run_reason=str(payload.get("reason") or "startup_price_update"),
+            status=status,
+            target_date=target_date,
+            fetch_start_date=fetch_start,
+            days_range=int(payload.get("days_range", OVERLAP_DAYS)),
+            rows_processed=None,
+            rows_ok=None,
+            rows_error=None,
+            source="startup_price_update",
+            message=message[:32000] if message else "",
+            payload=payload,
+        )
+    except Exception as exc:
+        print(f"[startup-price-update] update_runs log failed: {exc}", file=sys.stderr)
 
 
 def build_payload() -> dict:

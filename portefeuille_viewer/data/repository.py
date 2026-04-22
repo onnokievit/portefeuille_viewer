@@ -213,6 +213,74 @@ def load_asset_driver_beta_snapshot() -> pl.DataFrame:
     return compact_float64(out)
 
 
+def load_asset_dividend_calendar_snapshot() -> pl.DataFrame:
+    from portefeuille_viewer.data.dividend_calendar_repository import ensure_dividend_calendar_schema
+
+    ensure_dividend_calendar_schema()
+    sql = """
+        SELECT
+            asset_rollup,
+            ib_symbol,
+            ib_currency,
+            next_dividend_date,
+            next_dividend_amount,
+            trailing_12m_dividend,
+            forward_12m_dividend,
+            next_earnings_date,
+            source_dividend,
+            source_earnings,
+            status,
+            message,
+            raw_dividend_value,
+            fetched_at,
+            updated_at
+        FROM asset_dividend_calendar_current
+    """
+    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
+    with pyodbc.connect(conn_str_stock) as conn:
+        df = pl.read_database(sql, conn)
+    if df is None or df.is_empty():
+        out = pl.DataFrame(
+            schema={
+                "asset_rollup": pl.Utf8,
+                "ib_symbol": pl.Utf8,
+                "ib_currency": pl.Utf8,
+                "next_dividend_date": pl.Date,
+                "next_dividend_amount": pl.Float64,
+                "trailing_12m_dividend": pl.Float64,
+                "forward_12m_dividend": pl.Float64,
+                "next_earnings_date": pl.Date,
+                "source_dividend": pl.Utf8,
+                "source_earnings": pl.Utf8,
+                "status": pl.Utf8,
+                "message": pl.Utf8,
+                "raw_dividend_value": pl.Utf8,
+                "fetched_at": pl.Datetime,
+                "updated_at": pl.Datetime,
+            }
+        )
+    else:
+        out = df.with_columns(
+            [
+                pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.strip_chars().str.to_uppercase(),
+                pl.col("ib_symbol").cast(pl.Utf8, strict=False).str.strip_chars(),
+                pl.col("ib_currency").cast(pl.Utf8, strict=False).str.strip_chars(),
+                pl.col("next_dividend_date").cast(pl.Date, strict=False),
+                pl.col("next_dividend_amount").cast(pl.Float64, strict=False),
+                pl.col("trailing_12m_dividend").cast(pl.Float64, strict=False),
+                pl.col("forward_12m_dividend").cast(pl.Float64, strict=False),
+                pl.col("next_earnings_date").cast(pl.Date, strict=False),
+                pl.col("source_dividend").cast(pl.Utf8, strict=False),
+                pl.col("source_earnings").cast(pl.Utf8, strict=False),
+                pl.col("status").cast(pl.Utf8, strict=False),
+                pl.col("message").cast(pl.Utf8, strict=False),
+                pl.col("raw_dividend_value").cast(pl.Utf8, strict=False),
+            ]
+        )
+    SNAPSHOT_STORE.safe_write("repository_snapshot_asset_dividend_calendar", out)
+    return compact_float64(out)
+
+
 def load_per_dag_asset_result_v2_snapshot() -> pl.DataFrame:
     """
     Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.

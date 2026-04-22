@@ -25,6 +25,7 @@ from portefeuille_viewer.services.historical_price_update_runner import Historic
 from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
+from portefeuille_viewer.services.app_task_scheduler import AppTaskScheduler
 from portefeuille_viewer.services.db_migration_service import DbMigrationService
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
@@ -938,6 +939,7 @@ def _refresh_phase_repository_core() -> None:
     repository.load_dividend_data()
     repository.load_historical_close_snapshot()
     repository.load_asset_driver_beta_snapshot()
+    repository.load_asset_dividend_calendar_snapshot()
     repository.load_per_dag_asset_result_v2_snapshot()
     repository.load_optie_referentie_data()
     repository.build_repository_active_asset_rollup_data()
@@ -1171,6 +1173,8 @@ def main():
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
+    app_task_scheduler = AppTaskScheduler(app)
+    app_task_scheduler.register_default_tasks()
     option_timevalue_service: OptionTimevalueService | None = None
     
     # Koppel signalen aan orchestrator:
@@ -1405,6 +1409,7 @@ def main():
     w.show()
     # Start price-update pas nadat UI volledig staat en event-loop idle is.
     QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)
+    app_task_scheduler.start()
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()
     else:
