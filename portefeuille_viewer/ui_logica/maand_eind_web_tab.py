@@ -169,6 +169,7 @@ class MaandEindWebTab(QWidget):
         self._filter_regio = ""
         self._filter_value_grow = ""
         self._filter_sector = ""
+        self._year_perf_period = "month"
 
         layout = QVBoxLayout(self)
         if QWebEngineView is None:
@@ -404,6 +405,7 @@ class MaandEindWebTab(QWidget):
         anchor_date: date,
         group_keys: list[str],
         apply_sector_filter: bool,
+        period: str = "month",
     ) -> pl.DataFrame:
         schedule = sorted(
             {
@@ -447,7 +449,12 @@ class MaandEindWebTab(QWidget):
 
         exprs = []
         for out_col, compare_col in compare_cols.items():
-            months = {"perf_1y": 12.0, "perf_2y": 24.0, "perf_3y": 36.0, "perf_4y": 48.0, "perf_5y": 60.0}[out_col]
+            divisor_map = (
+                {"perf_1y": 52.0, "perf_2y": 104.0, "perf_3y": 156.0, "perf_4y": 208.0, "perf_5y": 260.0}
+                if period == "week"
+                else {"perf_1y": 12.0, "perf_2y": 24.0, "perf_3y": 36.0, "perf_4y": 48.0, "perf_5y": 60.0}
+            )
+            divisor = divisor_map[out_col]
             if compare_col in base.columns:
                 exprs.append(
                     pl.when(pl.col(anchor_col).is_not_null())
@@ -456,7 +463,7 @@ class MaandEindWebTab(QWidget):
                             pl.col(anchor_col).cast(pl.Float64, strict=False)
                             - pl.col(compare_col).cast(pl.Float64, strict=False).fill_null(0.0)
                         )
-                        / months
+                        / divisor
                     )
                     .otherwise(None)
                     .alias(out_col)
@@ -464,7 +471,7 @@ class MaandEindWebTab(QWidget):
             else:
                 exprs.append(
                     pl.when(pl.col(anchor_col).is_not_null())
-                    .then(pl.col(anchor_col).cast(pl.Float64, strict=False) / months)
+                    .then(pl.col(anchor_col).cast(pl.Float64, strict=False) / divisor)
                     .otherwise(None)
                     .alias(out_col)
                 )
@@ -499,12 +506,14 @@ class MaandEindWebTab(QWidget):
             anchor_date,
             group_keys=["asset_rollup", "value_grow", "sector", "regio"],
             apply_sector_filter=True,
+            period=self._year_perf_period,
         )
         sector_year_perf = self._build_year_performance_matrix(
             df_source,
             anchor_date,
             group_keys=["sector"],
             apply_sector_filter=False,
+            period=self._year_perf_period,
         )
         self._loaded_once = True
         self._call_js(
@@ -524,6 +533,7 @@ class MaandEindWebTab(QWidget):
                     "moment_count": max(int(asset_matrix.width) - 4, 0),
                     "frequency": self._frequency,
                     "year_perf_anchor": anchor_date.isoformat(),
+                    "year_perf_period": self._year_perf_period,
                     "loaded_once": self._loaded_once,
                 },
             },
@@ -560,6 +570,10 @@ class MaandEindWebTab(QWidget):
 
     def _set_filter_sector(self, value: str):
         self._filter_sector = str(value or "").strip()
+        self._schedule_publish()
+
+    def _toggle_year_perf_period(self):
+        self._year_perf_period = "week" if self._year_perf_period == "month" else "month"
         self._schedule_publish()
 
     def _open_end_value_chart_dialog(self) -> None:
@@ -678,6 +692,7 @@ class MaandEindWebTab(QWidget):
         <button id="btn_refresh">Refresh</button>
         <button id="btn_endvalue_chart">Eindwaarde Chart</button>
         <button id="btn_diff_chart">Verschil Chart</button>
+        <button id="btn_year_perf_period">Performance: maand</button>
       </div>
       <div class="meta" id="meta">Nog niet geladen.</div>
       <div class="tables-row">
@@ -762,6 +777,7 @@ class MaandEindWebTab(QWidget):
       const assetYearState = { cols: [], rows: [], filters: { asset: "" }, sort: { source: "year", col: "asset_rollup", dir: "asc" }, syncing:false };
       const sectorYearState = { cols: [], rows: [], filters: {}, sort: { source: "year", col: "asset_rollup", dir: "asc" }, syncing:false };
       const bridgeState = { bridge: null };
+      let yearPerfPeriod = "month";
       function refillSelect(id, options, current, emptyLabel){
         const el=document.getElementById(id);
         if(!el) return;
@@ -830,11 +846,12 @@ class MaandEindWebTab(QWidget):
         if(col==="value_grow") return "Value/Grow";
         if(col==="sector") return "Sector";
         if(col==="regio") return "Regio";
-        if(col==="perf_1y") return "1Y / mnd";
-        if(col==="perf_2y") return "2Y / mnd";
-        if(col==="perf_3y") return "3Y / mnd";
-        if(col==="perf_4y") return "4Y / mnd";
-        if(col==="perf_5y") return "5Y / mnd";
+        const suffix = yearPerfPeriod === "week" ? "wk" : "mnd";
+        if(col==="perf_1y") return `1Y / ${suffix}`;
+        if(col==="perf_2y") return `2Y / ${suffix}`;
+        if(col==="perf_3y") return `3Y / ${suffix}`;
+        if(col==="perf_4y") return `4Y / ${suffix}`;
+        if(col==="perf_5y") return `5Y / ${suffix}`;
         return col;
       }
       function visibleColsFor(tableState, source, metaCols, diffVisibleCols){
@@ -1101,6 +1118,7 @@ class MaandEindWebTab(QWidget):
         document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
         document.getElementById("btn_endvalue_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openEndValueChart?.());
         document.getElementById("btn_diff_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openDiffValueChart?.());
+        document.getElementById("btn_year_perf_period")?.addEventListener("click", ()=> bridgeState.bridge?.toggleYearPerfPeriod?.());
         bindDateCommit("start_date", (value)=> bridgeState.bridge?.setStartDate?.(value));
         bindDateCommit("end_date", (value)=> bridgeState.bridge?.setEndDate?.(value));
         document.getElementById("frequency")?.addEventListener("change", (e)=> bridgeState.bridge?.setFrequency?.(e.target.value||""));
@@ -1129,10 +1147,13 @@ class MaandEindWebTab(QWidget):
         sectorState.cols = (payload&&payload.sector_cols)?payload.sector_cols:[];
         sectorYearState.rows = (payload&&payload.sector_year_rows)?payload.sector_year_rows:[];
         sectorYearState.cols = (payload&&payload.sector_year_cols)?payload.sector_year_cols:[];
+        const meta=(payload&&payload.meta)?payload.meta:{};
+        yearPerfPeriod = meta.year_perf_period || "month";
+        const btnPerf=document.getElementById("btn_year_perf_period");
+        if(btnPerf) btnPerf.textContent = yearPerfPeriod === "week" ? "Performance: week" : "Performance: maand";
         if(!assetState.cols.includes(assetState.sort.col)) assetState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
         if(!sectorState.cols.includes(sectorState.sort.col)) sectorState.sort = { source:"values", col: "asset_rollup", dir: "asc" };
         rerenderAll();
-        const meta=(payload&&payload.meta)?payload.meta:{};
         const labels = {
           daily: "elke dag",
           weekly_friday: "elke vrijdag",
@@ -1142,7 +1163,8 @@ class MaandEindWebTab(QWidget):
           year_end: "laatste dag jaar"
         };
         const label = labels[meta.frequency] || "3e vrijdag maand";
-        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.sector_count||0} sectoren | ${meta.moment_count||0} meetmomenten | jaarperformance t/m ${meta.year_perf_anchor||""} | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
+        const perfLabel = yearPerfPeriod === "week" ? "jaarperformance per week" : "jaarperformance per maand";
+        document.getElementById("meta").textContent = `${meta.asset_count||0} assets | ${meta.sector_count||0} sectoren | ${meta.moment_count||0} meetmomenten | ${perfLabel} t/m ${meta.year_perf_anchor||""} | bron: per_dag_asset_result_v2.totaal_v2 | US omgerekend via EURUSD | ${label}`;
       };
       if(window.qt && window.QWebChannel){
         new QWebChannel(qt.webChannelTransport, function(channel){
@@ -1206,3 +1228,7 @@ class _MaandEindWebBridge(QObject):
     @Slot()
     def openDiffValueChart(self) -> None:
         self._tab._open_diff_value_chart_dialog()
+
+    @Slot()
+    def toggleYearPerfPeriod(self) -> None:
+        self._tab._toggle_year_perf_period()

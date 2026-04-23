@@ -533,11 +533,9 @@ class MaandEindChartDialog(QDialog):
             if not state:
                 return
             start_date = _coerce_to_date(state.get("start_date"))
-            end_date = _coerce_to_date(state.get("end_date"))
             if start_date is not None:
                 self._start_date = start_date
-            if end_date is not None:
-                self._end_date = end_date
+            self._end_date = date.today()
             frequency = str(state.get("frequency") or "").strip()
             if frequency in {"daily", "weekly_friday", "third_friday", "month_end", "quarter_end", "year_end"}:
                 self._frequency = frequency
@@ -557,7 +555,6 @@ class MaandEindChartDialog(QDialog):
             get_settings().set_month_end_chart_state(
                 {
                     "start_date": self._start_date.isoformat(),
-                    "end_date": self._end_date.isoformat(),
                     "frequency": self._frequency,
                     "selected_sectors": sorted(self._selected_sectors) if self._selected_sectors else [],
                     "selected_regios": sorted(self._selected_regios) if self._selected_regios else [],
