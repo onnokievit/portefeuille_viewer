@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout, QDoubleSpinBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
@@ -6,6 +6,27 @@ from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui_logica.state_engine_tasks_dialog import StateEngineTasksDialog
+from portefeuille_viewer.ui_logica.cash_management_chart_dialog import (
+    open_cash_management_chart_dialog,
+)
+from portefeuille_viewer.ui_logica.cash_management_result_chart_dialog import (
+    open_cash_management_result_chart_dialog,
+)
+from portefeuille_viewer.ui_logica.cash_management_year_result_chart_dialog import (
+    open_cash_management_year_result_chart_dialog,
+)
+from portefeuille_viewer.ui_logica.cash_management_year_result_percent_chart_dialog import (
+    open_cash_management_year_result_percent_chart_dialog,
+)
+from portefeuille_viewer.ui_logica.year_result_vs_indices_chart_dialog import (
+    open_year_result_vs_indices_chart_dialog,
+)
+from portefeuille_viewer.ui_logica.cash_management_entries_dialog import (
+    open_cash_management_entries_dialog,
+)
+from portefeuille_viewer.ui_logica.account_daily_balances_dialog import (
+    open_account_daily_balances_dialog,
+)
 
 class SettingsTab(QWidget, Ui_SettingsTab):
 
@@ -34,6 +55,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
 
         self._init_ui_color_settings()
         self._init_state_engine_task_controls()
+        self._init_cash_management_controls()
 
     def _init_ui_color_settings(self):
         if not hasattr(self, "groupBox_2"):
@@ -75,6 +97,17 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._tab_hover_btn.clicked.connect(self._on_tab_hover_clicked)
         layout.addWidget(self._tab_hover_btn)
 
+        label_chart_width = QLabel("Chart lijndikte")
+        layout.addWidget(label_chart_width)
+        self._chart_line_width_spin = QDoubleSpinBox()
+        self._chart_line_width_spin.setRange(0.5, 8.0)
+        self._chart_line_width_spin.setDecimals(1)
+        self._chart_line_width_spin.setSingleStep(0.1)
+        self._chart_line_width_spin.setSuffix(" px")
+        self._chart_line_width_spin.setValue(self.settings_manager.get_chart_line_width_px())
+        self._chart_line_width_spin.valueChanged.connect(self._on_chart_line_width_changed)
+        layout.addWidget(self._chart_line_width_spin)
+
         layout.addStretch(1)
         self._refresh_header_color_button()
         self._refresh_total_color_button()
@@ -106,6 +139,41 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._state_engine_tasks_dialog.show()
         self._state_engine_tasks_dialog.raise_()
         self._state_engine_tasks_dialog.activateWindow()
+
+    def _init_cash_management_controls(self):
+        group = QGroupBox("Cash Management")
+        layout = QVBoxLayout(group)
+        row = QHBoxLayout()
+        label = QLabel("Chart op basis van cumulatief geïnvesteerd vermogen en dagelijkse eindsaldi.")
+        row.addWidget(label)
+        row.addStretch(1)
+        button_manage = QPushButton("Cash Mutaties")
+        button_manage.clicked.connect(lambda: open_cash_management_entries_dialog(self))
+        row.addWidget(button_manage)
+        button_balances = QPushButton("Dag-eindstanden")
+        button_balances.clicked.connect(lambda: open_account_daily_balances_dialog(self))
+        row.addWidget(button_balances)
+        button = QPushButton("Cash Chart")
+        button.clicked.connect(lambda: open_cash_management_chart_dialog(self))
+        row.addWidget(button)
+        button_result = QPushButton("Resultaat Chart")
+        button_result.clicked.connect(lambda: open_cash_management_result_chart_dialog(self))
+        row.addWidget(button_result)
+        button_year_result = QPushButton("Jaarresultaat Chart")
+        button_year_result.clicked.connect(lambda: open_cash_management_year_result_chart_dialog(self))
+        row.addWidget(button_year_result)
+        button_year_result_pct = QPushButton("% Jaarresultaat")
+        button_year_result_pct.clicked.connect(
+            lambda: open_cash_management_year_result_percent_chart_dialog(self)
+        )
+        row.addWidget(button_year_result_pct)
+        button_vs_indices = QPushButton("% vs Indices")
+        button_vs_indices.clicked.connect(lambda: open_year_result_vs_indices_chart_dialog(self))
+        row.addWidget(button_vs_indices)
+        layout.addLayout(row)
+
+        insert_index = max(0, self.verticalLayout_main.count() - 1)
+        self.verticalLayout_main.insertWidget(insert_index, group)
 
     def _refresh_header_color_button(self):
         color = self.settings_manager.get_table_header_bg()
@@ -181,6 +249,9 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self.settings_manager.set_tab_hover_bg(color.name())
         self._refresh_tab_hover_button()
         signals.uiStyleChanged.emit("tab_hover_bg")
+
+    def _on_chart_line_width_changed(self, value: float):
+        self.settings_manager.set_chart_line_width_px(value)
 
 
     def load_comment_colors(self):

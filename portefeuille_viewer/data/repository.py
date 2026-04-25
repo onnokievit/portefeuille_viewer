@@ -48,7 +48,7 @@ def reload_db_config():
 
 def switch_database(name: str):
     """Schakel naar een andere database."""
-    global db_path, conn_str
+    global DEFAULT_DB_NAME, db_path, conn_str
     if name not in DB_MAP:
         raise ValueError(f"Onbekende database: {name}")
     # flush eventuele dirty comments naar huidige DB voordat we overschakelen
@@ -64,6 +64,7 @@ def switch_database(name: str):
         pass
     db_path = new_path
     conn_str = test_conn_str
+    DEFAULT_DB_NAME = name
     # reset comment-cache zodat nieuwe DB geladen wordt
     try:
         SNAPSHOT_STORE.repository_snapshot_open_optie_comments = None

@@ -4,6 +4,7 @@ import json
 import threading
 import builtins
 import contextlib
+import argparse
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, cast
 from collections import Counter
@@ -90,6 +91,45 @@ def _apply_env_defaults_from_settings() -> None:
 
 
 _apply_env_defaults_from_settings()
+
+
+def _parse_startup_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument(
+        "--db",
+        "--database",
+        dest="database_alias",
+        default="",
+        help="Start direct met database alias/naam uit Settings > Databases.",
+    )
+    args, _unknown = parser.parse_known_args(argv[1:])
+    return args
+
+
+def _normalize_database_alias(value: str) -> str:
+    return "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum())
+
+
+def _resolve_database_alias(alias: str) -> str:
+    settings = get_settings()
+    databases = settings.get_databases()
+    wanted = _normalize_database_alias(alias)
+    if not wanted:
+        return ""
+    for name in databases:
+        if _normalize_database_alias(name) == wanted:
+            return name
+    available = ", ".join(databases.keys()) or "(geen databases ingesteld)"
+    raise ValueError(f"Onbekende database alias '{alias}'. Beschikbaar: {available}")
+
+
+def _apply_startup_database_selection(alias: str) -> None:
+    if not str(alias or "").strip():
+        return
+    db_name = _resolve_database_alias(alias)
+    repository.switch_database(db_name)
+    get_settings().set_last_database(db_name)
+    _log(f"[startup-db] actieve database via --db: {db_name}")
 
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
@@ -1150,6 +1190,7 @@ def main():
     global _AANDELEN_TV_SEED_TS
     import faulthandler
     faulthandler.enable()
+    startup_args = _parse_startup_args(sys.argv)
     existing_app = QApplication.instance()
     app = cast(QApplication | None, existing_app)
     if app is None:
@@ -1165,6 +1206,11 @@ def main():
         font.setWeight(demi_bold)
     app.setFont(font)
     run_startup_db_migrations()
+    try:
+        _apply_startup_database_selection(startup_args.database_alias)
+    except Exception as exc:
+        _log(f"[startup-db] {exc}")
+        raise SystemExit(2) from exc
     if ENABLE_ENGINE_CORE_RUNTIME:
         _log("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
         if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:

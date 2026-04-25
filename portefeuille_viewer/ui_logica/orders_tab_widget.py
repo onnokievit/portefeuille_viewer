@@ -65,7 +65,7 @@ class OrdersTableModel(HighlightingPandasTableModel):
             return self._display_headers.get(col_name, col_name)
         return str(section + 1)
 from portefeuille_viewer.data.repository import (
-    get_connection, DB_MAP, DB_STYLES, DEFAULT_DB_NAME,
+    get_connection,
     load_reference_lists, update_transactions_atomic, insert_transaction, insert_transactions_atomic,
     get_next_order_id, get_next_order_item_no, delete_transactions_by_ids, parse_int_field, parse_float_field,
     build_uniek_id, is_pairable
@@ -220,10 +220,11 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)
         
-        self.comboDatabase.addItems(list(DB_MAP.keys()))
-        self.comboDatabase.setCurrentText(DEFAULT_DB_NAME)
+        import portefeuille_viewer.data.repository as repo
+        self.comboDatabase.addItems(list(repo.DB_MAP.keys()))
+        self.comboDatabase.setCurrentText(repo.DEFAULT_DB_NAME)
         self.comboDatabase.currentTextChanged.connect(self.apply_database_by_name)
-        self._apply_db_color(DEFAULT_DB_NAME)
+        self._apply_db_color(repo.DEFAULT_DB_NAME)
         
         
         self._current_offset = 0
@@ -1461,7 +1462,8 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.dbChanged.emit()
             
     def _apply_db_color(self, name: str):
-        style = DB_STYLES.get(name, {"fg": "black", "bg": "white"})
+        import portefeuille_viewer.data.repository as repo
+        style = repo.DB_STYLES.get(name, {"fg": "black", "bg": "white"})
         fg = style.get("fg", "black")
         bg = style.get("bg", "white")
         css = f"""

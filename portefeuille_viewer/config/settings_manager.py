@@ -45,6 +45,13 @@ LOCAL_ONLY_KEYS = {
         "month_end_chart_state",
         "month_end_diff_chart_window_geometry",
         "month_end_diff_chart_state",
+        "year_result_vs_indices_selected_indices",
+        "year_result_vs_indices_selected_portfolio",
+        "chart_line_width_px",
+        "chart_line_widths_by_series",
+        "chart_line_styles_by_series",
+        "chart_start_dates_by_chart",
+        "year_result_vs_indices_start_date",
     },
     "app": {"last_database"},
 }
@@ -327,6 +334,150 @@ class SettingsManager:
         self.config.set('ui', 'tab_hover_bg', color)
         self.save()
 
+    def get_chart_line_width_px(self) -> float:
+        try:
+            value = self.config.getfloat('ui', 'chart_line_width_px', fallback=1.6)
+        except Exception:
+            value = 1.6
+        return min(8.0, max(0.5, float(value)))
+
+    def set_chart_line_width_px(self, value: float):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        try:
+            clean = min(8.0, max(0.5, float(value)))
+        except Exception:
+            clean = 1.6
+        self.config.set('ui', 'chart_line_width_px', str(clean))
+        self.save()
+
+    def get_chart_line_widths_by_series(self) -> dict:
+        raw = self.config.get('ui', 'chart_line_widths_by_series', fallback='{}')
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out = {}
+        for chart_id, values in data.items():
+            if not isinstance(values, dict):
+                continue
+            chart_key = str(chart_id).strip()
+            if not chart_key:
+                continue
+            out[chart_key] = {}
+            for series_id, width in values.items():
+                key = str(series_id).strip()
+                if not key:
+                    continue
+                try:
+                    out[chart_key][key] = min(8.0, max(0.5, float(width)))
+                except Exception:
+                    continue
+        return out
+
+    def get_chart_line_widths_for_chart(self, chart_id: str) -> dict:
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return {}
+        return self.get_chart_line_widths_by_series().get(chart_key, {})
+
+    def set_chart_line_width_for_series(self, chart_id: str, series_id: str, width: float):
+        chart_key = str(chart_id or '').strip()
+        series_key = str(series_id or '').strip()
+        if not chart_key or not series_key:
+            return
+        try:
+            clean = min(8.0, max(0.5, float(width)))
+        except Exception:
+            clean = self.get_chart_line_width_px()
+        data = self.get_chart_line_widths_by_series()
+        data.setdefault(chart_key, {})[series_key] = clean
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'chart_line_widths_by_series', json.dumps(data, ensure_ascii=False))
+        self.save()
+
+    def get_chart_line_styles_by_series(self) -> dict:
+        raw = self.config.get('ui', 'chart_line_styles_by_series', fallback='{}')
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out = {}
+        for chart_id, values in data.items():
+            if not isinstance(values, dict):
+                continue
+            chart_key = str(chart_id).strip()
+            if not chart_key:
+                continue
+            out[chart_key] = {}
+            for series_id, style in values.items():
+                key = str(series_id).strip()
+                clean = str(style or '').strip().lower()
+                if key and clean in {"solid", "dashed"}:
+                    out[chart_key][key] = clean
+        return out
+
+    def get_chart_line_styles_for_chart(self, chart_id: str) -> dict:
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return {}
+        return self.get_chart_line_styles_by_series().get(chart_key, {})
+
+    def set_chart_line_style_for_series(self, chart_id: str, series_id: str, style: str):
+        chart_key = str(chart_id or '').strip()
+        series_key = str(series_id or '').strip()
+        clean = str(style or '').strip().lower()
+        if not chart_key or not series_key or clean not in {"solid", "dashed"}:
+            return
+        data = self.get_chart_line_styles_by_series()
+        data.setdefault(chart_key, {})[series_key] = clean
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'chart_line_styles_by_series', json.dumps(data, ensure_ascii=False))
+        self.save()
+
+    def get_chart_start_dates_by_chart(self) -> dict:
+        raw = self.config.get('ui', 'chart_start_dates_by_chart', fallback='{}')
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out = {}
+        for chart_id, value in data.items():
+            chart_key = str(chart_id or '').strip()
+            text = str(value or '').strip()
+            if chart_key and text:
+                out[chart_key] = text
+        return out
+
+    def get_chart_start_date(self, chart_id: str) -> str:
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return ''
+        return self.get_chart_start_dates_by_chart().get(chart_key, '')
+
+    def set_chart_start_date(self, chart_id: str, value: str):
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return
+        data = self.get_chart_start_dates_by_chart()
+        clean = str(value or '').strip()
+        if clean:
+            data[chart_key] = clean
+        else:
+            data.pop(chart_key, None)
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'chart_start_dates_by_chart', json.dumps(data, ensure_ascii=False))
+        self.save()
+
     def get_aandelen_web_col_widths(self) -> Dict[str, int]:
         raw = self.config.get('ui', 'aandelen_web_col_widths', fallback='{}')
         try:
@@ -550,6 +701,63 @@ class SettingsManager:
         if not self.config.has_section('ui'):
             self.config.add_section('ui')
         self.config.set('ui', 'month_end_diff_chart_state', json.dumps(state, ensure_ascii=False))
+        self.save()
+
+    def get_year_result_vs_indices_selected_indices(self) -> list[str]:
+        raw = self.config.get('ui', 'year_result_vs_indices_selected_indices', fallback='[]')
+        try:
+            values = json.loads(raw)
+        except Exception:
+            return []
+        if not isinstance(values, list):
+            return []
+        return [str(v).strip().upper() for v in values if str(v).strip()]
+
+    def set_year_result_vs_indices_selected_indices(self, values: list[str]):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean = []
+        seen = set()
+        for value in values or []:
+            text = str(value).strip().upper()
+            if text and text not in seen:
+                seen.add(text)
+                clean.append(text)
+        self.config.set('ui', 'year_result_vs_indices_selected_indices', json.dumps(clean, ensure_ascii=False))
+        self.save()
+
+    def get_year_result_vs_indices_selected_portfolio(self) -> list[str]:
+        raw = self.config.get('ui', 'year_result_vs_indices_selected_portfolio', fallback='[\"total\"]')
+        try:
+            values = json.loads(raw)
+        except Exception:
+            return ["total"]
+        if not isinstance(values, list):
+            return ["total"]
+        clean = [str(v).strip().lower() for v in values if str(v).strip()]
+        return clean or ["total"]
+
+    def set_year_result_vs_indices_selected_portfolio(self, values: list[str]):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        allowed = {"total", "degiro", "lynx", "interactive"}
+        clean = []
+        seen = set()
+        for value in values or []:
+            text = str(value).strip().lower()
+            if text in allowed and text not in seen:
+                seen.add(text)
+                clean.append(text)
+        self.config.set('ui', 'year_result_vs_indices_selected_portfolio', json.dumps(clean or ["total"], ensure_ascii=False))
+        self.save()
+
+    def get_year_result_vs_indices_start_date(self) -> str:
+        return self.config.get('ui', 'year_result_vs_indices_start_date', fallback='')
+
+    def set_year_result_vs_indices_start_date(self, value: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'year_result_vs_indices_start_date', str(value or '').strip())
         self.save()
 
     def get_tab_order(self) -> list[str]:

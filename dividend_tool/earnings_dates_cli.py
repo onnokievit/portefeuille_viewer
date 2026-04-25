@@ -14,6 +14,17 @@ import pyodbc
 
 ONNO_DB_PATH = Path(r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb")
 STOCK_TYPES = {"aandeel", "stock", "etf", "fonds", "fund", ""}
+EARNINGS_STOCK_TYPES = {"aandeel", "stock", ""}
+US_EXCHANGES = {
+    "NASDAQ",
+    "NYSE",
+    "AMEX",
+    "ARCA",
+    "BATS",
+    "ISLAND",
+    "IEX",
+    "SMART",
+}
 
 
 @dataclass(frozen=True)
@@ -441,6 +452,95 @@ def _fetch_nasdaq_earnings_for_date(day: date) -> tuple[str, list[dict[str, Any]
     return "ok", [row for row in rows if isinstance(row, dict)], f"rows={len(rows)}"
 
 
+def is_us_earnings_asset(asset: AssetRecord) -> bool:
+    asset_type = str(asset.asset_type or "").strip().lower()
+    currency = str(asset.ib_currency or "").strip().upper()
+    exchange = str(asset.exchange or "").strip().upper()
+    prim_exchange = str(asset.prim_exchange or "").strip().upper()
+    if asset_type not in EARNINGS_STOCK_TYPES:
+        return False
+    if currency != "USD":
+        return False
+    return exchange in US_EXCHANGES or prim_exchange in US_EXCHANGES
+
+
+def run_nasdaq_us_batch(assets: list[AssetRecord], scan_days: int) -> list[dict[str, Any]]:
+    us_assets = [asset for asset in assets if is_us_earnings_asset(asset)]
+    symbol_to_assets: dict[str, list[AssetRecord]] = {}
+    for asset in us_assets:
+        symbol = str(asset.ib_symbol or "").strip().upper()
+        if symbol:
+            symbol_to_assets.setdefault(symbol, []).append(asset)
+
+    wanted_symbols = set(symbol_to_assets)
+    found: dict[str, dict[str, Any]] = {}
+    today = date.today()
+    log("START Nasdaq batch scan")
+    log(f"US earnings assets: {len(us_assets)} | unieke symbols: {len(wanted_symbols)} | scan_days={scan_days}")
+    log("Communicatie: per datum 1 call naar https://api.nasdaq.com/api/calendar/earnings?date=YYYY-MM-DD")
+
+    checked = 0
+    rows_seen = 0
+    for offset in range(max(0, int(scan_days)) + 1):
+        day = today + timedelta(days=offset)
+        status, rows, message = _fetch_nasdaq_earnings_for_date(day)
+        checked += 1
+        if status == "rate_limited":
+            log(f"STOP rate limited op {day.isoformat()}: {message}")
+            break
+        if status not in {"ok", "no_data"}:
+            log(f"WARN {day.isoformat()}: {status} {message}")
+            continue
+        rows_seen += len(rows)
+        for row in rows:
+            symbol = str(row.get("symbol") or "").strip().upper()
+            if symbol not in wanted_symbols or symbol in found:
+                continue
+            hit_date = normalize_to_date(row.get("date")) or day
+            found[symbol] = {
+                "symbol": symbol,
+                "date": hit_date.isoformat(),
+                "source_date": day.isoformat(),
+                "time": row.get("time") or "",
+                "fiscalQuarterEnding": row.get("fiscalQuarterEnding") or "",
+                "name": row.get("name") or "",
+            }
+        if offset in {0, 1, 7, 14, 30, 60, 90, scan_days}:
+            log(f"progress: checked={checked} through={day.isoformat()} rows_seen={rows_seen} found_symbols={len(found)}")
+        if len(found) >= len(wanted_symbols):
+            log("Alle gevraagde symbols gevonden; scan stopt vroeg.")
+            break
+
+    results: list[dict[str, Any]] = []
+    for asset in us_assets:
+        symbol = str(asset.ib_symbol or "").strip().upper()
+        hit = found.get(symbol)
+        if hit:
+            results.append(
+                {
+                    "asset": asset.asset_rollup,
+                    "symbol": symbol,
+                    "status": "ok",
+                    "date": hit["date"],
+                    "source": "nasdaq_date_scan",
+                    "message": f"time={hit['time'] or '-'} fiscalQuarterEnding={hit['fiscalQuarterEnding'] or '-'} source_date={hit['source_date']}",
+                }
+            )
+        else:
+            results.append(
+                {
+                    "asset": asset.asset_rollup,
+                    "symbol": symbol,
+                    "status": "no_data",
+                    "date": "",
+                    "source": "nasdaq_date_scan",
+                    "message": f"niet gevonden in komende {scan_days} dagen",
+                }
+            )
+    log(f"KLAAR Nasdaq batch: checked_days={checked} rows_seen={rows_seen} found_assets={sum(1 for r in results if r['status'] == 'ok')} missing={sum(1 for r in results if r['status'] != 'ok')}")
+    return results
+
+
 def _date_from_unix(value: Any) -> date | None:
     if value is None:
         return None
@@ -520,6 +620,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-assets", type=int, default=None, help="Max aantal assets om te testen.")
     parser.add_argument("--earnings-limit", type=int, default=12, help="Aantal yfinance earnings rows per symbool.")
     parser.add_argument("--nasdaq-scan-days", type=int, default=120, help="Aantal dagen vooruit scannen in Nasdaq earnings calendar.")
+    parser.add_argument("--batch-nasdaq-us", action="store_true", help="Batchtest: scan Nasdaq per datum en match alle US-aandelen uit ONNO.")
     return parser.parse_args()
 
 
@@ -541,7 +642,10 @@ def main() -> int:
         log(f"FATAL: assets laden mislukt: {type(exc).__name__}: {exc}")
         return 1
 
-    results = [diagnose_asset(asset, args.earnings_limit, args.nasdaq_scan_days) for asset in assets]
+    if args.batch_nasdaq_us:
+        results = run_nasdaq_us_batch(assets, args.nasdaq_scan_days)
+    else:
+        results = [diagnose_asset(asset, args.earnings_limit, args.nasdaq_scan_days) for asset in assets]
 
     log("")
     log("SAMENVATTING")
