@@ -3244,7 +3244,7 @@ volume_score
 vulnerability_score
 liquidity_score
 confidence_score
-asset_mode
+asset_fase
 primary_action
 secondary_action
 covered_call_delta_min
@@ -3324,14 +3324,14 @@ Huidige rolstatus:
 - rollen verschijnen in de Asset Indicator-tab;
 - rollen wegen nog niet inhoudelijk mee in adviesregels.
 
-Bekende beperkingen:
+Bekende beperkingen (status 2026-04-26):
 
-- `asset_mode` en `primary_action` zijn nog te generiek per rol;
-- `bearish_distribution` kan voor assets als `medium_value_theta` te hard uitpakken;
-- `long_term_bull_top_10pct_range` leidt nu nog niet altijd tot een aangepast call-/putadvies;
-- `theta_score = null` betekent vaak alleen dat er geen open optie-timevalue beschikbaar is, niet dat theta onaantrekkelijk is;
-- `vulnerability_score`, exposure en assignment-risk zijn nog niet aangesloten;
-- option-market suitability is nog niet gebouwd.
+- `asset_fase` (voorheen `asset_mode`) en `primary_action` zijn voor sommige rollen nog te generiek; `_deltas_by_role()` moduleert nu wel delta-grenzen, maar de hoofdactie-mapping per rol is nog beperkt voor `medium_value_theta`, `high_beta_value`, `bearish_distribution`;
+- `bearish_distribution` kan voor assets als `medium_value_theta` te hard uitpakken; geen apart rolpad hiervoor;
+- `long_term_bull_top_10pct_range` leidt nu nog niet altijd tot een aangepast call-/putadvies bovenin de range;
+- `theta_score = null` betekent dat er geen open optie-timevalue beschikbaar is; `theta_opportunity_proxy_score` is nu de juiste signaalvariabele voor nieuwe kansen, maar beide zijn zichtbaar in de UI-tab;
+- `vulnerability_score`, portfolio-exposure en assignment-risk zijn nog niet aangesloten op de beslislogica (alleen iv_vs_rv en vulnerability ≥ 60 cap zijn gebouwd);
+- option-market suitability (`OptionOpportunityService`) is nog niet gebouwd.
 
 Laatste technische validatie:
 
@@ -3652,57 +3652,329 @@ Nog niet gebouwd:
 
 
 
-IBKR data uit je screenshots
-Deze zijn waardevol:
-HV Last
-IV Last
-Beta
-IV Change
-52HVL
-52HVH
-52IVL
-52IVH
+## Asset Indicator: huidige status en roadmap (2026-04-26)
 
-- waarvoor is dit nuttig?
-- is dit ophalen gebouwd?
-- wordt dit gebruikt?
+Deze sectie vervangt de eerdere losse todo-blokken rond HV/IV, theta-proxy en UI-persistentie. De Asset Indicator is nu een werkende analyse-tab met asset-regime, volatility-proxy, theta-proxy, role-aware advieslogica en een eigen web-UI. De volgende grote stap is option-chain data structureel ophalen en historisch opslaan.
 
-Nu betrouwbaar bouwbaar uit OHLCV
-Deze drie kunnen we direct bouwen met data die al structureel in de app zit:
-1. realized_volatility_score
-2. atr_pct
-3. choppiness_score
+### Waar staan we?
 
-Bouwbaar met IBKR HV/IV als proxy
-Deze kunnen we bouwen zodra we de IBKR-volatility update structureel maken:
-4. implied_volatility_score
-6. premium_to_realized_volatility_score
+### Indicatoren
 
-Nog niet echt bouwbaar zonder option chain
-Deze niet volledig:
-5. theta_opportunity_score
-Met alleen IBKR asset-IV kun je hooguit een voorlopige proxy maken:
-theta_opportunity_proxy
-maar dit is eignelijk
-hoog IV + beheersbare realized vol + range/choppy regime + voldoende liquiditeit onbekend
+| Indicator | Status | Noot |
+|---|---|---|
+| `realized_volatility_score` | ✅ gebouwd (v1) | Berekend uit OHLCV, 20d + 60d gewogen |
+| `atr_pct` | ✅ gebouwd (v1) | ATR-14 als % van slotkoers |
+| `choppiness_score` | ✅ gebouwd (v1) | Choppiness Index 14-periode |
+| `ibkr_hv_last` / HV proxy | ✅ gebouwd (v1.1) | Gelezen uit `historical_data_correct.historical_volatility`, getoond als `ibkr_hv_proxy_pct` / HV % |
+| `ibkr_iv_last` / IV proxy | ✅ gebouwd (v1.1) | Gelezen uit `historical_data_correct.implied_volatility`, getoond als `ibkr_iv_proxy_pct` / IV % |
+| `implied_volatility_score` | ✅ gebouwd (v1.1) | Score 0–100 op basis van `ibkr_iv_proxy_pct` via `_score_implied_volatility()` |
+| `iv_vs_realized_volatility_score` | ✅ gebouwd (v1.1) | Spread IV − RV gescoord via `_score_iv_vs_realized()`. Dit is item 6 (hernoemd van `premium_to_realized_volatility_score`) |
+| `theta_opportunity_proxy_score` | ✅ proxy gebouwd | Asset-level theta proxy: `implied_volatility_score` (45%), `iv_vs_realized_volatility_score` (35%), `choppiness_score` (20%). Dit is geen concrete optie-kans |
+| `theta_score` | ✅ gebouwd, maar semantisch beperkt | Komt uit bestaande open optieposities / `snapshot_optie_timevalue_live`; dit is huidige positie-theta, niet asset-kans en niet looptijd-/risico-genormaliseerd |
+| `premium_to_realized_volatility_score` | ❌ niet gebouwd | Vereist echte option-chain premiums: bid/ask/mid per strike/expiry |
+| `theta_opportunity_score` (echt) | ❌ niet gebouwd | Vereist option chain: premium, IV, delta, DTE, OTM%, spread en liquiditeit |
 
+### Volatility update
 
-###### Kort
-1-3: ja, nu bouwen.
-4: ja, zodra IBKR IV structureel wordt opgehaald.
-6: ja als proxy, beter noemen iv_vs_realized_volatility_score.
-5: alleen als ruwe proxy; echte versie pas met option chain.
-v1:
-realized_volatility_score
-atr_pct
-choppiness_score
+Gebouwd:
 
-v1.1:
-ibkr_hv_last
-ibkr_iv_last
-implied_volatility_score
-iv_vs_realized_volatility_score
+- `price_update_scripts/fetch_asset_volatility_history_to_db.py` haalt via IBKR per asset op:
+  - `HISTORICAL_VOLATILITY`;
+  - `OPTION_IMPLIED_VOLATILITY`.
+- De waarden worden structureel in de stock DB opgeslagen in `historical_data_correct`:
+  - `historical_volatility`;
+  - `implied_volatility`.
+- DB-write is versneld via tijdelijke tabel `temp_asset_volatility_history` en bulk-update.
+- De app start dit via `AssetVolatilityHistoryUpdateRunner` als background proces na app-start.
+- Na succesvolle run worden snapshots opnieuw geladen en wordt `snapshot_asset_indicator_live` opnieuw opgebouwd.
 
-v2:
-theta_opportunity_score
+Belangrijke configuratie:
+
+```text
+ASSET_VOL_HISTORY_UPDATE_DELAY_MS=300000
+ASSET_VOL_HISTORY_UPDATE_CLIENT_ID=140
+ASSET_VOL_HISTORY_UPDATE_DURATION=5 D
+ASSET_VOL_HISTORY_UPDATE_MAX_IN_FLIGHT=3
+```
+
+Nog open:
+
+- dagelijkse run-registratie/skip, zodat dezelfde update niet onnodig opnieuw draait bij meerdere app-starts;
+- robuustere rate-limit/backoff per beurs/asset;
+- eventueel extra IBKR assetvelden ophalen: Beta, IV Change, 52HVL, 52HVH, 52IVL, 52IVH.
+
+### Advieslaag
+
+Volledig herschreven van score-combinatie-logica naar **regime-first** structuur:
+
+- Beslissing op basis van `asset_fase` (mode), niet op ruwe `direction >= X and volume >= Y`
+- `theta_opportunity_proxy_score` is nu de primaire schakelaar voor "lijkt dit asset geschikt voor theta?"
+- `indicator_role` moduleert strike-deltas via `_deltas_by_role()`:
+  - `dividend_low_beta_anchor` / `dividend_value`: calls en puts verder OTM (×0.65–0.85)
+  - `high_beta_value` / `high_beta_speculative`: veel verder OTM (×0.55–0.65), geen puts dicht bij koers
+  - `early_investor`: calls iets dichter bij koers (×1.25–1.30) voor costbase-reductie, geen puts
+  - `volatility_products` (UVXY, TBT): volledig apart pad, altijd `geen_naked_puts`
+- `reason_1/2/3` bevatten nu specifieke informatie (theta_opp-waarde, band-positie, causaal argument)
+
+Nieuwe helper-functies in `asset_indicator_rules.py`:
+- `_decide_bullish_action()` — bullish_accumulation / bullish_trend
+- `_decide_range_action()` — range_upper_band / range_lower_band / range_mid
+- `_decide_volatility_product()` — volatility_products rol
+- `_deltas_by_role()` — rol-gecorrigeerde delta-grenzen
+- `_opp_label()` — formateert reason-tekst met theta_opp-waarde
+
+Nieuw in `ActionInput`:
+- `indicator_role: str | None`
+- `theta_opportunity_proxy_score: float | None`
+- `implied_volatility_score: float | None`
+- `iv_vs_realized_volatility_score: float | None`
+
+### Hernoemingen en semantiek
+
+| Oud | Nieuw | Reden |
+|---|---|---|
+| `defensieve_covered_call` | `reduce_via_covered_call` | "Defensief" was ambigu; de werkelijke intent is altijd: schrijf call op bestaande positie om te reduceren/beschermen. In choppy markten gebruikt het systeem `theta_harvest` of `covered_calls_ver_otm` (andere codes). |
+| `asset_mode` (kolom + veld) | `asset_fase` | "Mode" is technisch vaag; "fase" beschrijft correct dat het gaat om de cyclische fase van het asset. |
+| `ASSET_INDICATOR_ASSET_MODES` | `ASSET_INDICATOR_ASSET_FASES` | Consistent met bovenstaande rename. |
+| `classify_asset_mode()` | `classify_asset_fase()` | Idem. |
+
+Gewijzigde files: `asset_indicator_contract.py`, `asset_indicator_rules.py`, `asset_indicator_service.py`, `asset_indicator_web_tab.py`, `run_asset_indicator_once.py`.
+
+Belangrijk onderscheid in theta-kolommen:
+
+| UI-kolom | Betekenis | Bron | Beperking |
+|---|---|---|---|
+| `Asset theta proxy` / huidige `Theta opp` | Asset lijkt geschikt voor theta-strategie | Assetdata: IV, IV/RV, choppiness | Geen concrete strike/expiry, geen bid/ask, geen delta |
+| `Optie theta` / huidige `Theta` | Huidige theta/timevalue in bestaande optieposities | `snapshot_optie_timevalue_live` | Niet eerlijk vergelijkbaar zonder DTE, delta, OTM%, risk-normalisatie |
+| toekomstige `Option opportunity` | Concrete nieuwe optie-kansen | Option-chain snapshot | Nog te bouwen |
+
+Te overwegen UI-hernoeming:
+
+- `Theta opp` → `Asset theta proxy`;
+- `Theta` → `Optie theta`.
+
+### Covered call vs cash-secured put
+
+Covered call (long stock + short call) = cash-secured put (short put + cash) zijn synthetisch identiek via put-call parity. Het verschil zit alleen in de rente-component (box spread). Voor de indicator:
+- `reduce_via_covered_call` veronderstelt dat je het aandeel **al hebt**
+- Het is geen instapadvies — de reasons benoemen dit expliciet ("Schrijf call op bestaande positie")
+- In range/choppy markten met theta-kans wordt `theta_harvest` of `covered_calls_ver_otm` gebruikt, niet `reduce_via_covered_call`
+
+### Aanvullende implementaties (sessie 2026-04-26)
+
+#### iv_vs_rv drempelmodulatie in `_decide_range_action()`
+
+Geïmplementeerd. Wanneer `iv_vs_realized_volatility_score > 50` (IV hoger dan RV → premie is "rich"), worden alle theta_opp-drempels in range-logica met 10 punten verlaagd (`adj = -10.0`). Reden: als de markt al hogere IV inprijst dan gerealiseerde volatiliteit, is het risico/beloning van optie schrijven relatief beter.
+
+```python
+iv_rich = iv_vs_rv is not None and float(iv_vs_rv) > 50.0
+adj = -10.0 if iv_rich else 0.0
+iv_note = "; IV>RV: drempel verlaagd" if iv_rich else ""
+```
+
+#### Vulnerability-cap in `_decide_range_action()`
+
+Geïmplementeerd. Bij `vulnerability >= 60` wordt naked premium geblokkeerd ongeacht theta_opp:
+- `vulnerability >= 60` en `theta_opp >= 65 + adj`: `alleen_spreads` + `geen_naked_puts`
+- `vulnerability >= 60` en lager: `niets_doen` + `geen_extra_leverage`
+
+Reden: bij een al kwetsbare positie (hoge exposure, veel open posities, events) is naked schrijven onverantwoord ook al is de premie aantrekkelijk.
+
+#### early_investor rol in range- en pullback-mode
+
+Geïmplementeerd. De `early_investor`-rol had eerder alleen handling in bullish-modi. Toegevoegd:
+
+**Range-mode:**
+- `theta_opp >= 50 + adj`: `covered_calls_ver_otm` (alleen calls, geen puts). Reason: "Vroege/kleine positie – alleen costbase-reductie via calls"
+- Lager: `niets_doen`
+- Nooit puts in range-mode voor `early_investor`
+
+**Pullback-mode (bullish_pullback):**
+```python
+if role == "early_investor":
+    return ActionDecision(
+        asset_fase=mode,
+        primary_action="niets_doen",
+        secondary_action="geen_naked_puts",
+        reason_1="Pullback in vroege/kleine positie – geen exposure verhogen",
+        ...
+    )
+```
+
+Reden: bij een vroege positie (kleine sizing, thesis nog onbewezen) is pullback het moment om te wachten, niet om puts te schrijven.
+
+**Open punt (debatable):** `early_investor` in `bottoming`-mode krijgt nog steeds `schrijf_puts`. Dit is aanvechtbaar (exposure verhogen in onzekere startuppositie), maar is voorlopig zo gelaten omdat bottoming-signaal op zichzelf al een positief signaal is.
+
+#### Nieuwe helper `_scale()`
+
+Toegevoegd:
+```python
+def _scale(value: float, factor: float) -> float:
+    return max(0.05, min(0.50, value * factor))
+```
+Gebruikt door `_deltas_by_role()` om delta-grenzen te corrigeren per rol zonder buiten handelsbare grenzen te gaan.
+
+#### UI: Asset Indicator webtab
+
+Gebouwd in `asset_indicator_web_tab.py`:
+
+- webtab met summary cards, filters, sortering en context-menu filtering;
+- komma-gescheiden zoektermen;
+- context-menu per kolom met sorteren/filter wissen/waarden kiezen;
+- draggable kolomvolgorde;
+- kolomvolgorde persistent via app-local-settings (`QSettings`) met key:
+  - `asset_indicator/column_order_v1`;
+- browser `localStorage` blijft fallback/migratiepad:
+  - `asset_indicator_col_order_v1`;
+- resetknop `↺ kolommen` zet standaardvolgorde terug.
+
+### Wat moeten we nog doen?
+
+#### 1. Kolomnamen verduidelijken
+
+Status: gebouwd in `asset_indicator_web_tab.py`.
+
+- `Theta opp` is hernoemd naar `Asset theta proxy`;
+- `Theta` is hernoemd naar `Optie theta`.
+
+Nog open:
+
+- eventueel extra tooltip of reason opnemen: "Asset theta proxy is gebaseerd op asset-IV, IV/RV en choppiness; geen option-chain score."
+
+#### 2. Option-chain snapshot matrix bouwen
+
+Dit is de belangrijkste volgende inhoudelijke stap. Per asset moet een subset van de optiechain worden opgehaald en historisch opgeslagen.
+
+Gewenste ruwe velden:
+
+```text
+asset
+timestamp
+underlying_price
+expiry
+dte
+strike
+call_put
+bid
+ask
+mid
+delta
+theta
+gamma
+vega
+iv
+volume
+open_interest
+otm_pct
+spread_pct
+```
+
+Slimme subset, niet volledige chain:
+
+- expiries rond 1 week, 2 weken, 4 weken, 6-8 weken;
+- strikes rond delta 0.10, 0.15, 0.20, 0.30, 0.40;
+- calls en puts apart;
+- eventueel alleen assets met rol waar optiehandel logisch is, en `ignore` overslaan.
+
+Waarom historisch opslaan:
+
+- IBKR option data is vooral betrouwbaar tijdens market open;
+- buiten markturen zijn bid/ask/greeks mogelijk leeg of stale;
+- zonder opslag kun je alleen "nu" beoordelen;
+- met snapshots kun je zien of IV, premie, spreads en kansen verbeteren of verslechteren.
+
+#### 3. Echte option opportunity scores bouwen
+
+Uit de option-chain matrix:
+
+```text
+option_market_score
+put_opportunity_score
+call_opportunity_score
+theta_per_day_score
+theta_per_risk_score
 premium_to_realized_volatility_score
+option_liquidity_score
+option_spread_score
+option_chain_depth_score
+```
+
+Belangrijk: absolute theta is onvoldoende. Er moet genormaliseerd worden voor:
+
+- DTE;
+- delta;
+- OTM%;
+- bid/ask spread;
+- assignment-/gamma-risico;
+- onderliggende prijs / exposure;
+- asset-regime en indicatorrol.
+
+Voorbeeld:
+
+- optie met hoge theta en 3 weken looptijd kan minder aantrekkelijk zijn dan een kortlopende, verder OTM put met lagere absolute theta maar betere risico/rendement-verhouding.
+
+#### 4. Bestaande optieposities beter beoordelen
+
+De huidige `Optie theta` moet later worden uitgebreid naar beheerkwaliteit van bestaande posities:
+
+```text
+current_option_theta_abs
+current_option_theta_per_day
+current_option_theta_yield_pct
+current_option_theta_per_risk
+current_option_dte_weighted
+current_option_delta_risk
+```
+
+Doel:
+
+- niet alleen "hoeveel theta heb ik?", maar "is deze theta goed betaald voor het risico en de looptijd?".
+
+#### 5. Advieskalibratie en feedback-loop
+
+Nodig:
+
+- drempels tunen voor theta_opp, IV/RV, choppiness, vulnerability;
+- bekende assets periodiek reviewen: AHOLD, O, BAYER, APPLOVIN, VFC, ASMLAEB, ASMI, AMD, NVIDIA, UVXY, JNJ, KO, BATS, BTI, BMW, ARCHER, JOBY, ASTS;
+- signaalhistorie opslaan:
+  - `asset_indicator_signal_history`;
+  - `asset_indicator_service_runs`;
+- later trade/outcome-feedback koppelen.
+
+Status signaalhistorie:
+
+- gebouwd in `asset_indicator_service.py`;
+- opslaglocatie: actieve user DB / ONNO DB, niet stock DB;
+- reden: signalen zijn user-specifiek door `indicator_rol`, posities, huidige optie-theta en adviesregels;
+- stock DB blijft bedoeld voor neutrale marktdata zoals OHLCV, HV/IV en later option-chain snapshots;
+- elke succesvolle indicator-run probeert te schrijven naar:
+  - `asset_indicator_service_runs`;
+  - `asset_indicator_signal_history`;
+- als de user DB read-only/gelocked is, blijft de indicator-run werken en wordt historie-opslag overgeslagen.
+
+#### 6. Integratie in Single Asset Analyse
+
+Pas doen zodra adviezen stabiel genoeg zijn:
+
+- compacte adviesstrip bovenin Single Asset Analyse;
+- tooltip/detail met LT, ST, range, rol, volatility, asset theta proxy, optie theta;
+- geen herberekening in UI, alleen lezen uit `snapshot_asset_indicator_live`.
+
+### Nice-to-have uitbreidingen / verbeteringen
+
+- UI-presets in Asset Indicator:
+  - "Theta kansen";
+  - "Put kandidaten";
+  - "Covered call beheer";
+  - "Risico verlagen";
+  - "Onvoldoende data";
+  - "High IV / lage RV";
+- kolomzicht-presets naast vrije drag/drop volgorde;
+- filterstatus ook persistent maken;
+- sorteerstatus persistent maken;
+- export naar CSV/Excel;
+- detaildrawer per asset met mini-uitleg van score-opbouw;
+- sparklines of kleine trend/range visual per asset;
+- extra IBKR-volatilityvelden: Beta, IV Change, 52HVL, 52HVH, 52IVL, 52IVH;
+- `validate_action_codes()` optimaliseren met module-level cache;
+- `early_investor` in `bottoming`-mode opnieuw beoordelen: nu nog `schrijf_puts`, mogelijk te agressief voor kleine/vroege posities.

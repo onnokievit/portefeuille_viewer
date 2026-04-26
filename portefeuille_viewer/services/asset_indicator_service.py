@@ -11,6 +11,7 @@ No timers, startup wiring, UI integration or database writes live here yet.
 
 from __future__ import annotations
 
+import json
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
@@ -88,6 +89,14 @@ class AssetIndicatorService:
             SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, live_df)
             SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, summary_df)
             SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
+            _persist_signal_history(
+                run_id=run_id,
+                started_at=started_at,
+                duration_ms=duration_ms,
+                status="ok",
+                error="",
+                live_df=live_df,
+            )
 
             return AssetIndicatorRunResult(
                 run_id=run_id,
@@ -182,7 +191,7 @@ class AssetIndicatorService:
             "vulnerability_score": None,
             "liquidity_score": None,
             "confidence_score": 0.0,
-            "asset_mode": "insufficient_data",
+            "asset_fase": "insufficient_data",
             "primary_action": "geen_advies_onvoldoende_data",
             "secondary_action": "wachten_op_stabilisatie",
             "covered_call_delta_min": None,
@@ -281,7 +290,7 @@ class AssetIndicatorService:
                 "theta_score": theta_score,
                 "volume_score": volume_score,
                 "confidence_score": decision.confidence_score,
-                "asset_mode": decision.asset_mode,
+                "asset_fase": decision.asset_fase,
                 "primary_action": decision.primary_action,
                 "secondary_action": decision.secondary_action,
                 "covered_call_delta_min": decision.covered_call_delta_min,
@@ -301,7 +310,7 @@ class AssetIndicatorService:
             return empty_asset_indicator_summary_frame()
 
         summary_rows: list[dict] = []
-        for group_col, group_type in (("primary_action", "primary_action"), ("asset_mode", "asset_mode")):
+        for group_col, group_type in (("primary_action", "primary_action"), ("asset_fase", "asset_fase")):
             if group_col not in live_df.columns:
                 continue
             grouped = (
@@ -833,6 +842,202 @@ def _score_theta_opportunity_proxy(
     if direction_score is not None and float(direction_score) < -60.0:
         out *= 0.75
     return round(_clamp(out, 0.0, 100.0), 2)
+
+
+def _persist_signal_history(
+    *,
+    run_id: str,
+    started_at: datetime,
+    duration_ms: float,
+    status: str,
+    error: str,
+    live_df: pl.DataFrame,
+) -> None:
+    if live_df is None or live_df.is_empty():
+        return
+    try:
+        from portefeuille_viewer.data import repository
+
+        if not getattr(repository, "db_path", None):
+            return
+        with repository.get_connection() as conn:
+            cur = conn.cursor()
+            _ensure_signal_history_tables(cur)
+            ended_at = datetime.now()
+            cur.execute(
+                """
+                INSERT INTO asset_indicator_service_runs
+                    (run_id, started_at, ended_at, status, duration_ms,
+                     assets_total, assets_scored, assets_insufficient_data,
+                     service_version, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    started_at,
+                    ended_at,
+                    status,
+                    float(duration_ms),
+                    int(live_df.height),
+                    AssetIndicatorService._count_scored(live_df),
+                    AssetIndicatorService._count_insufficient(live_df),
+                    SERVICE_VERSION,
+                    str(error or "")[:4000],
+                ),
+            )
+            rows = [_history_row_tuple(run_id, row) for row in live_df.to_dicts()]
+            if rows:
+                cur.executemany(
+                    """
+                    INSERT INTO asset_indicator_signal_history
+                        (run_id, as_of, asset_rollup, asset_name, indicator_role,
+                         trend_phase, asset_fase, primary_action, secondary_action,
+                         data_quality, direction_score, long_term_direction_score,
+                         short_term_direction_score, range_position_pct,
+                         realized_volatility_score, atr_pct, choppiness_score,
+                         ibkr_hv_proxy_pct, ibkr_iv_proxy_pct,
+                         implied_volatility_score, iv_vs_realized_volatility_score,
+                         theta_opportunity_proxy_score, theta_score, volume_score,
+                         confidence_score, reason_1, reason_2, reason_3,
+                         payload_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+            conn.commit()
+    except Exception as exc:
+        print(f"[asset-indicator] signal history persistence skipped: {exc}")
+
+
+def _ensure_signal_history_tables(cur) -> None:
+    try:
+        cur.execute(
+            """
+            CREATE TABLE asset_indicator_service_runs (
+                id COUNTER PRIMARY KEY,
+                run_id TEXT(40),
+                started_at DATETIME,
+                ended_at DATETIME,
+                status TEXT(32),
+                duration_ms DOUBLE,
+                assets_total LONG,
+                assets_scored LONG,
+                assets_insufficient_data LONG,
+                service_version TEXT(120),
+                error_message MEMO
+            )
+            """
+        )
+    except Exception:
+        pass
+    try:
+        cur.execute(
+            """
+            CREATE TABLE asset_indicator_signal_history (
+                id COUNTER PRIMARY KEY,
+                run_id TEXT(40),
+                as_of DATETIME,
+                asset_rollup TEXT(64),
+                asset_name TEXT(255),
+                indicator_role TEXT(80),
+                trend_phase TEXT(80),
+                asset_fase TEXT(80),
+                primary_action TEXT(80),
+                secondary_action TEXT(120),
+                data_quality TEXT(32),
+                direction_score DOUBLE,
+                long_term_direction_score DOUBLE,
+                short_term_direction_score DOUBLE,
+                range_position_pct DOUBLE,
+                realized_volatility_score DOUBLE,
+                atr_pct DOUBLE,
+                choppiness_score DOUBLE,
+                ibkr_hv_proxy_pct DOUBLE,
+                ibkr_iv_proxy_pct DOUBLE,
+                implied_volatility_score DOUBLE,
+                iv_vs_realized_volatility_score DOUBLE,
+                theta_opportunity_proxy_score DOUBLE,
+                theta_score DOUBLE,
+                volume_score DOUBLE,
+                confidence_score DOUBLE,
+                reason_1 TEXT(255),
+                reason_2 TEXT(255),
+                reason_3 TEXT(255),
+                payload_json MEMO,
+                created_at DATETIME
+            )
+            """
+        )
+    except Exception:
+        pass
+
+
+def _history_row_tuple(run_id: str, row: dict) -> tuple:
+    return (
+        run_id,
+        _dt_value(row.get("as_of")),
+        _text_value(row.get("asset_rollup"), 64),
+        _text_value(row.get("asset_name"), 255),
+        _text_value(row.get("indicator_role"), 80),
+        _text_value(row.get("trend_phase"), 80),
+        _text_value(row.get("asset_fase"), 80),
+        _text_value(row.get("primary_action"), 80),
+        _text_value(row.get("secondary_action"), 120),
+        _text_value(row.get("data_quality"), 32),
+        _float_value(row.get("direction_score")),
+        _float_value(row.get("long_term_direction_score")),
+        _float_value(row.get("short_term_direction_score")),
+        _float_value(row.get("range_position_pct")),
+        _float_value(row.get("realized_volatility_score")),
+        _float_value(row.get("atr_pct")),
+        _float_value(row.get("choppiness_score")),
+        _float_value(row.get("ibkr_hv_proxy_pct")),
+        _float_value(row.get("ibkr_iv_proxy_pct")),
+        _float_value(row.get("implied_volatility_score")),
+        _float_value(row.get("iv_vs_realized_volatility_score")),
+        _float_value(row.get("theta_opportunity_proxy_score")),
+        _float_value(row.get("theta_score")),
+        _float_value(row.get("volume_score")),
+        _float_value(row.get("confidence_score")),
+        _text_value(row.get("reason_1"), 255),
+        _text_value(row.get("reason_2"), 255),
+        _text_value(row.get("reason_3"), 255),
+        json.dumps(row, ensure_ascii=False, default=_json_default),
+        datetime.now(),
+    )
+
+
+def _text_value(value: object, max_len: int) -> str:
+    return str(value or "").strip()[:max_len]
+
+
+def _float_value(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out != out:
+        return None
+    return out
+
+
+def _dt_value(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+
+
+def _json_default(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
 
 
 def _linear_score(value: float, *, low: float, high: float) -> float:

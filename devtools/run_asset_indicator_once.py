@@ -137,8 +137,8 @@ def _print_live(args: argparse.Namespace) -> None:
         work = work.sort("direction_score", descending=True, nulls_last=True)
     elif args.sort == "volume" and "volume_score" in work.columns:
         work = work.sort("volume_score", descending=True, nulls_last=True)
-    elif args.sort == "mode" and "asset_mode" in work.columns:
-        work = work.sort(["asset_mode", "asset_rollup"])
+    elif args.sort == "mode" and "asset_fase" in work.columns:
+        work = work.sort(["asset_fase", "asset_rollup"])
     elif args.sort == "role" and "indicator_role" in work.columns:
         work = work.sort(["indicator_role", "asset_rollup"])
     elif args.sort == "asset" and "asset_rollup" in work.columns:
@@ -163,7 +163,7 @@ def _print_live(args: argparse.Namespace) -> None:
         "iv_vs_realized_volatility_score",
         "theta_opportunity_proxy_score",
         "volume_score",
-        "asset_mode",
+        "asset_fase",
         "primary_action",
         "secondary_action",
         "data_quality",
@@ -192,7 +192,7 @@ def _print_live(args: argparse.Namespace) -> None:
                 ivrv=_fmt_num(row.get("iv_vs_realized_volatility_score")),
                 theta_opp=_fmt_num(row.get("theta_opportunity_proxy_score")),
                 volume=_fmt_num(row.get("volume_score")),
-                mode=row.get("asset_mode") or "",
+                mode=row.get("asset_fase") or "",
                 action=row.get("primary_action") or "",
                 secondary=row.get("secondary_action") or "",
                 quality=row.get("data_quality") or "",
@@ -444,7 +444,7 @@ def _html_template(json_payload: str) -> str:
           <th data-key="iv_vs_realized_volatility_score">IV/RV</th>
           <th data-key="theta_opportunity_proxy_score">Theta opp</th>
           <th data-key="volume_score">Volume</th>
-          <th data-key="asset_mode">Mode</th>
+          <th data-key="asset_fase">Fase</th>
           <th data-key="primary_action">Action</th>
           <th data-key="secondary_action">Secondary</th>
           <th data-key="data_quality">Quality</th>
@@ -468,7 +468,7 @@ def _html_template(json_payload: str) -> str:
       quality: "__ALL__",
       secondary: "__ALL__",
     }};
-    const columns = ["asset_rollup","asset_name","indicator_role","direction_score","long_term_direction_score","short_term_direction_score","range_position_pct","trend_phase","realized_volatility_score","atr_pct","choppiness_score","ibkr_iv_proxy_pct","iv_vs_realized_volatility_score","theta_opportunity_proxy_score","volume_score","asset_mode","primary_action","secondary_action","data_quality"];
+    const columns = ["asset_rollup","asset_name","indicator_role","direction_score","long_term_direction_score","short_term_direction_score","range_position_pct","trend_phase","realized_volatility_score","atr_pct","choppiness_score","ibkr_iv_proxy_pct","iv_vs_realized_volatility_score","theta_opportunity_proxy_score","volume_score","asset_fase","primary_action","secondary_action","data_quality"];
 
     function fmt(v) {{
       if (v === null || v === undefined || v === "") return "-";
@@ -507,7 +507,7 @@ def _html_template(json_payload: str) -> str:
       return rows.filter(r => {{
         if (state.action !== "__ALL__" && r.primary_action !== state.action) return false;
         if (state.role !== "__ALL__" && r.indicator_role !== state.role) return false;
-        if (state.mode !== "__ALL__" && r.asset_mode !== state.mode) return false;
+        if (state.mode !== "__ALL__" && r.asset_fase !== state.mode) return false;
         if (state.quality !== "__ALL__" && r.data_quality !== state.quality) return false;
         if (state.secondary !== "__ALL__" && r.secondary_action !== state.secondary) return false;
         if (q && !rowText(r).includes(q)) return false;
@@ -548,7 +548,7 @@ def _html_template(json_payload: str) -> str:
           <td class="num">${{fmt(r.iv_vs_realized_volatility_score)}}</td>
           <td class="num">${{fmt(r.theta_opportunity_proxy_score)}}</td>
           <td class="num">${{fmt(r.volume_score)}}</td>
-          <td><span class="pill">${{escapeHtml(r.asset_mode)}}</span></td>
+          <td><span class="pill">${{escapeHtml(r.asset_fase)}}</span></td>
           <td><span class="pill">${{escapeHtml(r.primary_action)}}</span></td>
           <td>${{escapeHtml(r.secondary_action)}}</td>
           <td>${{escapeHtml(r.data_quality)}}</td>
@@ -589,7 +589,7 @@ def _html_template(json_payload: str) -> str:
     }});
     fillSelect("action", unique("primary_action"), state.action);
     fillSelect("role", unique("indicator_role"), state.role);
-    fillSelect("mode", unique("asset_mode"), state.mode);
+    fillSelect("mode", unique("asset_fase"), state.mode);
     fillSelect("quality", unique("data_quality"), state.quality);
     fillSelect("secondary", unique("secondary_action"), state.secondary);
     renderSummary();

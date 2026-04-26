@@ -17,7 +17,7 @@ SNAPSHOT_ASSET_INDICATOR_SUMMARY: Final = "snapshot_asset_indicator_summary"
 SNAPSHOT_ASSET_INDICATOR_META: Final = "snapshot_asset_indicator_meta"
 
 
-ASSET_INDICATOR_ASSET_MODES: Final[tuple[str, ...]] = (
+ASSET_INDICATOR_ASSET_FASES: Final[tuple[str, ...]] = (
     "bullish_accumulation",
     "bullish_trend",
     "bullish_pullback",
@@ -37,7 +37,7 @@ ASSET_INDICATOR_PRIMARY_ACTIONS: Final[tuple[str, ...]] = (
     "schrijf_puts",
     "covered_calls_ver_otm",
     "theta_harvest",
-    "defensieve_covered_call",
+    "reduce_via_covered_call",
     "alleen_spreads",
     "risico_verlagen",
     "niets_doen",
@@ -107,7 +107,7 @@ ASSET_INDICATOR_LIVE_SCHEMA: Final[dict[str, pl.DataType]] = {
     "vulnerability_score": pl.Float64,
     "liquidity_score": pl.Float64,
     "confidence_score": pl.Float64,
-    "asset_mode": pl.Utf8,
+    "asset_fase": pl.Utf8,
     "primary_action": pl.Utf8,
     "secondary_action": pl.Utf8,
     "covered_call_delta_min": pl.Float64,

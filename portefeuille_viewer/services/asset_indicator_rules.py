@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from math import isfinite
 
 from portefeuille_viewer.services.asset_indicator_contract import (
-    ASSET_INDICATOR_ASSET_MODES,
+    ASSET_INDICATOR_ASSET_FASES,
     ASSET_INDICATOR_DATA_QUALITY_CODES,
     ASSET_INDICATOR_PRIMARY_ACTIONS,
     ASSET_INDICATOR_SECONDARY_ACTIONS,
@@ -68,7 +68,7 @@ class ActionInput:
 
 @dataclass(frozen=True)
 class ActionDecision:
-    asset_mode: str
+    asset_fase: str
     primary_action: str
     secondary_action: str
     covered_call_delta_min: float | None
@@ -97,14 +97,14 @@ def _pct_change(current: float | None, previous: float | None) -> float | None:
 
 def validate_action_codes() -> None:
     """Fail fast when local rules emit codes outside the shared contract."""
-    required_modes = set(ASSET_INDICATOR_ASSET_MODES)
+    required_fases = set(ASSET_INDICATOR_ASSET_FASES)
     required_primary = {
         "long_houden",
         "long_uitbreiden_voorzichtig",
         "schrijf_puts",
         "covered_calls_ver_otm",
         "theta_harvest",
-        "defensieve_covered_call",
+        "reduce_via_covered_call",
         "alleen_spreads",
         "risico_verlagen",
         "niets_doen",
@@ -127,7 +127,7 @@ def validate_action_codes() -> None:
     required_quality = {"ok", "partial", "insufficient"}
 
     missing = (
-        required_modes.difference(ASSET_INDICATOR_ASSET_MODES)
+        required_fases.difference(ASSET_INDICATOR_ASSET_FASES)
         | required_primary.difference(ASSET_INDICATOR_PRIMARY_ACTIONS)
         | required_secondary.difference(ASSET_INDICATOR_SECONDARY_ACTIONS)
         | required_quality.difference(ASSET_INDICATOR_DATA_QUALITY_CODES)
@@ -420,7 +420,7 @@ def calculate_volume_score(data: VolumeInput) -> float | None:
     return round(_clamp(score, -100.0, 100.0), 2)
 
 
-def classify_asset_mode(
+def classify_asset_fase(
     direction_score: float | None,
     volume_score: float | None,
     vulnerability_score: float | None = None,
@@ -481,12 +481,12 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
     role = (data.indicator_role or "").strip()
     trend_phase = data.trend_phase or ""
 
-    mode = classify_asset_mode(direction, volume, vulnerability, data_quality, trend_phase)
+    mode = classify_asset_fase(direction, volume, vulnerability, data_quality, trend_phase)
     conf = _confidence(direction, volume, theta, vulnerability, data_quality)
 
     if mode == "insufficient_data":
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="geen_advies_onvoldoende_data",
             secondary_action="wachten_op_stabilisatie",
             covered_call_delta_min=None,
@@ -504,7 +504,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
 
     if vulnerability >= 80.0:
         return ActionDecision(
-            asset_mode="high_risk_avoid",
+            asset_fase="high_risk_avoid",
             primary_action="risico_verlagen",
             secondary_action="geen_naked_puts",
             covered_call_delta_min=None,
@@ -520,7 +520,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
     if mode == "bearish_distribution":
         if theta_opp is not None and theta_opp >= 60.0 and vulnerability < 60.0:
             return ActionDecision(
-                asset_mode=mode,
+                asset_fase=mode,
                 primary_action="alleen_spreads",
                 secondary_action="geen_naked_puts",
                 covered_call_delta_min=0.35,
@@ -533,7 +533,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 reason_3="Call credit spreads of put-spread buffers; geen naked puts",
             )
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="risico_verlagen",
             secondary_action="geen_naked_puts",
             covered_call_delta_min=0.35,
@@ -549,7 +549,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
     if mode == "bottoming":
         if theta_opp is not None and theta_opp >= 50.0:
             return ActionDecision(
-                asset_mode=mode,
+                asset_fase=mode,
                 primary_action="schrijf_puts",
                 secondary_action="deeper_otm_put_reduced_position_sizing",
                 covered_call_delta_min=None,
@@ -562,7 +562,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 reason_3="Beperkte positiegrootte; geen calls schrijven",
             )
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="niets_doen",
             secondary_action="wachten_op_stabilisatie",
             covered_call_delta_min=None,
@@ -578,8 +578,8 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
     if mode == "overextended":
         if theta_opp is not None and theta_opp >= 55.0:
             return ActionDecision(
-                asset_mode=mode,
-                primary_action="defensieve_covered_call",
+                asset_fase=mode,
+                primary_action="reduce_via_covered_call",
                 secondary_action="assignment_risico_controleren",
                 covered_call_delta_min=0.25,
                 covered_call_delta_max=0.35,
@@ -591,8 +591,8 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 reason_3="Strike dichter bij koers dan normaal; deel winst afromen",
             )
         return ActionDecision(
-            asset_mode=mode,
-            primary_action="defensieve_covered_call",
+            asset_fase=mode,
+            primary_action="reduce_via_covered_call",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=0.20,
             covered_call_delta_max=0.30,
@@ -606,9 +606,23 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
 
     if mode == "bullish_pullback":
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.10, 0.20), base_put=(0.15, 0.25))
+        if role == "early_investor":
+            return ActionDecision(
+                asset_fase=mode,
+                primary_action="niets_doen",
+                secondary_action="geen_naked_puts",
+                covered_call_delta_min=None,
+                covered_call_delta_max=None,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1="Pullback in vroege/kleine positie – geen exposure verhogen",
+                reason_2="Geen puts schrijven bij terugval in onzekere positie",
+                reason_3="Wacht op herstel of betere instapkans",
+            )
         if theta_opp is not None and theta_opp >= 50.0:
             return ActionDecision(
-                asset_mode=mode,
+                asset_fase=mode,
                 primary_action="schrijf_puts",
                 secondary_action="deeper_otm_put_reduced_position_sizing",
                 covered_call_delta_min=cm,
@@ -622,7 +636,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             )
         if volume <= -30.0:
             return ActionDecision(
-                asset_mode=mode,
+                asset_fase=mode,
                 primary_action="niets_doen",
                 secondary_action="volume_waarschuwt",
                 covered_call_delta_min=None,
@@ -635,7 +649,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 reason_3="Wacht op volumebevestiging van herstel",
             )
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="long_houden",
             secondary_action="geen_call_dichtbij",
             covered_call_delta_min=cm,
@@ -655,7 +669,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
         return _decide_range_action(trend_phase, theta_opp, iv_score, iv_vs_rv, role, vulnerability, conf)
 
     return ActionDecision(
-        asset_mode=mode,
+        asset_fase=mode,
         primary_action="niets_doen",
         secondary_action="wachten_op_stabilisatie",
         covered_call_delta_min=None,
@@ -681,7 +695,7 @@ def _decide_bullish_action(
 
     if role == "early_investor":
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="covered_calls_ver_otm",
             secondary_action="geen_call_dichtbij",
             covered_call_delta_min=0.15,
@@ -698,7 +712,7 @@ def _decide_bullish_action(
         if opp >= 55.0:
             secondary = "puts_dicht_bij_koers_toegestaan" if opp >= 65.0 else "puts_alleen_bij_pullback"
             return ActionDecision(
-                asset_mode=mode,
+                asset_fase=mode,
                 primary_action="long_houden",
                 secondary_action=secondary,
                 covered_call_delta_min=cm,
@@ -711,7 +725,7 @@ def _decide_bullish_action(
                 reason_3="Calls alleen ver OTM of helemaal niet schrijven",
             )
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="long_houden",
             secondary_action="geen_call_dichtbij",
             covered_call_delta_min=cm,
@@ -727,7 +741,7 @@ def _decide_bullish_action(
     # bullish_trend
     if opp >= 50.0:
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="covered_calls_ver_otm",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=cm,
@@ -741,7 +755,7 @@ def _decide_bullish_action(
         )
     if volume <= -30.0:
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="niets_doen",
             secondary_action="volume_waarschuwt",
             covered_call_delta_min=None,
@@ -754,7 +768,7 @@ def _decide_bullish_action(
             reason_3="Wacht op volumebevestiging",
         )
     return ActionDecision(
-        asset_mode=mode,
+        asset_fase=mode,
         primary_action="long_houden",
         secondary_action="geen_call_dichtbij",
         covered_call_delta_min=cm,
@@ -779,11 +793,79 @@ def _decide_range_action(
 ) -> ActionDecision:
     opp = theta_opp or 0.0
 
+    # When IV > RV the premium is rich relative to realized moves: lower all thresholds by 10.
+    iv_rich = iv_vs_rv is not None and float(iv_vs_rv) > 50.0
+    adj = -10.0 if iv_rich else 0.0
+    iv_note = "; IV>RV: drempel verlaagd" if iv_rich else ""
+
+    # Moderate vulnerability: cap options even when IV is attractive.
+    # (Vulnerability ≥ 80 is already handled upstream and never reaches here.)
+    if vulnerability >= 60.0:
+        if opp >= (65.0 + adj):
+            return ActionDecision(
+                asset_fase="range_theta_candidate",
+                primary_action="alleen_spreads",
+                secondary_action="geen_naked_puts",
+                covered_call_delta_min=None,
+                covered_call_delta_max=None,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1=f"Range-regime, vulnerability={vulnerability:.0f} – geen naked premium",
+                reason_2=f"Theta-opp={opp:.0f} aantrekkelijk maar risico te hoog voor naked short",
+                reason_3="Alleen defined-risk spreads; beperk positiegrootte",
+            )
+        return ActionDecision(
+            asset_fase="range_theta_candidate",
+            primary_action="niets_doen",
+            secondary_action="geen_extra_leverage",
+            covered_call_delta_min=None,
+            covered_call_delta_max=None,
+            short_put_delta_min=None,
+            short_put_delta_max=None,
+            confidence_score=conf,
+            reason_1=f"Range-regime maar vulnerability={vulnerability:.0f} – geen short premium",
+            reason_2=_opp_label("Reduceer risico of wacht op lagere vulnerability", theta_opp),
+            reason_3="Wacht tot vulnerability onder 60 daalt",
+        )
+
+    # Early investor: only calls to reduce cost basis, never puts.
+    if role == "early_investor":
+        cm, cx = _deltas_by_role(role, base_call=(0.15, 0.25), base_put=(0.15, 0.25))[:2]
+        if opp >= (50.0 + adj):
+            return ActionDecision(
+                asset_fase="range_theta_candidate",
+                primary_action="covered_calls_ver_otm",
+                secondary_action="geen_call_dichtbij",
+                covered_call_delta_min=cm,
+                covered_call_delta_max=cx,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1="Range-regime met vroege/kleine positie",
+                reason_2=_opp_label(f"Calls schrijven om costbase te verlagen{iv_note}", theta_opp),
+                reason_3="Geen puts: exposure niet verhogen in onzekere positie",
+            )
+        return ActionDecision(
+            asset_fase="range_theta_candidate",
+            primary_action="niets_doen",
+            secondary_action="wachten_op_stabilisatie",
+            covered_call_delta_min=None,
+            covered_call_delta_max=None,
+            short_put_delta_min=None,
+            short_put_delta_max=None,
+            confidence_score=conf,
+            reason_1="Range-regime, vroege/kleine positie",
+            reason_2=_opp_label("IV te laag voor callpremie", theta_opp),
+            reason_3="Wacht op hogere IV of bevestiging van trend",
+        )
+
+    # Normal flow with IV-adjusted thresholds.
     if trend_phase == "range_upper_band":
-        if opp >= 55.0:
+        if opp >= (55.0 + adj):
             cm, cx, pm, px = _deltas_by_role(role, base_call=(0.25, 0.40), base_put=(0.20, 0.30))
             return ActionDecision(
-                asset_mode="range_theta",
+                asset_fase="range_theta",
                 primary_action="theta_harvest",
                 secondary_action="covered_calls_en_puts_toegestaan",
                 covered_call_delta_min=cm,
@@ -792,12 +874,12 @@ def _decide_range_action(
                 short_put_delta_max=px,
                 confidence_score=conf,
                 reason_1="Range, bovenste band – theta harvest rechtvaardigd",
-                reason_2=f"Theta-opp={opp:.0f}: calls dichter bij koers; puts kunnen ook",
+                reason_2=f"Theta-opp={opp:.0f}: calls dichter bij koers; puts kunnen ook{iv_note}",
                 reason_3="Bewaar buffer boven voor upside; puts op steun",
             )
         cm, cx, _, _ = _deltas_by_role(role, base_call=(0.25, 0.35), base_put=(0.20, 0.30))
         return ActionDecision(
-            asset_mode="range_theta_candidate",
+            asset_fase="range_theta_candidate",
             primary_action="covered_calls_ver_otm",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=cm,
@@ -806,15 +888,15 @@ def _decide_range_action(
             short_put_delta_max=None,
             confidence_score=conf,
             reason_1="Range, bovenste band – calls schrijven is logisch",
-            reason_2=_opp_label("IV matig; calls ver OTM", theta_opp),
+            reason_2=_opp_label(f"IV matig; calls ver OTM{iv_note}", theta_opp),
             reason_3="Geen puts tenzij koers significant daalt",
         )
 
     if trend_phase == "range_lower_band":
-        if opp >= 45.0:
+        if opp >= (45.0 + adj):
             _, _, pm, px = _deltas_by_role(role, base_call=(0.15, 0.25), base_put=(0.20, 0.30))
             return ActionDecision(
-                asset_mode="range_theta",
+                asset_fase="range_theta",
                 primary_action="schrijf_puts",
                 secondary_action="deeper_otm_put_reduced_position_sizing",
                 covered_call_delta_min=None,
@@ -823,11 +905,11 @@ def _decide_range_action(
                 short_put_delta_max=px,
                 confidence_score=conf,
                 reason_1="Range, onderste band – put schrijven aantrekkelijk",
-                reason_2=f"Theta-opp={opp:.0f}: premie oogsten op steunniveau",
+                reason_2=f"Theta-opp={opp:.0f}: premie oogsten op steunniveau{iv_note}",
                 reason_3="Niet te dicht op de koers; beheers assignment-risico",
             )
         return ActionDecision(
-            asset_mode="range_theta_candidate",
+            asset_fase="range_theta_candidate",
             primary_action="niets_doen",
             secondary_action="wachten_op_stabilisatie",
             covered_call_delta_min=None,
@@ -841,10 +923,10 @@ def _decide_range_action(
         )
 
     # range_mid (en catch-all voor range)
-    if opp >= 60.0:
+    if opp >= (60.0 + adj):
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.25, 0.40), base_put=(0.20, 0.30))
         return ActionDecision(
-            asset_mode="range_theta",
+            asset_fase="range_theta",
             primary_action="theta_harvest",
             secondary_action="covered_calls_en_puts_toegestaan",
             covered_call_delta_min=cm,
@@ -853,13 +935,13 @@ def _decide_range_action(
             short_put_delta_max=px,
             confidence_score=conf,
             reason_1="Range-mid met sterke premie-opportunity",
-            reason_2=f"Theta-opp={opp:.0f}: calls én puts op respectievelijke niveaus",
+            reason_2=f"Theta-opp={opp:.0f}: calls én puts op respectievelijke niveaus{iv_note}",
             reason_3="Iron-condor stijl; bewaar marges aan beide zijden",
         )
-    if opp >= 40.0:
+    if opp >= (40.0 + adj):
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.20, 0.35), base_put=(0.15, 0.25))
         return ActionDecision(
-            asset_mode="range_theta_candidate",
+            asset_fase="range_theta_candidate",
             primary_action="covered_calls_ver_otm",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=cm,
@@ -868,12 +950,12 @@ def _decide_range_action(
             short_put_delta_max=px,
             confidence_score=conf,
             reason_1="Range-mid met matige premie-opportunity",
-            reason_2=f"Theta-opp={opp:.0f}: calls schrijven is passend",
+            reason_2=f"Theta-opp={opp:.0f}: calls schrijven is passend{iv_note}",
             reason_3="Puts alleen als koers naar onderste band trekt",
         )
 
     return ActionDecision(
-        asset_mode="range_theta_candidate",
+        asset_fase="range_theta_candidate",
         primary_action="niets_doen",
         secondary_action="wachten_op_stabilisatie",
         covered_call_delta_min=None,
@@ -896,7 +978,7 @@ def _decide_volatility_product(
     opp = theta_opp or 0.0
     if direction is not None and direction >= 20.0 and opp >= 55.0:
         return ActionDecision(
-            asset_mode=mode,
+            asset_fase=mode,
             primary_action="covered_calls_ver_otm",
             secondary_action="geen_naked_puts",
             covered_call_delta_min=0.20,
@@ -909,7 +991,7 @@ def _decide_volatility_product(
             reason_3="Kleine positiegrootte; product primair als hedge of spec",
         )
     return ActionDecision(
-        asset_mode=mode,
+        asset_fase=mode,
         primary_action="niets_doen",
         secondary_action="geen_naked_puts",
         covered_call_delta_min=None,

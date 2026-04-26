@@ -1,4 +1,5 @@
 import contextlib
+import html
 import math
 import os
 import re
@@ -11,6 +12,11 @@ import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget
 from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression, QSignalBlocker
+
+try:
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+except Exception:  # pragma: no cover
+    QWebEngineView = None
 
 # from streamlit import columns
 
@@ -460,6 +466,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self._init_asset_indicator_strip()
         self._wrap_in_scroll_area()
         self._step_defaults = {"step_size": 2.0, "step_size_tick": 0.5, "chart_shift": 0.0, "price_decimals": 2}
         self._step_settings_by_asset: dict[str, dict[str, object]] = {}
@@ -757,6 +764,143 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         QTimer.singleShot(0, self._bind_state_engine_controls)
         signals.stateRebuildFinished.connect(lambda _payload: self._refresh_state_engine_controls())
 
+    def _init_asset_indicator_strip(self) -> None:
+        parent = getattr(self, "groupBox_3", None)
+        if parent is None:
+            return
+        if QWebEngineView is None:
+            self.assetIndicatorStrip = QLabel("Asset indicator niet beschikbaar", parent)
+            self.assetIndicatorStrip.setGeometry(240, 8, 1780, 46)
+            self.assetIndicatorStrip.setStyleSheet(
+                "background:#fff; border:1px solid #c9d1dc; border-radius:4px; padding:3px 6px; color:#59616d;"
+            )
+            return
+        self.assetIndicatorStrip = QWebEngineView(parent)
+        self.assetIndicatorStrip.setObjectName("assetIndicatorStrip")
+        self.assetIndicatorStrip.setGeometry(240, 8, 1780, 46)
+        self.assetIndicatorStrip.setContextMenuPolicy(Qt.NoContextMenu)
+        self.assetIndicatorStrip.setHtml(self._asset_indicator_strip_html(None, ""))
+
+    def _update_asset_indicator_strip(self, asset_rollup: str | None = None) -> None:
+        strip = getattr(self, "assetIndicatorStrip", None)
+        if strip is None:
+            return
+        asset = str(asset_rollup or self.asset_selector.currentText() or "").strip().upper()
+        row = self._get_asset_indicator_row(asset)
+        html_text = self._asset_indicator_strip_html(row, asset)
+        if hasattr(strip, "setHtml"):
+            strip.setHtml(html_text)
+        else:
+            strip.setText(self._asset_indicator_plain_text(row, asset))
+
+    def _get_asset_indicator_row(self, asset_rollup: str) -> dict | None:
+        if not asset_rollup:
+            return None
+        df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
+        if df is None or df.is_empty() or "asset_rollup" not in df.columns:
+            return None
+        try:
+            rows = df.filter(
+                pl.col("asset_rollup").cast(pl.Utf8, strict=False).str.to_uppercase() == asset_rollup
+            )
+            if rows.is_empty():
+                return None
+            return rows.row(0, named=True)
+        except Exception:
+            return None
+
+    def _asset_indicator_plain_text(self, row: dict | None, asset: str) -> str:
+        if not row:
+            return f"{asset or '-'} | geen asset indicator snapshot"
+        return (
+            f"{asset}: {row.get('primary_action') or '-'} | {row.get('secondary_action') or '-'} | "
+            f"{row.get('asset_fase') or '-'} | dir {self._fmt_strip_value(row.get('direction_score'))} | "
+            f"asset theta {self._fmt_strip_value(row.get('theta_opportunity_proxy_score'))}"
+        )
+
+    def _asset_indicator_strip_html(self, row: dict | None, asset: str) -> str:
+        if not row:
+            message = "Geen asset indicator snapshot" if asset else "Selecteer een asset"
+            body = f"""
+              <div class="empty">
+                <strong>{html.escape(asset or "-")}</strong>
+                <span>{html.escape(message)}</span>
+              </div>
+            """
+        else:
+            action = str(row.get("primary_action") or "-")
+            secondary = str(row.get("secondary_action") or "-")
+            fase = str(row.get("asset_fase") or "-")
+            role = str(row.get("indicator_role") or "-")
+            quality = str(row.get("data_quality") or "-")
+            reason_1 = str(row.get("reason_1") or "")
+            reason_2 = str(row.get("reason_2") or "")
+            body = f"""
+              <div class="row">
+                <div class="left">
+                  <div class="labels">
+                    <span class="asset">{html.escape(asset)}</span>
+                    <span class="pill action {html.escape(self._strip_action_class(action))}">{html.escape(action)}</span>
+                    <span class="pill">{html.escape(secondary)}</span>
+                    <span class="pill muted">{html.escape(fase)}</span>
+                    <span class="pill muted">{html.escape(role)}</span>
+                  </div>
+                  <div class="scores">
+                    <span>Dir <b>{self._fmt_strip_value(row.get("direction_score"))}</b></span>
+                    <span>LT <b>{self._fmt_strip_value(row.get("long_term_direction_score"))}</b></span>
+                    <span>ST <b>{self._fmt_strip_value(row.get("short_term_direction_score"))}</b></span>
+                    <span>Range <b>{self._fmt_strip_value(row.get("range_position_pct"))}</b></span>
+                    <span>Asset theta <b>{self._fmt_strip_value(row.get("theta_opportunity_proxy_score"))}</b></span>
+                    <span>Optie theta <b>{self._fmt_strip_value(row.get("theta_score"))}</b></span>
+                    <span>IV/RV <b>{self._fmt_strip_value(row.get("iv_vs_realized_volatility_score"))}</b></span>
+                    <span>Q <b>{html.escape(quality)}</b></span>
+                  </div>
+                </div>
+                <div class="reason"><div>{html.escape(reason_1)}</div><span>{html.escape(reason_2)}</span></div>
+              </div>
+            """
+        return f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    html,body{{margin:0;padding:0;background:#f8fafc;color:#1f2937;font-family:Segoe UI,Arial,sans-serif;font-size:11px;overflow:hidden;}}
+    .row{{height:46px;border:1px solid #c9d1dc;border-radius:3px;background:#fff;padding:2px 5px;box-sizing:border-box;display:grid;grid-template-columns:58% 42%;gap:8px;align-items:start;}}
+    .left{{min-width:0;display:grid;grid-template-rows:19px 19px;gap:1px;overflow:hidden;}}
+    .labels{{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;}}
+    .asset{{font-weight:700;min-width:62px;}}
+    .pill{{display:inline-block;border:1px solid #cbd5e1;border-radius:999px;background:#fff;padding:1px 6px;line-height:15px;}}
+    .muted{{color:#64748b;background:#f8fafc;}}
+    .action{{font-weight:650;}}
+    .long_houden,.schrijf_puts,.covered_calls_ver_otm,.theta_harvest{{background:#dcfce7;border-color:#86efac;color:#14532d;}}
+    .reduce_via_covered_call{{background:#fef3c7;border-color:#facc15;color:#713f12;}}
+    .risico_verlagen,.alleen_spreads{{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d;}}
+    .niets_doen{{background:#f1f5f9;color:#334155;}}
+    .scores{{display:flex;align-items:center;gap:12px;white-space:nowrap;color:#475569;overflow:hidden;}}
+    .scores b{{color:#111827;}}
+    .reason{{height:40px;overflow:hidden;color:#334155;line-height:18px;border-left:1px solid #e2e8f0;padding-left:8px;}}
+    .reason div,.reason span{{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+    .reason span{{color:#64748b;}}
+    .empty{{height:46px;border:1px solid #c9d1dc;border-radius:4px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 8px;box-sizing:border-box;color:#64748b;}}
+    .empty strong{{color:#111827;}}
+  </style>
+</head>
+<body>{body}</body>
+</html>
+"""
+
+    def _strip_action_class(self, action: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_-]", "_", str(action or ""))
+
+    def _fmt_strip_value(self, value) -> str:
+        if value is None or value == "":
+            return "-"
+        try:
+            return f"{float(value):.1f}"
+        except Exception:
+            return html.escape(str(value))
+
     def set_active(self, active: bool):
         self._active = active
         if active:
@@ -764,6 +908,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._schedule_opties_reload()
             self._bind_state_engine_controls()
             self._refresh_state_engine_controls()
+            self._update_asset_indicator_strip()
 
     def _bind_state_engine_controls(self):
         runner = getattr(SNAPSHOT_STORE, "state_engine_runner", None)
@@ -1239,6 +1384,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._asset_selector_reload_timer.start()
         elif snapshot_key == "repository_snapshot_asset_dividend_calendar":
             self._update_dividend_labels(self.asset_selector.currentText())
+        elif snapshot_key == "snapshot_asset_indicator_live":
+            self._update_asset_indicator_strip()
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -3734,6 +3881,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.logic.enable_test_orders = getattr(self, "enable_test_orders", True)
         self.logic.set_asset(asset_rollup)
         self._current_step_asset = str(asset_rollup or "")
+        self._update_asset_indicator_strip(self._current_step_asset)
         self._apply_step_settings_for_asset(self._current_step_asset)
         self._update_dividend_labels(self._current_step_asset)
         self._get_live_summary_row(asset_rollup, refresh=True)
