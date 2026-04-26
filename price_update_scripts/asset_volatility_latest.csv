@@ -1,0 +1,2 @@
+asset_rollup,asset_name,asset_type,ib_symbol,ib_currency,exchange,prim_exchange,contractid,as_of,ibkr_hv_last,ibkr_iv_last,historical_volatility,implied_volatility,data_quality,error
+AHOLD,AHOLD,aandeel,AD,EUR,SMART,AEB,240486295,2026-04-26T11:10:20.590189,0.20159038,0.25548433,0.20159038,0.25548433,ok,""

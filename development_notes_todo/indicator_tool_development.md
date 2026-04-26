@@ -3230,6 +3230,15 @@ long_term_direction_score
 short_term_direction_score
 range_position_pct
 trend_phase
+realized_volatility_score
+realized_volatility_20d_pct
+realized_volatility_60d_pct
+atr_pct
+choppiness_score
+ibkr_iv_proxy_pct
+implied_volatility_score
+iv_vs_realized_volatility_score
+theta_opportunity_proxy_score
 theta_score
 volume_score
 vulnerability_score
@@ -3289,6 +3298,25 @@ Huidige theta:
 - deze score zegt nog niet of een asset zonder open opties aantrekkelijk is voor opties;
 - hiervoor is later `OptionOpportunityService` nodig.
 
+Huidige volatility-laag:
+
+- `realized_volatility_score` wordt berekend uit OHLCV;
+- `realized_volatility_20d_pct` en `realized_volatility_60d_pct` zijn annualized realized volatility op basis van close-to-close returns;
+- `atr_pct` gebruikt 14-daagse Average True Range gedeeld door de laatste close;
+- `choppiness_score` gebruikt een 14-daagse choppiness-index: hoog betekent veel heen-en-weer beweging ten opzichte van netto range;
+- `ibkr_iv_proxy_pct` wordt voorlopig gevuld uit beschikbare IBKR-IV velden wanneer die in snapshots zitten, of uit bestaande open optie-timevalue IV;
+- `implied_volatility_score` is een score op `ibkr_iv_proxy_pct`;
+- `iv_vs_realized_volatility_score` vergelijkt IBKR-IV proxy met realized volatility;
+- `theta_opportunity_proxy_score` is bewust een proxy: IV + IV/RV + choppiness, niet een echte optiechain/contract-score.
+
+Belangrijke beperking:
+
+```text
+theta_opportunity_proxy_score is geen echte option opportunity-score.
+```
+
+Voor een echte score zijn option chain data nodig: strikes, expiraties, bid/ask/mid, DTE, delta, theta, IV en liquiditeit.
+
 Huidige rolstatus:
 
 - `indicator_rol` wordt gelezen;
@@ -3308,11 +3336,11 @@ Bekende beperkingen:
 Laatste technische validatie:
 
 ```text
-python -m py_compile portefeuille_viewer\services\asset_indicator_contract.py portefeuille_viewer\services\asset_indicator_rules.py portefeuille_viewer\services\asset_indicator_service.py portefeuille_viewer\ui_logica\asset_indicator_web_tab.py devtools\run_asset_indicator_once.py
+python -m py_compile portefeuille_viewer\data\repository.py portefeuille_viewer\services\asset_indicator_contract.py portefeuille_viewer\services\asset_indicator_rules.py portefeuille_viewer\services\asset_indicator_service.py portefeuille_viewer\ui_logica\asset_indicator_web_tab.py devtools\run_asset_indicator_once.py
 python devtools\run_asset_indicator_once.py --limit 20 --sort asset --no-html
 ```
 
-Beide checks draaiden succesvol na toevoeging van de meer-dimensionale direction-laag.
+De compile-check draaide succesvol na toevoeging van de meer-dimensionale direction- en volatility-laag. Een latere end-to-end DB-run kan blokkeren wanneer Access/de app de database gelockt houdt.
 
 ---
 
@@ -3444,6 +3472,42 @@ Waarom:
 - lege theta betekent nu vaak "geen open optiepositie", niet "geen theta-kans";
 - de UI moet dit onderscheid duidelijk maken.
 
+#### Stap 3b: volatility-data structureel maken
+
+Doel:
+
+```text
+IBKR HV/IV structureel beschikbaar maken voor de indicator.
+```
+
+Al gebouwd in de indicator:
+
+```text
+realized_volatility_score
+realized_volatility_20d_pct
+realized_volatility_60d_pct
+atr_pct
+choppiness_score
+ibkr_iv_proxy_pct
+implied_volatility_score
+iv_vs_realized_volatility_score
+theta_opportunity_proxy_score
+```
+
+Nog te bouwen in price-update of aparte update-job:
+
+- POC `devtools/fetch_historical_volatility_ib.py` promoveren naar structurele update;
+- dagelijks/latest IBKR `HISTORICAL_VOLATILITY` en `OPTION_IMPLIED_VOLATILITY` ophalen;
+- bij voorkeur opslaan in aparte volatility-tabel/snapshot in plaats van los in `historical_data_correct`;
+- minimaal een `asset_volatility_latest` tabel/snapshot;
+- later eventueel rolling `asset_volatility_history`, met retentie van bijvoorbeeld 252-400 handelsdagen.
+
+Voorlopige repository-compatibiliteit:
+
+- als `historical_data_correct` kolommen `historical_volatility` en `implied_volatility` bevat, worden deze nu mee ingelezen in de OHLCV snapshot;
+- dit is alleen compatibiliteit met bestaande POC-data;
+- structurele v1 moet alsnog een expliciete volatility update-job krijgen.
+
 #### Stap 4: portfolio-aware vulnerability aansluiten
 
 Doel:
@@ -3549,3 +3613,96 @@ Aanpak:
 
 - pas doen nadat stap 1 en 2 acceptabele adviezen geven;
 - anders wordt een te vroeg advies te prominent in de dagelijkse workflow.
+
+### Statusupdate: AssetVolatilityHistoryUpdateRunner
+
+Actuele implementatie in versie 1.3:
+
+- De eerdere memory-snapshot service `AssetVolatilityUpdateService` is verwijderd uit de app-startup.
+- De app gebruikt nu `AssetVolatilityHistoryUpdateRunner`.
+- Deze runner start het werkende DB-script als apart proces:
+  - `price_update_scripts/fetch_asset_volatility_history_to_db.py`.
+- Het script vraagt per asset dagelijks/periodiek IBKR historical data op voor:
+  - `HISTORICAL_VOLATILITY`;
+  - `OPTION_IMPLIED_VOLATILITY`.
+- Resultaat wordt structureel weggeschreven naar bestaande kolommen in `historical_data_correct`:
+  - `historical_volatility`;
+  - `implied_volatility`.
+- De DB-write is geoptimaliseerd via tijdelijke tabel:
+  - `temp_asset_volatility_history`;
+  - daarna bulk update naar `historical_data_correct`.
+- Na succesvolle app-run herlaadt de app `repository_snapshot_historical_ohlcv` / `repository_snapshot_historical_close`.
+- Daarna wordt `snapshot_asset_indicator_live` opnieuw opgebouwd, zodat de indicator HV/IV uit de DB gebruikt.
+- De Asset Indicator webtab toont naast IV ook HV.
+
+Belangrijke configuratie:
+
+```text
+ASSET_VOL_HISTORY_UPDATE_DELAY_MS=300000
+ASSET_VOL_HISTORY_UPDATE_CLIENT_ID=140
+ASSET_VOL_HISTORY_UPDATE_DURATION=5 D
+ASSET_VOL_HISTORY_UPDATE_MAX_IN_FLIGHT=3
+```
+
+Nog niet gebouwd:
+
+- rate-limit/backoff strategie per beurs/asset;
+- echte option-chain gebaseerde `theta_opportunity_score`;
+- dagelijkse run-registratie/skip in `update_runs` zodat hij niet opnieuw draait bij meerdere app-starts op dezelfde dag.
+
+
+
+IBKR data uit je screenshots
+Deze zijn waardevol:
+HV Last
+IV Last
+Beta
+IV Change
+52HVL
+52HVH
+52IVL
+52IVH
+
+- waarvoor is dit nuttig?
+- is dit ophalen gebouwd?
+- wordt dit gebruikt?
+
+Nu betrouwbaar bouwbaar uit OHLCV
+Deze drie kunnen we direct bouwen met data die al structureel in de app zit:
+1. realized_volatility_score
+2. atr_pct
+3. choppiness_score
+
+Bouwbaar met IBKR HV/IV als proxy
+Deze kunnen we bouwen zodra we de IBKR-volatility update structureel maken:
+4. implied_volatility_score
+6. premium_to_realized_volatility_score
+
+Nog niet echt bouwbaar zonder option chain
+Deze niet volledig:
+5. theta_opportunity_score
+Met alleen IBKR asset-IV kun je hooguit een voorlopige proxy maken:
+theta_opportunity_proxy
+maar dit is eignelijk
+hoog IV + beheersbare realized vol + range/choppy regime + voldoende liquiditeit onbekend
+
+
+###### Kort
+1-3: ja, nu bouwen.
+4: ja, zodra IBKR IV structureel wordt opgehaald.
+6: ja als proxy, beter noemen iv_vs_realized_volatility_score.
+5: alleen als ruwe proxy; echte versie pas met option chain.
+v1:
+realized_volatility_score
+atr_pct
+choppiness_score
+
+v1.1:
+ibkr_hv_last
+ibkr_iv_last
+implied_volatility_score
+iv_vs_realized_volatility_score
+
+v2:
+theta_opportunity_score
+premium_to_realized_volatility_score

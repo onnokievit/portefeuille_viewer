@@ -155,6 +155,13 @@ def _print_live(args: argparse.Namespace) -> None:
         "short_term_direction_score",
         "range_position_pct",
         "trend_phase",
+        "realized_volatility_score",
+        "atr_pct",
+        "choppiness_score",
+        "ibkr_hv_proxy_pct",
+        "ibkr_iv_proxy_pct",
+        "iv_vs_realized_volatility_score",
+        "theta_opportunity_proxy_score",
         "volume_score",
         "asset_mode",
         "primary_action",
@@ -169,7 +176,7 @@ def _print_live(args: argparse.Namespace) -> None:
     print(f"showing {limited.height} of {work.height} rows")
     for row in limited.select(cols).to_dicts():
         print(
-            "- {asset}: role={role} dir={direction} lt={lt} st={st} range={range_pos} phase={phase} vol={volume} mode={mode} action={action} secondary={secondary} quality={quality}".format(
+            "- {asset}: role={role} dir={direction} lt={lt} st={st} range={range_pos} phase={phase} rv={rv} atr={atr} chop={chop} hv={hv} iv={iv} ivrv={ivrv} theta_opp={theta_opp} vol={volume} mode={mode} action={action} secondary={secondary} quality={quality}".format(
                 asset=row.get("asset_rollup") or "",
                 role=row.get("indicator_role") or "",
                 direction=_fmt_num(row.get("direction_score")),
@@ -177,6 +184,13 @@ def _print_live(args: argparse.Namespace) -> None:
                 st=_fmt_num(row.get("short_term_direction_score")),
                 range_pos=_fmt_num(row.get("range_position_pct")),
                 phase=row.get("trend_phase") or "",
+                rv=_fmt_num(row.get("realized_volatility_score")),
+                atr=_fmt_num(row.get("atr_pct")),
+                chop=_fmt_num(row.get("choppiness_score")),
+                hv=_fmt_num(row.get("ibkr_hv_proxy_pct")),
+                iv=_fmt_num(row.get("ibkr_iv_proxy_pct")),
+                ivrv=_fmt_num(row.get("iv_vs_realized_volatility_score")),
+                theta_opp=_fmt_num(row.get("theta_opportunity_proxy_score")),
                 volume=_fmt_num(row.get("volume_score")),
                 mode=row.get("asset_mode") or "",
                 action=row.get("primary_action") or "",
@@ -423,6 +437,12 @@ def _html_template(json_payload: str) -> str:
           <th data-key="short_term_direction_score">ST</th>
           <th data-key="range_position_pct">Range %</th>
           <th data-key="trend_phase">Trend fase</th>
+          <th data-key="realized_volatility_score">RV score</th>
+          <th data-key="atr_pct">ATR %</th>
+          <th data-key="choppiness_score">Chop</th>
+          <th data-key="ibkr_iv_proxy_pct">IV %</th>
+          <th data-key="iv_vs_realized_volatility_score">IV/RV</th>
+          <th data-key="theta_opportunity_proxy_score">Theta opp</th>
           <th data-key="volume_score">Volume</th>
           <th data-key="asset_mode">Mode</th>
           <th data-key="primary_action">Action</th>
@@ -448,7 +468,7 @@ def _html_template(json_payload: str) -> str:
       quality: "__ALL__",
       secondary: "__ALL__",
     }};
-    const columns = ["asset_rollup","asset_name","indicator_role","direction_score","long_term_direction_score","short_term_direction_score","range_position_pct","trend_phase","volume_score","asset_mode","primary_action","secondary_action","data_quality"];
+    const columns = ["asset_rollup","asset_name","indicator_role","direction_score","long_term_direction_score","short_term_direction_score","range_position_pct","trend_phase","realized_volatility_score","atr_pct","choppiness_score","ibkr_iv_proxy_pct","iv_vs_realized_volatility_score","theta_opportunity_proxy_score","volume_score","asset_mode","primary_action","secondary_action","data_quality"];
 
     function fmt(v) {{
       if (v === null || v === undefined || v === "") return "-";
@@ -521,6 +541,12 @@ def _html_template(json_payload: str) -> str:
           <td class="num">${{fmt(r.short_term_direction_score)}}</td>
           <td class="num">${{fmt(r.range_position_pct)}}</td>
           <td>${{escapeHtml(r.trend_phase)}}</td>
+          <td class="num">${{fmt(r.realized_volatility_score)}}</td>
+          <td class="num">${{fmt(r.atr_pct)}}</td>
+          <td class="num">${{fmt(r.choppiness_score)}}</td>
+          <td class="num">${{fmt(r.ibkr_iv_proxy_pct)}}</td>
+          <td class="num">${{fmt(r.iv_vs_realized_volatility_score)}}</td>
+          <td class="num">${{fmt(r.theta_opportunity_proxy_score)}}</td>
           <td class="num">${{fmt(r.volume_score)}}</td>
           <td><span class="pill">${{escapeHtml(r.asset_mode)}}</span></td>
           <td><span class="pill">${{escapeHtml(r.primary_action)}}</span></td>

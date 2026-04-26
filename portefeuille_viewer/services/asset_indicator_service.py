@@ -14,6 +14,7 @@ from __future__ import annotations
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
+from math import log10, sqrt
 from time import perf_counter
 from uuid import uuid4
 
@@ -166,6 +167,16 @@ class AssetIndicatorService:
             "short_term_direction_score": None,
             "range_position_pct": None,
             "trend_phase": "insufficient_data",
+            "realized_volatility_score": None,
+            "realized_volatility_20d_pct": None,
+            "realized_volatility_60d_pct": None,
+            "atr_pct": None,
+            "choppiness_score": None,
+            "ibkr_hv_proxy_pct": None,
+            "ibkr_iv_proxy_pct": None,
+            "implied_volatility_score": None,
+            "iv_vs_realized_volatility_score": None,
+            "theta_opportunity_proxy_score": None,
             "theta_score": None,
             "volume_score": None,
             "vulnerability_score": None,
@@ -203,7 +214,29 @@ class AssetIndicatorService:
         )
         direction_score = calculate_direction_score(direction_input)
         volume_score = calculate_volume_score(features["volume_input"])
+        volatility_metrics = features["volatility_metrics"]
         theta_score = _score_theta(theta_metrics)
+        ibkr_hv_proxy_pct = _normalize_volatility_pct(
+            _first_number(
+                volatility_metrics.get("ibkr_hv_proxy_pct"),
+            )
+        )
+        ibkr_iv_proxy_pct = _first_number(
+            theta_metrics.get("avg_iv"),
+            volatility_metrics.get("ibkr_iv_proxy_pct"),
+        )
+        ibkr_iv_proxy_pct = _normalize_volatility_pct(ibkr_iv_proxy_pct)
+        implied_volatility_score = _score_implied_volatility(ibkr_iv_proxy_pct)
+        iv_vs_realized_volatility_score = _score_iv_vs_realized(
+            ibkr_iv_proxy_pct,
+            volatility_metrics.get("realized_volatility_20d_pct"),
+        )
+        theta_opportunity_proxy_score = _score_theta_opportunity_proxy(
+            implied_volatility_score=implied_volatility_score,
+            iv_vs_realized_volatility_score=iv_vs_realized_volatility_score,
+            choppiness_score=volatility_metrics.get("choppiness_score"),
+            direction_score=direction_score,
+        )
         data_quality = "ok" if direction_score is not None and volume_score is not None else "partial"
         if direction_score is None:
             data_quality = "insufficient"
@@ -221,6 +254,10 @@ class AssetIndicatorService:
                 vulnerability_score=None,
                 liquidity_score=None,
                 data_quality=data_quality,
+                indicator_role=base.get("indicator_role"),
+                theta_opportunity_proxy_score=theta_opportunity_proxy_score,
+                implied_volatility_score=implied_volatility_score,
+                iv_vs_realized_volatility_score=iv_vs_realized_volatility_score,
             )
         )
 
@@ -231,6 +268,16 @@ class AssetIndicatorService:
                 "short_term_direction_score": short_term_direction_score,
                 "range_position_pct": range_position_pct,
                 "trend_phase": trend_phase,
+                "realized_volatility_score": volatility_metrics.get("realized_volatility_score"),
+                "realized_volatility_20d_pct": volatility_metrics.get("realized_volatility_20d_pct"),
+                "realized_volatility_60d_pct": volatility_metrics.get("realized_volatility_60d_pct"),
+                "atr_pct": volatility_metrics.get("atr_pct"),
+                "choppiness_score": volatility_metrics.get("choppiness_score"),
+                "ibkr_hv_proxy_pct": ibkr_hv_proxy_pct,
+                "ibkr_iv_proxy_pct": ibkr_iv_proxy_pct,
+                "implied_volatility_score": implied_volatility_score,
+                "iv_vs_realized_volatility_score": iv_vs_realized_volatility_score,
+                "theta_opportunity_proxy_score": theta_opportunity_proxy_score,
                 "theta_score": theta_score,
                 "volume_score": volume_score,
                 "confidence_score": decision.confidence_score,
@@ -399,7 +446,16 @@ def _normalize_history_df(df: pl.DataFrame | None) -> pl.DataFrame:
         .alias("asset_rollup"),
         pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"),
     ]
-    for col in ("open_price", "high_price", "low_price", "volume_value"):
+    for col in (
+        "open_price",
+        "high_price",
+        "low_price",
+        "volume_value",
+        "historical_volatility",
+        "implied_volatility",
+        "ibkr_hv_last",
+        "ibkr_iv_last",
+    ):
         if col in df.columns:
             exprs.append(pl.col(col).cast(pl.Float64, strict=False).alias(col))
         else:
@@ -516,6 +572,7 @@ def _calculate_history_features(history_rows: list[dict]) -> dict:
         return {
             "direction_input": DirectionInput(close=None),
             "volume_input": VolumeInput(),
+            "volatility_metrics": {},
         }
 
     close = closes[-1]
@@ -571,6 +628,7 @@ def _calculate_history_features(history_rows: list[dict]) -> dict:
         if latest_price_change is not None and relative_volume_20d is not None
         else None
     )
+    volatility_metrics = _calculate_volatility_metrics(history_rows)
 
     return {
         "direction_input": DirectionInput(
@@ -599,7 +657,188 @@ def _calculate_history_features(history_rows: list[dict]) -> dict:
             relative_volume_20d=relative_volume_20d,
             volume_weighted_price_change=volume_weighted_price_change,
         ),
+        "volatility_metrics": volatility_metrics,
     }
+
+
+def _calculate_volatility_metrics(history_rows: list[dict]) -> dict:
+    closes = [_to_float(row.get("close_price")) for row in history_rows]
+    highs = [_to_float(row.get("high_price")) for row in history_rows]
+    lows = [_to_float(row.get("low_price")) for row in history_rows]
+
+    realized_20 = _realized_volatility_pct(closes, 20)
+    realized_60 = _realized_volatility_pct(closes, 60)
+    atr_pct = _atr_pct(highs, lows, closes, 14)
+    choppiness = _choppiness_score(highs, lows, closes, 14)
+    realized_score = _score_realized_volatility(realized_20, realized_60, atr_pct)
+
+    latest = history_rows[-1] if history_rows else {}
+    ibkr_iv_proxy_pct = _normalize_volatility_pct(
+        _first_number(
+            latest.get("ibkr_iv_last"),
+            latest.get("implied_volatility"),
+        )
+    )
+    ibkr_hv_proxy_pct = _normalize_volatility_pct(
+        _first_number(
+            latest.get("ibkr_hv_last"),
+            latest.get("historical_volatility"),
+        )
+    )
+
+    return {
+        "realized_volatility_score": realized_score,
+        "realized_volatility_20d_pct": realized_20,
+        "realized_volatility_60d_pct": realized_60,
+        "atr_pct": atr_pct,
+        "choppiness_score": choppiness,
+        "ibkr_iv_proxy_pct": ibkr_iv_proxy_pct,
+        "ibkr_hv_proxy_pct": ibkr_hv_proxy_pct,
+    }
+
+
+def _realized_volatility_pct(closes: list[float | None], window: int) -> float | None:
+    clean = [float(v) for v in closes if v is not None and v > 0.0]
+    if len(clean) < window + 1:
+        return None
+    returns: list[float] = []
+    for prev, curr in zip(clean[-window - 1 : -1], clean[-window:]):
+        if prev > 0.0 and curr > 0.0:
+            returns.append(curr / prev - 1.0)
+    if len(returns) < max(5, window // 2):
+        return None
+    stdev = _stddev(returns)
+    if stdev is None:
+        return None
+    return round(stdev * sqrt(252.0) * 100.0, 2)
+
+
+def _atr_pct(
+    highs: list[float | None],
+    lows: list[float | None],
+    closes: list[float | None],
+    window: int,
+) -> float | None:
+    rows = [
+        (h, l, c)
+        for h, l, c in zip(highs, lows, closes)
+        if h is not None and l is not None and c is not None and h > 0.0 and l > 0.0 and c > 0.0
+    ]
+    if len(rows) < window + 1:
+        return None
+    true_ranges: list[float] = []
+    for idx in range(1, len(rows)):
+        high, low, _close = rows[idx]
+        prev_close = rows[idx - 1][2]
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    recent_tr = true_ranges[-window:]
+    latest_close = rows[-1][2]
+    if not recent_tr or latest_close == 0.0:
+        return None
+    return round((sum(recent_tr) / len(recent_tr)) / latest_close * 100.0, 2)
+
+
+def _choppiness_score(
+    highs: list[float | None],
+    lows: list[float | None],
+    closes: list[float | None],
+    window: int,
+) -> float | None:
+    rows = [
+        (h, l, c)
+        for h, l, c in zip(highs, lows, closes)
+        if h is not None and l is not None and c is not None and h > 0.0 and l > 0.0 and c > 0.0
+    ]
+    if len(rows) < window + 1:
+        return None
+    recent_rows = rows[-window:]
+    true_ranges: list[float] = []
+    source_rows = rows[-window - 1 :]
+    for idx in range(1, len(source_rows)):
+        high, low, _close = source_rows[idx]
+        prev_close = source_rows[idx - 1][2]
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    high_max = max(row[0] for row in recent_rows)
+    low_min = min(row[1] for row in recent_rows)
+    range_width = high_max - low_min
+    tr_sum = sum(true_ranges[-window:])
+    if range_width <= 0.0 or tr_sum <= 0.0 or window <= 1:
+        return None
+    value = 100.0 * log10(tr_sum / range_width) / log10(float(window))
+    return round(_clamp(value, 0.0, 100.0), 2)
+
+
+def _stddev(values: list[float]) -> float | None:
+    clean = [float(v) for v in values if v is not None]
+    if len(clean) < 2:
+        return None
+    mean = sum(clean) / len(clean)
+    variance = sum((v - mean) ** 2 for v in clean) / (len(clean) - 1)
+    return sqrt(variance)
+
+
+def _score_realized_volatility(
+    realized_20: float | None,
+    realized_60: float | None,
+    atr_pct: float | None,
+) -> float | None:
+    values = [v for v in (realized_20, realized_60) if v is not None]
+    if not values and atr_pct is None:
+        return None
+    base = values[0] if values else 0.0
+    if realized_20 is not None and realized_60 is not None:
+        base = (realized_20 * 0.65) + (realized_60 * 0.35)
+    score = _linear_score(base, low=8.0, high=65.0)
+    if atr_pct is not None:
+        score = (score * 0.75) + (_linear_score(atr_pct, low=0.8, high=7.5) * 0.25)
+    return round(_clamp(score, 0.0, 100.0), 2)
+
+
+def _score_implied_volatility(iv_pct: float | None) -> float | None:
+    if iv_pct is None:
+        return None
+    return round(_linear_score(iv_pct, low=10.0, high=85.0), 2)
+
+
+def _score_iv_vs_realized(iv_pct: float | None, realized_pct: float | None) -> float | None:
+    if iv_pct is None or realized_pct is None:
+        return None
+    spread = float(iv_pct) - float(realized_pct)
+    return round(_linear_score(spread, low=-15.0, high=35.0), 2)
+
+
+def _score_theta_opportunity_proxy(
+    *,
+    implied_volatility_score: float | None,
+    iv_vs_realized_volatility_score: float | None,
+    choppiness_score: float | None,
+    direction_score: float | None,
+) -> float | None:
+    if implied_volatility_score is None and iv_vs_realized_volatility_score is None:
+        return None
+    score = 0.0
+    weight = 0.0
+    if implied_volatility_score is not None:
+        score += implied_volatility_score * 0.45
+        weight += 0.45
+    if iv_vs_realized_volatility_score is not None:
+        score += iv_vs_realized_volatility_score * 0.35
+        weight += 0.35
+    if choppiness_score is not None:
+        score += choppiness_score * 0.20
+        weight += 0.20
+    if weight == 0.0:
+        return None
+    out = score / weight
+    if direction_score is not None and float(direction_score) < -60.0:
+        out *= 0.75
+    return round(_clamp(out, 0.0, 100.0), 2)
+
+
+def _linear_score(value: float, *, low: float, high: float) -> float:
+    if high <= low:
+        return 0.0
+    return _clamp(((float(value) - low) / (high - low)) * 100.0, 0.0, 100.0)
 
 
 def _mean_last(values: list[float], window: int) -> float | None:
@@ -638,6 +877,30 @@ def _pct_change(current: float | None, previous: float | None) -> float | None:
     if current is None or previous in (None, 0.0):
         return None
     return current / previous - 1.0
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, float(value)))
+
+
+def _first_number(*values) -> float | None:
+    for value in values:
+        out = _to_float(value)
+        if out is not None:
+            return out
+    return None
+
+
+def _normalize_volatility_pct(value) -> float | None:
+    vol = _to_float(value)
+    if vol is None:
+        return None
+    if vol <= 0.0:
+        return None
+    # IB option model ticks often use decimals (0.25), while TWS columns show percent (25.0).
+    if vol <= 3.0:
+        vol *= 100.0
+    return round(vol, 2)
 
 
 def _to_float(value) -> float | None:

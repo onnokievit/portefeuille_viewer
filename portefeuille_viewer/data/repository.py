@@ -109,19 +109,27 @@ def load_historical_close_snapshot() -> pl.DataFrame:
     """
     Laad historical OHLCV-data in memory en publiceer tevens een afgeslankte close-snapshot.
     """
-    sql = """
-        SELECT
-            datum,
-            asset_rollup,
-            [open] AS open_price,
-            [high] AS high_price,
-            [low] AS low_price,
-            [close] AS close_price,
-            [volume] AS volume_value
-        FROM historical_data_correct
-        WHERE asset_rollup IS NOT NULL
-    """
     with get_connection() as conn:
+        table_cols = {str(row.column_name).lower() for row in conn.cursor().columns(table="historical_data_correct")}
+        optional_selects = []
+        if "historical_volatility" in table_cols:
+            optional_selects.append("historical_volatility")
+        if "implied_volatility" in table_cols:
+            optional_selects.append("implied_volatility")
+        optional_sql = "".join(f",\n                [{col}]" for col in optional_selects)
+        sql = f"""
+            SELECT
+                datum,
+                asset_rollup,
+                [open] AS open_price,
+                [high] AS high_price,
+                [low] AS low_price,
+                [close] AS close_price,
+                [volume] AS volume_value
+                {optional_sql}
+            FROM historical_data_correct
+            WHERE asset_rollup IS NOT NULL
+        """
         df = pl.read_database(sql, conn)
     df_ohlcv = _prepare_historical_ohlcv_snapshot(df)
     df_close = _build_historical_close_from_ohlcv(df_ohlcv)
@@ -359,7 +367,15 @@ def _prepare_historical_ohlcv_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     df = _normalize_date_column(df, "datum")
     df = _normalize_asset_rollup_column(df, "asset_rollup")
     casts: list[pl.Expr] = []
-    for col in ("open_price", "high_price", "low_price", "close_price", "volume_value"):
+    for col in (
+        "open_price",
+        "high_price",
+        "low_price",
+        "close_price",
+        "volume_value",
+        "historical_volatility",
+        "implied_volatility",
+    ):
         if col in df.columns:
             casts.append(pl.col(col).cast(pl.Float64, strict=False).alias(col))
     if casts:

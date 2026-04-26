@@ -195,6 +195,13 @@ class AssetIndicatorWebTab(QWidget):
           <th data-key="short_term_direction_score">ST</th>
           <th data-key="range_position_pct">Range %</th>
           <th data-key="trend_phase">Trend fase</th>
+          <th data-key="realized_volatility_score">RV score</th>
+          <th data-key="atr_pct">ATR %</th>
+          <th data-key="choppiness_score">Chop</th>
+          <th data-key="ibkr_hv_proxy_pct">HV %</th>
+          <th data-key="ibkr_iv_proxy_pct">IV %</th>
+          <th data-key="iv_vs_realized_volatility_score">IV/RV</th>
+          <th data-key="theta_opportunity_proxy_score">Theta opp</th>
           <th data-key="theta_score">Theta</th>
           <th data-key="volume_score">Volume</th>
           <th data-key="asset_mode">Mode</th>
@@ -279,6 +286,7 @@ class AssetIndicatorWebTab(QWidget):
         <tr class="${attr(r.primary_action)}">
           <td><strong>${esc(r.asset_rollup)}</strong></td><td>${esc(r.asset_name)}</td><td>${esc(r.indicator_role)}</td>
           <td class="num">${fmt(r.direction_score)}</td><td class="num">${fmt(r.long_term_direction_score)}</td><td class="num">${fmt(r.short_term_direction_score)}</td><td class="num">${fmt(r.range_position_pct)}</td><td>${esc(r.trend_phase)}</td>
+          <td class="num">${fmt(r.realized_volatility_score)}</td><td class="num">${fmt(r.atr_pct)}</td><td class="num">${fmt(r.choppiness_score)}</td><td class="num">${fmt(r.ibkr_hv_proxy_pct)}</td><td class="num">${fmt(r.ibkr_iv_proxy_pct)}</td><td class="num">${fmt(r.iv_vs_realized_volatility_score)}</td><td class="num">${fmt(r.theta_opportunity_proxy_score)}</td>
           <td class="num">${fmt(r.theta_score)}</td><td class="num">${fmt(r.volume_score)}</td>
           <td><span class="pill">${esc(r.asset_mode)}</span></td><td><span class="pill">${esc(r.primary_action)}</span></td>
           <td>${esc(r.secondary_action)}</td><td>${esc(r.data_quality)}</td>

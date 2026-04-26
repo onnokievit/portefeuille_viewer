@@ -26,8 +26,10 @@ from portefeuille_viewer.services.historical_price_update_runner import Historic
 from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
+from portefeuille_viewer.services.asset_volatility_history_update_runner import AssetVolatilityHistoryUpdateRunner
 from portefeuille_viewer.services.app_task_scheduler import AppTaskScheduler
 from portefeuille_viewer.services.db_migration_service import DbMigrationService
+from portefeuille_viewer.services.asset_indicator_service import rebuild_asset_indicator_snapshots
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
@@ -1219,6 +1221,10 @@ def main():
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
+    asset_volatility_history_update_runner = AssetVolatilityHistoryUpdateRunner.from_environment(
+        host=get_settings().get_ib_host(),
+        port=get_settings().get_ib_port(),
+    )
     app_task_scheduler = AppTaskScheduler(app)
     app_task_scheduler.register_default_tasks()
     option_timevalue_service: OptionTimevalueService | None = None
@@ -1233,6 +1239,29 @@ def main():
             repository.load_historical_close_snapshot(),
             repository.load_asset_driver_beta_snapshot()
         ) if (payload or {}).get("status") in {"ok", "skipped"} else None
+    )
+
+    def _on_asset_volatility_history_finished(payload: dict):
+        status = (payload or {}).get("status")
+        _log(
+            "[asset-vol-history] finished: "
+            f"{status} assets={payload.get('assets_total')} "
+            f"hv_rows={payload.get('hv_rows')} iv_rows={payload.get('iv_rows')} "
+            f"db_ms={payload.get('duration_ms')}"
+        )
+        if status in {"ok", "partial"}:
+            repository.load_historical_close_snapshot()
+            rebuild_asset_indicator_snapshots()
+
+    asset_volatility_history_update_runner.started.connect(
+        lambda payload: _log(f"[asset-vol-history] started: {payload}")
+    )
+    asset_volatility_history_update_runner.progress.connect(
+        lambda message: _log(str(message))
+    )
+    asset_volatility_history_update_runner.finished.connect(_on_asset_volatility_history_finished)
+    asset_volatility_history_update_runner.failed.connect(
+        lambda message: _log(f"[asset-vol-history] failed: {message}")
     )
     signals.databaseChanged.connect(state_engine_runner.handle_database_changed)
     # Debounce snapshot refreshes: bij een wave van price_catchup jobs
@@ -1452,9 +1481,14 @@ def main():
     signals.databaseChanged.connect(_on_database_changed_refresh)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
     setattr(w, "option_timevalue_service", option_timevalue_service)
+    setattr(w, "asset_volatility_history_update_runner", asset_volatility_history_update_runner)
     w.show()
     # Start price-update pas nadat UI volledig staat en event-loop idle is.
     QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)
+    QTimer.singleShot(
+        max(1000, int(os.getenv("ASSET_VOL_HISTORY_UPDATE_DELAY_MS", "300000"))),
+        asset_volatility_history_update_runner.request_startup_update,
+    )
     app_task_scheduler.start()
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()
