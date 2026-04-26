@@ -80,6 +80,9 @@ class SnapshotStore:
     snapshot_optie_timevalue_live: pl.DataFrame | None
     snapshot_optie_timevalue_summary: pl.DataFrame | None
     snapshot_optie_timevalue_meta: pl.DataFrame | None
+    snapshot_asset_indicator_live: pl.DataFrame | None
+    snapshot_asset_indicator_summary: pl.DataFrame | None
+    snapshot_asset_indicator_meta: pl.DataFrame | None
     test_repository_load_input_test_dataframe: pl.DataFrame | None
     test_repository_load_output_test_dataframe: pl.DataFrame | None
     snapshot_aggregated_portfolio: pl.DataFrame | None
@@ -153,6 +156,9 @@ class SnapshotStore:
             "snapshot_optie_timevalue_live": None,
             "snapshot_optie_timevalue_summary": None,
             "snapshot_optie_timevalue_meta": None,
+            "snapshot_asset_indicator_live": None,
+            "snapshot_asset_indicator_summary": None,
+            "snapshot_asset_indicator_meta": None,
             "test_repository_load_input_test_dataframe": None,
             "test_repository_load_output_test_dataframe": None,
             "snapshot_aggregated_portfolio": None,
@@ -235,6 +241,7 @@ class SnapshotStore:
                 self.repository_dirty_test_orders_assets is not None,
                 self.repository_snapshot_active_scenario_orders_flat is not None,
                 self.snapshot_optie_timevalue_live is not None,
+                self.snapshot_asset_indicator_live is not None,
             )
         )
 
@@ -341,6 +348,10 @@ class SnapshotStore:
             )
         if self.snapshot_optie_timevalue_live is not None:
             parts.append(f"Optie Timevalue Live: {len(self.snapshot_optie_timevalue_live)} rijen")
+        if self.snapshot_asset_indicator_live is not None:
+            parts.append(f"Asset Indicator Live: {len(self.snapshot_asset_indicator_live)} rijen")
+        if self.snapshot_asset_indicator_summary is not None:
+            parts.append(f"Asset Indicator Summary: {len(self.snapshot_asset_indicator_summary)} rijen")
 
 
         return " \n ".join(parts) if parts else "(geen data geladen)"

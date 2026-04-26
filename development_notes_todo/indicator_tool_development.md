@@ -1597,3 +1597,1955 @@ De belangrijkste regel van het model:
 
 > Eerst bepalen of je upside wilt bezitten. Pas daarna bepalen of je theta wilt verkopen.
 
+---
+
+## 39. Integratieplan in `portefeuille_viewer_1.2`
+
+### 39.1 Hoofdkeuze: bouwen als service, niet als losse indicator-tab
+
+De analyse-tool moet in `portefeuille_viewer_1.2` als centrale service draaien:
+
+```text
+AssetIndicatorService
+```
+
+Deze service moet:
+
+1. bestaande snapshots lezen;
+2. per asset scores en adviesregels berekenen;
+3. actuele resultaten naar `SNAPSHOT_STORE` schrijven;
+4. periodiek resultaten persistent wegschrijven;
+5. snapshot-events publiceren zodat andere onderdelen de output kunnen gebruiken;
+6. later uitbreidbaar zijn naar backtest, alerts en ML.
+
+Belangrijk:
+
+```text
+De indicator-service is een beslislaag bovenop bestaande data.
+De indicator-service wordt niet de nieuwe brondata-laag.
+```
+
+Dus:
+
+- geen tweede eigen prijsfeed;
+- geen dubbele optiechain-loader;
+- geen eigen positie-import naast de bestaande aggregators;
+- geen directe UI-logica in de service;
+- geen transactie-injectiepad.
+
+De service hoort dezelfde ontwerpfilosofie te volgen als de rest van de app:
+
+- snapshots als centrale runtime-datalaag;
+- additieve database-uitbreidingen;
+- heavy compute buiten directe UI-interactie;
+- signalen alleen gericht publiceren;
+- eerst parallel bouwen, pas later UI-cutover of bredere afhankelijkheden.
+
+---
+
+### 39.2 Plaats in de bestaande architectuur
+
+Voorgestelde bestanden:
+
+```text
+portefeuille_viewer/services/asset_indicator_service.py
+portefeuille_viewer/services/asset_indicator_rules.py
+portefeuille_viewer/services/asset_indicator_models.py
+portefeuille_viewer/data/asset_indicator_repository.py
+```
+
+Later, wanneer een aparte moderne view zinvol wordt:
+
+```text
+portefeuille_viewer/projections/asset_indicator_projection_v2.py
+portefeuille_viewer/ui_logica/asset_indicator_web_pilot_tab.py
+```
+
+Voor de eerste iteratie is een aparte tab niet nodig. De eerste zichtbare integratie hoort in:
+
+```text
+Single Asset Analyse
+```
+
+Daar moet bovenin de balk per geselecteerd asset een compacte adviesregel komen:
+
+```text
+ASML | Bullish accumulation | Long houden | Geen call dichtbij | Put schrijven alleen bij pullback
+```
+
+Of korter:
+
+```text
+Advies: schrijf puts / long houden / niets doen / covered calls ver OTM / risico verlagen
+```
+
+---
+
+### 39.3 Runtime dataflow
+
+Gewenste dataflow:
+
+```text
+Repository / PriceFeed / Aggregators / StateEngine
+        ↓
+SNAPSHOT_STORE bron-snapshots
+        ↓
+AssetIndicatorService
+        ↓
+SNAPSHOT_STORE indicator-snapshots
+        ↓
+Single Asset Analyse / Aandelen / Alerts / toekomstige advisor
+        ↓
+optioneel: persistente signal history
+```
+
+De service gebruikt dus bestaande snapshots als input en publiceert nieuwe snapshots als output.
+
+Minimale output-snapshots:
+
+```text
+snapshot_asset_indicator_live
+snapshot_asset_indicator_summary
+snapshot_asset_indicator_meta
+```
+
+Betekenis:
+
+| Snapshot | Inhoud | Consumer |
+|---|---|---|
+| `snapshot_asset_indicator_live` | rij per asset met scores, regime, advies, reasons | Single Asset Analyse, toekomstige tab |
+| `snapshot_asset_indicator_summary` | samenvatting/toplijsten per adviescategorie | dashboard, alerts, scans |
+| `snapshot_asset_indicator_meta` | run-id, timestamp, input snapshot versions, status, fouten | debugging, observability |
+
+Voorbeeldrij in `snapshot_asset_indicator_live`:
+
+```text
+asset_rollup
+asset_name
+asset_type
+risk_class
+as_of
+direction_score
+theta_score
+volume_score
+vulnerability_score
+liquidity_score
+confidence_score
+asset_mode
+primary_action
+secondary_action
+covered_call_delta_min
+covered_call_delta_max
+short_put_delta_min
+short_put_delta_max
+max_exposure_pct
+current_exposure_pct
+assignment_exposure_pct
+reason_1
+reason_2
+reason_3
+data_quality
+```
+
+Voorbeeld:
+
+```text
+asset_rollup: MSFT
+direction_score: 72
+theta_score: 48
+volume_score: 63
+vulnerability_score: 31
+liquidity_score: 92
+asset_mode: bullish_accumulation
+primary_action: long_houden
+secondary_action: covered_calls_alleen_ver_otm
+covered_call_delta_min: 0.05
+covered_call_delta_max: 0.15
+short_put_delta_min: 0.15
+short_put_delta_max: 0.25
+reason_1: koers boven SMA20/50/200
+reason_2: volume bevestigt stijging
+reason_3: IV/theta niet hoog genoeg om upside agressief weg te schrijven
+```
+
+---
+
+### 39.4 Persistente opslag
+
+De actuele service-output moet in memory beschikbaar zijn via snapshots, maar periodiek ook persistent worden opgeslagen.
+
+Doel van persistentie:
+
+- historie van signalen opbouwen;
+- later backtesten of signalen nuttig waren;
+- regimewissels reconstrueren;
+- toekomstige ML-dataset voorbereiden;
+- app na restart snel laatste advies kunnen tonen, ook voordat alle bronnen opnieuw zijn opgebouwd.
+
+Voorgestelde nieuwe tabel:
+
+```text
+asset_indicator_signal_history
+```
+
+Locatie:
+
+```text
+STOCKDATA database
+```
+
+Reden:
+
+- signalen zijn markt-/asset-gerelateerd;
+- signalen zijn niet puur persoonlijke transactiedata;
+- dezelfde asset-signalen kunnen voor meerdere user databases bruikbaar zijn.
+
+Velden:
+
+```text
+id
+run_id
+created_at
+as_of
+asset_rollup
+asset_name
+asset_type
+risk_class
+direction_score
+theta_score
+volume_score
+vulnerability_score
+liquidity_score
+confidence_score
+asset_mode
+primary_action
+secondary_action
+covered_call_delta_min
+covered_call_delta_max
+short_put_delta_min
+short_put_delta_max
+max_exposure_pct
+current_exposure_pct
+assignment_exposure_pct
+data_quality
+reason_1
+reason_2
+reason_3
+input_hash
+service_version
+```
+
+Unieke index of dedupe-logica:
+
+```text
+asset_rollup + as_of + service_version
+```
+
+Voor persoonlijke portefeuille-afhankelijke scores is er een nuance:
+
+- `direction_score`, `volume_score`, `theta_score`, `liquidity_score` zijn grotendeels asset-/marktdata;
+- `vulnerability_score`, `current_exposure_pct`, `assignment_exposure_pct` zijn portfolio-afhankelijk.
+
+Daarom zijn er twee opties:
+
+1. v1: alles in user database opslaan, omdat het advies direct portefeuille-afhankelijk is;
+2. v2: splitsen in:
+
+```text
+STOCKDATA.asset_indicator_market_signal_history
+USERDB.asset_indicator_portfolio_signal_history
+```
+
+Pragmatische keuze voor eerste implementatie:
+
+```text
+Schrijf v1 naar de actieve user database.
+```
+
+Reden:
+
+- de eerste adviezen zijn portefeuille-afhankelijk;
+- max exposure en assignment exposure horen bij de gebruiker;
+- multi-user/multi-db gedrag blijft eenvoudiger te begrijpen;
+- later kan marktdeel alsnog naar STOCKDATA worden afgesplitst.
+
+---
+
+### 39.5 Input-snapshots voor v1
+
+De service moet in v1 alleen bestaande bronnen gebruiken.
+
+#### Marktdata
+
+```text
+repository_snapshot_historical_ohlcv
+repository_snapshot_historical_close
+repository_snapshot_historical_close_latest
+live_prices
+```
+
+Gebruik:
+
+- close/open/high/low/volume;
+- moving averages;
+- 52-week high/low;
+- ATR%;
+- recent volume;
+- latest close/live price.
+
+#### Asset metadata
+
+```text
+repository_snapshot_asset_rollup_data
+repository_snapshot_active_asset_rollup_data
+```
+
+Gebruik:
+
+- asset naam;
+- ticker/IB symbol;
+- valuta;
+- sector/regio;
+- asset type;
+- risk class;
+- optionable;
+- eventueel max exposure.
+
+#### Positie- en exposuredata
+
+```text
+aggregator_snapshot_aandelen_live
+aggregator_snapshot_load_open_opties_from_tx_live
+aggregator_snapshot_open_sprinters_live
+repository_snapshot_portfolio_value_total_combined_put
+```
+
+Gebruik:
+
+- huidige aandelenwaarde;
+- open optieposities;
+- open sprinterposities;
+- totale portefeuillewaarde;
+- asset exposure;
+- assignment exposure bij geschreven puts;
+- short call risico;
+- leverage/knockout risico.
+
+#### Optie- en theta-data
+
+```text
+snapshot_optie_timevalue_live
+snapshot_optie_timevalue_summary
+aggregator_snapshot_load_open_opties_from_tx_live
+```
+
+Gebruik:
+
+- time value;
+- DTE;
+- moneyness;
+- optieprijs;
+- eventueel IV/Greeks als beschikbaar;
+- open option liquidity als deze later beschikbaar komt.
+
+#### Eventdata
+
+```text
+repository_snapshot_asset_dividend_calendar
+```
+
+Gebruik:
+
+- ex-dividend waarschuwing;
+- dividend assignment risk bij calls.
+
+Earnings en macro-events zijn voor v1 optioneel. Deze kunnen later als aparte event-snapshot of tabel worden toegevoegd.
+
+---
+
+### 39.6 Servicegedrag en updatefrequentie
+
+De service moet zowel event-driven als periodiek kunnen draaien.
+
+#### Triggers
+
+Rebuild-trigger bij relevante snapshotupdates:
+
+```text
+repository_snapshot_historical_ohlcv
+repository_snapshot_historical_close_latest
+repository_snapshot_asset_rollup_data
+repository_snapshot_active_asset_rollup_data
+aggregator_snapshot_aandelen_live
+aggregator_snapshot_load_open_opties_from_tx_live
+aggregator_snapshot_open_sprinters_live
+snapshot_optie_timevalue_live
+repository_snapshot_asset_dividend_calendar
+repository_snapshot_portfolio_value_total_combined_put
+```
+
+Maar:
+
+```text
+Niet elke live tick mag direct een volledige indicator-run veroorzaken.
+```
+
+Daarom:
+
+- snapshot-events zetten alleen een dirty flag;
+- een `QTimer` coalescet updates;
+- volledige rebuild maximaal eens per ingestelde interval;
+- lichte live refresh mag vaker, maar alleen voor prijzen/exposure.
+
+#### Voorgestelde timers
+
+```text
+startup run: 5-10 seconden na app-start
+normal market run: elke 5 minuten
+live dirty debounce: 30-60 seconden
+end-of-day run: na historische update/catchup
+persistent write: elke 15 minuten of bij regimewijziging
+```
+
+Voor v1:
+
+```text
+Elke 5 minuten live berekenen.
+Elke 15 minuten wegschrijven.
+Bij assetselectie in Single Asset Analyse alleen snapshot lezen, niet zelf rekenen.
+```
+
+Voor dagopties/intraday kan later een kortere `intraday_signal` laag komen, maar die hoort niet in v1.
+
+---
+
+### 39.7 Dirty flags en compute-modi
+
+De service moet onderscheid maken tussen drie compute-modi:
+
+#### 1. Full rebuild
+
+Wanneer:
+
+- startup;
+- databasewissel;
+- historische OHLCV refresh;
+- asset metadata gewijzigd;
+- handmatige force-refresh.
+
+Doet:
+
+- alle assets opnieuw berekenen;
+- alle indicator-snapshots vervangen;
+- optioneel persistent wegschrijven.
+
+#### 2. Incremental portfolio refresh
+
+Wanneer:
+
+- open posities wijzigen;
+- opties/sprinters/aandelen live aggregators wijzigen;
+- scenario later eventueel actief wordt.
+
+Doet:
+
+- alleen exposure/vulnerability en actieadvies herberekenen;
+- technische direction/volume-features hergebruiken.
+
+#### 3. Lightweight publish
+
+Wanneer:
+
+- live price verandert;
+- UI-consumer actuele stand nodig heeft.
+
+Doet:
+
+- geen zware moving averages;
+- alleen laatste prijs, afstand tot levels, exposure en timestamp bijwerken;
+- publiceert alleen als relevante waarden echt veranderen.
+
+---
+
+### 39.8 Interne modules
+
+Voorgestelde scheiding:
+
+```text
+asset_indicator_service.py
+```
+
+Orkestratie:
+
+- QObject-service;
+- timers;
+- snapshot listeners;
+- dirty flags;
+- run scheduling;
+- schrijft output naar snapshot store;
+- roept repository aan voor persistente writes.
+
+```text
+asset_indicator_rules.py
+```
+
+Pure beslislogica:
+
+- scoreberekeningen;
+- regimeclassificatie;
+- actie-mapping;
+- delta-band mapping;
+- reason generation.
+
+Deze module moet zoveel mogelijk zonder Qt en zonder database kunnen draaien.
+
+```text
+asset_indicator_models.py
+```
+
+Dataclasses of simpele typed payloads:
+
+- `AssetIndicatorInput`
+- `AssetIndicatorScores`
+- `AssetIndicatorDecision`
+- `AssetIndicatorRunMeta`
+
+```text
+asset_indicator_repository.py
+```
+
+Database-laag:
+
+- tabel aanmaken/migreren;
+- laatste signalen laden;
+- signal history upserten;
+- oude signalen eventueel opschonen.
+
+---
+
+### 39.9 Beslis-output standaardiseren
+
+De service moet geen lange vrije tekst als primaire output gebruiken. Vrije tekst is nuttig voor de UI, maar andere onderdelen moeten op stabiele codes kunnen filteren.
+
+Gebruik daarom vaste codes.
+
+#### Asset modes
+
+```text
+bullish_accumulation
+bullish_trend
+range_theta
+bottoming
+overextended
+bearish_distribution
+high_risk_avoid
+insufficient_data
+```
+
+#### Primary actions
+
+```text
+long_houden
+long_uitbreiden_voorzichtig
+schrijf_puts
+covered_calls_ver_otm
+theta_harvest
+defensieve_covered_call
+alleen_spreads
+risico_verlagen
+niets_doen
+geen_advies_onvoldoende_data
+```
+
+#### Secondary actions
+
+```text
+geen_call_dichtbij
+puts_alleen_bij_pullback
+geen_naked_puts
+geen_extra_leverage
+assignment_risico_controleren
+ex_dividend_controleren
+roll_candidate_zoeken
+wachten_op_stabilisatie
+```
+
+Single Asset Analyse kan deze codes vertalen naar korte Nederlandse labels:
+
+```text
+schrijf_puts -> Schrijf puts
+niets_doen -> Niets doen
+covered_calls_ver_otm -> Calls ver OTM
+risico_verlagen -> Risico verlagen
+```
+
+---
+
+### 39.10 Scoring v1
+
+V1 moet bewust beperkt blijven.
+
+#### Direction score v1
+
+Input:
+
+- close versus SMA20/50/200;
+- helling SMA50;
+- 20d/60d momentum;
+- afstand tot 52w high;
+- drawdown vanaf 52w high.
+
+Output:
+
+```text
+-100 tot +100
+```
+
+V1-regels:
+
+```text
+close > SMA20 > SMA50 > SMA200              -> positief
+SMA50 stijgt                               -> positief
+20d momentum positief                      -> positief
+close < SMA50 < SMA200                     -> negatief
+drawdown groot en geen stabilisatie        -> negatief
+drawdown groot maar momentum draait        -> bottoming-kandidaat
+```
+
+Belangrijke verbetering:
+
+Een enkele `direction_score` is te eendimensionaal. Voor assetadvies moet direction worden opgesplitst in minimaal:
+
+```text
+long_term_direction_score
+short_term_direction_score
+range_position_score
+trend_phase
+```
+
+Doel:
+
+- long-term trend apart houden van korte-termijn retrace;
+- onderscheid maken tussen structureel bullish, pullback binnen uptrend, range, bodemzone en bearish distributie;
+- voorkomen dat een asset met sterke lange trend maar korte pullback verkeerd als `niets_doen` of generiek bearish wordt gezien;
+- herkennen of de koers onderin, middenin of bovenin de actuele range zit.
+
+Voorbeelden van `trend_phase`:
+
+```text
+long_term_bull_short_term_bull
+long_term_bull_retrace
+long_term_bull_bottom_10pct_range
+long_term_bull_top_10pct_range
+range_lower_band
+range_mid
+range_upper_band
+long_term_bear_relief_rally
+bearish_distribution
+insufficient_data
+```
+
+Voorbeeldinterpretatie:
+
+```text
+AHOLD:
+long_term_direction_score: hoog
+short_term_direction_score: neutraal/positief
+range_position_score: niet extreem
+trend_phase: long_term_bull_short_term_bull
+advies: long houden / puts schrijven toegestaan
+
+VFC:
+long_term_direction_score: positief/herstellend
+short_term_direction_score: pullback
+range_position_score: richting onderkant kanaal
+trend_phase: long_term_bull_retrace
+advies: reduced sizing / deeper OTM puts / calls blijven beheren
+```
+
+Deze velden moeten later naast de bestaande `direction_score` in `snapshot_asset_indicator_live` komen. De bestaande `direction_score` mag dan een samenvattende score blijven voor sortering, maar mag niet meer de enige input zijn voor `asset_mode` en `primary_action`.
+
+#### Volume score v1
+
+Input:
+
+- relative volume 20d;
+- 3-daagse price-volume score;
+- volume-weighted price change.
+
+Output:
+
+```text
+-100 tot +100
+```
+
+V1-regels:
+
+```text
+stijging + hoog volume       -> accumulatie
+stijging + laag volume       -> zwakker bullish
+daling + hoog volume         -> distributie/panic
+daling + laag volume         -> normale pullback
+zijwaarts + normaal volume   -> theta-regime
+```
+
+#### Theta score v1
+
+Input:
+
+- open optie timevalue;
+- DTE;
+- premium yield;
+- option mid/last indien beschikbaar;
+- IV/Greeks alleen gebruiken als betrouwbaar aanwezig.
+
+Output:
+
+```text
+0 tot 100
+```
+
+V1-regels:
+
+```text
+veel timevalue per dag       -> positief
+zeer korte DTE + hoge gamma   -> vulnerability omhoog
+lage premie                  -> calls/puts minder aantrekkelijk
+slechte prijsdata            -> theta confidence omlaag
+```
+
+Belangrijke nuance:
+
+De huidige `theta_score` is in eerste instantie een score op bestaande open optieposities en hun timevalue. Dat is nuttig om lopende posities te beoordelen, maar onvoldoende om nieuwe theta-kansen te vinden op assets waar nog geen optiepositie open staat.
+
+Toekomstige uitbreiding:
+
+```text
+OptionOpportunityService
+```
+
+Idee:
+
+- neem per asset een representatieve subset uit de beschikbare toekomstige optie-series;
+- selecteer meerdere looptijden, bijvoorbeeld 1 week, 2 weken, 4 weken en eventueel maandexpiraties;
+- neem per looptijd meerdere strikes rond de koers:
+  - licht ITM;
+  - ATM;
+  - licht OTM;
+  - verder OTM;
+- bereken per optie de relevante timevalue/extrinsic value;
+- koppel dit aan DTE om premie per dag of premie per week te krijgen;
+- koppel dit aan delta als ruwe kansschatter;
+- gebruik eventueel IV, spread en open interest/volume als kwaliteits- en liquiditeitsfilter;
+- vergelijk call- en putzijde apart, omdat een asset tegelijk goede covered-call-premie en slechte put-risk/reward kan hebben, of andersom.
+
+Doel stap 1:
+
+```text
+Optiedata gebruiken om het assetadvies te verfijnen.
+```
+
+Deze eerste stap hoeft nog geen concreet orderadvies per optiecontract te geven. De vraag is eerst:
+
+```text
+Moet ik in deze asset zitten, reduced zitten, bullish blijven,
+range/theta traden, of de asset links laten liggen?
+```
+
+Optiedata is daarbij niet alleen een losse "is opties interessant?" score, maar een extra lens op de asset zelf:
+
+- hoge premie + stabiele/range koers kan `range_theta` versterken;
+- hoge premie + bullish pullback kan short puts interessanter maken;
+- lage premie + chaotische koers kan juist betekenen dat risico niet betaald wordt;
+- brede spreads of dunne chains verlagen de bruikbaarheid van opties, ook als direction positief is;
+- lage theta op een asset met veel koersruis kan leiden tot `links_laten_liggen` of `reduced_position`;
+- hoge theta op een zwakke/bearish asset is geen automatisch koopsignaal, maar kan alleen met kleinere sizing/deeper OTM zinvol zijn.
+
+Pas in een latere stap komt de tweede vraag:
+
+```text
+Waar zou ik nu nieuwe opties kunnen schrijven, en tegen welke strike/looptijd?
+```
+
+Doel latere stap:
+
+```text
+Niet alleen meten hoeveel theta er nu in bestaande posities zit,
+maar inschatten of een asset momenteel een aantrekkelijke theta-markt heeft.
+```
+
+Richting expected value:
+
+```text
+candidate_score =
+    premium_yield_per_day
+  * liquidity_factor
+  * direction_fit
+  * role_fit
+  * risk_penalty
+```
+
+Waarbij:
+
+- `premium_yield_per_day`: premie of extrinsic value gedeeld door onderliggende waarde/strike en DTE;
+- `liquidity_factor`: spread, volume, open interest en aantal beschikbare strikes;
+- `direction_fit`: short puts scoren beter bij bullish trend/pullback; calls beter bij range of overextended;
+- `role_fit`: `dividend_low_beta_anchor`, `medium_value_theta`, `high_beta_speculative`, enz. wegen theta verschillend;
+- `risk_penalty`: assignment exposure, gamma-risico, drawdown, earnings/dividend en te korte looptijd.
+
+Delta wordt hierbij niet als perfecte kans gezien, maar als bruikbare marktproxy. Delta helpt om een ruwe kansinschatting te maken, maar mag niet los worden gebruikt als "kans op winst". De indicator moet daarom niet alleen zeggen "theta hoog", maar specifieker:
+
+```text
+theta aantrekkelijk voor covered calls
+theta aantrekkelijk voor short puts
+theta alleen aantrekkelijk met deeper OTM strikes
+theta te duur qua assignment/downside risico
+theta niet aantrekkelijk door lage premie of slechte spread
+```
+
+Deze uitbreiding hoort bij de optiechain-/advisorlaag en niet bij de eerste snapshot-only service. De eerste service mag wel alvast aparte velden voorbereiden:
+
+```text
+current_theta_score
+theta_market_score
+theta_opportunity_score
+theta_call_opportunity_score
+theta_put_opportunity_score
+theta_risk_score
+theta_ev_proxy
+theta_data_quality
+```
+
+De optiechain-/advisorlaag moet daarnaast per asset een compacte surface summary kunnen publiceren, zodat de Asset Indicator niet zelf de volledige optiechain hoeft te doorrekenen:
+
+```text
+best_put_1w
+best_put_2w
+best_put_4w
+best_call_1w
+best_call_2w
+best_call_4w
+avg_spread_quality
+available_strike_count
+theta_curve_slope
+```
+
+Belangrijk ontwerpprincipe:
+
+```text
+De Asset Indicator leest de samenvatting van OptionOpportunityService.
+De Asset Indicator scant niet zelf de volledige option chain.
+```
+
+Nog te bouwen:
+
+```text
+OptionOpportunityService bestaat nog niet.
+```
+
+Deze bouwfase moet expliciet toevoegen:
+
+- optiechain/universe ophalen per asset via de bestaande broker-/IBKR-koppeling;
+- expiraties selecteren rond bijvoorbeeld 1 week, 2 weken, 4 weken en maandexpiratie;
+- strikes selecteren rond ATM, licht OTM, verder OTM en eventueel licht ITM;
+- calls en puts apart ophalen en beoordelen;
+- bid/ask/last/mid, DTE, delta, theta, IV, volume en open interest vastleggen waar beschikbaar;
+- spreadkwaliteit en liquiditeit berekenen;
+- per asset bepalen of de optiemarkt interessant genoeg is om actief te volgen;
+- ruwe expected-value proxy per kandidaatoptie berekenen;
+- kandidaatopties publiceren naar een candidate snapshot;
+- per asset een compacte summary publiceren die de Asset Indicator kan lezen.
+
+Voorgestelde snapshots:
+
+```text
+snapshot_option_opportunity_candidates
+snapshot_option_opportunity_summary
+snapshot_option_opportunity_meta
+```
+
+Minimale output voor stap 1:
+
+```text
+asset_rollup
+option_market_score
+option_premium_score
+option_liquidity_score
+option_spread_score
+option_chain_depth_score
+call_market_score
+put_market_score
+option_market_status
+option_asset_bias
+option_positioning_hint
+option_regime_hint
+reason_1
+reason_2
+reason_3
+```
+
+Voorbeelden van `option_market_status`:
+
+```text
+interesting_for_options
+usable_but_selective
+only_existing_positions
+not_interesting_for_options
+insufficient_option_data
+```
+
+Daarmee kan de Asset Indicator eerst onderscheid maken tussen:
+
+- assets waar opties structureel nuttig zijn;
+- assets waar alleen bestaande posities beheerd moeten worden;
+- assets waar opties eigenlijk weinig toevoegen;
+- assets waar data ontbreekt.
+
+Voorbeelden van assetgerichte hints:
+
+```text
+option_asset_bias:
+  supports_bullish
+  supports_range_theta
+  supports_reduced_position
+  warns_unpaid_volatility
+  warns_bad_liquidity
+  no_useful_option_signal
+
+option_positioning_hint:
+  normal_position_allowed
+  reduced_position_sizing
+  only_existing_position_management
+  avoid_new_exposure
+  avoid_asset_for_now
+
+option_regime_hint:
+  bullish_with_put_premium
+  range_theta_candidate
+  noisy_low_theta
+  premium_rich_but_direction_weak
+  liquid_but_low_premium
+  illiquid_options
+```
+
+Deze hints worden later gecombineerd met `direction_score`, `volume_score`, `vulnerability_score` en `indicator_role`. Het eindadvies blijft assetgericht, bijvoorbeeld:
+
+```text
+long_houden
+schrijf_puts
+range_theta
+reduced_position
+alleen_bestaande_posities_beheren
+links_laten_liggen
+risico_verlagen
+```
+
+Eerste versie bij voorkeur handmatig starten, niet automatisch periodiek:
+
+- optiechain ophalen is traag;
+- IBKR-requests kunnen rate-limited zijn;
+- de scan moet eerst controleerbaar en reproduceerbaar zijn;
+- pas later eventueel periodiek draaien met throttling/cache.
+
+Voorbeeldinterpretatie:
+
+```text
+BAYER:
+put opportunity: hoog bij 4w 20-30 delta
+call opportunity: matig
+liquiditeit: ok
+risico: verhoogd door zwakke direction_score
+advies: alleen deeper OTM puts / ladder klein houden
+```
+
+#### Vulnerability score v1
+
+Input:
+
+- current exposure pct;
+- assignment exposure pct;
+- sprinter/hefboom aanwezigheid;
+- short option count;
+- asset risk class;
+- event flags zoals dividend.
+
+Output:
+
+```text
+0 tot 100
+```
+
+V1-regels:
+
+```text
+asset exposure > max         -> vulnerability omhoog
+short puts + assignment > max -> vulnerability omhoog
+sprinters dicht bij knockout -> vulnerability sterk omhoog
+ex-dividend + short ITM call -> vulnerability omhoog
+high beta/speculatief        -> max exposure lager
+```
+
+#### Liquidity score v1
+
+Input:
+
+- dollar volume uit OHLCV;
+- optie open interest/volume alleen als beschikbaar;
+- bid/ask spread later toevoegen.
+
+Output:
+
+```text
+0 tot 100
+```
+
+V1 mag liquidity nog simpel houden. Als data ontbreekt:
+
+```text
+liquidity_score = null
+data_quality = partial
+```
+
+---
+
+### 39.11 Actie-mapping v1
+
+De belangrijkste mapping:
+
+```text
+if data_quality == "insufficient":
+    primary_action = "geen_advies_onvoldoende_data"
+
+elif vulnerability_score >= 80:
+    primary_action = "risico_verlagen"
+    secondary_action = "geen_naked_puts"
+
+elif direction_score >= 60 and volume_score >= 40:
+    primary_action = "long_houden"
+    secondary_action = "geen_call_dichtbij"
+    covered_call_delta = 0.05-0.15
+
+elif direction_score >= 30 and theta_score >= 60:
+    primary_action = "covered_calls_ver_otm"
+    secondary_action = "puts_alleen_bij_pullback"
+    covered_call_delta = 0.15-0.25
+
+elif -25 <= direction_score <= 25 and theta_score >= 60 and vulnerability_score < 60:
+    primary_action = "theta_harvest"
+    secondary_action = "covered_calls_en_puts_toegestaan"
+    covered_call_delta = 0.25-0.40
+    short_put_delta = 0.20-0.30
+
+elif direction_score <= -40 and volume_score <= -40:
+    primary_action = "risico_verlagen"
+    secondary_action = "geen_naked_puts"
+
+elif direction_score >= 10 and volume_score <= -30:
+    primary_action = "niets_doen"
+    secondary_action = "volume_waarschuwt"
+
+else:
+    primary_action = "niets_doen"
+```
+
+Belangrijk:
+
+```text
+De service geeft een adviesrichting, geen automatische order.
+```
+
+Een latere roll-advisor kan op basis van deze output concrete option candidates rangschikken.
+
+---
+
+### 39.12 Integratie met Single Asset Analyse
+
+Eerste UI-consumer:
+
+```text
+single_asset_analyse_tab_logica.py
+```
+
+Gewenst gedrag:
+
+1. Bij assetselectie leest de tab `snapshot_asset_indicator_live`.
+2. De tab filtert op `asset_rollup`.
+3. Bovenin de bestaande balk of header komt een compacte adviesstrip.
+4. De tab rekent het advies niet zelf uit.
+5. Bij `snapshotUpdated("snapshot_asset_indicator_live")` vernieuwt alleen deze strip en eventueel een klein detailblok.
+
+Voorbeeld compacte strip:
+
+```text
+Advies: Long houden | Calls: 0.05-0.15 delta | Puts: alleen bij pullback | Risico: normaal
+```
+
+Voorbeeld kleurcodering:
+
+| Primary action | Kleur |
+|---|---|
+| `long_houden` | groen |
+| `schrijf_puts` | blauw/groen |
+| `theta_harvest` | blauw |
+| `covered_calls_ver_otm` | groen/blauw |
+| `niets_doen` | grijs |
+| `risico_verlagen` | rood/oranje |
+| `alleen_spreads` | oranje |
+| `geen_advies_onvoldoende_data` | grijs |
+
+Detailpopup of tooltip:
+
+```text
+Direction +72
+Theta 48
+Volume +63
+Vulnerability 31
+Reden:
+1. Koers boven SMA20/50/200
+2. Volume bevestigt stijging
+3. Premie niet hoog genoeg om upside agressief weg te schrijven
+```
+
+De strip moet stabiel blijven bij live ticks:
+
+- geen tabel rebuild;
+- geen asset reload;
+- alleen label/score update;
+- update throttlen als de service snel publiceert.
+
+---
+
+### 39.13 Integratie met andere onderdelen
+
+#### Aandelen-tab
+
+Later kan `snapshot_asset_indicator_live` worden gejoined op `asset_rollup`.
+
+Mogelijke extra kolommen:
+
+```text
+asset_mode
+primary_action
+direction_score
+theta_score
+vulnerability_score
+```
+
+Gebruik:
+
+- snel zien welke assets calls vermijden;
+- welke assets put-write candidates zijn;
+- welke assets te veel vulnerability hebben.
+
+#### Open Opties
+
+Gebruik:
+
+- short calls markeren wanneer `secondary_action = geen_call_dichtbij`;
+- roll candidate markeren als short call delta te hoog wordt;
+- short puts markeren wanneer volume/distributie waarschuwt.
+
+#### Optie Tijdswaarde
+
+Gebruik:
+
+- timevalue niet los beoordelen, maar combineren met direction;
+- hoge timevalue op bullish accumulation betekent niet automatisch call schrijven;
+- hoge timevalue in range_theta krijgt prioriteit.
+
+#### Alerts
+
+Later kunnen alerts direct op de indicator-output draaien:
+
+```text
+asset_mode veranderd
+primary_action veranderd
+vulnerability_score boven 80
+theta_score boven 70
+volume_score draait van positief naar sterk negatief
+assignment_exposure_pct boven limiet
+```
+
+---
+
+### 39.14 Scenario-integratie
+
+Voor v1 moet de indicator-service standaard op live/base portefeuille draaien.
+
+Scenario-integratie komt later en moet aansluiten op de bestaande overlay-architectuur.
+
+Niet doen:
+
+```text
+scenario-orders in de indicator-service als transacties injecteren
+```
+
+Wel doen:
+
+```text
+scenario-aware indicator-run als aparte context
+```
+
+Voorbeeld latere snapshots:
+
+```text
+snapshot_asset_indicator_live
+snapshot_asset_indicator_scenario
+snapshot_asset_indicator_scenario_meta
+```
+
+Gebruik:
+
+- wat verandert er aan vulnerability als een scenario actief is;
+- welke assets worden na scenario boven max exposure geduwd;
+- verandert het advies na generated option actions.
+
+Voor v1:
+
+```text
+geen scenario-integratie, alleen architectuur voorbereiden.
+```
+
+---
+
+### 39.15 Database-migratie en compatibiliteit
+
+Schemawijzigingen moeten via `DbMigrationService`.
+
+Regels:
+
+- alleen nieuwe tabellen;
+- geen breaking changes op bestaande tabellen;
+- nullable/default kolommen;
+- meerdere user databases ondersteunen;
+- migratie idempotent maken.
+
+V1-tabellen in user database:
+
+```text
+asset_indicator_signal_history
+asset_indicator_service_runs
+```
+
+`asset_indicator_service_runs`:
+
+```text
+run_id
+started_at
+finished_at
+status
+assets_total
+assets_scored
+assets_insufficient_data
+error_message
+service_version
+input_summary
+```
+
+Deze run-tabel is nuttig om te zien of de service betrouwbaar draait.
+
+---
+
+### 39.16 Configuratie en feature flags
+
+Nieuwe settings:
+
+```text
+ENABLE_ASSET_INDICATOR_SERVICE=true/false
+ASSET_INDICATOR_RUN_INTERVAL_SECONDS=300
+ASSET_INDICATOR_PERSIST_INTERVAL_SECONDS=900
+ASSET_INDICATOR_STARTUP_DELAY_SECONDS=10
+ASSET_INDICATOR_ENABLE_SINGLE_ASSET_STRIP=true/false
+ASSET_INDICATOR_ENABLE_HISTORY_WRITE=true/false
+```
+
+Reden:
+
+- service veilig parallel kunnen bouwen;
+- UI-strip apart kunnen aanzetten;
+- persistent schrijven apart kunnen testen;
+- snel rollback mogelijk houden.
+
+---
+
+### 39.17 Observability
+
+De service moet per run minimaal loggen:
+
+```text
+run_id
+mode
+duration_ms
+assets_total
+assets_scored
+assets_skipped
+snapshot_rows_written
+history_rows_written
+trigger_reason
+```
+
+In `snapshot_asset_indicator_meta`:
+
+```text
+last_run_id
+last_run_at
+last_success_at
+last_duration_ms
+last_status
+last_error
+assets_scored
+assets_insufficient_data
+service_version
+```
+
+Belangrijk voor performance:
+
+- geen volledige rebuild bij elke live tick;
+- geen publish als output identiek is;
+- hash of rowcount/timestamp gebruiken om onnodige UI-updates te vermijden.
+
+---
+
+### 39.18 Teststrategie
+
+#### Unit tests
+
+Voor `asset_indicator_rules.py`:
+
+- bullish accumulation;
+- range theta;
+- bearish distribution;
+- high vulnerability;
+- insufficient data;
+- covered-call penalty;
+- put-writing filter.
+
+#### Service tests
+
+Met kleine Polars testframes:
+
+- service leest bron-snapshots;
+- service schrijft `snapshot_asset_indicator_live`;
+- ontbrekende OHLCV geeft `insufficient_data`;
+- ontbrekende optiegegevens breekt run niet;
+- exposure boven limiet verhoogt vulnerability;
+- same-output publish wordt overgeslagen of beperkt.
+
+#### Integratietests
+
+- app start met service uit;
+- app start met service aan;
+- databasewissel forceert full rebuild;
+- Single Asset Analyse toont strip voor geselecteerd asset;
+- bij ontbrekend advies toont UI neutrale tekst.
+
+#### Handmatige smoke test
+
+1. Start app.
+2. Controleer dat indicator-service na startup één run doet.
+3. Open Single Asset Analyse.
+4. Kies asset met voldoende historie.
+5. Controleer adviesstrip.
+6. Kies asset zonder voldoende historie.
+7. Controleer `geen advies / onvoldoende data`.
+8. Wacht op volgende timer-run.
+9. Controleer dat tab niet flikkert of volledig herlaadt.
+10. Controleer history-tabel op nieuwe signalen als persistentie aan staat.
+
+---
+
+### 39.19 Gefaseerde implementatie
+
+#### Fase 0: datacontract vastleggen
+
+Doel:
+
+- outputkolommen vastleggen;
+- action codes vastleggen;
+- snapshot keys toevoegen aan `SnapshotStore`;
+- feature flags toevoegen;
+- geen UI-gedrag wijzigen.
+
+Resultaat:
+
+```text
+Leeg maar stabiel contract voor indicator-output.
+```
+
+#### Fase 1: pure rules-engine
+
+Doel:
+
+- `asset_indicator_rules.py` bouwen;
+- Direction v1;
+- Volume v1;
+- simpele action mapping;
+- unit tests.
+
+Nog geen timers, geen database.
+
+Resultaat:
+
+```text
+Los testbare score- en advieslogica.
+```
+
+#### Fase 2: service met snapshot-output
+
+Doel:
+
+- `AssetIndicatorService` bouwen;
+- bestaande snapshots lezen;
+- `snapshot_asset_indicator_live` publiceren;
+- `snapshot_asset_indicator_meta` publiceren;
+- startup run en handmatige schedule.
+
+Resultaat:
+
+```text
+Andere app-onderdelen kunnen indicator-output lezen uit SNAPSHOT_STORE.
+```
+
+#### Fase 3: Single Asset Analyse strip
+
+Doel:
+
+- bovenin `Single Asset Analyse` advies tonen;
+- alleen lezen uit `snapshot_asset_indicator_live`;
+- reageren op `snapshotUpdated("snapshot_asset_indicator_live")`;
+- geen zware herberekening in UI.
+
+Resultaat:
+
+```text
+Per asset zichtbaar: schrijf puts / niets doen / long houden / calls ver OTM / risico verlagen.
+```
+
+#### Fase 4: persistentie
+
+Doel:
+
+- repository bouwen;
+- migratie voor history/run-tabellen;
+- periodieke writes;
+- laatste advies kunnen laden na restart.
+
+Resultaat:
+
+```text
+Historische signalen worden opgebouwd.
+```
+
+#### Fase 5: portfolio-aware scores
+
+Doel:
+
+- aandelen, opties en sprinters combineren;
+- current exposure pct;
+- assignment exposure pct;
+- vulnerability score;
+- max exposure regels per risk class.
+
+Resultaat:
+
+```text
+Advies houdt rekening met bestaande portefeuillepositie.
+```
+
+#### Fase 6: theta-aware uitbreiding
+
+Doel:
+
+- koppelen aan `snapshot_optie_timevalue_live`;
+- theta score;
+- DTE/gamma-risk;
+- call/put delta-band output;
+- roll-candidate basis voorbereiden.
+
+Resultaat:
+
+```text
+Advies ondersteunt theta harvesting zonder blind upside weg te schrijven.
+```
+
+#### Fase 7: scans en alerts
+
+Doel:
+
+- summary snapshot gebruiken;
+- assets groeperen per actie;
+- alertregels toevoegen.
+
+Voorbeelden:
+
+```text
+toon assets waar ik geen calls moet schrijven
+toon put-write candidates
+toon assets met vulnerability > 80
+toon range-theta assets
+```
+
+#### Fase 8: backtest en ML-voorbereiding
+
+Doel:
+
+- signal history combineren met latere returns;
+- meten of regimes zinvol waren;
+- roll-beslissingen evalueren;
+- feature dataset opbouwen.
+
+Resultaat:
+
+```text
+De indicator wordt meetbaar en kan later ML voeden.
+```
+
+---
+
+### 39.20 Eerste concrete bouwsnede
+
+De kleinste zinvolle eerste bouwsnede is:
+
+```text
+1. Snapshot contract toevoegen
+2. asset_indicator_rules.py met Direction + Volume + action mapping
+3. AssetIndicatorService met 5-minuten timer
+4. snapshot_asset_indicator_live publiceren
+5. Single Asset Analyse adviesstrip lezen uit snapshot
+```
+
+Nog niet in eerste bouwsnede:
+
+- persistent history;
+- volledige optiechain/Greeks;
+- IV Rank;
+- scenario-integratie;
+- aparte WebEngine-tab;
+- ML;
+- automatische order-candidates.
+
+Deze volgorde houdt de feature klein genoeg om veilig in de bestaande app te integreren, maar legt wel direct het juiste fundament:
+
+```text
+service -> snapshot -> consumers -> history -> advisor
+```
+
+---
+
+### 39.21 Asset role naast `waarde_groei`
+
+`asset_rollup_data.value_grow` / `waarde_groei` blijft bestaan en behoudt zijn huidige betekenis.
+
+Voor de indicator is later een aparte interpretatiekolom nodig, omdat waarde/groei niet hetzelfde is als de rol die een asset in de strategie speelt.
+
+Extra kolom in `asset_rollup_data`:
+
+```text
+indicator_rol
+```
+
+Let op: de huidige fysieke kolomnaam is `indicator_rol`. In de code worden daarnaast de aliases `indicator_role` en de oude typo `indicatorl_rol` ondersteund.
+
+Vaste rollen:
+
+```text
+dividend_low_beta_anchor
+dividend_value
+medium_value_theta
+high_beta_value
+high_beta_speculative
+early_investor
+volatility_products
+ignore
+```
+
+Gebruik:
+
+- `dividend_low_beta_anchor`: stabiele dividend-/allocatiepositie met lage beta. Lagere groei en lage theta zijn acceptabel; advies moet minder snel dwingen tot actie. Covered calls alleen voorzichtig en niet te dicht bij de koers.
+- `dividend_value`: waarde/dividendpositie waar trend en dividend belangrijk zijn, maar waar optiepremie wel als extra rendement mag meetellen.
+- `medium_value_theta`: tussen waarde en groei in, vaak met hogere volatiliteit en bruikbare theta. Voorbeelden zoals Bayer kunnen hier vallen: richting mag wisselend zijn, maar de asset kan interessant blijven voor ladders met puts/calls mits position sizing klopt.
+- `high_beta_value`: grote kwaliteitsbedrijven of big tech met hogere beta, maar ook echte omzet/winst. Upside niet te snel wegschrijven; drawdowns zijn normaaler dan bij dividend anchors.
+- `high_beta_speculative`: speculatieve/high beta assets. Strengere exposurelimieten, kleinere posities, meer nadruk op downside en assignment-risico.
+- `early_investor`: kleine vroege posities waarvan de thesis vooral groei is. Mag dalen zonder direct exit-signaal; calls kunnen later helpen om costbase te verlagen, maar niet agressief zolang de positie klein en thesisgedreven is.
+- `volatility_products`: producten zoals UVXY die per case een andere interpretatie nodig hebben. Voor UVXY is de lange termijn bijvoorbeeld structurele daling en kan short calls schrijven logisch zijn, terwijl korte termijn stress juist hard tegen de positie kan bewegen.
+- `ignore`: asset niet meer scoren of tonen in indicator-output.
+
+`turnaround_theta` is geen vaste rol. Dat moet later een dynamische suggestie/regime worden die de indicator kan voorstellen en die daarna eventueel door de gebruiker geaccepteerd kan worden.
+
+Implementatie v1.3:
+
+- `indicator_rol` wordt ingelezen uit `asset_rollup_data`.
+- `indicator_role` wordt gepubliceerd in `snapshot_asset_indicator_live`.
+- Assets met rol `ignore` worden niet gescoord en niet getoond in de indicator-output.
+- De Asset Indicator-tab krijgt een rolkolom en rolfilter.
+- De rol weegt nu nog niet inhoudelijk mee in de action mapping; dat is de volgende laag nadat de rollen in de data gevuld zijn.
+
+---
+
+### 39.22 Status implementatie in `portefeuille_viewer_1.3`
+
+De eerste werkende implementatie is inmiddels verder dan de oorspronkelijke minimale bouwsnede.
+
+Gerealiseerd:
+
+- `SnapshotStore` bevat indicator-snapshots:
+  - `snapshot_asset_indicator_live`;
+  - `snapshot_asset_indicator_summary`;
+  - `snapshot_asset_indicator_meta`.
+- `asset_indicator_contract.py` bevat het gedeelde outputcontract, vaste action/mode codes en schema's.
+- `asset_indicator_rules.py` bevat pure score- en beslislogica.
+- `asset_indicator_service.py` bouwt de indicator-output vanuit bestaande snapshots.
+- `devtools/run_asset_indicator_once.py` kan de indicator buiten de app handmatig draaien.
+- `asset_indicator_web_tab.py` toont de indicator-output in de app als aparte tab.
+- `main_window_logica.py` voegt de tab `Asset Indicator` toe.
+
+Huidige inputdata:
+
+- `repository_snapshot_asset_rollup_data`;
+- `repository_snapshot_historical_ohlcv`;
+- `snapshot_optie_timevalue_live`, alleen wanneer deze in de app al gevuld is;
+- `indicator_rol` uit `asset_rollup_data`.
+
+Nog niet gebruikt:
+
+- volledige optiechain;
+- option opportunity scan;
+- portfolio exposure;
+- assignment exposure;
+- sprinters/leverage;
+- dividend/earnings events in de decision mapping;
+- persistente signal history.
+
+Huidige outputvelden in `snapshot_asset_indicator_live`:
+
+```text
+asset_rollup
+asset_name
+asset_type
+risk_class
+indicator_role
+as_of
+direction_score
+long_term_direction_score
+short_term_direction_score
+range_position_pct
+trend_phase
+theta_score
+volume_score
+vulnerability_score
+liquidity_score
+confidence_score
+asset_mode
+primary_action
+secondary_action
+covered_call_delta_min
+covered_call_delta_max
+short_put_delta_min
+short_put_delta_max
+max_exposure_pct
+current_exposure_pct
+assignment_exposure_pct
+reason_1
+reason_2
+reason_3
+data_quality
+```
+
+Direction is nu meer-dimensionaal:
+
+- `direction_score`: samengestelde score voor sortering en compacte weergave;
+- `long_term_direction_score`: structurele trend;
+- `short_term_direction_score`: tactische trend/retrace;
+- `range_position_pct`: positie in recente range, 0 is onderkant en 100 is bovenkant;
+- `trend_phase`: niet-lineair regime-label.
+
+Huidige `trend_phase` waarden:
+
+```text
+long_term_bull_short_term_bull
+long_term_bull_retrace
+long_term_bull_bottom_10pct_range
+long_term_bull_top_10pct_range
+range_lower_band
+range_mid
+range_upper_band
+long_term_bear_relief_rally
+bearish_distribution
+insufficient_data
+```
+
+Belangrijke ontwerpkeuze:
+
+```text
+trend_phase is geen scoreladder.
+```
+
+Het label zegt welk soort situatie het is. `range_lower_band` is bijvoorbeeld niet per se slechter dan `range_upper_band`; het vraagt een ander advies.
+
+Huidige theta:
+
+- `theta_score` is voorlopig een ruwe score op bestaande open optieposities;
+- de score komt uit `snapshot_optie_timevalue_live`;
+- deze score zegt nog niet of een asset zonder open opties aantrekkelijk is voor opties;
+- hiervoor is later `OptionOpportunityService` nodig.
+
+Huidige rolstatus:
+
+- `indicator_rol` wordt gelezen;
+- `ignore` werkt al als filter;
+- rollen verschijnen in de Asset Indicator-tab;
+- rollen wegen nog niet inhoudelijk mee in adviesregels.
+
+Bekende beperkingen:
+
+- `asset_mode` en `primary_action` zijn nog te generiek per rol;
+- `bearish_distribution` kan voor assets als `medium_value_theta` te hard uitpakken;
+- `long_term_bull_top_10pct_range` leidt nu nog niet altijd tot een aangepast call-/putadvies;
+- `theta_score = null` betekent vaak alleen dat er geen open optie-timevalue beschikbaar is, niet dat theta onaantrekkelijk is;
+- `vulnerability_score`, exposure en assignment-risk zijn nog niet aangesloten;
+- option-market suitability is nog niet gebouwd.
+
+Laatste technische validatie:
+
+```text
+python -m py_compile portefeuille_viewer\services\asset_indicator_contract.py portefeuille_viewer\services\asset_indicator_rules.py portefeuille_viewer\services\asset_indicator_service.py portefeuille_viewer\ui_logica\asset_indicator_web_tab.py devtools\run_asset_indicator_once.py
+python devtools\run_asset_indicator_once.py --limit 20 --sort asset --no-html
+```
+
+Beide checks draaiden succesvol na toevoeging van de meer-dimensionale direction-laag.
+
+---
+
+### 39.23 Juiste vervolgstappen vanaf huidige status
+
+De volgende stappen moeten niet meteen naar optiechain/EV springen. Eerst moet de huidige assetindicator beter worden gekalibreerd met de nieuwe dimensies en rollen.
+
+#### Stap 1: role-aware action mapping
+
+Doel:
+
+```text
+indicator_rol + trend_phase + range_position_pct gebruiken om het assetadvies te verfijnen.
+```
+
+Waarom:
+
+- de rollen zijn nu gevuld en zichtbaar;
+- zonder rolweging blijven AHOLD, O, BAYER, APPLOVIN, VFC en UVXY te generiek;
+- dit is de kleinste stap met direct betere adviezen.
+
+Voorbeelden:
+
+- `dividend_low_beta_anchor`:
+  - stabiele long-term trend minder snel afstraffen;
+  - lagere theta accepteren;
+  - covered calls voorzichtig en niet agressief;
+  - vaker `long_houden` of `schrijf_puts` bij gezonde trend.
+- `dividend_value`:
+  - trend en dividend blijven leidend;
+  - puts mogen bij bullish trend/pullback;
+  - bovenin range eerder calls beheren of afwachten.
+- `medium_value_theta`:
+  - range/pullback mag interessanter zijn als theta of optie-markt later goed is;
+  - niet automatisch `niets_doen` bij rommelige direction;
+  - wel reduced sizing bij zwakke trend.
+- `high_beta_value`:
+  - upside niet snel wegschrijven;
+  - pullbacks kunnen put-kansen zijn;
+  - top van range betekent eerder voorzichtigheid dan automatisch meer puts.
+- `high_beta_speculative`:
+  - strenger op drawdown, volume en range chaos;
+  - kleinere sizing;
+  - vaker `avoid_new_exposure` of `reduced_position_sizing`.
+- `early_investor`:
+  - upside beschermen;
+  - calls pas later/voorzichtig om costbase te verlagen;
+  - kleine positie kan blijven bestaan ondanks slechte korte termijn.
+- `volatility_products`:
+  - niet generiek behandelen;
+  - per product een aparte strategie-notitie of config nodig.
+
+Concrete codewijziging:
+
+- `ActionInput` uitbreiden met `indicator_role`;
+- `map_scores_to_action()` role-aware maken;
+- reason-teksten expliciet noemen wanneer rol het advies beïnvloedt;
+- nieuwe action/secondary codes toevoegen als nodig:
+  - `reduced_position`;
+  - `alleen_bestaande_posities_beheren`;
+  - `links_laten_liggen`;
+  - `avoid_new_exposure`.
+
+#### Stap 2: calibratie van `trend_phase`
+
+Doel:
+
+```text
+thresholds controleren op bekende assets.
+```
+
+Reviewset:
+
+```text
+AHOLD
+O
+BAYER
+APPLOVIN
+VFC
+ASMLAEB
+ASMI
+AMD
+NVIDIA
+UVXY
+JNJ
+KO
+BATS
+BTI
+BMW
+ARCHER
+JOBY
+ASTS
+```
+
+Te controleren per asset:
+
+- klopt long-term score met de grafiek;
+- klopt short-term score met recente beweging;
+- klopt range position;
+- is `trend_phase` logisch;
+- is `asset_mode` logisch;
+- is `primary_action` bruikbaar.
+
+Uitkomst:
+
+- thresholds aanpassen;
+- eventueel nieuwe trend phases toevoegen;
+- te harde labels zoals `bearish_distribution` nuanceren.
+
+#### Stap 3: huidige theta hernoemen/splitsen
+
+Doel:
+
+```text
+voorkomen dat huidige theta wordt verward met opportunity-theta.
+```
+
+Aanpassing:
+
+- huidig `theta_score` inhoudelijk behandelen als `current_theta_score`;
+- eventueel output uitbreiden met beide namen:
+  - `current_theta_score`;
+  - `theta_opportunity_score`;
+- `theta_opportunity_score` voorlopig `null` houden tot OptionOpportunityService bestaat.
+
+Waarom:
+
+- huidige score komt alleen uit bestaande open opties;
+- lege theta betekent nu vaak "geen open optiepositie", niet "geen theta-kans";
+- de UI moet dit onderscheid duidelijk maken.
+
+#### Stap 4: portfolio-aware vulnerability aansluiten
+
+Doel:
+
+```text
+advies laten afhangen van bestaande exposure.
+```
+
+Input:
+
+- open aandelen;
+- open opties;
+- open sprinters;
+- portfolio value;
+- assignment exposure;
+- short call exposure;
+- eventuele max exposure per rol.
+
+Output:
+
+- `current_exposure_pct`;
+- `assignment_exposure_pct`;
+- `vulnerability_score`;
+- role-aware max exposure;
+- reasons wanneer exposure het advies beperkt.
+
+Voorbeeld:
+
+```text
+VFC bullish retrace, maar positie al groot:
+primary_action: covered calls beheren / reduced sizing
+secondary_action: geen extra assignment exposure
+```
+
+#### Stap 5: Option market suitability bouwen
+
+Doel stap 5 is nog niet concrete optie-orders kiezen, maar assetadvies verbeteren met optiemarktdata:
+
+```text
+Is deze asset qua optiemarkt geschikt om met opties te werken?
+```
+
+Te bouwen service:
+
+```text
+OptionOpportunityService
+```
+
+Eerste output:
+
+```text
+option_market_score
+option_premium_score
+option_liquidity_score
+option_spread_score
+option_chain_depth_score
+call_market_score
+put_market_score
+option_market_status
+option_asset_bias
+option_positioning_hint
+option_regime_hint
+```
+
+Deze service moet eerst handmatig draaien, omdat optiechain ophalen via IBKR traag en rate-limited kan zijn.
+
+#### Stap 6: concrete option opportunities
+
+Pas na stap 5:
+
+- strikes/expiraties rangschikken;
+- call/put candidates tonen;
+- EV-proxy per kandidaat;
+- delta/DTE/spread/liquiditeit meewegen;
+- roll-advisor voorbereiden.
+
+#### Stap 7: persistentie en history
+
+Doel:
+
+- signalen bewaren;
+- regimewissels volgen;
+- later backtesten;
+- kunnen zien of adviezen over tijd verbeteren.
+
+Tabellen:
+
+```text
+asset_indicator_signal_history
+asset_indicator_service_runs
+```
+
+#### Stap 8: integratie in Single Asset Analyse
+
+Doel:
+
+- compacte adviesstrip bovenin de bestaande assetanalyse;
+- detail/tooltip met long-term, short-term, range, rol, theta en vulnerability;
+- geen herberekening in de UI;
+- alleen lezen uit `snapshot_asset_indicator_live`.
+
+Aanpak:
+
+- pas doen nadat stap 1 en 2 acceptabele adviezen geven;
+- anders wordt een te vroeg advies te prominent in de dagelijkse workflow.
