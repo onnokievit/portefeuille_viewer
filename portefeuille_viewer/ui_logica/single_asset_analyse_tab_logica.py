@@ -866,8 +866,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
   <meta charset="utf-8"/>
   <style>
     html,body{{margin:0;padding:0;background:#f8fafc;color:#1f2937;font-family:Segoe UI,Arial,sans-serif;font-size:11px;overflow:hidden;}}
-    .row{{height:46px;border:1px solid #c9d1dc;border-radius:3px;background:#fff;padding:2px 5px;box-sizing:border-box;display:grid;grid-template-columns:58% 42%;gap:8px;align-items:start;}}
-    .left{{min-width:0;display:grid;grid-template-rows:19px 19px;gap:1px;overflow:hidden;}}
+    .row{{height:46px;border:1px solid #c9d1dc;border-radius:3px;background:#fff;padding:2px 5px;box-sizing:border-box;display:flex;gap:8px;align-items:flex-start;}}
+    .left{{flex:0 0 auto;max-width:760px;display:grid;grid-template-rows:19px 19px;gap:1px;overflow:hidden;}}
     .labels{{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;}}
     .asset{{font-weight:700;min-width:62px;}}
     .pill{{display:inline-block;border:1px solid #cbd5e1;border-radius:999px;background:#fff;padding:1px 6px;line-height:15px;}}
@@ -879,7 +879,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     .niets_doen{{background:#f1f5f9;color:#334155;}}
     .scores{{display:flex;align-items:center;gap:12px;white-space:nowrap;color:#475569;overflow:hidden;}}
     .scores b{{color:#111827;}}
-    .reason{{height:40px;overflow:hidden;color:#334155;line-height:18px;border-left:1px solid #e2e8f0;padding-left:8px;}}
+    .reason{{flex:1 1 auto;min-width:260px;height:40px;overflow:hidden;color:#334155;line-height:18px;border-left:1px solid #e2e8f0;padding-left:8px;}}
     .reason div,.reason span{{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
     .reason span{{color:#64748b;}}
     .empty{{height:46px;border:1px solid #c9d1dc;border-radius:4px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 8px;box-sizing:border-box;color:#64748b;}}
