@@ -91,7 +91,8 @@ class CashManagementEntriesDialog(QDialog):
 
         root = QVBoxLayout(self)
         root.addWidget(QLabel("Beheer cash mutaties. Selecteer een rij om te wijzigen of maak een nieuw record."))
-        root.addWidget(QLabel(f"Database: {data_repository.db_path}"))
+        self.lbl_database = QLabel(self)
+        root.addWidget(self.lbl_database)
         self.lbl_status = QLabel("", self)
         root.addWidget(self.lbl_status)
 
@@ -176,6 +177,7 @@ class CashManagementEntriesDialog(QDialog):
     def reload(self) -> None:
         if self._load_worker is not None and self._load_worker.isRunning():
             return
+        self.lbl_database.setText(f"Database: {data_repository.db_path}")
         self._set_busy(True, "Laden...")
         self._load_worker = _CashEntriesLoadWorker(self)
         self._load_worker.loaded.connect(self._on_rows_loaded)
