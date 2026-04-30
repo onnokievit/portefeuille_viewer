@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QDate, QThread, Signal
+from PySide6.QtCore import Qt, QDate, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -106,6 +106,7 @@ class AccountDailyBalancesDialog(QDialog):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setFocusPolicy(Qt.ClickFocus)
         self.table.itemSelectionChanged.connect(self._on_table_selection_changed)
         tables_wrap.addWidget(self.table, 3)
 
@@ -116,55 +117,71 @@ class AccountDailyBalancesDialog(QDialog):
         self.pivot_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.pivot_table.setSelectionMode(QTableWidget.SingleSelection)
         self.pivot_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.pivot_table.setFocusPolicy(Qt.ClickFocus)
         pivot_wrap.addWidget(self.pivot_table, 1)
 
         form_wrap = QGridLayout()
+        form_wrap.setColumnStretch(0, 0)
+        form_wrap.setColumnStretch(1, 1)
         root.addLayout(form_wrap)
 
-        left_form = QFormLayout()
-        right_form = QFormLayout()
-        form_wrap.addLayout(left_form, 0, 0)
-        form_wrap.addLayout(right_form, 0, 1)
+        entry_form = QFormLayout()
+        side_form = QFormLayout()
+        form_wrap.addLayout(entry_form, 0, 0, 2, 1)
+        form_wrap.addLayout(side_form, 0, 1)
 
         self.input_datum = QDateEdit(self)
         self.input_datum.setCalendarPopup(True)
         self.input_datum.setDisplayFormat("dd-MM-yyyy")
         self.input_datum.setDate(QDate.currentDate())
-        left_form.addRow("Datum", self.input_datum)
+        self.input_datum.setFocusPolicy(Qt.StrongFocus)
+        entry_form.addRow("Datum", self.input_datum)
 
         self.input_broker = QComboBox(self)
         self.input_broker.addItems(BROKERS)
-        left_form.addRow("Broker", self.input_broker)
+        self.input_broker.setFocusPolicy(Qt.StrongFocus)
+        entry_form.addRow("Broker", self.input_broker)
 
         self.input_ending_balance = QDoubleSpinBox(self)
         self.input_ending_balance.setDecimals(2)
         self.input_ending_balance.setRange(-1_000_000_000, 1_000_000_000)
         self.input_ending_balance.setSingleStep(100.0)
-        right_form.addRow("Eindstand", self.input_ending_balance)
+        self.input_ending_balance.setFocusPolicy(Qt.StrongFocus)
+        entry_form.addRow("Eindstand", self.input_ending_balance)
 
         self.input_currency = QLineEdit(self)
         self.input_currency.setText("EUR")
-        right_form.addRow("Currency", self.input_currency)
+        self.input_currency.setFocusPolicy(Qt.ClickFocus)
+        side_form.addRow("Currency", self.input_currency)
 
         self.input_source = QComboBox(self)
         self.input_source.addItems(SOURCES)
-        right_form.addRow("Source", self.input_source)
+        self.input_source.setFocusPolicy(Qt.NoFocus)
+        self.input_source.hide()
 
         self.input_comment = QTextEdit(self)
         self.input_comment.setFixedHeight(90)
-        root.addWidget(QLabel("Comment"))
-        root.addWidget(self.input_comment)
+        self.input_comment.setFocusPolicy(Qt.ClickFocus)
+        side_form.addRow("Comment", self.input_comment)
 
         buttons = QHBoxLayout()
-        root.addLayout(buttons)
+        form_wrap.addLayout(buttons, 1, 1)
         self.btn_new = QPushButton("Nieuw", self)
         self.btn_save = QPushButton("Opslaan", self)
         self.btn_delete = QPushButton("Verwijderen", self)
         self.btn_reset = QPushButton("Reset", self)
         self.btn_close = QPushButton("Sluiten", self)
-        for btn in (self.btn_new, self.btn_save, self.btn_delete, self.btn_reset, self.btn_close):
+        self.btn_save.setFocusPolicy(Qt.StrongFocus)
+        entry_form.addRow("", self.btn_save)
+        for btn in (self.btn_delete, self.btn_new, self.btn_reset, self.btn_close):
+            btn.setFocusPolicy(Qt.ClickFocus)
             buttons.addWidget(btn)
         buttons.addStretch(1)
+
+        self.setTabOrder(self.input_datum, self.input_broker)
+        self.setTabOrder(self.input_broker, self.input_ending_balance)
+        self.setTabOrder(self.input_ending_balance, self.btn_save)
+        self.setTabOrder(self.btn_save, self.input_datum)
 
         self.btn_new.clicked.connect(self._new_balance)
         self.btn_save.clicked.connect(self._save_balance)
@@ -174,6 +191,11 @@ class AccountDailyBalancesDialog(QDialog):
 
         self._reset_form()
         self.reload()
+        QTimer.singleShot(0, self._focus_datum)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self._focus_datum)
 
     def reload(self) -> None:
         if self._load_worker is not None and self._load_worker.isRunning():
@@ -344,6 +366,11 @@ class AccountDailyBalancesDialog(QDialog):
         self.input_source.setCurrentIndex(0)
         self.input_comment.clear()
         self.btn_delete.setEnabled(False)
+        self._focus_datum()
+
+    def _focus_datum(self) -> None:
+        self.input_datum.setFocus(Qt.OtherFocusReason)
+        self.input_datum.selectAll()
 
     def _save_balance(self) -> None:
         if self._save_worker is not None and self._save_worker.isRunning():
@@ -366,7 +393,8 @@ class AccountDailyBalancesDialog(QDialog):
         self._save_worker.start()
 
     def _on_save_done(self, row_id: int) -> None:
-        self._selected_id = int(row_id)
+        self.table.clearSelection()
+        self._reset_form()
         self.lbl_status.setText("Record opgeslagen. Tabel vernieuwen...")
         self.reload()
 
