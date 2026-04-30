@@ -53,6 +53,10 @@ from portefeuille_viewer.services.scenario_aandelen_overlay import (
 from portefeuille_viewer.services.scenario_generated_option_sync import (
     mark_bucket23_out_of_sync,
 )
+from portefeuille_viewer.services.asset_indicator_contract import (
+    ASSET_INDICATOR_ASSET_FASES,
+    ASSET_INDICATOR_PRIMARY_ACTIONS,
+)
 from portefeuille_viewer.services.aandelen_tab_summary import build_aandelen_tab_summary
 from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_scenario_dialog
 from portefeuille_viewer.data.test_order_repository import delete_test_order
@@ -610,6 +614,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.comboBoxStatus.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxValueGrow.currentTextChanged.connect(self._on_filter_changed)
         self.comboBoxSector.currentTextChanged.connect(self._on_filter_changed)
+        self._init_asset_indicator_filter_comboboxes()
         self._init_sort_comboboxes()
 
         settings = get_settings()
@@ -1386,6 +1391,20 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self._update_dividend_labels(self.asset_selector.currentText())
         elif snapshot_key == "snapshot_asset_indicator_live":
             self._update_asset_indicator_strip()
+            self._fill_asset_indicator_filter_comboboxes()
+            indicator_filter_active = any(
+                (combo.currentText() or "").strip()
+                for combo in (
+                    getattr(self, "comboBoxAssetFase", None),
+                    getattr(self, "comboBoxAssetAction", None),
+                )
+                if combo is not None
+            )
+            if (
+                indicator_filter_active
+                or (self.comboBoxSortering.currentText() or "").strip().lower() in {"asset_fase", "primary_action"}
+            ):
+                self._asset_selector_reload_timer.start()
 
     def _apply_test_orders_column_widths(self) -> None:
         """
@@ -2561,6 +2580,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def _reset_filters_for_database_change(self):
         self._fill_filter_comboboxes()
+        self._fill_asset_indicator_filter_comboboxes()
         self.comboBoxStatus.blockSignals(True)
         try:
             idx = self.comboBoxStatus.findText("active")
@@ -2610,12 +2630,19 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         status = self.comboBoxStatus.currentText()
         value_grow = self.comboBoxValueGrow.currentText()
         sector = self.comboBoxSector.currentText()
+        asset_fase = self.comboBoxAssetFase.currentText() if hasattr(self, "comboBoxAssetFase") else ""
+        asset_action = self.comboBoxAssetAction.currentText() if hasattr(self, "comboBoxAssetAction") else ""
         # Lege string betekent 'geen filter'
         regio = regio if regio else None
         status = status if status else None
         value_grow = value_grow if value_grow else None
         sector = sector if sector else None
         assets = self.logic.load_assets(regio=regio, status=status, value_grow=value_grow, sector=sector)
+        assets = self._apply_asset_indicator_filters(
+            assets,
+            asset_fase=asset_fase if asset_fase else None,
+            primary_action=asset_action if asset_action else None,
+        )
         assets = self._apply_asset_sorting(assets)
         target_asset = ""
         with QSignalBlocker(self.asset_selector):
@@ -2633,6 +2660,101 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if target_asset:
             QTimer.singleShot(0, lambda asset=target_asset: self.on_asset_selected(asset))
 
+    def _init_asset_indicator_filter_comboboxes(self) -> None:
+        self._ensure_asset_indicator_filter_comboboxes()
+        self._fill_asset_indicator_filter_comboboxes()
+        if hasattr(self, "comboBoxAssetFase"):
+            self.comboBoxAssetFase.currentTextChanged.connect(self._on_filter_changed)
+        if hasattr(self, "comboBoxAssetAction"):
+            self.comboBoxAssetAction.currentTextChanged.connect(self._on_filter_changed)
+
+    def _ensure_asset_indicator_filter_comboboxes(self) -> None:
+        if not hasattr(self, "horizontalLayout") or not hasattr(self, "comboBoxSortering"):
+            return
+        insert_at = self.horizontalLayout.indexOf(self.comboBoxSortering)
+        if insert_at < 0:
+            insert_at = self.horizontalLayout.count()
+        if not hasattr(self, "comboBoxAssetFase"):
+            self.comboBoxAssetFase = QComboBox(self.horizontalLayoutWidget)
+            self.comboBoxAssetFase.setObjectName("comboBoxAssetFase")
+            self.comboBoxAssetFase.setMaximumWidth(150)
+            self.comboBoxAssetFase.setStyleSheet("background-color: rgb(230, 230, 230);")
+            self.horizontalLayout.insertWidget(insert_at, self.comboBoxAssetFase)
+            insert_at += 1
+        if not hasattr(self, "comboBoxAssetAction"):
+            self.comboBoxAssetAction = QComboBox(self.horizontalLayoutWidget)
+            self.comboBoxAssetAction.setObjectName("comboBoxAssetAction")
+            self.comboBoxAssetAction.setMaximumWidth(180)
+            self.comboBoxAssetAction.setStyleSheet("background-color: rgb(230, 230, 230);")
+            self.horizontalLayout.insertWidget(insert_at, self.comboBoxAssetAction)
+
+    def _fill_asset_indicator_filter_comboboxes(self) -> None:
+        fase_values, action_values = self._asset_indicator_filter_values()
+        self._fill_combo_preserve_current(getattr(self, "comboBoxAssetFase", None), fase_values)
+        self._fill_combo_preserve_current(getattr(self, "comboBoxAssetAction", None), action_values)
+
+    def _asset_indicator_filter_values(self) -> tuple[list[str], list[str]]:
+        fase_values = list(ASSET_INDICATOR_ASSET_FASES)
+        action_values = list(ASSET_INDICATOR_PRIMARY_ACTIONS)
+        df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
+        if df is not None and not df.is_empty():
+            if "asset_fase" in df.columns:
+                for value in sorted({str(v).strip() for v in df["asset_fase"].to_list() if v}):
+                    if value and value not in fase_values:
+                        fase_values.append(value)
+            if "primary_action" in df.columns:
+                for value in sorted({str(v).strip() for v in df["primary_action"].to_list() if v}):
+                    if value and value not in action_values:
+                        action_values.append(value)
+        return fase_values, action_values
+
+    def _fill_combo_preserve_current(self, combo: QComboBox | None, values: list[str]) -> None:
+        if combo is None:
+            return
+        current = combo.currentText()
+        with QSignalBlocker(combo):
+            combo.clear()
+            combo.addItem("")
+            combo.addItems(values)
+            if current:
+                idx = combo.findText(current)
+                if idx < 0:
+                    combo.addItem(current)
+                    idx = combo.findText(current)
+                combo.setCurrentIndex(idx)
+
+    def _apply_asset_indicator_filters(
+        self,
+        assets: list[str],
+        *,
+        asset_fase: str | None = None,
+        primary_action: str | None = None,
+    ) -> list[str]:
+        asset_fase = str(asset_fase or "").strip()
+        primary_action = str(primary_action or "").strip()
+        if not asset_fase and not primary_action:
+            return assets
+        df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
+        required = {"asset_rollup"}
+        if asset_fase:
+            required.add("asset_fase")
+        if primary_action:
+            required.add("primary_action")
+        if df is None or df.is_empty() or not required.issubset(set(df.columns)):
+            return []
+
+        filtered = df
+        if asset_fase:
+            filtered = filtered.filter(pl.col("asset_fase").cast(pl.Utf8, strict=False) == asset_fase)
+        if primary_action:
+            filtered = filtered.filter(pl.col("primary_action").cast(pl.Utf8, strict=False) == primary_action)
+        allowed = {
+            str(value or "").strip().upper()
+            for value in filtered["asset_rollup"].to_list()
+            if str(value or "").strip()
+        }
+        return [asset for asset in assets if str(asset or "").strip().upper() in allowed]
+
     def _init_sort_comboboxes(self):
         self.comboBoxSortering.clear()
         self.comboBoxSortering.addItem("alfabetisch")
@@ -2642,6 +2764,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.comboBoxSortering.addItem("portfolio_total_waarde_lineair_pct")
         self.comboBoxSortering.addItem("portfolio_total_waarde_delta_pct")
         self.comboBoxSortering.addItem("dividend date")
+        self.comboBoxSortering.addItem("asset_fase")
+        self.comboBoxSortering.addItem("primary_action")
 
         self.comboBoxSortDirection.clear()
         self.comboBoxSortDirection.addItem("ASC")
@@ -2660,6 +2784,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
         if sort_key.lower() in {"dividend date", "dividend_date", "dividend datum"}:
             return self._sort_assets_by_dividend_date(assets, desc=desc)
+
+        if sort_key.lower() in {"asset_fase", "primary_action"}:
+            return self._sort_assets_by_indicator(assets, sort_key=sort_key.lower(), desc=desc)
 
         df_sum = self._get_summary_source_df()
         if df_sum is None or df_sum.is_empty() or sort_key not in df_sum.columns:
@@ -2682,6 +2809,44 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if v is None:
                 return (1, 0.0)
             return (0, -v if desc else v)
+
+        return sorted(assets, key=_key)
+
+    def _sort_assets_by_indicator(self, assets: list[str], *, sort_key: str, desc: bool = False) -> list[str]:
+        df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
+        required = {"asset_rollup", "asset_fase"}
+        if sort_key == "primary_action":
+            required.add("primary_action")
+        if df is None or df.is_empty() or not required.issubset(set(df.columns)):
+            return sorted(assets, reverse=desc)
+
+        fase_order = {name: idx for idx, name in enumerate(ASSET_INDICATOR_ASSET_FASES)}
+        action_order = {name: idx for idx, name in enumerate(ASSET_INDICATOR_PRIMARY_ACTIONS)}
+        max_fase = len(fase_order)
+        max_action = len(action_order)
+        indicator_map: dict[str, tuple[str, str]] = {}
+        with contextlib.suppress(Exception):
+            for row in df.select(list(required)).to_dicts():
+                asset = str(row.get("asset_rollup") or "").strip().upper()
+                if not asset:
+                    continue
+                indicator_map[asset] = (
+                    str(row.get("asset_fase") or "").strip(),
+                    str(row.get("primary_action") or "").strip(),
+                )
+
+        def _key(asset: str):
+            asset_key = str(asset or "").strip().upper()
+            fase, primary_action = indicator_map.get(asset_key, ("", ""))
+            fase_rank = fase_order.get(fase, max_fase)
+            if desc:
+                fase_rank = -fase_rank
+            if sort_key == "primary_action":
+                action_rank = action_order.get(primary_action, max_action)
+                if desc:
+                    action_rank = -action_rank
+                return (fase_rank, action_rank, asset_key)
+            return (fase_rank, asset_key)
 
         return sorted(assets, key=_key)
 

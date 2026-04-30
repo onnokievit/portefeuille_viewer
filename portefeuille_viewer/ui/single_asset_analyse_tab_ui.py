@@ -18,8 +18,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
     QDoubleSpinBox, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QPushButton, QSizePolicy,
-    QSpacerItem, QTableView, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget)
+    QTableView, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QWidget)
 
 from pyqtgraph import PlotWidget
 
@@ -58,7 +58,7 @@ class Ui_SingleAssetAnalyseTab(object):
         self.verticalLayout_9.setContentsMargins(9, 9, 9, 9)
         self.horizontalLayoutWidget = QWidget(self.widget)
         self.horizontalLayoutWidget.setObjectName(u"horizontalLayoutWidget")
-        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1221, 31))
+        self.horizontalLayoutWidget.setGeometry(QRect(10, 10, 1561, 31))
         self.horizontalLayout = QHBoxLayout(self.horizontalLayoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -135,6 +135,20 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayout.addWidget(self.comboBoxSector)
 
+        self.comboBoxAssetFase = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxAssetFase.setObjectName(u"comboBoxAssetFase")
+        self.comboBoxAssetFase.setMaximumSize(QSize(140, 16777215))
+        self.comboBoxAssetFase.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+
+        self.horizontalLayout.addWidget(self.comboBoxAssetFase)
+
+        self.comboBoxAssetAction = QComboBox(self.horizontalLayoutWidget)
+        self.comboBoxAssetAction.setObjectName(u"comboBoxAssetAction")
+        self.comboBoxAssetAction.setMaximumSize(QSize(140, 16777215))
+        self.comboBoxAssetAction.setStyleSheet(u"background-color: rgb(230, 230, 230);")
+
+        self.horizontalLayout.addWidget(self.comboBoxAssetAction)
+
         self.comboBoxRegio = QComboBox(self.horizontalLayoutWidget)
         self.comboBoxRegio.setObjectName(u"comboBoxRegio")
         self.comboBoxRegio.setMaximumSize(QSize(60, 16777215))
@@ -163,14 +177,10 @@ class Ui_SingleAssetAnalyseTab(object):
 
         self.horizontalLayoutWidget_2 = QWidget(self.widget)
         self.horizontalLayoutWidget_2.setObjectName(u"horizontalLayoutWidget_2")
-        self.horizontalLayoutWidget_2.setGeometry(QRect(1260, 10, 821, 31))
+        self.horizontalLayoutWidget_2.setGeometry(QRect(1600, 10, 481, 31))
         self.horizontalLayout_2 = QHBoxLayout(self.horizontalLayoutWidget_2)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.horizontalSpacer_2 = QSpacerItem(200, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.horizontalLayout_2.addItem(self.horizontalSpacer_2)
-
         self.commentSearchCheckbox = QCheckBox(self.horizontalLayoutWidget_2)
         self.commentSearchCheckbox.setObjectName(u"commentSearchCheckbox")
 
@@ -381,7 +391,9 @@ class Ui_SingleAssetAnalyseTab(object):
         QWidget.setTabOrder(self.endDate, self.comboBoxStatus)
         QWidget.setTabOrder(self.comboBoxStatus, self.comboBoxValueGrow)
         QWidget.setTabOrder(self.comboBoxValueGrow, self.comboBoxSector)
-        QWidget.setTabOrder(self.comboBoxSector, self.comboBoxRegio)
+        QWidget.setTabOrder(self.comboBoxSector, self.comboBoxAssetFase)
+        QWidget.setTabOrder(self.comboBoxAssetFase, self.comboBoxAssetAction)
+        QWidget.setTabOrder(self.comboBoxAssetAction, self.comboBoxRegio)
         QWidget.setTabOrder(self.comboBoxRegio, self.comboBoxSortering)
         QWidget.setTabOrder(self.comboBoxSortering, self.comboBoxSortDirection)
         QWidget.setTabOrder(self.comboBoxSortDirection, self.checkBoxLiveResortOpenOpties)
