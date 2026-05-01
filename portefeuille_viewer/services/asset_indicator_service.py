@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from math import log10, sqrt
 from time import perf_counter
 from uuid import uuid4
@@ -171,6 +171,7 @@ class AssetIndicatorService:
                 _pick_text(asset, ("indicator_rol", "indicator_role", "indicatorl_rol"), fallback="")
             ),
             "as_of": as_of,
+            "input_cutoff_date": _latest_history_date(history_rows),
             "direction_score": None,
             "long_term_direction_score": None,
             "short_term_direction_score": None,
@@ -267,6 +268,7 @@ class AssetIndicatorService:
                 theta_opportunity_proxy_score=theta_opportunity_proxy_score,
                 implied_volatility_score=implied_volatility_score,
                 iv_vs_realized_volatility_score=iv_vs_realized_volatility_score,
+                choppiness_score=volatility_metrics.get("choppiness_score"),
             )
         )
 
@@ -473,12 +475,27 @@ def _normalize_history_df(df: pl.DataFrame | None) -> pl.DataFrame:
         df.with_columns(exprs)
         .filter(
             pl.col("datum").is_not_null()
+            & (pl.col("datum") < date.today())
             & pl.col("asset_rollup").is_not_null()
             & (pl.col("asset_rollup") != "")
             & pl.col("close_price").is_not_null()
         )
         .sort(["asset_rollup", "datum"])
     )
+
+
+def _latest_history_date(history_rows: list[dict]) -> date | None:
+    for row in reversed(history_rows or []):
+        value = row.get("datum")
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except Exception:
+            continue
+    return None
 
 
 def _history_by_asset(df: pl.DataFrame) -> dict[str, list[dict]]:
@@ -885,23 +902,7 @@ def _persist_signal_history(
             )
             rows = [_history_row_tuple(run_id, row) for row in live_df.to_dicts()]
             if rows:
-                cur.executemany(
-                    """
-                    INSERT INTO asset_indicator_signal_history
-                        (run_id, as_of, asset_rollup, asset_name, indicator_role,
-                         trend_phase, asset_fase, primary_action, secondary_action,
-                         data_quality, direction_score, long_term_direction_score,
-                         short_term_direction_score, range_position_pct,
-                         realized_volatility_score, atr_pct, choppiness_score,
-                         ibkr_hv_proxy_pct, ibkr_iv_proxy_pct,
-                         implied_volatility_score, iv_vs_realized_volatility_score,
-                         theta_opportunity_proxy_score, theta_score, volume_score,
-                         confidence_score, reason_1, reason_2, reason_3,
-                         payload_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    rows,
-                )
+                _upsert_signal_history_rows(cur, rows)
             conn.commit()
     except Exception as exc:
         print(f"[asset-indicator] signal history persistence skipped: {exc}")
@@ -928,6 +929,144 @@ def _ensure_signal_history_tables(cur) -> None:
         )
     except Exception:
         pass
+    _ensure_table_column(cur, "asset_indicator_signal_history", "input_cutoff_date", "DATETIME")
+
+
+def _ensure_table_column(cur, table_name: str, column_name: str, ddl_type: str) -> None:
+    try:
+        existing = {str(row.column_name).lower() for row in cur.columns(table=table_name)}
+    except Exception:
+        return
+    if column_name.lower() in existing:
+        return
+    try:
+        cur.execute(f"ALTER TABLE [{table_name}] ADD COLUMN [{column_name}] {ddl_type}")
+    except Exception:
+        pass
+
+
+def _upsert_signal_history_rows(cur, rows: list[tuple]) -> None:
+    insert_columns = [
+        "run_id",
+        "as_of",
+        "input_cutoff_date",
+        "asset_rollup",
+        "asset_name",
+        "indicator_role",
+        "trend_phase",
+        "asset_fase",
+        "primary_action",
+        "secondary_action",
+        "data_quality",
+        "direction_score",
+        "long_term_direction_score",
+        "short_term_direction_score",
+        "range_position_pct",
+        "realized_volatility_score",
+        "atr_pct",
+        "choppiness_score",
+        "ibkr_hv_proxy_pct",
+        "ibkr_iv_proxy_pct",
+        "implied_volatility_score",
+        "iv_vs_realized_volatility_score",
+        "theta_opportunity_proxy_score",
+        "theta_score",
+        "volume_score",
+        "confidence_score",
+        "reason_1",
+        "reason_2",
+        "reason_3",
+        "payload_json",
+        "created_at",
+    ]
+    update_columns = [col for col in insert_columns if col not in {"asset_rollup", "input_cutoff_date"}]
+    update_sql = (
+        "UPDATE [asset_indicator_signal_history] SET "
+        + ", ".join(f"[{col}] = ?" for col in update_columns)
+        + " WHERE [asset_rollup] = ? AND [input_cutoff_date] = ?"
+    )
+    insert_sql = (
+        "INSERT INTO [asset_indicator_signal_history] ("
+        + ", ".join(f"[{col}]" for col in insert_columns)
+        + ") VALUES ("
+        + ", ".join("?" for _ in insert_columns)
+        + ")"
+    )
+    for row in rows:
+        (
+            run_id,
+            as_of,
+            input_cutoff_date,
+            asset_rollup,
+            asset_name,
+            indicator_role,
+            trend_phase,
+            asset_fase,
+            primary_action,
+            secondary_action,
+            data_quality,
+            direction_score,
+            long_term_direction_score,
+            short_term_direction_score,
+            range_position_pct,
+            realized_volatility_score,
+            atr_pct,
+            choppiness_score,
+            ibkr_hv_proxy_pct,
+            ibkr_iv_proxy_pct,
+            implied_volatility_score,
+            iv_vs_realized_volatility_score,
+            theta_opportunity_proxy_score,
+            theta_score,
+            volume_score,
+            confidence_score,
+            reason_1,
+            reason_2,
+            reason_3,
+            payload_json,
+            created_at,
+        ) = row
+        if input_cutoff_date is None:
+            cur.execute(insert_sql, row)
+            continue
+        cur.execute(
+            update_sql,
+            (
+                run_id,
+                as_of,
+                asset_name,
+                indicator_role,
+                trend_phase,
+                asset_fase,
+                primary_action,
+                secondary_action,
+                data_quality,
+                direction_score,
+                long_term_direction_score,
+                short_term_direction_score,
+                range_position_pct,
+                realized_volatility_score,
+                atr_pct,
+                choppiness_score,
+                ibkr_hv_proxy_pct,
+                ibkr_iv_proxy_pct,
+                implied_volatility_score,
+                iv_vs_realized_volatility_score,
+                theta_opportunity_proxy_score,
+                theta_score,
+                volume_score,
+                confidence_score,
+                reason_1,
+                reason_2,
+                reason_3,
+                payload_json,
+                created_at,
+                asset_rollup,
+                input_cutoff_date,
+            ),
+        )
+        if int(getattr(cur, "rowcount", 0) or 0) <= 0:
+            cur.execute(insert_sql, row)
     try:
         cur.execute(
             """
@@ -935,6 +1074,7 @@ def _ensure_signal_history_tables(cur) -> None:
                 id COUNTER PRIMARY KEY,
                 run_id TEXT(40),
                 as_of DATETIME,
+                input_cutoff_date DATETIME,
                 asset_rollup TEXT(64),
                 asset_name TEXT(255),
                 indicator_role TEXT(80),
@@ -974,6 +1114,7 @@ def _history_row_tuple(run_id: str, row: dict) -> tuple:
     return (
         run_id,
         _dt_value(row.get("as_of")),
+        _date_value(row.get("input_cutoff_date")),
         _text_value(row.get("asset_rollup"), 64),
         _text_value(row.get("asset_name"), 255),
         _text_value(row.get("indicator_role"), 80),
@@ -1028,6 +1169,19 @@ def _dt_value(value: object) -> datetime | None:
         return value
     try:
         return datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+
+
+def _date_value(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).date()
     except Exception:
         return None
 

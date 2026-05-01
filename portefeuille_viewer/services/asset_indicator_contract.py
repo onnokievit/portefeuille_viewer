@@ -18,14 +18,15 @@ SNAPSHOT_ASSET_INDICATOR_META: Final = "snapshot_asset_indicator_meta"
 
 
 ASSET_INDICATOR_ASSET_FASES: Final[tuple[str, ...]] = (
-    "bullish_accumulation",
-    "bullish_trend",
-    "bullish_pullback",
-    "range_theta_candidate",
-    "range_theta",
-    "bottoming",
-    "overextended",
-    "bearish_distribution",
+    "bull_continuation",
+    "bull_short_pullback",
+    "bear_continuation",
+    "bear_short_relief",
+    "bull_overextended",
+    "bull_top_reversal",
+    "bear_bottom_correction",
+    "bear_bottom_reversal",
+    "chop",
     "high_risk_avoid",
     "insufficient_data",
 )
@@ -87,6 +88,7 @@ ASSET_INDICATOR_LIVE_SCHEMA: Final[dict[str, pl.DataType]] = {
     "risk_class": pl.Utf8,
     "indicator_role": pl.Utf8,
     "as_of": pl.Datetime,
+    "input_cutoff_date": pl.Date,
     "direction_score": pl.Float64,
     "long_term_direction_score": pl.Float64,
     "short_term_direction_score": pl.Float64,

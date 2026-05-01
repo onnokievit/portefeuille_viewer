@@ -817,8 +817,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if not row:
             return f"{asset or '-'} | geen asset indicator snapshot"
         return (
-            f"{asset}: {row.get('primary_action') or '-'} | {row.get('secondary_action') or '-'} | "
-            f"{row.get('asset_fase') or '-'} | dir {self._fmt_strip_value(row.get('direction_score'))} | "
+            f"{asset}: {row.get('asset_fase') or '-'} | {row.get('trend_phase') or '-'} | "
+            f"{row.get('primary_action') or '-'} | {row.get('secondary_action') or '-'} | "
+            f"{row.get('indicator_role') or '-'} | dir {self._fmt_strip_value(row.get('direction_score'))} | "
             f"asset theta {self._fmt_strip_value(row.get('theta_opportunity_proxy_score'))}"
         )
 
@@ -835,6 +836,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             action = str(row.get("primary_action") or "-")
             secondary = str(row.get("secondary_action") or "-")
             fase = str(row.get("asset_fase") or "-")
+            trend_phase = str(row.get("trend_phase") or "-")
             role = str(row.get("indicator_role") or "-")
             quality = str(row.get("data_quality") or "-")
             reason_1 = str(row.get("reason_1") or "")
@@ -844,9 +846,10 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 <div class="left">
                   <div class="labels">
                     <span class="asset">{html.escape(asset)}</span>
+                    <span class="pill fase">{html.escape(fase)}</span>
+                    <span class="pill muted">{html.escape(trend_phase)}</span>
                     <span class="pill action {html.escape(self._strip_action_class(action))}">{html.escape(action)}</span>
-                    <span class="pill">{html.escape(secondary)}</span>
-                    <span class="pill muted">{html.escape(fase)}</span>
+                    <span class="pill muted">{html.escape(secondary)}</span>
                     <span class="pill muted">{html.escape(role)}</span>
                   </div>
                   <div class="scores">
@@ -876,6 +879,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     .asset{{font-weight:700;min-width:62px;}}
     .pill{{display:inline-block;border:1px solid #cbd5e1;border-radius:999px;background:#fff;padding:1px 6px;line-height:15px;}}
     .muted{{color:#64748b;background:#f8fafc;}}
+    .fase{{font-weight:650;background:#eff6ff;border-color:#93c5fd;color:#1e3a8a;}}
     .action{{font-weight:650;}}
     .long_houden,.schrijf_puts,.covered_calls_ver_otm,.theta_harvest{{background:#dcfce7;border-color:#86efac;color:#14532d;}}
     .reduce_via_covered_call{{background:#fef3c7;border-color:#facc15;color:#713f12;}}

@@ -64,6 +64,7 @@ class ActionInput:
     theta_opportunity_proxy_score: float | None = None
     implied_volatility_score: float | None = None
     iv_vs_realized_volatility_score: float | None = None
+    choppiness_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -349,7 +350,7 @@ def classify_trend_phase(
     range_position_pct: float | None,
     data_quality: str = "ok",
 ) -> str:
-    """Classify direction into a non-linear trading regime label."""
+    """Classify the tactical short-term move or band position."""
     if data_quality == "insufficient" or not _is_number(long_term_direction_score):
         return "insufficient_data"
 
@@ -357,30 +358,37 @@ def classify_trend_phase(
     short_term = float(short_term_direction_score) if _is_number(short_term_direction_score) else 0.0
     range_pos = float(range_position_pct) if _is_number(range_position_pct) else None
 
-    if long_term <= -55.0 and short_term <= -20.0:
-        return "bearish_distribution"
-    if long_term <= -35.0 and short_term > 20.0:
-        return "long_term_bear_relief_rally"
-
     if long_term >= 45.0:
-        if range_pos is not None and range_pos <= 10.0:
-            return "long_term_bull_bottom_10pct_range"
+        if range_pos is not None and range_pos >= 70.0 and short_term <= -25.0:
+            return "reversal_down"
         if range_pos is not None and range_pos >= 90.0:
-            return "long_term_bull_top_10pct_range"
-        if short_term < -15.0:
-            return "long_term_bull_retrace"
+            return "bull_top_10pct_range"
+        if range_pos is not None and range_pos <= 10.0:
+            return "bull_bottom_10pct_range"
+        if short_term <= -15.0:
+            return "short_bear"
         if short_term >= 20.0:
-            return "long_term_bull_short_term_bull"
-        return "long_term_bull_retrace"
+            return "short_bull"
+        return "short_neutral"
 
-    if -35.0 < long_term < 45.0:
-        if range_pos is not None and range_pos <= 30.0:
-            return "range_lower_band"
-        if range_pos is not None and range_pos >= 70.0:
-            return "range_upper_band"
-        return "range_mid"
+    if long_term <= -35.0:
+        if range_pos is not None and range_pos <= 30.0 and short_term >= 25.0:
+            return "reversal_up"
+        if range_pos is not None and range_pos <= 10.0:
+            return "bear_bottom_10pct_range"
+        if range_pos is not None and range_pos >= 90.0:
+            return "bear_top_10pct_range"
+        if short_term >= 20.0:
+            return "short_bull"
+        if short_term <= -20.0:
+            return "short_bear"
+        return "short_neutral"
 
-    return "bearish_distribution"
+    if range_pos is not None and range_pos <= 30.0:
+        return "range_lower_band"
+    if range_pos is not None and range_pos >= 70.0:
+        return "range_upper_band"
+    return "range_mid"
 
 
 def calculate_volume_score(data: VolumeInput) -> float | None:
@@ -426,44 +434,84 @@ def classify_asset_fase(
     vulnerability_score: float | None = None,
     data_quality: str = "ok",
     trend_phase: str | None = None,
+    long_term_direction_score: float | None = None,
+    short_term_direction_score: float | None = None,
+    range_position_pct: float | None = None,
+    choppiness_score: float | None = None,
 ) -> str:
     if data_quality == "insufficient" or not _is_number(direction_score):
         return "insufficient_data"
 
-    if trend_phase:
-        if trend_phase == "bearish_distribution":
-            return "bearish_distribution"
-        if trend_phase == "long_term_bear_relief_rally":
-            return "bottoming"
-        if trend_phase in {"long_term_bull_retrace", "long_term_bull_bottom_10pct_range"}:
-            return "bullish_pullback"
-        if trend_phase == "long_term_bull_top_10pct_range":
-            return "overextended"
-        if trend_phase == "long_term_bull_short_term_bull":
-            volume = float(volume_score) if _is_number(volume_score) else 0.0
-            return "bullish_accumulation" if volume >= 40.0 else "bullish_trend"
-        if trend_phase in {"range_lower_band", "range_mid", "range_upper_band"}:
-            return "range_theta_candidate"
-
     direction = float(direction_score)
     volume = float(volume_score) if _is_number(volume_score) else 0.0
     vulnerability = float(vulnerability_score) if _is_number(vulnerability_score) else 0.0
+    long_term = float(long_term_direction_score) if _is_number(long_term_direction_score) else direction
+    short_term = float(short_term_direction_score) if _is_number(short_term_direction_score) else 0.0
+    range_pos = float(range_position_pct) if _is_number(range_position_pct) else None
+    choppiness = float(choppiness_score) if _is_number(choppiness_score) else 0.0
 
     if vulnerability >= 85.0:
         return "high_risk_avoid"
+
+    if long_term >= 45.0:
+        if trend_phase == "reversal_down" or (range_pos is not None and range_pos >= 70.0 and short_term <= -25.0):
+            return "bull_top_reversal"
+        if trend_phase == "bull_top_10pct_range" or (range_pos is not None and range_pos >= 90.0):
+            return "bull_overextended"
+        if trend_phase in {"bull_bottom_10pct_range", "short_bear"} or short_term <= -15.0:
+            return "bull_short_pullback"
+        return "bull_continuation"
+
+    if long_term <= -35.0:
+        if trend_phase == "reversal_up" or (range_pos is not None and range_pos <= 30.0 and short_term >= 25.0):
+            if direction >= -20.0 and volume >= 0.0:
+                return "bear_bottom_reversal"
+            return "bear_bottom_correction"
+        if trend_phase == "bear_bottom_10pct_range" or (range_pos is not None and range_pos <= 10.0):
+            return "bear_bottom_correction"
+        if trend_phase in {"bear_top_10pct_range", "short_bull"} or short_term >= 20.0:
+            return "bear_short_relief"
+        return "bear_continuation"
+
+    if short_term <= -30.0:
+        return "bear_bottom_correction" if range_pos is not None and range_pos <= 35.0 else "bear_continuation"
+    if short_term >= 30.0:
+        if range_pos is not None and range_pos <= 45.0:
+            return "bear_bottom_reversal" if direction >= -20.0 and volume >= 0.0 else "bear_bottom_correction"
+        return "bull_continuation"
+    if (
+        -25.0 <= long_term <= 25.0
+        and -25.0 <= short_term <= 25.0
+        and (range_pos is None or 30.0 <= range_pos <= 70.0)
+        and choppiness >= 45.0
+    ):
+        return "chop"
+    if trend_phase == "range_lower_band":
+        return "bear_bottom_correction" if direction < 0.0 else "chop"
+    if trend_phase == "range_upper_band":
+        return "bull_overextended" if direction > 25.0 else "chop"
+    if trend_phase == "range_mid" and choppiness >= 40.0:
+        return "chop"
+    if direction >= 45.0 and short_term >= 20.0:
+        return "bull_continuation"
+    if direction <= -35.0 and short_term <= -20.0:
+        return "bear_continuation"
+
     if direction >= 60.0 and volume >= 40.0:
-        return "bullish_accumulation"
+        return "bull_continuation"
     if direction >= 75.0 and volume <= -30.0:
-        return "bullish_pullback"
+        return "bull_top_reversal"
     if direction >= 35.0:
-        return "bullish_trend"
+        return "bull_continuation"
     if direction <= -40.0 and volume <= -30.0:
-        return "bearish_distribution"
+        return "bear_continuation"
     if direction <= -25.0 and volume > -20.0:
-        return "bottoming"
+        return "bear_bottom_correction"
     if direction >= 45.0 and volume < -20.0:
-        return "overextended"
-    return "range_theta_candidate"
+        return "bull_top_reversal"
+    if -15.0 <= direction <= 15.0 and choppiness >= 40.0:
+        return "chop"
+    return "bear_bottom_correction" if direction < 0.0 else "bull_continuation"
 
 
 def map_scores_to_action(data: ActionInput) -> ActionDecision:
@@ -481,7 +529,17 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
     role = (data.indicator_role or "").strip()
     trend_phase = data.trend_phase or ""
 
-    mode = classify_asset_fase(direction, volume, vulnerability, data_quality, trend_phase)
+    mode = classify_asset_fase(
+        direction,
+        volume,
+        vulnerability,
+        data_quality,
+        trend_phase,
+        data.long_term_direction_score,
+        data.short_term_direction_score,
+        data.range_position_pct,
+        data.choppiness_score,
+    )
     conf = _confidence(direction, volume, theta, vulnerability, data_quality)
 
     if mode == "insufficient_data":
@@ -517,7 +575,36 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             reason_3="Gebruik alleen kleine of defined-risk posities",
         )
 
-    if mode == "bearish_distribution":
+    if mode == "bull_top_reversal":
+        if theta_opp is not None and theta_opp >= 55.0:
+            return ActionDecision(
+                asset_fase=mode,
+                primary_action="reduce_via_covered_call",
+                secondary_action="assignment_risico_controleren",
+                covered_call_delta_min=0.30,
+                covered_call_delta_max=0.45,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1="Bulltrend toont topvorming of duidelijke korte-termijn weakness",
+                reason_2=f"Theta-opp={theta_opp:.0f} – beheer bestaande long via covered call",
+                reason_3="Geen puts schrijven; eerst kijken of top-reversal doorzet",
+            )
+        return ActionDecision(
+            asset_fase=mode,
+            primary_action="risico_verlagen",
+            secondary_action="geen_naked_puts",
+            covered_call_delta_min=0.30,
+            covered_call_delta_max=0.45,
+            short_put_delta_min=None,
+            short_put_delta_max=None,
+            confidence_score=conf,
+            reason_1="Bulltrend verzwakt richting top-reversal",
+            reason_2="Exposure verlagen of calls gebruiken om risico af te bouwen",
+            reason_3="Geen extra assignment exposure totdat reversal ontkracht is",
+        )
+
+    if mode == "bear_continuation":
         if theta_opp is not None and theta_opp >= 60.0 and vulnerability < 60.0:
             return ActionDecision(
                 asset_fase=mode,
@@ -528,7 +615,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=None,
                 short_put_delta_max=None,
                 confidence_score=conf,
-                reason_1="Bearish regime maar IV is hoog",
+                reason_1="Bear continuation maar IV is hoog",
                 reason_2=f"Theta-opp={theta_opp:.0f} – premie alleen via defined-risk spreads",
                 reason_3="Call credit spreads of put-spread buffers; geen naked puts",
             )
@@ -541,12 +628,41 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             short_put_delta_min=None,
             short_put_delta_max=None,
             confidence_score=conf,
-            reason_1="Direction en volume wijzen op distributie",
-            reason_2="Exposure verlagen in bearish regime",
+            reason_1="LT en ST trend blijven bearish",
+            reason_2="Exposure verlagen in bear continuation",
             reason_3="Geen naked puts schrijven tot trend omkeert",
         )
 
-    if mode == "bottoming":
+    if mode == "bear_short_relief":
+        if theta_opp is not None and theta_opp >= 60.0 and vulnerability < 60.0:
+            return ActionDecision(
+                asset_fase=mode,
+                primary_action="alleen_spreads",
+                secondary_action="geen_naked_puts",
+                covered_call_delta_min=0.30,
+                covered_call_delta_max=0.45,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1="Relief rally binnen intacte beartrend",
+                reason_2=f"Theta-opp={theta_opp:.0f} – premie alleen defined-risk benutten",
+                reason_3="Geen naked puts: rally kan mislukken richting bear continuation",
+            )
+        return ActionDecision(
+            asset_fase=mode,
+            primary_action="niets_doen",
+            secondary_action="geen_naked_puts",
+            covered_call_delta_min=None,
+            covered_call_delta_max=None,
+            short_put_delta_min=None,
+            short_put_delta_max=None,
+            confidence_score=conf,
+            reason_1="Short-term rally binnen LT beartrend",
+            reason_2="Nog geen echte bodemreversal; niet achter de bounce aanlopen",
+            reason_3="Wacht op reversal-up bevestiging of terugval naar lagere risk/reward",
+        )
+
+    if mode == "bear_bottom_correction":
         if theta_opp is not None and theta_opp >= 50.0:
             return ActionDecision(
                 asset_fase=mode,
@@ -557,9 +673,9 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=0.10,
                 short_put_delta_max=0.20,
                 confidence_score=conf,
-                reason_1="Asset stabiliseert na daling",
+                reason_1="Beartrend stabiliseert bij de onderkant van de range",
                 reason_2=f"Theta-opp={theta_opp:.0f} – premie oogsten via deep OTM puts",
-                reason_3="Beperkte positiegrootte; geen calls schrijven",
+                reason_3="Alleen kleine sizing; reversal is nog niet bevestigd",
             )
         return ActionDecision(
             asset_fase=mode,
@@ -570,12 +686,55 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             short_put_delta_min=None,
             short_put_delta_max=None,
             confidence_score=conf,
-            reason_1="Asset lijkt te bodemen maar richting onzeker",
+            reason_1="Beartrend lijkt te bodemen, maar bevestiging is beperkt",
             reason_2=_opp_label("Premie te laag om risico te rechtvaardigen", theta_opp),
             reason_3="Wacht op hogere IV of bevestiging van stabilisatie",
         )
 
-    if mode == "overextended":
+    if mode == "bear_bottom_reversal":
+        if role == "early_investor":
+            return ActionDecision(
+                asset_fase=mode,
+                primary_action="niets_doen",
+                secondary_action="geen_naked_puts",
+                covered_call_delta_min=None,
+                covered_call_delta_max=None,
+                short_put_delta_min=None,
+                short_put_delta_max=None,
+                confidence_score=conf,
+                reason_1="Bottom reversal maar positie is early-investor",
+                reason_2="Geen exposure verhogen in vroege/kleine positie",
+                reason_3="Wacht op opvolgende bevestiging van reversal-up",
+            )
+        if theta_opp is not None and theta_opp >= 50.0:
+            return ActionDecision(
+                asset_fase=mode,
+                primary_action="long_uitbreiden_voorzichtig",
+                secondary_action="deeper_otm_put_reduced_position_sizing",
+                covered_call_delta_min=None,
+                covered_call_delta_max=None,
+                short_put_delta_min=0.10,
+                short_put_delta_max=0.20,
+                confidence_score=conf,
+                reason_1="Beartrend lijkt gebodemd en draait omhoog",
+                reason_2=f"Theta-opp={theta_opp:.0f} – voorzichtig exposure opbouwen via diepe puts",
+                reason_3="Geen covered calls dicht bij koers; upside ruimte houden",
+            )
+        return ActionDecision(
+            asset_fase=mode,
+            primary_action="long_uitbreiden_voorzichtig",
+            secondary_action="geen_call_dichtbij",
+            covered_call_delta_min=None,
+            covered_call_delta_max=None,
+            short_put_delta_min=None,
+            short_put_delta_max=None,
+            confidence_score=conf,
+            reason_1="Bottom reversal krijgt richtingbevestiging",
+            reason_2=_opp_label("Theta niet aantrekkelijk; liever pure long exposure", theta_opp),
+            reason_3="Upside niet wegschrijven in vroege reversal",
+        )
+
+    if mode == "bull_overextended":
         if theta_opp is not None and theta_opp >= 55.0:
             return ActionDecision(
                 asset_fase=mode,
@@ -586,7 +745,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=None,
                 short_put_delta_max=None,
                 confidence_score=conf,
-                reason_1="Asset in top van 90d-range",
+                reason_1="Bulltrend staat bovenin de range",
                 reason_2=f"IV aantrekkelijk (opp={theta_opp:.0f}) – schrijf defensieve covered call",
                 reason_3="Strike dichter bij koers dan normaal; deel winst afromen",
             )
@@ -599,12 +758,12 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             short_put_delta_min=None,
             short_put_delta_max=None,
             confidence_score=conf,
-            reason_1="Asset sterk gestegen en in top van 90d-range",
+            reason_1="Asset sterk gestegen en in top van de range",
             reason_2="Covered call beschermt gedeeltelijk bij correctie",
             reason_3="Geen puts schrijven op dit overextended niveau",
         )
 
-    if mode == "bullish_pullback":
+    if mode == "bull_short_pullback":
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.10, 0.20), base_put=(0.15, 0.25))
         if role == "early_investor":
             return ActionDecision(
@@ -616,7 +775,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=None,
                 short_put_delta_max=None,
                 confidence_score=conf,
-                reason_1="Pullback in vroege/kleine positie – geen exposure verhogen",
+                reason_1="Bull short pullback in vroege/kleine positie – geen exposure verhogen",
                 reason_2="Geen puts schrijven bij terugval in onzekere positie",
                 reason_3="Wacht op herstel of betere instapkans",
             )
@@ -630,7 +789,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=pm,
                 short_put_delta_max=px,
                 confidence_score=conf,
-                reason_1="Lange-termijn bullish, korte-termijn pullback",
+                reason_1="LT bull intact, korte-termijn pullback",
                 reason_2=f"Theta-opp={theta_opp:.0f} – puts schrijven op pullback-niveau",
                 reason_3="Kies deep OTM put; geen calls schrijven in daling",
             )
@@ -644,7 +803,7 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
                 short_put_delta_min=None,
                 short_put_delta_max=None,
                 confidence_score=conf,
-                reason_1="Bullish structuur maar volume bevestigt niet",
+                reason_1="Bullstructuur intact maar volume bevestigt niet",
                 reason_2=_opp_label("Premie onvoldoende voor short puts", theta_opp),
                 reason_3="Wacht op volumebevestiging van herstel",
             )
@@ -657,15 +816,15 @@ def map_scores_to_action(data: ActionInput) -> ActionDecision:
             short_put_delta_min=None,
             short_put_delta_max=None,
             confidence_score=conf,
-            reason_1="Bullish structuur intact, tijdelijke terugval",
+            reason_1="Bullstructuur intact, tijdelijke terugval",
             reason_2="Upside open houden – geen calls dicht bij koers",
             reason_3=_opp_label("Wacht op hogere IV voor premie-kans", theta_opp),
         )
 
-    if mode in {"bullish_accumulation", "bullish_trend"}:
+    if mode == "bull_continuation":
         return _decide_bullish_action(mode, role, theta_opp, volume, conf)
 
-    if mode in {"range_theta", "range_theta_candidate"}:
+    if mode == "chop":
         return _decide_range_action(trend_phase, theta_opp, iv_score, iv_vs_rv, role, vulnerability, conf)
 
     return ActionDecision(
@@ -708,7 +867,7 @@ def _decide_bullish_action(
             reason_3="Geen puts: exposure in kleine positie niet verhogen",
         )
 
-    if mode == "bullish_accumulation":
+    if mode == "bull_continuation" and volume >= 40.0:
         if opp >= 55.0:
             secondary = "puts_dicht_bij_koers_toegestaan" if opp >= 65.0 else "puts_alleen_bij_pullback"
             return ActionDecision(
@@ -738,7 +897,7 @@ def _decide_bullish_action(
             reason_3=_opp_label("Premie nog onvoldoende voor puts", theta_opp),
         )
 
-    # bullish_trend
+    # bull_continuation without strong volume confirmation
     if opp >= 50.0:
         return ActionDecision(
             asset_fase=mode,
@@ -803,7 +962,7 @@ def _decide_range_action(
     if vulnerability >= 60.0:
         if opp >= (65.0 + adj):
             return ActionDecision(
-                asset_fase="range_theta_candidate",
+                asset_fase="chop",
                 primary_action="alleen_spreads",
                 secondary_action="geen_naked_puts",
                 covered_call_delta_min=None,
@@ -816,7 +975,7 @@ def _decide_range_action(
                 reason_3="Alleen defined-risk spreads; beperk positiegrootte",
             )
         return ActionDecision(
-            asset_fase="range_theta_candidate",
+            asset_fase="chop",
             primary_action="niets_doen",
             secondary_action="geen_extra_leverage",
             covered_call_delta_min=None,
@@ -834,7 +993,7 @@ def _decide_range_action(
         cm, cx = _deltas_by_role(role, base_call=(0.15, 0.25), base_put=(0.15, 0.25))[:2]
         if opp >= (50.0 + adj):
             return ActionDecision(
-                asset_fase="range_theta_candidate",
+                asset_fase="chop",
                 primary_action="covered_calls_ver_otm",
                 secondary_action="geen_call_dichtbij",
                 covered_call_delta_min=cm,
@@ -847,7 +1006,7 @@ def _decide_range_action(
                 reason_3="Geen puts: exposure niet verhogen in onzekere positie",
             )
         return ActionDecision(
-            asset_fase="range_theta_candidate",
+            asset_fase="chop",
             primary_action="niets_doen",
             secondary_action="wachten_op_stabilisatie",
             covered_call_delta_min=None,
@@ -865,7 +1024,7 @@ def _decide_range_action(
         if opp >= (55.0 + adj):
             cm, cx, pm, px = _deltas_by_role(role, base_call=(0.25, 0.40), base_put=(0.20, 0.30))
             return ActionDecision(
-                asset_fase="range_theta",
+                asset_fase="chop",
                 primary_action="theta_harvest",
                 secondary_action="covered_calls_en_puts_toegestaan",
                 covered_call_delta_min=cm,
@@ -879,7 +1038,7 @@ def _decide_range_action(
             )
         cm, cx, _, _ = _deltas_by_role(role, base_call=(0.25, 0.35), base_put=(0.20, 0.30))
         return ActionDecision(
-            asset_fase="range_theta_candidate",
+            asset_fase="chop",
             primary_action="covered_calls_ver_otm",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=cm,
@@ -896,7 +1055,7 @@ def _decide_range_action(
         if opp >= (45.0 + adj):
             _, _, pm, px = _deltas_by_role(role, base_call=(0.15, 0.25), base_put=(0.20, 0.30))
             return ActionDecision(
-                asset_fase="range_theta",
+                asset_fase="chop",
                 primary_action="schrijf_puts",
                 secondary_action="deeper_otm_put_reduced_position_sizing",
                 covered_call_delta_min=None,
@@ -909,7 +1068,7 @@ def _decide_range_action(
                 reason_3="Niet te dicht op de koers; beheers assignment-risico",
             )
         return ActionDecision(
-            asset_fase="range_theta_candidate",
+            asset_fase="chop",
             primary_action="niets_doen",
             secondary_action="wachten_op_stabilisatie",
             covered_call_delta_min=None,
@@ -926,7 +1085,7 @@ def _decide_range_action(
     if opp >= (60.0 + adj):
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.25, 0.40), base_put=(0.20, 0.30))
         return ActionDecision(
-            asset_fase="range_theta",
+            asset_fase="chop",
             primary_action="theta_harvest",
             secondary_action="covered_calls_en_puts_toegestaan",
             covered_call_delta_min=cm,
@@ -941,7 +1100,7 @@ def _decide_range_action(
     if opp >= (40.0 + adj):
         cm, cx, pm, px = _deltas_by_role(role, base_call=(0.20, 0.35), base_put=(0.15, 0.25))
         return ActionDecision(
-            asset_fase="range_theta_candidate",
+            asset_fase="chop",
             primary_action="covered_calls_ver_otm",
             secondary_action="puts_alleen_bij_pullback",
             covered_call_delta_min=cm,
@@ -955,7 +1114,7 @@ def _decide_range_action(
         )
 
     return ActionDecision(
-        asset_fase="range_theta_candidate",
+        asset_fase="chop",
         primary_action="niets_doen",
         secondary_action="wachten_op_stabilisatie",
         covered_call_delta_min=None,
