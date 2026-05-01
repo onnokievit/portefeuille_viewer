@@ -251,6 +251,32 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key == "repository_snapshot_alle_transacties":
             self._orders_reload_timer.start()
+        elif snapshot_key == "repository_snapshot_asset_rollup_data":
+            self._reload_reference_lists()
+
+    def _reload_reference_lists(self):
+        import portefeuille_viewer.data.repository as repo
+        self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
+        self._brokers = self.brokers
+        self._asset_rollups = self.asset_rollups
+        self._sprinter_details = self.sprinter_details
+
+        current_values = {}
+        for part in (self.order1, self.order2):
+            for key in ("broker", "asset_rollup", "detail"):
+                widget = part.get(key)
+                if widget is not None:
+                    current_values[(id(part), key)] = widget.currentText()
+
+        for part in (self.order1, self.order2):
+            part["broker"].set_items(self.brokers)
+            part["asset_rollup"].set_items(self.asset_rollups)
+            part["detail"].set_items(self.sprinter_details)
+            for key in ("broker", "asset_rollup", "detail"):
+                widget = part.get(key)
+                previous = current_values.get((id(part), key), "")
+                if widget is not None and previous:
+                    widget.setCurrentText(previous)
 
     def auto_fill_year(self, line_edit: QLineEdit):
         s = (line_edit.text() or "").strip()

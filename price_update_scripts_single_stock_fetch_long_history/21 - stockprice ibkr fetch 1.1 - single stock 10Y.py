@@ -18,7 +18,7 @@ conn_str = (r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\\Users\\o
 
 # Keep default behavior, but allow CLI override:
 # python "21 - ...py" AHOLD
-target_asset_rollup = (sys.argv[1].strip() if len(sys.argv) > 1 else "UPBOUND")
+target_asset_rollup = (sys.argv[1].strip() if len(sys.argv) > 1 else "IBKR")
 sql_query_stock_range = f"SELECT * FROM asset_rollup_data WHERE asset_rollup = '{target_asset_rollup}'"
 
 # Column used to filter valid rows
