@@ -33,6 +33,7 @@ from portefeuille_viewer.data.repository import (
     load_open_optie_comments_cache,
     flush_dirty_open_optie_comments_to_db,
     update_open_optie_comment_color,
+    get_stockdata_connection,
 )
 from portefeuille_viewer.services.single_asset_scenario_analyse import (
     bereken_open_opties_payoff,
@@ -80,8 +81,6 @@ from portefeuille_viewer.data.test_order_repository import (
     load_test_orders_cache_from_db,
     load_test_order_scenarios_cache_from_db,
 )
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
-
 class CommentSortProxy(QSortFilterProxyModel):
     """Proxy die op UserRole sorteert en tuples (priority, text) netjes vergelijkt."""
     def __init__(self, parent=None):
@@ -4062,8 +4061,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._refresh_snapshot_driven_views_immediately_for_active_asset()
 
     def _connect_stockdb(self):
-        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-        return pyodbc.connect(conn_str)
+        return get_stockdata_connection()
 
     def _ensure_step_settings_table(self, cur) -> None:
         try:

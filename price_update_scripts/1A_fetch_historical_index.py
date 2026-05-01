@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 import pyodbc
@@ -13,10 +14,12 @@ from ibapi.contract import Contract
 from ibapi.wrapper import EWrapper
 
 
-CONN_STR = (
-    r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-    r"DBQ=C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
-)
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.data.repository import get_stockdata_connection
+
 TEMP_TABLE = "temp_stock_prices_temp"
 INFO_STATUS_CODES = {2103, 2104, 2105, 2106, 2107, 2108, 2158, 2159, 1100, 1101, 1102}
 
@@ -89,7 +92,7 @@ def load_index_targets(asset_filter: set[str] | None = None) -> list[IndexTarget
           AND ib_symbol IS NOT NULL
           AND ib_currency IS NOT NULL
     """
-    with pyodbc.connect(CONN_STR) as conn:
+    with get_stockdata_connection() as conn:
         df = pd.read_sql(sql, conn)
     if df.empty:
         return []
@@ -232,7 +235,7 @@ def save_df_to_access_temp(df: pd.DataFrame) -> int:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     rows = [tuple(row) for row in out.to_numpy()]
-    with pyodbc.connect(CONN_STR) as conn:
+    with get_stockdata_connection() as conn:
         cur = conn.cursor()
         try:
             cur.execute(create_sql)

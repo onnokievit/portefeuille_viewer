@@ -10,11 +10,16 @@ import pandas as pd
 import pyodbc
 import random
 import sys
+from pathlib import Path
 
 # -------------------------
 # Access connection (READ asset list + WRITE temp table)
 # -------------------------
-conn_str = (r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\\Users\\onno\\OneDrive\\Beleggen\\2025 - portefeuille database 02.03 - STOCKDATA.accdb')
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
 
 # Keep default behavior, but allow CLI override:
 # python "21 - ...py" AHOLD
@@ -235,7 +240,7 @@ def kick_off_more(app: TestApp):
 # -------------------------
 # Write all rows to Access temp table (create-if-not-exists, then append)
 # -------------------------
-def save_df_to_access_temp(df: pd.DataFrame, conn_str: str):
+def save_df_to_access_temp(df: pd.DataFrame):
     """
     Creates temp_stock_prices_temp in Access if it doesn't exist,
     then inserts all rows from df (append).
@@ -290,7 +295,7 @@ def save_df_to_access_temp(df: pd.DataFrame, conn_str: str):
     data = [tuple(row) for row in df_to_write.to_numpy()]
 
     try:
-        with pyodbc.connect(conn_str) as conn:
+        with get_stockdata_connection() as conn:
             cur = conn.cursor()
 
             # Try to create table — if exists, ignore
@@ -315,7 +320,7 @@ def main():
     t0 = time()
 
     # -------- Load symbol universe from Access --------
-    with pyodbc.connect(conn_str) as connection:
+    with get_stockdata_connection() as connection:
         all_data = pd.read_sql(sql_query_stock_range, connection)
 
     # Filter: require non-null currency
@@ -351,7 +356,7 @@ def main():
     print(all_stock_prices_df.head())
 
     # -------- Append DataFrame to Access temp table --------
-    save_df_to_access_temp(all_stock_prices_df, conn_str)
+    save_df_to_access_temp(all_stock_prices_df)
 
     print(f"Total elapsed: {time() - t0:.2f}s")
 

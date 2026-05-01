@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -15,7 +16,15 @@ from ibapi.contract import Contract
 from ibapi.wrapper import EWrapper
 
 
-DEFAULT_DB = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.config import get_stockdata_db_path
+from portefeuille_viewer.data.repository import get_stockdata_connection
+
+
+DEFAULT_DB = get_stockdata_db_path()
 INFO_CODES = {1100, 1101, 1102, 2103, 2104, 2105, 2106, 2107, 2108, 2158, 2159}
 
 
@@ -57,7 +66,7 @@ def _to_float(value: Any) -> float | None:
 
 
 def load_asset_meta(db_path: str, asset_rollup: str) -> AssetMeta:
-    conn = pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
+    conn = get_stockdata_connection() if db_path == get_stockdata_db_path() else pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
     cur = conn.cursor()
     row = cur.execute(
         """

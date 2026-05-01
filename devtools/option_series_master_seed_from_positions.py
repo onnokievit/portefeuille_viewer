@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from datetime import datetime, date
+from pathlib import Path
 from typing import Any
 
 import pyodbc
 
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.config import get_stockdata_db_path
+from portefeuille_viewer.data.repository import get_stockdata_connection
+
+
 DEFAULT_ONNO_DB = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb"
-DEFAULT_STOCK_DB = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+DEFAULT_STOCK_DB = get_stockdata_db_path()
 
 
 def connect_access(db_path: str) -> pyodbc.Connection:
+    if db_path == get_stockdata_db_path():
+        return get_stockdata_connection()
     return pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
 
 
@@ -217,4 +229,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

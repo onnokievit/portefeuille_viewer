@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyodbc
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
@@ -30,8 +29,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from portefeuille_viewer.config import get_settings  # noqa: E402
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH  # noqa: E402
+from portefeuille_viewer.config import get_settings, get_stockdata_db_path  # noqa: E402
+from portefeuille_viewer.data import repository  # noqa: E402
 
 
 LOOKBACK_MONTHS: dict[str, int] = {"3m": 3, "6m": 6, "12m": 12}
@@ -57,7 +56,7 @@ class BetaMatrixViewer(QMainWindow):
         self.combo_lookback.currentTextChanged.connect(self._rebuild_matrix)
 
         self.label_info = QLabel("Nog geen matrix geladen.", self)
-        self.label_db = QLabel(f"DB: {STOCKDATA_DB_PATH}", self)
+        self.label_db = QLabel(f"DB: {get_stockdata_db_path()}", self)
         self.label_db.setStyleSheet("color:#666;")
 
         top = QHBoxLayout()
@@ -82,8 +81,7 @@ class BetaMatrixViewer(QMainWindow):
         QTimer.singleShot(0, self._rebuild_matrix)
 
     def _connect(self):
-        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-        return pyodbc.connect(conn_str)
+        return repository.get_stockdata_connection()
 
     def _load_source_data(self) -> None:
         enabled = {str(v).strip().upper() for v in get_settings().get_enabled_beta_drivers()}

@@ -6,12 +6,11 @@ from typing import Any
 
 import pyodbc
 
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
+from portefeuille_viewer.data import repository
 
 
 def _connect() -> pyodbc.Connection:
-    conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-    return pyodbc.connect(conn_str)
+    return repository.get_stockdata_connection()
 
 
 def ensure_update_runs_schema() -> None:

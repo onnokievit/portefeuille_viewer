@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,7 +17,14 @@ from seed_option_series_master_from_all_users import (
 )
 
 
-DEFAULT_STOCK_DB = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.config import get_stockdata_db_path
+
+
+DEFAULT_STOCK_DB = get_stockdata_db_path()
 
 
 @dataclass

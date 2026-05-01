@@ -6,11 +6,12 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, Slot
 
+from portefeuille_viewer.config import get_stockdata_db_path
 from portefeuille_viewer.signals import signals
 
 
 OVERLAP_DAYS = 5
-STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+STOCKDATA_DB_PATH = get_stockdata_db_path()
 
 
 class HistoricalPriceUpdateRunner(QObject):

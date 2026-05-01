@@ -858,9 +858,7 @@ def _persist_signal_history(
     try:
         from portefeuille_viewer.data import repository
 
-        if not getattr(repository, "db_path", None):
-            return
-        with repository.get_connection() as conn:
+        with repository.get_stockdata_connection() as conn:
             cur = conn.cursor()
             _ensure_signal_history_tables(cur)
             ended_at = datetime.now()

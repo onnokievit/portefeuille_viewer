@@ -1,7 +1,14 @@
 import pyodbc
 import time
+import sys
+from pathlib import Path
 
-conn_str = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb'
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.data.repository import get_stockdata_connection
 
 MAIN_TABLE = "historical_data_correct"
 TEMP_TABLE = "temp_stock_prices_temp"
@@ -105,7 +112,7 @@ def merge_update_insert(cur):
 
 def main():
     t0 = time.time()
-    with pyodbc.connect(conn_str) as conn:
+    with get_stockdata_connection() as conn:
         conn.autocommit = False  # één grote transactie
         cur = conn.cursor()
 

@@ -6,15 +6,13 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-import pyodbc
-
 
 OVERLAP_DAYS = 5
-STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
 APP_ROOT = Path(__file__).resolve().parents[1]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
 from portefeuille_viewer.data.update_run_repository import (  # noqa: E402
     has_successful_run_today as has_successful_update_run_today,
     log_update_run_once,
@@ -22,10 +20,6 @@ from portefeuille_viewer.data.update_run_repository import (  # noqa: E402
 
 
 def get_oldest_last_price_date() -> date | None:
-    conn_str = (
-        r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        rf"DBQ={STOCKDATA_DB_PATH}"
-    )
     query = """
         SELECT MIN(last_datum) AS oldest_last_date
         FROM (
@@ -38,7 +32,7 @@ def get_oldest_last_price_date() -> date | None:
             GROUP BY h.asset_rollup
         ) AS q
     """
-    with pyodbc.connect(conn_str) as conn:
+    with _connect() as conn:
         cur = conn.cursor()
         row = cur.execute(query).fetchone()
     if not row or row[0] is None:
@@ -52,11 +46,7 @@ def get_oldest_last_price_date() -> date | None:
 
 
 def _connect():
-    conn_str = (
-        r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        rf"DBQ={STOCKDATA_DB_PATH}"
-    )
-    return pyodbc.connect(conn_str)
+    return get_stockdata_connection()
 
 
 def has_successful_run_today(run_reason: str) -> bool:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +21,14 @@ from build_options_live_universe_py import (
 )
 
 
-DEFAULT_STOCK_DB = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from portefeuille_viewer.config import get_stockdata_db_path
+
+
+DEFAULT_STOCK_DB = get_stockdata_db_path()
 USER_DB_MAP = {
     "onno": r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb",
     "muriel": r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - MURIEL.accdb",
@@ -226,4 +234,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

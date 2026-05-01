@@ -3,7 +3,7 @@
 Run:
     python devtools/asset_indicator_changes_web.py
 
-The report reads asset_indicator_signal_history from the configured user
+The report reads asset_indicator_signal_history from the configured stockdata
 database and shows assets whose selected indicator field changed recently.
 """
 
@@ -30,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from portefeuille_viewer.data import repository  # noqa: E402
+from portefeuille_viewer.config import get_stockdata_db_path  # noqa: E402
 
 
 FIELD_OPTIONS: dict[str, str] = {
@@ -152,7 +153,7 @@ def main() -> int:
     server = ThreadingHTTPServer((args.host, int(args.port)), Handler)
     url = f"http://{args.host}:{args.port}"
     print(f"Asset indicator wijzigingenrapport: {url}")
-    print(f"Database: {repository.db_path}")
+    print(f"Database: {get_stockdata_db_path()}")
     if not args.no_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
@@ -172,7 +173,7 @@ def build_payload(selected_field: str, days: int) -> ReportPayload:
         changes = find_changes(rows, db_column, days=max(1, int(days)))
         return ReportPayload(
             generated_at=datetime.now().isoformat(timespec="seconds"),
-            db_path=str(repository.db_path or ""),
+            db_path=str(get_stockdata_db_path() or ""),
             days=max(1, int(days)),
             selected_field=selected_field,
             rows_loaded=len(rows),
@@ -182,7 +183,7 @@ def build_payload(selected_field: str, days: int) -> ReportPayload:
     except Exception as exc:
         return ReportPayload(
             generated_at=datetime.now().isoformat(timespec="seconds"),
-            db_path=str(repository.db_path or ""),
+            db_path=str(get_stockdata_db_path() or ""),
             days=max(1, int(days)),
             selected_field=selected_field,
             rows_loaded=0,
@@ -201,7 +202,7 @@ def load_history_rows(days: int) -> list[dict[str, Any]]:
         WHERE created_at >= ?
         ORDER BY asset_rollup, created_at, id
     """
-    with repository.get_connection() as conn:
+    with repository.get_stockdata_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(sql, cutoff)
         columns = [str(desc[0]) for desc in cursor.description]

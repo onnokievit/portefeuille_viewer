@@ -656,11 +656,8 @@ class PriceFeedService(QObject):
     @staticmethod
     def _connect_option_last_prices_db():
         # option_last_prices moet in STOCKDATA staan (zelfde DB als option_series_master)
-        from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
-        import pyodbc
-        return pyodbc.connect(
-            rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH}"
-        )
+        from portefeuille_viewer.data import repository
+        return repository.get_stockdata_connection()
 
     @staticmethod
     def _pick_option_price_from_entry(entry: dict) -> tuple[Optional[float], Optional[str]]:

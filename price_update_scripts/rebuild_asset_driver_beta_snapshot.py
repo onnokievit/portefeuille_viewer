@@ -10,11 +10,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from portefeuille_viewer.services.beta_snapshot_service import rebuild_asset_driver_beta_snapshot
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
+from portefeuille_viewer.config import get_stockdata_db_path
 
 
 def main() -> int:
-    payload = rebuild_asset_driver_beta_snapshot(STOCKDATA_DB_PATH)
+    payload = rebuild_asset_driver_beta_snapshot(get_stockdata_db_path())
     print(json.dumps(payload, default=str))
     return 0
 

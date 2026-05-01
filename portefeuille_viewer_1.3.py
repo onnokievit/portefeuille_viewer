@@ -19,11 +19,10 @@ from portefeuille_viewer.signals import signals
 
 # Importeer hoofdvenster en benodigde modules
 from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
-from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.config import get_settings, get_stockdata_db_path
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.price_feed import PriceFeedService
 from portefeuille_viewer.services.historical_price_update_runner import HistoricalPriceUpdateRunner
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
 from portefeuille_viewer.services.asset_volatility_history_update_runner import AssetVolatilityHistoryUpdateRunner
@@ -1477,7 +1476,7 @@ def main():
         live_aggregator_opties=live_aggregator_opties,
         live_aggregator_sprinters=live_aggregator_sprinters,
     )
-    option_timevalue_service = OptionTimevalueService(price_feed, STOCKDATA_DB_PATH)
+    option_timevalue_service = OptionTimevalueService(price_feed, get_stockdata_db_path())
     signals.databaseChanged.connect(_on_database_changed_refresh)
     w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
     setattr(w, "option_timevalue_service", option_timevalue_service)

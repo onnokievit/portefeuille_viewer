@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pyodbc
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.data import repository
 
 
 BETA_SNAPSHOT_TABLE = "asset_driver_beta_snapshot"
@@ -30,8 +31,8 @@ _US_NDX_SECTORS = {
 
 
 def rebuild_asset_driver_beta_snapshot(stock_db_path: str) -> dict[str, Any]:
-    conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={stock_db_path}"
-    with pyodbc.connect(conn_str) as conn:
+    _ = stock_db_path
+    with repository.get_stockdata_connection() as conn:
         _ensure_beta_snapshot_table(conn)
         meta = _load_asset_metadata(conn)
         prices = _load_historical_close(conn)

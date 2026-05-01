@@ -24,6 +24,8 @@ DEFAULT_COMMENT_COLORS = [
     (0, "Geen", "", ""),
 ]
 
+DEFAULT_STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+
 LOCAL_ONLY_KEYS = {
     "interactive_brokers": None,
     "ui": {
@@ -800,6 +802,10 @@ class SettingsManager:
         self.config.set('app', 'last_database', name)
         self.save()
 
+    # === Stockdata database ===
+    def get_stockdata_db_path(self) -> str:
+        return self.config.get('stockdata', 'db_path', fallback=DEFAULT_STOCKDATA_DB_PATH).strip()
+
     # === Brokers ===
     def get_brokers(self):
         """Haal brokerlijst op uit settings.ini (comma-separated)."""
@@ -920,6 +926,10 @@ def get_databases() -> Dict[str, Dict[str, str]]:
 
 def get_default_database() -> Optional[str]:
     return get_settings().get_default_database()
+
+
+def get_stockdata_db_path() -> str:
+    return get_settings().get_stockdata_db_path()
 
 
 def add_database(name: str, path: str, fg_color: str = 'black', bg_color: str = 'white'):

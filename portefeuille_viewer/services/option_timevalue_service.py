@@ -15,6 +15,7 @@ import pyodbc
 from PySide6.QtCore import QObject, QTimer, QMetaObject, Qt, Slot
 from ibapi.contract import Contract
 
+from portefeuille_viewer.data import repository
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 
@@ -309,9 +310,7 @@ class OptionTimevalueService(QObject):
         self._publish_timer.start()
 
     def _connect_stockdb(self):
-        return pyodbc.connect(
-            rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={self.stock_db_path}"
-        )
+        return repository.get_stockdata_connection()
 
     def _ensure_option_series_master_columns(self, cur) -> None:
         # Additive-only schema hardening for manual resolver workflow.

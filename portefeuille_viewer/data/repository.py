@@ -5,10 +5,9 @@ import polars as pl
 
 from datetime import date, datetime, timedelta
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.config import get_databases, get_default_database, get_settings
+from portefeuille_viewer.config import get_databases, get_default_database, get_settings, get_stockdata_db_path
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.domain.engine import compact_float64
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
@@ -170,8 +169,7 @@ def load_asset_driver_beta_snapshot() -> pl.DataFrame:
             updated_at
         FROM asset_driver_beta_snapshot
     """
-    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-    with pyodbc.connect(conn_str_stock) as conn:
+    with get_stockdata_connection() as conn:
         try:
             df = pl.read_database(sql, conn)
         except Exception:
@@ -245,8 +243,7 @@ def load_asset_dividend_calendar_snapshot() -> pl.DataFrame:
             updated_at
         FROM asset_dividend_calendar_current
     """
-    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-    with pyodbc.connect(conn_str_stock) as conn:
+    with get_stockdata_connection() as conn:
         df = pl.read_database(sql, conn)
     if df is None or df.is_empty():
         out = pl.DataFrame(
@@ -888,6 +885,11 @@ TABLE_COLS = [
 
 def get_connection():
     return pyodbc.connect(conn_str)
+
+
+def get_stockdata_connection():
+    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={get_stockdata_db_path()};"
+    return pyodbc.connect(conn_str_stock)
 
 
 def _normalize_orders_committed_payload(

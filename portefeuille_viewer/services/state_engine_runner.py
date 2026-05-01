@@ -13,7 +13,6 @@ from PySide6.QtCore import QObject, QProcess
 
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.signals import signals
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
 
 
 STARTUP_DAILY_CATCHUP_REASON = "startup_daily_catchup_fullscope_v1"
@@ -535,8 +534,7 @@ class StateEngineRunner(QObject):
 
     def _get_today_startup_price_fetch_start_date(self) -> date | None:
         try:
-            conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH}"
-            with pyodbc.connect(conn_str) as conn:
+            with repository.get_stockdata_connection() as conn:
                 cur = conn.cursor()
                 row = cur.execute(
                     """
@@ -808,7 +806,6 @@ class StateEngineRunner(QObject):
     def _get_shared_last_price_dates(self, assets: list[str]) -> dict[str, date]:
         if not assets:
             return {}
-        conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH}"
         placeholders = ",".join("?" for _ in assets)
         query = f"""
             SELECT asset_rollup, MAX(datum) AS last_price_date
@@ -816,7 +813,7 @@ class StateEngineRunner(QObject):
             WHERE asset_rollup IN ({placeholders})
             GROUP BY asset_rollup
         """
-        with pyodbc.connect(conn_str) as conn:
+        with repository.get_stockdata_connection() as conn:
             cur = conn.cursor()
             rows = cur.execute(query, assets).fetchall()
         result: dict[str, date] = {}

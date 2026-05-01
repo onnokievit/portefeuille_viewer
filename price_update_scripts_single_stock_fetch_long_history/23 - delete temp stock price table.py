@@ -1,12 +1,19 @@
 import pyodbc
+import sys
+from pathlib import Path
 
-conn_str = r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb'
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
+
 TEMP_TABLE = "temp_stock_prices_temp"
 
 def delete_all_records():
     try:
         # Establish a connection to the database
-        with pyodbc.connect(conn_str) as conn:
+        with get_stockdata_connection() as conn:
             conn.autocommit = True  # No need for explicit commit
             cur = conn.cursor()
 

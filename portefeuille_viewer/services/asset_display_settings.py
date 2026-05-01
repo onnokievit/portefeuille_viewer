@@ -2,17 +2,14 @@ from __future__ import annotations
 
 from typing import Iterable
 
-import pyodbc
-
-from portefeuille_viewer.services.historical_price_update_runner import STOCKDATA_DB_PATH
+from portefeuille_viewer.data import repository
 
 
 DEFAULT_PRICE_DECIMALS = 2
 
 
 def _connect_stockdb():
-    conn_str = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={STOCKDATA_DB_PATH};"
-    return pyodbc.connect(conn_str)
+    return repository.get_stockdata_connection()
 
 
 def load_price_decimals_map(

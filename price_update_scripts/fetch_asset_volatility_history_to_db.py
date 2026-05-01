@@ -17,7 +17,14 @@ from ibapi.contract import Contract
 from ibapi.wrapper import EWrapper
 
 
-STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+APP_ROOT = Path(__file__).resolve().parents[1]
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from portefeuille_viewer.config import get_stockdata_db_path  # noqa: E402
+from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
+
+STOCKDATA_DB_PATH = get_stockdata_db_path()
 INFO_CODES = {1100, 1101, 1102, 2103, 2104, 2105, 2106, 2107, 2108, 2158, 2159}
 TEMP_VOL_TABLE = "temp_asset_volatility_history"
 
@@ -579,6 +586,8 @@ def resolve_exchange(sec_type: str, exchange: str, prim_exchange: str) -> str:
 
 
 def connect_access(db_path: str):
+    if db_path == get_stockdata_db_path():
+        return get_stockdata_connection()
     return pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
 
 
