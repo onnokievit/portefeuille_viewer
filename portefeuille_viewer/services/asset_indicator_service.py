@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import traceback
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from math import log10, sqrt
 from time import perf_counter
 from uuid import uuid4
@@ -69,12 +69,23 @@ def rebuild_asset_indicator_snapshots() -> AssetIndicatorRunResult:
 
 
 class AssetIndicatorService:
-    def rebuild(self) -> AssetIndicatorRunResult:
+    def rebuild(
+        self,
+        *,
+        cutoff_date: date | None = None,
+        publish_snapshots: bool = True,
+        persist_history: bool = True,
+        include_live_theta: bool = True,
+    ) -> AssetIndicatorRunResult:
         run_id = uuid4().hex
-        started_at = datetime.now()
+        started_at = datetime.now() if cutoff_date is None else datetime.combine(cutoff_date, time(23, 59, 59))
         t0 = perf_counter()
         try:
-            live_df = self._build_live_snapshot(started_at)
+            live_df = self._build_live_snapshot(
+                started_at,
+                cutoff_date=cutoff_date,
+                include_live_theta=include_live_theta,
+            )
             summary_df = self._build_summary_snapshot(live_df, started_at)
             duration_ms = (perf_counter() - t0) * 1000.0
             meta_df = self._build_meta_snapshot(
@@ -86,17 +97,19 @@ class AssetIndicatorService:
                 live_df=live_df,
             )
 
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, live_df)
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, summary_df)
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
-            _persist_signal_history(
-                run_id=run_id,
-                started_at=started_at,
-                duration_ms=duration_ms,
-                status="ok",
-                error="",
-                live_df=live_df,
-            )
+            if publish_snapshots:
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, live_df)
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, summary_df)
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
+            if persist_history:
+                _persist_signal_history(
+                    run_id=run_id,
+                    started_at=started_at,
+                    duration_ms=duration_ms,
+                    status="ok",
+                    error="",
+                    live_df=live_df,
+                )
 
             return AssetIndicatorRunResult(
                 run_id=run_id,
@@ -117,9 +130,10 @@ class AssetIndicatorService:
                 error=error,
                 live_df=empty_asset_indicator_live_frame(),
             )
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, empty_asset_indicator_live_frame())
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, empty_asset_indicator_summary_frame())
-            SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
+            if publish_snapshots:
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, empty_asset_indicator_live_frame())
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, empty_asset_indicator_summary_frame())
+                SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
             print("[asset-indicator] rebuild failed")
             print(traceback.format_exc())
             return AssetIndicatorRunResult(
@@ -132,14 +146,26 @@ class AssetIndicatorService:
                 error=error,
             )
 
-    def _build_live_snapshot(self, as_of: datetime) -> pl.DataFrame:
+    def _build_live_snapshot(
+        self,
+        as_of: datetime,
+        *,
+        cutoff_date: date | None = None,
+        include_live_theta: bool = True,
+    ) -> pl.DataFrame:
         assets_df = _normalize_assets_df(getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None))
         if assets_df.is_empty():
             return empty_asset_indicator_live_frame()
 
         history_df = _normalize_history_df(getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None))
+        if cutoff_date is not None and not history_df.is_empty() and "datum" in history_df.columns:
+            history_df = history_df.filter(pl.col("datum") <= cutoff_date)
         history_by_asset = _history_by_asset(history_df)
-        theta_by_asset = _theta_by_asset(getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None))
+        theta_by_asset = (
+            _theta_by_asset(getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None))
+            if include_live_theta
+            else {}
+        )
 
         rows: list[dict] = []
         for asset in assets_df.to_dicts():

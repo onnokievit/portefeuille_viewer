@@ -18,6 +18,12 @@ try:
 except Exception:  # pragma: no cover
     QWebEngineView = None
 
+
+HISTORY_CHART_LEFT_AXIS_WIDTH = 38
+HISTORY_CHART_RIGHT_AXIS_WIDTH = 36
+HISTORY_CHART_BOTTOM_AXIS_HEIGHT = 26
+HISTORY_CHART_TOP_AXIS_HEIGHT = 8
+
 # from streamlit import columns
 
 from portefeuille_viewer.signals import signals
@@ -1494,6 +1500,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
     def _ensure_history_charts_right_axis(self):
         pw = self.priceAantalChart
         if self._history_charts_right_axis_ready:
+            self._apply_history_chart_axis_layout()
             return
 
         self._rightView = pg.ViewBox()
@@ -1508,6 +1515,76 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         _sync_right_view_geometry()
         pw.plotItem.vb.sigResized.connect(_sync_right_view_geometry)
         self._history_charts_right_axis_ready = True
+        self._apply_history_chart_axis_layout()
+
+    def _apply_history_chart_axis_layout(self):
+        charts = (self.priceAantalChart, self.resultaatChart)
+        small_font = QFont("Arial", 7)
+        for chart in charts:
+            plot_item = chart.getPlotItem()
+            plot_item.showAxis("top", False)
+            plot_item.showAxis("right", True)
+            plot_item.getAxis("left").setWidth(HISTORY_CHART_LEFT_AXIS_WIDTH)
+            plot_item.getAxis("right").setWidth(HISTORY_CHART_RIGHT_AXIS_WIDTH)
+            plot_item.getAxis("bottom").setHeight(HISTORY_CHART_BOTTOM_AXIS_HEIGHT)
+            plot_item.getAxis("top").setHeight(HISTORY_CHART_TOP_AXIS_HEIGHT)
+            plot_item.layout.setContentsMargins(0, 0, 0, 0)
+            chart.setContentsMargins(0, 0, 0, 0)
+            for axis_name in ("left", "bottom"):
+                plot_item.getAxis(axis_name).setStyle(tickFont=small_font)
+        self.priceAantalChart.getPlotItem().getAxis("right").setStyle(tickFont=small_font)
+        self.resultaatChart.getPlotItem().getAxis("right").setStyle(showValues=False, tickLength=0)
+
+    @staticmethod
+    def _format_history_aantal_tick(value: float) -> str:
+        try:
+            value = float(value)
+        except Exception:
+            return ""
+        if abs(value) > 1000.0:
+            return f"{value / 1000.0:.2f}".replace(".", ",") + " k"
+        if abs(value - round(value)) < 1e-6:
+            return str(int(round(value)))
+        return f"{value:.1f}".replace(".", ",")
+
+    def _set_history_aantal_axis_ticks(self, y_min: float, y_max: float) -> None:
+        import math
+
+        if y_max <= y_min:
+            y_max = y_min + 1.0
+        step = self._nice_history_aantal_step(y_min, y_max)
+        start = math.floor(y_min / step) * step
+        end = math.ceil(y_max / step) * step
+        ticks = []
+        value = start
+        max_ticks = 12
+        while value <= end + (step * 0.5) and len(ticks) < max_ticks:
+            ticks.append((value, self._format_history_aantal_tick(value)))
+            value += step
+        self.priceAantalChart.getPlotItem().getAxis("right").setTicks([ticks])
+
+    @staticmethod
+    def _nice_history_aantal_step(y_min: float, y_max: float) -> float:
+        import math
+
+        span = max(1.0, abs(float(y_max) - float(y_min)))
+        raw_step = span / 5.0
+        magnitude = 10.0 ** math.floor(math.log10(raw_step))
+        for multiplier in (1.0, 2.0, 5.0, 10.0):
+            step = multiplier * magnitude
+            if raw_step <= step:
+                if step < 1.0:
+                    return 1.0
+                return step
+        return max(1.0, 10.0 * magnitude)
+
+    @staticmethod
+    def _padded_axis_range(y_min: float, y_max: float, *, padding: float) -> tuple[float, float]:
+        if y_max <= y_min:
+            y_max = y_min + 1.0
+        span = y_max - y_min
+        pad = span * max(0.0, float(padding))
+        return y_min - pad, y_max + pad
 
     @staticmethod
     def _set_plot_ranges(widget: pg.PlotWidget, x_values, y_values, *, padding=0.02):
@@ -4355,7 +4432,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._rightView.clear()
         aantal_curve = pg.PlotCurveItem(x, aantal, pen=pg.mkPen('g', width=2), name="Aantal bezit")
         self._rightView.addItem(aantal_curve)
-        pw.plotItem.getAxis('right').setLabel('Aantal bezit', color='g')
+        pw.plotItem.getAxis('right').setLabel('')
         ticks = [(i, str(datums[i])) for i in range(0, len(datums), max(1, len(datums)//10))]
         ax = pw.getPlotItem().getAxis('bottom')
         ax.setTicks([ticks])
@@ -4367,6 +4444,8 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             if y_min == y_max:
                 y_max = y_min + 1.0
             self._rightView.setYRange(y_min, y_max, padding=0.02)
+            padded_min, padded_max = self._padded_axis_range(y_min, y_max, padding=0.02)
+            self._set_history_aantal_axis_ticks(padded_min, padded_max)
 
         # --- Chart 2: resultaatChart ---
         rw = self.resultaatChart
@@ -4376,11 +4455,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         rw.plotItem.setLabel('left', '')
         rw.plotItem.setLabel('bottom', '')
         self._set_plot_ranges(rw, x, totaal)
+        self._apply_history_chart_axis_layout()
         font = QFont("Arial", 7)
         pw.getAxis('bottom').setStyle(tickFont=font)
         pw.getAxis('left').setStyle(tickFont=font)
+        pw.getAxis('right').setStyle(tickFont=font)
         rw.getAxis('bottom').setStyle(tickFont=font)
         rw.getAxis('left').setStyle(tickFont=font)
+        rw.getAxis('right').setStyle(showValues=False, tickLength=0)
         ticks2 = [(i, str(datums[i])) for i in range(0, len(datums), max(1, len(datums)//10))]
         ax2 = rw.getPlotItem().getAxis('bottom')
         ax2.setTicks([ticks2])                    

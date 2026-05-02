@@ -58,7 +58,10 @@ class AssetIndicatorChangesPayload:
     db_path: str
     days: int
     rows_loaded: int
+    comparison_from: str
+    comparison_to: str
     changes: list[dict[str, Any]]
+    timeline: dict[str, list[dict[str, Any]]]
     summary: dict[str, int]
     error: str = ""
 
@@ -68,12 +71,17 @@ def build_asset_indicator_changes(days: int = 7) -> AssetIndicatorChangesPayload
     try:
         rows = load_history_rows(days=days)
         changes = build_changes(rows, days=days)
+        timeline = build_timeline(rows)
+        comparison_from, comparison_to = _comparison_window(changes)
         return AssetIndicatorChangesPayload(
             generated_at=datetime.now().isoformat(timespec="seconds"),
             db_path=str(get_stockdata_db_path() or ""),
             days=days,
             rows_loaded=len(rows),
+            comparison_from=comparison_from,
+            comparison_to=comparison_to,
             changes=changes,
+            timeline=timeline,
             summary=_summary(changes),
         )
     except Exception as exc:
@@ -82,7 +90,10 @@ def build_asset_indicator_changes(days: int = 7) -> AssetIndicatorChangesPayload
             db_path=str(get_stockdata_db_path() or ""),
             days=days,
             rows_loaded=0,
+            comparison_from="",
+            comparison_to="",
             changes=[],
+            timeline={},
             summary={},
             error=f"{type(exc).__name__}: {exc}",
         )
@@ -139,6 +150,37 @@ def build_changes(rows: list[dict[str, Any]], days: int = 7) -> list[dict[str, A
     return out
 
 
+def build_timeline(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    by_asset: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        asset = str(row.get("asset_rollup") or "").strip().upper()
+        if asset:
+            by_asset.setdefault(asset, []).append(row)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for asset, asset_rows in by_asset.items():
+        cutoff_rows = [row for row in asset_rows if row.get("input_cutoff_date") is not None]
+        if cutoff_rows:
+            asset_rows = cutoff_rows
+        effective_rows = _latest_rows_per_input_day(asset_rows)
+        effective_rows.sort(key=lambda r: (_input_day_key(r), _dt_sort_value(r.get("created_at") or r.get("as_of"))))
+        out[asset] = [
+            {
+                "cutoff_date": _fmt_date(row.get("input_cutoff_date") or row.get("as_of")),
+                "asset_fase": row.get("asset_fase") or "",
+                "trend_phase": row.get("trend_phase") or "",
+                "primary_action": row.get("primary_action") or "",
+                "secondary_action": row.get("secondary_action") or "",
+                "direction_score": _round_or_blank(row.get("direction_score")),
+                "theta_proxy": _round_or_blank(row.get("theta_opportunity_proxy_score")),
+                "confidence_score": _round_or_blank(row.get("confidence_score")),
+                "reason_1": row.get("reason_1") or "",
+            }
+            for row in effective_rows
+        ]
+    return out
+
+
 def _latest_rows_per_input_day(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     latest_by_day: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -170,21 +212,28 @@ def classify_change(
     current: dict[str, Any],
     changed_at: datetime,
 ) -> dict[str, Any]:
-    prev_phase = _text(previous, "asset_fase") if previous else ""
+    previous_exists = previous is not None
+    prev_phase = _text(previous, "asset_fase") if previous_exists else _text(current, "asset_fase")
     cur_phase = _text(current, "asset_fase")
-    prev_trend = _text(previous, "trend_phase") if previous else ""
+    prev_trend = _text(previous, "trend_phase") if previous_exists else _text(current, "trend_phase")
     cur_trend = _text(current, "trend_phase")
-    prev_action = _text(previous, "primary_action") if previous else ""
+    prev_action = _text(previous, "primary_action") if previous_exists else _text(current, "primary_action")
     cur_action = _text(current, "primary_action")
-    prev_secondary = _text(previous, "secondary_action") if previous else ""
+    prev_secondary = _text(previous, "secondary_action") if previous_exists else _text(current, "secondary_action")
     cur_secondary = _text(current, "secondary_action")
 
-    phase_delta = PHASE_RANK.get(cur_phase, 0) - PHASE_RANK.get(prev_phase, 0)
-    direction_delta = _num(current.get("direction_score")) - _num(previous.get("direction_score") if previous else None)
-    confidence_delta = _num(current.get("confidence_score")) - _num(previous.get("confidence_score") if previous else None)
-    theta_delta = _num(current.get("theta_opportunity_proxy_score")) - _num(
-        previous.get("theta_opportunity_proxy_score") if previous else None
-    )
+    if previous_exists:
+        phase_delta = PHASE_RANK.get(cur_phase, 0) - PHASE_RANK.get(prev_phase, 0)
+        direction_delta = _num(current.get("direction_score")) - _num(previous.get("direction_score"))
+        confidence_delta = _num(current.get("confidence_score")) - _num(previous.get("confidence_score"))
+        theta_delta = _num(current.get("theta_opportunity_proxy_score")) - _num(
+            previous.get("theta_opportunity_proxy_score")
+        )
+    else:
+        phase_delta = 0.0
+        direction_delta = 0.0
+        confidence_delta = 0.0
+        theta_delta = 0.0
 
     label, impact, priority = _label_change(
         prev_phase=prev_phase,
@@ -195,22 +244,30 @@ def classify_change(
         direction_delta=direction_delta,
         confidence_delta=confidence_delta,
         theta_delta=theta_delta,
-        previous_exists=previous is not None,
+        previous_exists=previous_exists,
     )
 
-    reasons = _change_reasons(
-        prev_phase,
-        cur_phase,
-        prev_trend,
-        cur_trend,
-        prev_action,
-        cur_action,
-        phase_delta,
-        direction_delta,
-        confidence_delta,
-        theta_delta,
-        current,
-    )
+    if previous_exists:
+        reasons = _change_reasons(
+            prev_phase,
+            cur_phase,
+            prev_trend,
+            cur_trend,
+            prev_action,
+            cur_action,
+            phase_delta,
+            direction_delta,
+            confidence_delta,
+            theta_delta,
+            current,
+        )
+    else:
+        cutoff_date = _fmt_date(current.get("input_cutoff_date") or current.get("as_of"))
+        reasons = (
+            f"Baseline op cutoff-dag {cutoff_date or '-'}",
+            "Nog geen eerdere cutoff-dag beschikbaar voor vergelijking",
+            str(current.get("reason_1") or "Geen materiele wijziging"),
+        )
 
     return {
         "asset_rollup": asset,
@@ -264,7 +321,7 @@ def _label_change(
     previous_exists: bool,
 ) -> tuple[str, float, int]:
     if not previous_exists:
-        return "nieuw", 0.0, 20
+        return "stabiel", 0.0, 5
     if cur_phase == "high_risk_avoid":
         return "sterk_verslechterd", -80.0, 100
     if cur_phase == "bull_top_reversal" and prev_phase != "bull_top_reversal":
@@ -349,6 +406,12 @@ def _summary(changes: list[dict[str, Any]]) -> dict[str, int]:
         label = str(row.get("change_label") or "")
         out[label] = out.get(label, 0) + 1
     return out
+
+
+def _comparison_window(changes: list[dict[str, Any]]) -> tuple[str, str]:
+    current_dates = sorted({str(row.get("current_input_cutoff_date") or "") for row in changes if row.get("current_input_cutoff_date")})
+    previous_dates = sorted({str(row.get("previous_input_cutoff_date") or "") for row in changes if row.get("previous_input_cutoff_date")})
+    return (previous_dates[-1] if previous_dates else "", current_dates[-1] if current_dates else "")
 
 
 def _text(row: dict[str, Any] | None, key: str) -> str:

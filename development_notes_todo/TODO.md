@@ -147,5 +147,6 @@ Parse datums/float32 éénmalig bij snapshot-build en hergebruik.
 Optimaliseer tabelupdates (model hergebruik + kolomrestricties in filters).
 Uit te voeren tests: start app, wissel asset/filter in Single Asset tab, observeer CPU; plaats debug-log op aantal snapshotUpdated emits per minuut om overbodige triggers te vinden. Natural next steps: 1) Implement join-based prijsopbouw in de aggregators. 2) Beperk signal-handlers per tab/snapshot en voorkom dubbele refresh. 3) Preparse datum/float32 in snapshots.
 
+### history close tabel wordt nog geladen en gebruikt naast history ohlc. history close uitfaseren
 
 
