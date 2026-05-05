@@ -751,6 +751,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if hasattr(self, "checkBoxLiveResortOpenOpties"):
             self.checkBoxLiveResortOpenOpties.setChecked(self._opties_live_resort_enabled)
             self.checkBoxLiveResortOpenOpties.toggled.connect(self._on_toggle_live_resort_open_opties)
+        if hasattr(self, "checkBoxTijdVsVolume"):
+            self.checkBoxTijdVsVolume.setChecked(True)
+            self.checkBoxTijdVsVolume.toggled.connect(self.update_chart)
         self.testOrderFlushTimer = QTimer(self)
         self.testOrderFlushTimer.setInterval(60_000)  # 60s
         self.testOrderFlushTimer.timeout.connect(self._flush_test_orders_if_dirty)
@@ -1849,12 +1852,14 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         return centers, width
 
     @staticmethod
-    def _distribution_from_bucket_centers(rows: list[dict], centers: list[float], width: float) -> list[float]:
+    def _distribution_from_bucket_centers(
+        rows: list[dict], centers: list[float], width: float, use_volume: bool = True
+    ) -> list[float]:
         if not rows or not centers or width <= 0:
             return []
         left_edge = float(centers[0]) - width / 2.0
         weights = [0.0 for _ in centers]
-        used_rows = 0
+        total_weight = 0.0
         for row in rows:
             price_range = SingleAssetAnalyseTab._row_price_range(row)
             if price_range is None:
@@ -1871,13 +1876,18 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             touched = end_idx - start_idx + 1
             if touched <= 0:
                 continue
-            used_rows += 1
-            bucket_weight = 1.0 / touched
+            if use_volume:
+                vol = row.get("volume")
+                row_weight = float(vol) if vol is not None and float(vol) > 0 else 1.0
+            else:
+                row_weight = 1.0
+            total_weight += row_weight
+            bucket_weight = row_weight / touched
             for idx in range(start_idx, end_idx + 1):
                 weights[idx] += bucket_weight
-        if used_rows <= 0:
+        if total_weight <= 0:
             return []
-        return [value * 100.0 / used_rows for value in weights]
+        return [value * 100.0 / total_weight for value in weights]
 
     def _render_payoff_distribution_overlay(self, x_values: list[float]) -> None:
         self._ensure_payoff_distribution_axis()
@@ -1896,14 +1906,15 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         all_rows = self._load_asset_historical_ohlcv(asset)
         rows = self._filter_rows_last_months(all_rows, 12)
         rows_24m = self._filter_rows_last_months(all_rows, 24)
+        use_volume = hasattr(self, "checkBoxTijdVsVolume") and self.checkBoxTijdVsVolume.isChecked()
         centers, bucket_width = self._build_fine_distribution_grid(rows, x_values)
-        distribution_24m = self._distribution_from_bucket_centers(rows_24m, centers, bucket_width)
-        distribution_12m = self._distribution_from_bucket_centers(rows, centers, bucket_width)
+        distribution_24m = self._distribution_from_bucket_centers(rows_24m, centers, bucket_width, use_volume)
+        distribution_12m = self._distribution_from_bucket_centers(rows, centers, bucket_width, use_volume)
         distribution_6m = self._distribution_from_bucket_centers(
-            self._filter_rows_last_months(rows, 6), centers, bucket_width
+            self._filter_rows_last_months(rows, 6), centers, bucket_width, use_volume
         )
         distribution_3m = self._distribution_from_bucket_centers(
-            self._filter_rows_last_months(rows, 3), centers, bucket_width
+            self._filter_rows_last_months(rows, 3), centers, bucket_width, use_volume
         )
         series_candidates = [
             distribution_24m,

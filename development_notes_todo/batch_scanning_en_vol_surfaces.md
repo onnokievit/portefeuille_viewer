@@ -1,312 +1,438 @@
-# Batch Scanning en Vol Surfaces — Planningsdocument
+# Batch Scanning en Vol Surfaces
 
-## Aanleiding
+## Status en richting
 
-De huidige `PriceFeedService` werkt met **permanente market data subscriptions** via de IB API.
-Elke asset krijgt een open verbinding die een "market data line" verbruikt.
-IB limiteert het aantal gelijktijdige lijnen per account (standaard ~100, bijkopen mogelijk à ~$10/maand per 100).
+Dit document vervangt het eerdere plan waarin optiechains primair via `reqSecDefOptParams`
+en brede market-data scans werden opgebouwd. De praktische tests in `vol_surf_poc` laten een
+betere basis zien:
 
-Dit werkt voor de huidige portfolio (~135 assets + ~125 eigen optieposities), maar schaalt niet naar:
+- optiecontracten ophalen via TWS API `reqContractDetails`;
+- strike en multiplier leeg laten;
+- voor grote chains per maand en per zijde ophalen;
+- de volledige raw/normalized contractDetails per asset opslaan in parquet;
+- Access alleen gebruiken voor runlogging en bestaande app-masterdata, niet als bulk-chainstore.
 
-1. **Grote asset lijsten** (bijv. 1500 assets voor screening of universum-tracking)
-2. **Volledige optiechains** voor dealer gamma exposure (GEX) of implied volatility surfaces (vol smile / IV surface)
-
-Dit document beschrijft de benodigde architectuuruitbreiding en legt de basis voor latere implementatie.
-
----
-
-## Probleemanalyse
-
-### Huidige architectuur (PriceFeedService)
-
-- Eén `ibapi.EClient` verbinding, één clientId
-- Per asset: één permanente `reqMktData(..., snapshot=False)` subscription
-- Throttle: 10ms sleep per subscription
-- Setup tijd ~135 assets: ~1.35 seconden
-- Geen batching, geen queue, geen multi-connection
-
-### Waarom dit niet schaalt
-
-| Schaalvraag | Contracts nodig | Probleem |
-|---|---|---|
-| 1500 assets live | 1500 | 15× IB-limiet overschreden |
-| GEX voor SPX | ~8.000–15.000 | Onmogelijk met subscriptions |
-| IV surface 50 underlyings | ~50.000+ | Orders of magnitude te veel |
-| GEX voor eigen universe (50 namen) | ~5.000 | Onhaalbaar via live subscriptions |
-
-### Wat IB wél ondersteunt op schaal
-
-- **`reqMktData(..., snapshot=True)`** — haalt data eenmalig op, verbruikt **geen** permanente market data line
-- **`reqSecDefOptParams(underlying)`** — haalt alle strikes + expiraties van een keten in één call op
-- **Meerdere parallelle `EClient` verbindingen** — elk met eigen clientId, elk met eigen request-namespace
+De chain-scanner wordt een aparte tool naast de portefeuilleviewer. De tool moet later ook vanuit
+de portefeuilleviewer geopend kunnen worden.
 
 ---
 
-## Use cases
+## Kernbeslissing
 
-### 1. GEX — Dealer Gamma Exposure
+### Chain registry in parquet
 
-**Wat is het:**
-Het aggregeren van de delta-gecorrigeerde gamma van alle market makers (dealers) per strike,
-opgeteld over de volledige optiereeks van een onderliggende waarde (bijv. AEX, SPX, individuele aandelen).
-GEX geeft aan waar de markt door dealers mechanisch gehedged wordt, wat koersbewegingen kan
-versterken of dempen.
+De brede optiecontract-registry komt in parquet, met een bestand per asset:
 
-**Wat heb je nodig:**
-- Per underlying: alle actieve strikes × alle actieve expiraties
-- Per contract: open interest + gamma (uit `tickOptionComputation`)
-- Frequentie: dagelijkse snapshot (EOD) is voldoende voor tactische toepassing;
-  intradagse refresh (bijv. elk uur) voor fijnere analyse
-
-**Vereisten:**
-- Volledige chain ophalen via `reqSecDefOptParams`
-- Snapshot per contract: gamma + open interest
-- Aggregatie per strike: `GEX(strike) = Σ(OI × gamma × multiplier × spotprice)` met tekentoewijzing call/put
-
----
-
-### 2. IV Surface / Vol Smile
-
-**Wat is het:**
-De implied volatility als functie van strike en expiratie, voor een gegeven underlying.
-Geeft inzicht in marktprijzen van tail risk, skew (asymmetrie call/put), en termijnstructuur van volatiliteit.
-
-**Wat heb je nodig:**
-- Per underlying: selectie van strikes (bijv. ±30% moneyness) × selectie van expiraties (bijv. eerste 6)
-- Per contract: bid/ask spread + implied volatility (uit `tickOptionComputation`)
-- Frequentie: periodieke snapshot tijdens markturen (bijv. elke 15–30 minuten)
-
-**Vereisten:**
-- Chain-structuur ophalen via `reqSecDefOptParams`
-- Filter op moneyness en looptijd (niet elke strike nodig)
-- IV per contract ophalen via snapshot
-
----
-
-### 3. Groot asset-universum (1500+ namen)
-
-**Wat is het:**
-Tracking van koersen voor een breed universum van aandelen, ETFs of indices —
-los van de huidige eigen posities. Gebruikt voor screening, relatieve sterkte, sectorrotatie etc.
-
-**Wat heb je nodig:**
-- Last of close koers per asset
-- Frequentie: near-live (bijv. elke minuut refreshen) of EOD-batch
-
-**Vereisten:**
-- Snapshot-gebaseerde refresh in plaats van permanente subscriptions
-- Meerdere parallelle IB-verbindingen om doorvoer te verhogen
-
----
-
-## Voorgestelde architectuur: ChainDataService
-
-### Ontwerp
-
-Naast de bestaande `PriceFeedService` (die blijft voor eigen posities)
-komt een aparte `ChainDataService` als onafhankelijke data-acquisitielaag.
-
-```
-ChainDataService
-├── RequestQueue          — prioriteitswachtrij voor snapshot-requests
-├── ConnectionPool        — N parallelle EClient verbindingen (elk eigen clientId)
-├── ChainResolver         — haalt strikes/expiraties op via reqSecDefOptParams
-├── SnapshotWorker(s)     — verdeelt requests over pool, verwerkt callbacks
-└── ResultStore           — schrijft naar DB (chain_snapshots, gex_data, iv_surface)
+```text
+<chain_dir>/
+  CHAIN_MSFT.parquet
+  CHAIN_ABN.parquet
+  CHAIN_BMW.parquet
 ```
 
-### ConnectionPool
+Elk bestand bevat alle bekende optiecontracten voor dat asset, inclusief contracten die in eerdere
+runs gezien zijn maar in de meest recente run niet opnieuw terugkwamen. De registry is daarmee een
+historische lokale contract-id cache.
 
-- Stel bijv. 5–10 parallelle `EClient` instanties in, elk met clientId 20, 21, 22 ...
-- Elke verbinding verwerkt max 50 gelijktijdige snapshot-requests (IB soft limit)
-- Pool verdeelt inkomende requests round-robin of op basis van load
+Updateflow per asset:
 
-### RequestQueue
+1. Lees bestaand `CHAIN_<asset>.parquet` als het bestaat.
+2. Haal actuele contractDetails op bij IBKR.
+3. Normaliseer de nieuwe contracten naar hetzelfde schema.
+4. Combineer bestaand + nieuw.
+5. Dedup/update op `conid`.
+6. Schrijf het volledige bestand opnieuw weg.
 
-- Priority levels:
-  - `HIGH` — huidige posities, intradag refresh
-  - `NORMAL` — GEX-chains, IV surface refresh
-  - `LOW` — bulk universe scan, EOD batch
-- Rate limiting: max 50 requests/seconde per verbinding (IB API limiet)
-- Retry-logica voor tijdout of error 162 (Historical data farm)
+Parquet is hier bewust gekozen omdat dit bulkdata is. Access werd in eerdere projecten traag bij
+grote aantallen row-by-row writes. Parquet kan deze chainbestanden snel lezen en herschrijven.
 
-### ChainResolver
+### `option_series_master` blijft voor gebruikte series
 
-1. `reqSecDefOptParams(underlying, "", "OPT", exchange)` → geeft alle strikes + expiraties
-2. Filter strikes op moneyness (bijv. spot ± 25%)
-3. Filter expiraties op looptijd (bijv. 0–180 dagen)
-4. Genereer lijst van te fetchen contracten → door naar queue
+De bestaande Access-tabel `option_series_master` blijft de master voor series die de app concreet
+gebruikt:
 
-### Snapshot vs. Subscription Rotation
+- series waarin orders/posities bestaan of bestonden;
+- series die live optieprijzen nodig hebben;
+- series die handmatig gekozen zijn bij ambiguiteit;
+- eventueel series die expliciet vanuit chain parquet naar een watchlist/promoted set worden gezet.
 
-Twee technieken voor het ophalen van data zonder permanente lijnen te verbruiken:
+Niet elke mogelijke MSFT strike/expiry hoeft in `option_series_master`.
 
-**Snapshot (`snapshot=True`)**
-- IB handelt de lifecycle af: jij vraagt, IB stuurt wat het heeft, verbinding sluit automatisch
-- Snel en eenvoudig te implementeren
-- Nadeel: IB stuurt wat er op dat moment beschikbaar is — bij onvolledig geladen data krijg je een
-  onvolledig of leeg antwoord
-- **Kritiek nadeel voor opties:** `tickOptionComputation` (greeks: IV, delta, gamma) wordt bij snapshots
-  niet altijd geretourneerd. IB berekent greeks pas na een korte actieve subscriptie-periode.
+De bestaande resolver-flow blijft relevant. Als een order binnenkomt:
 
-**Subscription rotation (handmatig cyclen)**
-- Roep `reqMktData(..., snapshot=False)` aan — gewone persistente subscription
-- Wacht tot de gewenste tick-types zijn ontvangen (bijv. `tickOptionComputation` met IV + gamma)
-- Roep daarna `cancelMktData(tid)` aan, ga door naar volgend contract
-- Voordeel: je bepaalt zelf wanneer je genoeg data hebt — betrouwbaarder voor optie-greeks
-- Nadeel: subscribe → wacht → cancel logica moet je zelf implementeren en bewaken
+1. Zoek eerst in de parquet chain registry.
+2. Bij precies 1 kandidaat: koppel/importeer deze naar `option_series_master`.
+3. Bij meerdere kandidaten: toon manual resolver met de parquet/IBKR kandidaten.
+4. Bij geen kandidaat: fallback naar live `reqContractDetails` resolver.
 
-**Welke methode per use case:**
-
-| Use case | Methode | Reden |
-|---|---|---|
-| 1500 asset-koersen (last/close) | Snapshot | Snel, simpel, greeks niet nodig |
-| GEX (gamma + OI per strike) | Rotation | `tickOptionComputation` vereist actieve subscriptie |
-| IV surface (IV per strike/expiry) | Rotation | Zelfde reden |
-
-**Conclusie:** de `ChainDataService` heeft twee workers nodig:
-- `SnapshotWorker` — voor aandelen, ETFs, indices
-- `RotationWorker` — voor optie-chains (GEX, IV surface), beheert subscribe/wacht/cancel cyclus per contract
-
-Beide workers draaien op dezelfde `ConnectionPool`.
+Dit is belangrijk voor adjusted series, zoals ABN, waar dezelfde expiry/strike/right meerdere
+contracten kan opleveren met verschillende `trading_class`, `local_symbol` en `multiplier`.
 
 ---
 
-### SnapshotWorker
+## IBKR ophaalstrategie
 
-- Per contract: `reqMktData(tid, contract, "", False, True, [])` (snapshot=True)
-- Callback `tickPrice` → sla op in buffer
-- Na ontvangst: vrij request ID, markeer als afgerond
-- Timeout: 5 seconden, daarna retry of skip
+De basis komt uit `vol_surf_poc/basic_abn_option_chain.py`.
 
-### RotationWorker
+### ContractDetails request
 
-- Per contract: `reqMktData(tid, contract, "", False, False, [])` (persistente subscriptie)
-- Wacht op `tickOptionComputation` met minimaal IV + gamma (of timeout)
-- Na ontvangst: roep `cancelMktData(tid)` aan, ga door naar volgend contract in queue
-- Timeout per contract: 8 seconden (greeks komen soms later dan tickPrice)
-- Max gelijktijdige rotatie-subscripties per verbinding: ~20 (conservatief, greeks zijn zwaarder)
+Per request wordt een `Contract` object gebouwd met:
+
+```python
+contract.secType = "OPT"
+contract.symbol = ib_symbol
+contract.currency = ib_currency
+contract.exchange = option_exchange
+contract.right = "C"  # of "P"
+contract.lastTradeDateOrContractMonth = "202606"  # maandniveau
+
+# Niet zetten:
+# contract.strike
+# contract.multiplier
+```
+
+Voor kleine Europese chains kan `lastTradeDateOrContractMonth` leeg werken. Voor grote US chains
+zoals MSFT bleek dat te breed en onbetrouwbaar. Daarom wordt de productiestrategie:
+
+```text
+per asset
+  per maand binnen horizon
+    per right C/P
+      reqContractDetails
+```
+
+Voor 3 maanden zijn dat 6 requests per asset.
+
+### Maandhorizon
+
+De tool moet instelbaar maken hoeveel maanden vooruit gescand worden. Default voorstel:
+
+```text
+3 maanden voor korte IV-surface workflow
+12 maanden voor algemene chain registry
+```
+
+Bij maandrequests komen meerdere expiries binnen, bijvoorbeeld voor MSFT met `202606`:
+
+```text
+20260605
+20260612
+20260618
+```
+
+### Exchangekeuze
+
+De exchange komt uit bestaande referentiedata waar mogelijk:
+
+- `optie_referentie_data.opt_exchange`;
+- fallback op `SMART` voor US namen;
+- fallback op bekende Europese exchanges zoals `FTA` of `EUREX` waar van toepassing.
+
+De tool moet per asset loggen welke exchange gebruikt is. Later kan de GUI exchange overrides
+ondersteunen.
 
 ---
 
-## Schattingen doorvoer en timing
+## Parquet schema
 
-| Scenario | Contracts | Verbindingen | Requests/sec | Geschatte looptijd |
-|---|---|---|---|---|
-| GEX SPX (dagelijks) | 10.000 | 5 | 250 | ~40 seconden |
-| IV surface 20 namen | 8.000 | 5 | 250 | ~32 seconden |
-| Universe 1500 assets | 1.500 | 5 | 250 | ~6 seconden |
-| Alles gecombineerd (EOD) | ~20.000 | 10 | 500 | ~40 seconden |
+Minimaal schema per `CHAIN_<asset>.parquet`:
+
+```text
+conid                       int64
+asset_rollup                string
+ib_symbol                   string
+ib_currency                 string
+sec_type                    string
+exchange                    string
+primary_exchange            string
+local_symbol                string
+trading_class               string
+expiry                      date
+last_trade_date_raw         string
+right                       string
+strike                      float64
+multiplier                  float64
+contract_month              string
+source                      string      # tws_contract_details
+first_seen_at               datetime
+last_seen_at                datetime
+last_refresh_run_id         string
+last_request_month          string
+last_request_right          string
+raw_contract_json           string
+```
+
+Dedup key:
+
+```text
+conid
+```
+
+Als `conid` ontbreekt of ongeldig is, wordt het record niet als geldig contract opgeslagen maar in
+de runlog als rejected geteld.
+
+Updategedrag:
+
+- nieuw `conid`: insert met `first_seen_at = now`, `last_seen_at = now`;
+- bestaand `conid`: behoud `first_seen_at`, update `last_seen_at` en metadata;
+- niet opnieuw gezien: laten staan, `last_seen_at` blijft oud.
+
+Actueel filter later:
+
+```text
+last_seen_at >= laatste succesvolle refresh voor asset
+```
+
+of ruimer:
+
+```text
+last_seen_at >= vandaag - 30 dagen
+```
 
 ---
 
-## Afbakening t.o.v. bestaande code
+## Access runlogging
 
-| Component | Verantwoordelijkheid | Aanpassen? |
-|---|---|---|
-| `PriceFeedService` | Live koersen eigen posities | Nee — blijft ongewijzigd |
-| `OptionTimevalueService` | Greeks eigen posities | Nee — blijft ongewijzigd |
-| `ChainDataService` (nieuw) | Batch snapshots, chains, GEX, IV surface | Nieuw te bouwen |
-| DB schema | Opslag chain-data | Nieuwe tabellen toevoegen |
+De scanner schrijft geen bulkcontracten naar Access. Wel schrijft hij runlogging naar de stockdb.
+De stockdb-locatie komt uit de bestaande settings:
 
-De twee services draaien naast elkaar. `ChainDataService` schrijft naar eigen DB-tabellen.
-Geen gedeelde staat, geen gedeelde IB-verbindingen.
+```python
+from portefeuille_viewer.config import get_settings
+stock_db_path = get_settings().get_stockdata_db_path()
+```
 
----
-
-## DB-tabellen (nieuw)
+Nieuwe tabellen:
 
 ```sql
--- Dagelijkse GEX-snapshots per underlying per strike
-CREATE TABLE gex_snapshots (
-    underlying      TEXT,
-    snapshot_date   DATE,
-    expiry          DATE,
-    strike          REAL,
-    right           TEXT,   -- 'C' of 'P'
-    open_interest   INTEGER,
-    gamma           REAL,
-    gex_contribution REAL,
-    fetched_at      TIMESTAMP
-);
-
--- IV surface snapshots
-CREATE TABLE iv_surface_snapshots (
-    underlying      TEXT,
-    snapshot_ts     TIMESTAMP,
-    expiry          DATE,
-    strike          REAL,
-    right           TEXT,
-    bid             REAL,
-    ask             REAL,
-    mid             REAL,
-    iv              REAL,
-    delta           REAL,
-    days_to_expiry  INTEGER
-);
-
--- Universe koersen (bulk assets)
-CREATE TABLE universe_prices (
-    symbol          TEXT,
-    currency        TEXT,
-    price           REAL,
-    fetched_at      TIMESTAMP
+CREATE TABLE option_chain_scan_runs (
+    run_id TEXT(64) PRIMARY KEY,
+    started_at DATETIME,
+    finished_at DATETIME,
+    status TEXT(32),
+    tws_host TEXT(64),
+    tws_port LONG,
+    client_id LONG,
+    parquet_dir LONGTEXT,
+    asset_count LONG,
+    contracts_seen LONG,
+    contracts_inserted LONG,
+    contracts_updated LONG,
+    contracts_rejected LONG,
+    error_message LONGTEXT
 );
 ```
 
----
+```sql
+CREATE TABLE option_chain_scan_asset_log (
+    id AUTOINCREMENT PRIMARY KEY,
+    run_id TEXT(64),
+    asset_rollup TEXT(64),
+    ib_symbol TEXT(64),
+    ib_currency TEXT(16),
+    option_exchange TEXT(32),
+    status TEXT(32),
+    started_at DATETIME,
+    finished_at DATETIME,
+    months_requested LONG,
+    requests_sent LONG,
+    contracts_returned LONG,
+    contracts_inserted LONG,
+    contracts_updated LONG,
+    contracts_rejected LONG,
+    parquet_path LONGTEXT,
+    error_message LONGTEXT
+);
+```
 
-## Implementatiefasen (aanzet)
+Optioneel detailniveau voor debugging:
 
-### Fase 0 — Voorbereiding (geen code)
-- [ ] Beslissen welke underlyings voor GEX/IV surface (eigen universe vs. index + top-50)
-- [ ] Beslissen welke frequentie per use case (EOD vs. intradag)
-- [ ] IB account checken: hoeveel market data lines beschikbaar / hoeveel bijkopen indien nodig
-- [ ] Checken of IB snapshot-modus werkt voor alle asset types (STK, IND, FUT, OPT, FOP)
+```sql
+CREATE TABLE option_chain_scan_request_log (
+    id AUTOINCREMENT PRIMARY KEY,
+    run_id TEXT(64),
+    asset_rollup TEXT(64),
+    request_month TEXT(8),
+    right_code TEXT(1),
+    status TEXT(32),
+    contracts_returned LONG,
+    duration_ms LONG,
+    error_message LONGTEXT
+);
+```
 
-### Fase 1 — ConnectionPool + SnapshotWorker
-- [ ] `IbConnectionPool` klasse: beheert N EClient instanties
-- [ ] `SnapshotWorker`: snapshot-request dispatch + callback verwerking
-- [ ] Testen met klein universum (bijv. 50 assets, 1 optieketen)
-
-### Fase 2 — ChainResolver
-- [ ] `reqSecDefOptParams` wrapper
-- [ ] Moneyness + expiry filter logica
-- [ ] Integratie met RequestQueue
-
-### Fase 3 — GEX berekening
-- [ ] Ophalen chain + OI + gamma via SnapshotWorker
-- [ ] GEX aggregatie per strike: `Σ(OI × gamma × multiplier × spot)`
-- [ ] Opslaan in `gex_snapshots`
-- [ ] Eenvoudige visualisatie (bar chart per strike)
-
-### Fase 4 — IV Surface
-- [ ] Ophalen chain + IV + bid/ask via SnapshotWorker
-- [ ] Opslaan in `iv_surface_snapshots`
-- [ ] Visualisatie: surface plot of heatmap (strike × expiry → IV)
-
-### Fase 5 — Universe scanning (1500 assets)
-- [ ] Bulk asset lijst importeren (bijv. uit CSV of screener export)
-- [ ] Periodieke refresh via ChainDataService
-- [ ] Koppeling aan bestaande screening/filtering logica
-
----
-
-## Open vragen
-
-- Welke underlyings voor GEX prioriteit? (AEX index, individuele namen, SPX?)
-- Willen we intradagse GEX (bijv. elk uur) of volstaat dagelijks EOD?
-- Kosten snapshots: IB rekent **niet per snapshot-call**. Je betaalt een maandelijks exchange-abonnement
-  (bijv. $1–$15/maand per beurs). Als je al geabonneerd bent op de beurzen waar je handelt, zijn snapshots
-  daar gratis. Extra kosten ontstaan alleen als de universe beurzen bevat waarvoor je nog geen abonnement hebt.
-  → **Actie fase 0:** inventariseer op welke exchanges de 1500 assets noteren, check welke abonnementen je al hebt.
-- Hoe integreren we de ChainDataService in de Qt event loop vs. aparte thread/process?
-- Willen we de universe-scan koppelen aan een alert of signaallaag?
+Access writes blijven beperkt tot enkele rijen per run/asset/request. Dat voorkomt het bekende
+performanceprobleem van grote row-by-row bulk writes.
 
 ---
 
-## Status
+## Standalone Qt tool
 
-**Fase:** Planningsdocument — nog niet geïmplementeerd  
-**Datum aangemaakt:** 2026-05-02  
-**Prioriteit:** Later — na afronding lopende updateflow en indicator-work
+Werknaam:
+
+```text
+option_chain_retriever
+```
+
+Voorgestelde locatie:
+
+```text
+portefeuille_viewer/option_chain_retriever/
+```
+
+of voorlopig:
+
+```text
+portefeuille_viewer/vol_surf_poc/option_chain_retriever/
+```
+
+De tool moet standalone kunnen starten, maar ook vanuit de portefeuilleviewer geopend kunnen worden.
+Daarom splitsen we UI en core:
+
+```text
+option_chain_retriever/
+  chain_scanner.py          # IBKR/TWS scanner, geen Qt
+  chain_store.py            # parquet read/merge/write
+  chain_run_repository.py   # Access runlog
+  asset_source.py           # asset_rollup_data + optie_referentie_data lezen
+  parquet_viewer.py         # parquet inspectie helpers/model
+  chain_retriever_window.py # Qt GUI
+  main.py                   # standalone entrypoint
+```
+
+### GUI-functionaliteit
+
+Minimaal:
+
+- stockdb-pad tonen uit settings;
+- parquet target directory kiezen en opslaan in settings;
+- TWS host/port/client-id instellen;
+- assetlijst laden uit `asset_rollup_data`;
+- filteren/selecteren: 1 asset, selectie assets, alle assets;
+- horizon in maanden;
+- calls/puts aan/uit;
+- start/stop knop;
+- live logpaneel;
+- progress per asset;
+- resultaatkolommen: status, returned, inserted, updated, rejected, parquet path;
+- parquet viewer tab.
+
+### Parquet viewer
+
+De GUI moet parquet files kunnen tonen:
+
+- asset kiezen of parquet file openen;
+- tabelweergave met sort/filter;
+- kolommen tonen/verbergen;
+- snelle filters: expiry range, right, strike range, trading_class, multiplier;
+- summary: aantal contracts, expiries, strikes, rights, laatste `last_seen_at`;
+- export naar CSV optioneel.
+
+Voor grote bestanden moet de viewer niet alles onnodig kopieren. Polars scan/read is de voorkeur.
+
+---
+
+## Relatie met IV / vol surfaces
+
+De IV job leest straks direct uit de chain parquet registry.
+
+Flow:
+
+```text
+CHAIN_MSFT.parquet
+  -> filter expiry <= vandaag + 60 dagen
+  -> filter vrijdag / maandselectie
+  -> filter moneyness op basis van spot
+  -> filter C/P
+  -> request IV via conid
+  -> schrijf IV snapshot naar parquet
+```
+
+IV-output hoort in aparte opslag, niet in de chain registry:
+
+```text
+option_iv_snapshots/
+  asset_rollup=MSFT/
+    IV_MSFT_2026-05-05_153000.parquet
+```
+
+De chain registry is contract-identiteit. IV snapshots zijn meetdata/tijdreeks.
+
+---
+
+## Implementatiefasen
+
+### Fase 1 - Core scanner zonder GUI
+
+- [ ] `basic_abn_option_chain.py` logica extraheren naar herbruikbare scanner.
+- [ ] Per asset/month/right `reqContractDetails` ophalen.
+- [ ] Normaliseren naar DataFrame.
+- [ ] Per asset parquet merge/dedup/write.
+- [ ] Runlog tabellen in Access aanmaken en vullen.
+- [ ] CLI entrypoint voor 1 asset en batch assets.
+
+### Fase 2 - Asset source en settings
+
+- [ ] Assetlijst lezen uit `asset_rollup_data`.
+- [ ] Alleen aandelen selecteren.
+- [ ] `ib_symbol`, `ib_currency`, optiereferentie/exchange bepalen.
+- [ ] Stockdb-pad uit settings lezen.
+- [ ] Parquet directory in settings opslaan.
+
+### Fase 3 - Qt GUI
+
+- [ ] Standalone window bouwen.
+- [ ] Assetselectie, target directory, TWS instellingen.
+- [ ] Worker thread zodat UI niet blokkeert.
+- [ ] Logpaneel en progressweergave.
+- [ ] Stop/cancel mechanisme.
+
+### Fase 4 - Parquet viewer
+
+- [ ] Parquet file openen vanuit GUI.
+- [ ] Tabelweergave + summary.
+- [ ] Filters voor expiry/right/strike/trading_class/multiplier.
+
+### Fase 5 - Integratie portefeuilleviewer
+
+- [ ] Knop in settings of tools-menu: "Option Chain Retriever".
+- [ ] Window standalone kunnen starten of vanuit bestaande app openen.
+- [ ] Geen gedeelde IB-verbinding verplicht; tool gebruikt eigen TWS client-id.
+
+### Fase 6 - IV workflow
+
+- [ ] IV-universe bouwen uit chain parquet.
+- [ ] Contracten selecteren op DTE/moneyness/right.
+- [ ] IV ophalen via conid met subscription-rotation.
+- [ ] IV snapshots naar aparte parquet opslag.
+
+---
+
+## Nog te beslissen
+
+1. Default horizon voor chain scanning: 3, 6 of 12 maanden?
+2. Welke assets zijn "aandelen" in `asset_rollup_data`: bestaande typekolom of afleiden uit velden?
+3. Welke exchange fallback per markt:
+   - US: `SMART`
+   - Amsterdam: `FTA`
+   - Duitsland: `EUREX`
+4. Moet de scanner verlopen contracten bewaren zonder limiet, of na bijvoorbeeld 2 jaar archiveren?
+5. Moet de parquet directory lokaal blijven of ook onder OneDrive?
+6. Moet de batch standaard sequentieel draaien, of mogen meerdere assets parallel met meerdere clientIds?
+
+---
+
+## Samenvatting
+
+De nieuwe architectuur:
+
+```text
+TWS reqContractDetails
+  -> option_chain_retriever
+  -> per asset parquet chain registry
+  -> Access runlog
+  -> resolver/import naar option_series_master wanneer de app een serie echt gebruikt
+  -> IV jobs lezen direct uit parquet
+```
+
+Dit houdt bulkdata snel en goedkoop in parquet, terwijl de bestaande Access-gebaseerde app-logica
+voor orders, resolver en live optieprijzen intact blijft.
