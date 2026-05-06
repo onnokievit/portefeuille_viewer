@@ -25,6 +25,7 @@ DEFAULT_COMMENT_COLORS = [
 ]
 
 DEFAULT_STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - STOCKDATA.accdb"
+DEFAULT_OPTION_CHAIN_PARQUET_DIR = r"C:\Users\onno\OneDrive\Beleggen\asset_data_parquet"
 
 LOCAL_ONLY_KEYS = {
     "interactive_brokers": None,
@@ -805,6 +806,69 @@ class SettingsManager:
     # === Stockdata database ===
     def get_stockdata_db_path(self) -> str:
         return self.config.get('stockdata', 'db_path', fallback=DEFAULT_STOCKDATA_DB_PATH).strip()
+
+    # === Option chain scanner ===
+    def get_option_chain_scanner_settings(self) -> dict:
+        section = 'option_chain_scanner'
+        return {
+            'parquet_dir': self.config.get(section, 'parquet_dir', fallback=DEFAULT_OPTION_CHAIN_PARQUET_DIR).strip(),
+            'horizon_months': self.config.getint(section, 'horizon_months', fallback=3),
+            'parallel_workers': self.config.getint(section, 'parallel_workers', fallback=1),
+            'max_assets_per_start': self.config.getint(section, 'max_assets_per_start', fallback=10),
+            'right_request_mode': self.config.get(section, 'right_request_mode', fallback='separate').strip(),
+            'tws_host': self.config.get(section, 'tws_host', fallback='127.0.0.1').strip(),
+            'tws_port': self.config.getint(section, 'tws_port', fallback=7496),
+            'client_id_base': self.config.getint(section, 'client_id_base', fallback=9900),
+            'client_id_min': self.config.getint(section, 'client_id_min', fallback=1000),
+            'client_id_max': self.config.getint(section, 'client_id_max', fallback=10000),
+            'request_pause_sec': self.config.getfloat(section, 'request_pause_sec', fallback=1.0),
+            'asset_pause_sec': self.config.getfloat(section, 'asset_pause_sec', fallback=2.0),
+        }
+
+    def set_option_chain_scanner_settings(
+        self,
+        *,
+        parquet_dir: str | None = None,
+        horizon_months: int | None = None,
+        parallel_workers: int | None = None,
+        max_assets_per_start: int | None = None,
+        right_request_mode: str | None = None,
+        tws_host: str | None = None,
+        tws_port: int | None = None,
+        client_id_base: int | None = None,
+        client_id_min: int | None = None,
+        client_id_max: int | None = None,
+        request_pause_sec: float | None = None,
+        asset_pause_sec: float | None = None,
+    ) -> None:
+        section = 'option_chain_scanner'
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+        if parquet_dir is not None:
+            self.config.set(section, 'parquet_dir', str(parquet_dir))
+        if horizon_months is not None:
+            self.config.set(section, 'horizon_months', str(int(horizon_months)))
+        if parallel_workers is not None:
+            self.config.set(section, 'parallel_workers', str(int(parallel_workers)))
+        if max_assets_per_start is not None:
+            self.config.set(section, 'max_assets_per_start', str(int(max_assets_per_start)))
+        if right_request_mode is not None:
+            self.config.set(section, 'right_request_mode', str(right_request_mode))
+        if tws_host is not None:
+            self.config.set(section, 'tws_host', str(tws_host))
+        if tws_port is not None:
+            self.config.set(section, 'tws_port', str(int(tws_port)))
+        if client_id_base is not None:
+            self.config.set(section, 'client_id_base', str(int(client_id_base)))
+        if client_id_min is not None:
+            self.config.set(section, 'client_id_min', str(int(client_id_min)))
+        if client_id_max is not None:
+            self.config.set(section, 'client_id_max', str(int(client_id_max)))
+        if request_pause_sec is not None:
+            self.config.set(section, 'request_pause_sec', str(float(request_pause_sec)))
+        if asset_pause_sec is not None:
+            self.config.set(section, 'asset_pause_sec', str(float(asset_pause_sec)))
+        self.save()
 
     # === Brokers ===
     def get_brokers(self):

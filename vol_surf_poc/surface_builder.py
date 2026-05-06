@@ -1,31 +1,212 @@
-"""
-Build plotly charts from option IV data.
+from __future__ import annotations
 
-Three chart types:
-  - 3D Surface  : interpolated IV surface (strike/moneyness/delta × DTE → IV)
-  - Smile Lines : per-expiry IV curves
-  - Heatmap     : 2D colour grid (strike/moneyness × DTE)
-
-X-axis modes : "strike" | "moneyness" | "delta"
-Right filter : "C" (calls) | "P" (puts) | "B" (both)
-"""
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from scipy.interpolate import RBFInterpolator
 
-# ── constants ─────────────────────────────────────────────────────────────────
+try:
+    from scipy.interpolate import RBFInterpolator
+except Exception:  # pragma: no cover - optional fallback for lean environments
+    RBFInterpolator = None
+
 
 X_LABEL = {"strike": "Strike", "moneyness": "Moneyness (K/S)", "delta": "|Delta|"}
-_CALL_COLORS = ["#1f77b4", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
-_PUT_COLORS  = ["#aec7e8", "#98df8a", "#ff9896", "#c5b0d5", "#c49c94", "#f7b6d2"]
+_PLOTLY_CDN = "cdn"
 
-_PLOTLY_CDN = "cdn"          # set to "require" if offline
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+def prepare_surface_frame(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "iv" not in out.columns and "model_iv" in out.columns:
+        out["iv"] = out["model_iv"]
+    if "iv" in out.columns:
+        out["iv"] = pd.to_numeric(out["iv"], errors="coerce")
+        # IB model_iv is often 0.xx. Store/chart as percent.
+        mask = out["iv"].between(0, 10)
+        out.loc[mask, "iv"] = out.loc[mask, "iv"] * 100.0
+    for col in ("strike", "moneyness", "delta", "dte"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+    if "expiry" in out.columns:
+        out["expiry"] = out["expiry"].astype(str).str.replace("-", "", regex=False).str[:8]
+    return out.dropna(subset=["iv", "dte", "strike"])
 
-def _x_col(df: pd.DataFrame, x_mode: str) -> pd.Series:
+
+def build_3d_surface(df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C") -> str:
+    data = prepare_surface_frame(df)
+    fig = go.Figure()
+    any_data = False
+    for side, colorscale, name in _sides(right):
+        sub = _filter(data, side, x_mode)
+        if sub.empty:
+            continue
+        xi, yi, zi = _interpolate(_x(sub, x_mode), sub["dte"], sub["iv"])
+        if xi is None:
+            fig.add_trace(_scatter3d(sub, x_mode, name))
+            any_data = True
+            continue
+        fig.add_trace(
+            go.Surface(
+                x=xi,
+                y=yi,
+                z=zi,
+                colorscale=colorscale,
+                opacity=0.82 if right == "B" else 1.0,
+                name=name,
+                showscale=True,
+                colorbar=dict(title="IV %", thickness=15, len=0.65),
+            )
+        )
+        any_data = True
+    if not any_data:
+        _empty(fig)
+    fig.update_layout(
+        height=650,
+        margin=dict(l=50, r=30, t=45, b=45),
+        title=f"Vol Surface [{x_mode}]",
+        scene=dict(
+            xaxis_title=X_LABEL.get(x_mode, "X"),
+            yaxis_title="DTE",
+            zaxis_title="IV %",
+            camera=dict(eye=dict(x=1.6, y=-1.5, z=1.0)),
+        ),
+    )
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
+def build_smile_lines(df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C") -> str:
+    data = prepare_surface_frame(df)
+    fig = go.Figure()
+    any_data = False
+    for side, _colorscale, name in _sides(right):
+        sub = _filter(data, side, x_mode)
+        for expiry, group in sub.groupby("expiry", dropna=True):
+            group = group.sort_values("strike")
+            dte = int(group["dte"].iloc[0]) if len(group) else 0
+            fig.add_trace(
+                go.Scatter(
+                    x=_x(group, x_mode),
+                    y=group["iv"],
+                    mode="lines+markers",
+                    name=f"{expiry} {side} ({dte}d)",
+                    hovertemplate=f"{X_LABEL.get(x_mode, 'X')}: %{{x:.4f}}<br>IV: %{{y:.2f}}%<extra>{name}</extra>",
+                )
+            )
+            any_data = True
+    if not any_data:
+        _empty(fig)
+    fig.update_layout(
+        height=580,
+        margin=dict(l=50, r=30, t=45, b=45),
+        title="Volatility Smile per Expiry",
+        xaxis_title=X_LABEL.get(x_mode, "X"),
+        yaxis_title="IV %",
+        hovermode="x unified",
+    )
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
+def build_heatmap(df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C") -> str:
+    data = prepare_surface_frame(df)
+    sides = _sides(right)
+    fig = make_subplots(rows=1, cols=len(sides), subplot_titles=[s[2] for s in sides], shared_yaxes=True)
+    any_data = False
+    for idx, (side, _colorscale, _name) in enumerate(sides, start=1):
+        sub = _filter(data, side, x_mode)
+        xi, yi, zi = _interpolate(_x(sub, x_mode), sub["dte"], sub["iv"]) if not sub.empty else (None, None, None)
+        if xi is None:
+            continue
+        fig.add_trace(
+            go.Heatmap(
+                x=xi,
+                y=yi,
+                z=zi,
+                colorscale="RdYlGn_r",
+                colorbar=dict(title="IV %", thickness=14),
+            ),
+            row=1,
+            col=idx,
+        )
+        fig.update_xaxes(title_text=X_LABEL.get(x_mode, "X"), row=1, col=idx)
+        any_data = True
+    if not any_data:
+        _empty(fig)
+    fig.update_yaxes(title_text="DTE", row=1, col=1)
+    fig.update_layout(height=540, margin=dict(l=50, r=30, t=45, b=45), title=f"IV Heatmap [{x_mode}]")
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
+def build_metric_heatmap(
+    df: pd.DataFrame,
+    metric: str,
+    title: str,
+    x_mode: str = "moneyness",
+    right: str = "B",
+) -> str:
+    data = df.copy()
+    if metric not in data.columns:
+        fig = go.Figure()
+        _empty(fig)
+        fig.update_layout(title=f"{title} - kolom ontbreekt: {metric}")
+        return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+    for col in (metric, "strike", "moneyness", "delta", "dte"):
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+    sides = _sides(right)
+    fig = make_subplots(rows=1, cols=len(sides), subplot_titles=[s[2] for s in sides], shared_yaxes=True)
+    any_data = False
+    for idx, (side, _colorscale, _name) in enumerate(sides, start=1):
+        sub = _filter(data, side, x_mode).dropna(subset=[metric])
+        xi, yi, zi = _interpolate(_x(sub, x_mode), sub["dte"], sub[metric]) if not sub.empty else (None, None, None)
+        if xi is None:
+            if sub.empty:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=_x(sub, x_mode),
+                    y=sub["dte"],
+                    mode="markers",
+                    marker=dict(size=7, color=sub[metric], colorscale="Viridis", showscale=True),
+                    name=side,
+                ),
+                row=1,
+                col=idx,
+            )
+        else:
+            fig.add_trace(
+                go.Heatmap(x=xi, y=yi, z=zi, colorscale="Viridis", colorbar=dict(title=metric, thickness=14)),
+                row=1,
+                col=idx,
+            )
+        fig.update_xaxes(title_text=X_LABEL.get(x_mode, "X"), row=1, col=idx)
+        any_data = True
+    if not any_data:
+        _empty(fig)
+    fig.update_yaxes(title_text="DTE", row=1, col=1)
+    fig.update_layout(height=540, margin=dict(l=50, r=30, t=45, b=45), title=f"{title} [{x_mode}]")
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
+def _sides(right: str) -> list[tuple[str, str, str]]:
+    if right == "C":
+        return [("C", "Blues", "Calls")]
+    if right == "P":
+        return [("P", "Reds", "Puts")]
+    return [("C", "Blues", "Calls"), ("P", "Reds", "Puts")]
+
+
+def _filter(df: pd.DataFrame, right: str, x_mode: str) -> pd.DataFrame:
+    sub = df[df["right"].astype(str).str.upper() == right].copy()
+    if x_mode == "delta":
+        sub = sub.dropna(subset=["delta"])
+    elif x_mode == "moneyness":
+        sub = sub.dropna(subset=["moneyness"])
+    return sub
+
+
+def _x(df: pd.DataFrame, x_mode: str):
+    if df.empty:
+        return pd.Series(dtype=float)
     if x_mode == "moneyness":
         return df["moneyness"]
     if x_mode == "delta":
@@ -33,219 +214,37 @@ def _x_col(df: pd.DataFrame, x_mode: str) -> pd.Series:
     return df["strike"]
 
 
-def _filter_right(df: pd.DataFrame, right: str) -> pd.DataFrame:
-    if right in ("C", "P"):
-        return df[df["right"] == right].copy()
-    return df.copy()
-
-
-def _interpolate_surface(
-    x: np.ndarray, y: np.ndarray, z: np.ndarray,
-    nx: int = 60, ny: int = 30
-) -> tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[None, None, None]:
-    """RBF interpolation of scattered (x, y) → z onto a regular grid."""
+def _interpolate(x, y, z):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    z = np.asarray(z, dtype=float)
     mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
     x, y, z = x[mask], y[mask], z[mask]
     if len(x) < 6:
         return None, None, None
+    xi = np.linspace(x.min(), x.max(), 60)
+    yi = np.linspace(y.min(), y.max(), 30)
+    xi_g, yi_g = np.meshgrid(xi, yi)
+    if RBFInterpolator is None:
+        return None, None, None
     try:
-        rbf = RBFInterpolator(
-            np.column_stack([x, y]), z,
-            kernel="thin_plate_spline",
-            smoothing=0.8,
-        )
-    except Exception as exc:
-        print(f"  [surface] RBF failed: {exc}")
+        rbf = RBFInterpolator(np.column_stack([x, y]), z, kernel="thin_plate_spline", smoothing=0.8)
+        zi_g = rbf(np.column_stack([xi_g.ravel(), yi_g.ravel()])).reshape(xi_g.shape)
+        return xi, yi, np.clip(zi_g, 0, None)
+    except Exception:
         return None, None, None
 
-    xi = np.linspace(x.min(), x.max(), nx)
-    yi = np.linspace(y.min(), y.max(), ny)
-    xi_g, yi_g = np.meshgrid(xi, yi)
-    zi_g = rbf(np.column_stack([xi_g.ravel(), yi_g.ravel()])).reshape(xi_g.shape)
-    zi_g = np.clip(zi_g, 0, None)          # IV can't be negative
-    return xi, yi, zi_g
 
-
-def _base_layout(**kwargs) -> dict:
-    return dict(margin=dict(l=50, r=30, t=40, b=50), **kwargs)
-
-
-# ── chart builders ────────────────────────────────────────────────────────────
-
-def build_3d_surface(
-    df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C"
-) -> str:
-    """Return full HTML string with an interactive 3D vol surface."""
-    fig = go.Figure()
-    xl  = X_LABEL[x_mode]
-
-    sides = (
-        [("C", "Blues", "Calls"), ("P", "Reds", "Puts")]
-        if right == "B"
-        else [(right, "Blues" if right == "C" else "Reds",
-               "Calls" if right == "C" else "Puts")]
+def _scatter3d(df: pd.DataFrame, x_mode: str, name: str):
+    return go.Scatter3d(
+        x=_x(df, x_mode),
+        y=df["dte"],
+        z=df["iv"],
+        mode="markers",
+        name=name,
+        marker=dict(size=4, color=df["iv"], colorscale="Viridis", showscale=True),
     )
 
-    any_data = False
-    for r, cscale, name in sides:
-        sub = _filter_right(df, r)
-        if x_mode == "delta":
-            sub = sub.dropna(subset=["delta"])
-        if sub.empty:
-            continue
 
-        x = _x_col(sub, x_mode).values.astype(float)
-        y = sub["dte"].values.astype(float)
-        z = sub["iv"].values.astype(float)
-
-        xi, yi, zi = _interpolate_surface(x, y, z)
-        if xi is None:
-            continue
-
-        any_data = True
-        fig.add_trace(go.Surface(
-            x=xi, y=yi, z=zi,
-            colorscale=cscale,
-            opacity=0.80 if right == "B" else 1.0,
-            name=name,
-            showscale=True,
-            colorbar=dict(title="IV %", thickness=15, len=0.6),
-        ))
-
-    if not any_data:
-        fig.add_annotation(text="Geen data beschikbaar", showarrow=False,
-                           font=dict(size=18), xref="paper", yref="paper", x=0.5, y=0.5)
-
-    title = {"C": "Calls", "P": "Puts", "B": "Calls + Puts"}[right]
-    fig.update_layout(
-        **_base_layout(height=650),
-        title=f"Vol Surface — {title}  [{x_mode}]",
-        scene=dict(
-            xaxis_title=xl,
-            yaxis_title="DTE (dagen)",
-            zaxis_title="Implied Volatility (%)",
-            camera=dict(eye=dict(x=1.6, y=-1.5, z=1.0)),
-        ),
-    )
-    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
-
-
-def build_smile_lines(
-    df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C"
-) -> str:
-    """Return full HTML with per-expiry smile curves."""
-    fig = go.Figure()
-    xl  = X_LABEL[x_mode]
-
-    sub = _filter_right(df, right)
-    if x_mode == "delta":
-        sub = sub.dropna(subset=["delta"])
-
-    if sub.empty:
-        fig.add_annotation(text="Geen data beschikbaar", showarrow=False,
-                           font=dict(size=18), xref="paper", yref="paper", x=0.5, y=0.5)
-        return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
-
-    expiries = sorted(sub["expiry"].unique())
-    rights_to_plot = (
-        [("C", "solid", _CALL_COLORS), ("P", "dash", _PUT_COLORS)]
-        if right == "B"
-        else [(right, "solid", _CALL_COLORS)]
-    )
-
-    for i, exp in enumerate(expiries):
-        sub_e = sub[sub["expiry"] == exp].sort_values("strike")
-        dte   = int(sub_e["dte"].iloc[0])
-        label = f"{exp[:4]}-{exp[4:6]}-{exp[6:]} ({dte}d)"
-
-        for r, dash, palette in rights_to_plot:
-            sub_r = sub_e[sub_e["right"] == r]
-            if sub_r.empty:
-                continue
-            x = _x_col(sub_r, x_mode)
-            suffix = " C" if r == "C" else " P"
-            fig.add_trace(go.Scatter(
-                x=x, y=sub_r["iv"],
-                mode="lines+markers",
-                name=label + (suffix if right == "B" else ""),
-                line=dict(color=palette[i % len(palette)], dash=dash, width=2),
-                marker=dict(size=5),
-                hovertemplate=(
-                    f"{xl}: %{{x:.4f}}<br>IV: %{{y:.2f}}%<br>{label}{suffix}<extra></extra>"
-                ),
-            ))
-
-    fig.update_layout(
-        **_base_layout(height=580),
-        title="Volatility Smile per Expiry",
-        xaxis_title=xl,
-        yaxis_title="Implied Volatility (%)",
-        hovermode="x unified",
-        legend=dict(font=dict(size=10), groupclick="toggleitem"),
-    )
-    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
-
-
-def build_heatmap(
-    df: pd.DataFrame, x_mode: str = "moneyness", right: str = "C"
-) -> str:
-    """Return full HTML with IV heatmap(s) — one panel per right when right='B'."""
-    xl = X_LABEL[x_mode]
-    sides = (
-        [("C", "Calls"), ("P", "Puts")]
-        if right == "B"
-        else [(right, "Calls" if right == "C" else "Puts")]
-    )
-    n_cols = len(sides)
-    fig = make_subplots(
-        rows=1, cols=n_cols,
-        subplot_titles=[s[1] for s in sides],
-        shared_yaxes=True,
-        horizontal_spacing=0.08,
-    )
-
-    any_data = False
-    for col_i, (r, _name) in enumerate(sides, start=1):
-        sub = _filter_right(df, r)
-        if x_mode == "delta":
-            sub = sub.dropna(subset=["delta"])
-        if sub.empty:
-            continue
-
-        x = _x_col(sub, x_mode).values.astype(float)
-        y = sub["dte"].values.astype(float)
-        z = sub["iv"].values.astype(float)
-
-        xi, yi, zi = _interpolate_surface(x, y, z)
-        if xi is None:
-            continue
-
-        any_data = True
-        z_min = max(0.0, float(z.min()) - 1)
-        z_max = float(z.max()) + 1
-
-        fig.add_trace(
-            go.Heatmap(
-                x=xi, y=yi, z=zi,
-                colorscale="RdYlGn_r",
-                zmin=z_min, zmax=z_max,
-                colorbar=dict(
-                    title="IV %", len=0.75, thickness=14,
-                    x=1.01 if col_i == n_cols else (0.44 if n_cols > 1 else 1.01),
-                ),
-                hovertemplate=f"{xl}: %{{x:.4f}}<br>DTE: %{{y}}d<br>IV: %{{z:.2f}}%<extra></extra>",
-            ),
-            row=1, col=col_i,
-        )
-        fig.update_xaxes(title_text=xl, row=1, col=col_i)
-
-    if not any_data:
-        fig.add_annotation(text="Geen data beschikbaar", showarrow=False,
-                           font=dict(size=18), xref="paper", yref="paper", x=0.5, y=0.5)
-
-    fig.update_yaxes(title_text="DTE (dagen)", row=1, col=1)
-    fig.update_layout(
-        **_base_layout(height=520),
-        title=f"IV Heatmap  [{x_mode}]",
-    )
-    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+def _empty(fig) -> None:
+    fig.add_annotation(text="Geen IV data beschikbaar", showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5)

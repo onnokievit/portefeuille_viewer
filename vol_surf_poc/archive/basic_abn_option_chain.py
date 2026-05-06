@@ -68,7 +68,8 @@ def make_contract(strike: float | None, args: argparse.Namespace) -> Contract:
     c.currency = args.currency
     if args.expiry:
         c.lastTradeDateOrContractMonth = args.expiry
-    c.right = args.right
+    if args.right and args.right != "BOTH":
+        c.right = args.right
     if strike is not None:
         c.strike = float(strike)
     if args.multiplier:
@@ -87,7 +88,7 @@ def main() -> int:
     parser.add_argument("--currency", default="EUR")
     parser.add_argument("--exchange", default="FTA")
     parser.add_argument("--expiry", default="20260515")
-    parser.add_argument("--right", default="C", choices=["C", "P"])
+    parser.add_argument("--right", default="C", choices=["C", "P", "BOTH"])
     parser.add_argument("--center-strike", type=float, default=29.0)
     parser.add_argument("--strike-window", type=float, default=1.0)
     parser.add_argument("--strike-step", type=float, default=0.5)

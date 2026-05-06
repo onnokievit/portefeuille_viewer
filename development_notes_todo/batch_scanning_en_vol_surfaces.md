@@ -15,6 +15,23 @@ betere basis zien:
 De chain-scanner wordt een aparte tool naast de portefeuilleviewer. De tool moet later ook vanuit
 de portefeuilleviewer geopend kunnen worden.
 
+Besluiten per 2026-05-05:
+
+- scanner-horizon wordt instelbaar, default `3` maanden;
+- laatst ingestelde horizon wordt opgeslagen in `settings_shared.ini`;
+- parquet target directory wordt instelbaar, default `C:\Users\onno\OneDrive\Beleggen\asset_data_parquet`;
+- alle oude contracten voorlopig bewaren;
+- eerste scope is aandelen, maar het ontwerp moet later index- en futureopties kunnen dragen;
+- scanner draait vanuit de portefeuilleviewer altijd in een apart proces;
+- in `portefeuille_viewer_1.4` komt een standalone entrypoint `optie_scanner.py`.
+- assetselectie gebruikt `asset_rollup_data.optie_scanner_incl`;
+- onderliggend IBKR type gebruikt `asset_rollup_data.ib_asset_type`;
+- default TWS poort voor de scanner is `7496`;
+- parallelisme moet direct functioneel zijn, maar de default blijft `1` worker.
+- right request mode wordt instelbaar: `separate` of `combined`.
+- TWS bleek bij langere runs te kunnen vastlopen; daarom zijn batchgrootte, pauzes en random
+  client-id range expliciete scannerinstellingen.
+
 ---
 
 ## Kernbeslissing
@@ -29,6 +46,16 @@ De brede optiecontract-registry komt in parquet, met een bestand per asset:
   CHAIN_ABN.parquet
   CHAIN_BMW.parquet
 ```
+
+Default directory:
+
+```text
+C:\Users\onno\OneDrive\Beleggen\asset_data_parquet
+```
+
+De GUI moet deze directory kunnen wijzigen en de waarde in settings bewaren. Omdat een
+asset-parquet bij een refresh volledig wordt vervangen, moet schrijven via een tijdelijk bestand
+in dezelfde directory gebeuren en daarna pas het bestaande parquet vervangen.
 
 Elk bestand bevat alle bekende optiecontracten voor dat asset, inclusief contracten die in eerdere
 runs gezien zijn maar in de meest recente run niet opnieuw terugkwamen. De registry is daarmee een
@@ -76,14 +103,15 @@ De basis komt uit `vol_surf_poc/basic_abn_option_chain.py`.
 
 ### ContractDetails request
 
-Per request wordt een `Contract` object gebouwd met:
+Voor fase 1 wordt uitgegaan van opties op aandelen (`ib_asset_type = STK`). Per request wordt een
+`Contract` object gebouwd met:
 
 ```python
 contract.secType = "OPT"
 contract.symbol = ib_symbol
 contract.currency = ib_currency
 contract.exchange = option_exchange
-contract.right = "C"  # of "P"
+contract.right = "C"  # of "P"; bij combined mode niet zetten
 contract.lastTradeDateOrContractMonth = "202606"  # maandniveau
 
 # Niet zetten:
@@ -103,14 +131,70 @@ per asset
 
 Voor 3 maanden zijn dat 6 requests per asset.
 
-### Maandhorizon
-
-De tool moet instelbaar maken hoeveel maanden vooruit gescand worden. Default voorstel:
+Right request mode:
 
 ```text
-3 maanden voor korte IV-surface workflow
-12 maanden voor algemene chain registry
+separate -> per maand 2 requests: C en P apart
+combined -> per maand 1 request: right leeg, IBKR geeft C en P samen terug als dit werkt voor die chain
 ```
+
+Voor sommige US aandelen lijkt `combined` goed en sneller te werken. De instelling blijft bewust
+per tool beschikbaar, omdat brede requests per onderliggende kunnen verschillen in betrouwbaarheid.
+
+### TWS pacing en client-id beleid
+
+De scanner moet TWS defensief belasten. De eerste praktijkrun met `1` worker en `3` maanden liep na
+ongeveer 26 assets vast in TWS zelf. De applicatie kan TWS niet betrouwbaar "unfreezen"; een
+API-disconnect ruimt alleen de client-sessie op. Als TWS intern vastloopt of geheugen/queues vol
+lopen, blijft handmatig herstarten of killen soms nodig.
+
+Default pacing:
+
+```text
+request_pause_sec = 1.0
+asset_pause_sec = 2.0
+max_assets_per_start = 10
+```
+
+Per assetscan wordt een random client-id gekozen binnen een instelbare range:
+
+```text
+client_id_min = 1000
+client_id_max = 10000
+```
+
+Een andere client-id kan sessieconflicten en oude request-state vermijden, maar is geen garantie
+tegen TWS-overbelasting. De belangrijkste bescherming blijft: kleine batches, expliciete pauzes en
+succesvolle assets automatisch uitvinken zodat een run hervat kan worden.
+
+Latere asset types:
+
+```text
+ib_asset_type = STK  -> optiecontract secType OPT
+ib_asset_type = IND  -> optiecontract secType OPT, onderliggende index
+ib_asset_type = FUT  -> optiecontract secType FOP, future option
+```
+
+Index- en futureopties vragen extra mapping. De screenshots laten bijvoorbeeld zien:
+
+- AEX/EOE indexopties: underlying `AEX IND`, option exchange `FTA`, trading class zoals `A5`;
+- Micro Bitcoin future options: security type `Future Options`, exchange `CME`, multiplier `0.1`;
+- Micro E-mini Nasdaq future options: security type `Future Options`, exchange `CME`, multiplier `2`.
+
+Daarom is `ib_asset_type` bewust de IBKR security type van de onderliggende waarde, niet alleen een
+vrije app-classificatie. Fase 1 mag `IND` en `FUT` skippen met duidelijke logging; de core moet
+zodanig gescheiden blijven dat `FOP` later kan worden toegevoegd.
+
+### Maandhorizon
+
+De tool moet instelbaar maken hoeveel maanden vooruit gescand worden. Default:
+
+```text
+3 maanden
+```
+
+De laatst gebruikte waarde wordt opgeslagen in `settings_shared.ini`, zodat standalone tool en
+portefeuilleviewer-integratie dezelfde default gebruiken.
 
 Bij maandrequests komen meerdere expiries binnen, bijvoorbeeld voor MSFT met `202606`:
 
@@ -130,6 +214,17 @@ De exchange komt uit bestaande referentiedata waar mogelijk:
 
 De tool moet per asset loggen welke exchange gebruikt is. Later kan de GUI exchange overrides
 ondersteunen.
+
+Voorlopige fallback-regels:
+
+```text
+US aandelen          -> SMART
+Amsterdam/Nederland  -> FTA
+Duitsland            -> EUREX
+```
+
+Deze regels zijn defaults. `optie_referentie_data` en later GUI overrides moeten voorrang kunnen
+krijgen.
 
 ---
 
@@ -200,6 +295,48 @@ De stockdb-locatie komt uit de bestaande settings:
 from portefeuille_viewer.config import get_settings
 stock_db_path = get_settings().get_stockdata_db_path()
 ```
+
+### Assetselectie
+
+Voor scanner-deelname is een nieuwe kolom in `asset_rollup_data` gemaakt:
+
+```sql
+optie_scanner_incl
+```
+
+Aanbevolen Access type:
+
+```text
+YESNO
+```
+
+Als de kolom tijdelijk als tekst bestaat, moet de scanner robuust waarden zoals `1`, `true`, `yes`,
+`ja`, `j`, `y` als aan behandelen. Structureel is `YESNO` beter dan tekst, omdat filters en UI
+checkboxes dan eenvoudiger en minder foutgevoelig zijn.
+
+Voor IBKR onderliggend type is ook een nieuwe tekstkolom gemaakt:
+
+```sql
+ib_asset_type TEXT
+```
+
+Aanbevolen waarden volgen IBKR secType:
+
+```text
+STK
+IND
+FUT
+```
+
+Fase 1 scant alleen:
+
+```text
+optie_scanner_incl = true
+ib_asset_type = STK
+```
+
+Assets met `IND` of `FUT` worden in fase 1 nog niet opgehaald, maar wel zichtbaar/logbaar gemaakt
+als skipped reason `unsupported_ib_asset_type`. Dit voorkomt stille verwarring.
 
 Nieuwe tabellen:
 
@@ -279,12 +416,6 @@ Voorgestelde locatie:
 portefeuille_viewer/option_chain_retriever/
 ```
 
-of voorlopig:
-
-```text
-portefeuille_viewer/vol_surf_poc/option_chain_retriever/
-```
-
 De tool moet standalone kunnen starten, maar ook vanuit de portefeuilleviewer geopend kunnen worden.
 Daarom splitsen we UI en core:
 
@@ -299,6 +430,32 @@ option_chain_retriever/
   main.py                   # standalone entrypoint
 ```
 
+Daarnaast komt in de root van `portefeuille_viewer_1.4`:
+
+```text
+optie_scanner.py
+```
+
+Dit is het eenvoudige standalone startpunt:
+
+```powershell
+python optie_scanner.py
+```
+
+De portefeuilleviewer opent dezelfde tool via een knop in Settings, maar altijd als apart proces.
+De hoofdapp deelt dus geen QApplication, geen UI thread en geen IB-verbinding met de scanner.
+
+Procesmodel vanuit de hoofdapp:
+
+```text
+Settings knop
+  -> QProcess/subprocess.Popen(...)
+  -> python optie_scanner.py
+  -> scanner heeft eigen process, eigen TWS client-id(s), eigen UI thread
+```
+
+Als de scanner crasht of hangt, moet de portefeuilleviewer blijven draaien.
+
 ### GUI-functionaliteit
 
 Minimaal:
@@ -306,9 +463,13 @@ Minimaal:
 - stockdb-pad tonen uit settings;
 - parquet target directory kiezen en opslaan in settings;
 - TWS host/port/client-id instellen;
+- client-id range instellen; per assetscan wordt random een client-id uit die range gebruikt;
 - assetlijst laden uit `asset_rollup_data`;
 - filteren/selecteren: 1 asset, selectie assets, alle assets;
 - horizon in maanden;
+- parallelisme instellen: `1` is sequentieel, `2+` gebruikt meerdere workers/clientIds;
+- max assets per start instellen; succesvolle assets worden na afloop automatisch uitgevinkt;
+- pauze tussen IBKR-requests en tussen assets instellen;
 - calls/puts aan/uit;
 - start/stop knop;
 - live logpaneel;
@@ -328,6 +489,33 @@ De GUI moet parquet files kunnen tonen:
 - export naar CSV optioneel.
 
 Voor grote bestanden moet de viewer niet alles onnodig kopieren. Polars scan/read is de voorkeur.
+
+### Settings
+
+Nieuwe settings in `settings_shared.ini`:
+
+```ini
+[option_chain_scanner]
+parquet_dir = C:\Users\onno\OneDrive\Beleggen\asset_data_parquet
+horizon_months = 3
+parallel_workers = 1
+right_request_mode = separate
+tws_host = 127.0.0.1
+tws_port = 7496
+client_id_min = 1000
+client_id_max = 10000
+request_pause_sec = 1.0
+asset_pause_sec = 2.0
+max_assets_per_start = 10
+```
+
+`parallel_workers = 1` betekent sequentieel. Ook in sequentiele modus krijgt iedere assetscan een
+random client-id uit de ingestelde range. Bij `2+` wordt hetzelfde principe gebruikt per asset; de
+workers delen dus geen vaste client-id.
+
+Parallelisme moet vanaf de eerste implementatie functioneel zijn, maar de default staat op `1` om
+datakwaliteit en reproduceerbaarheid eerst te bewaken. Later kan de GUI naar `2+` gezet worden voor
+snellere batches of load balancing over meerdere TWS/Gateway instanties.
 
 ---
 
@@ -373,10 +561,13 @@ De chain registry is contract-identiteit. IV snapshots zijn meetdata/tijdreeks.
 ### Fase 2 - Asset source en settings
 
 - [ ] Assetlijst lezen uit `asset_rollup_data`.
-- [ ] Alleen aandelen selecteren.
+- [ ] Kolom `optie_scanner_incl` lezen als scanner-inclusievlag.
+- [ ] Kolom `ib_asset_type` lezen als IBKR onderliggend secType.
+- [ ] In fase 1 alleen aandelen/STK selecteren.
 - [ ] `ib_symbol`, `ib_currency`, optiereferentie/exchange bepalen.
 - [ ] Stockdb-pad uit settings lezen.
 - [ ] Parquet directory in settings opslaan.
+- [ ] Horizon en parallelisme in settings opslaan.
 
 ### Fase 3 - Qt GUI
 
@@ -395,8 +586,9 @@ De chain registry is contract-identiteit. IV snapshots zijn meetdata/tijdreeks.
 ### Fase 5 - Integratie portefeuilleviewer
 
 - [ ] Knop in settings of tools-menu: "Option Chain Retriever".
-- [ ] Window standalone kunnen starten of vanuit bestaande app openen.
-- [ ] Geen gedeelde IB-verbinding verplicht; tool gebruikt eigen TWS client-id.
+- [ ] Tool starten via apart proces, niet als child widget in dezelfde processruimte.
+- [ ] Standalone entrypoint `optie_scanner.py`.
+- [ ] Geen gedeelde IB-verbinding; tool gebruikt eigen TWS client-id(s).
 
 ### Fase 6 - IV workflow
 
@@ -409,15 +601,12 @@ De chain registry is contract-identiteit. IV snapshots zijn meetdata/tijdreeks.
 
 ## Nog te beslissen
 
-1. Default horizon voor chain scanning: 3, 6 of 12 maanden?
-2. Welke assets zijn "aandelen" in `asset_rollup_data`: bestaande typekolom of afleiden uit velden?
-3. Welke exchange fallback per markt:
-   - US: `SMART`
-   - Amsterdam: `FTA`
-   - Duitsland: `EUREX`
-4. Moet de scanner verlopen contracten bewaren zonder limiet, of na bijvoorbeeld 2 jaar archiveren?
-5. Moet de parquet directory lokaal blijven of ook onder OneDrive?
-6. Moet de batch standaard sequentieel draaien, of mogen meerdere assets parallel met meerdere clientIds?
+1. Of `optie_scanner_incl` in Access wordt omgezet van tekst naar `YESNO`.
+2. Welke extra mappingvelden nodig zijn voor `IND` en `FUT`:
+   option product, option exchange, trading class, future localSymbol/conId.
+3. Welke bewaartermijn later voor verlopen contracten; voorlopig alles bewaren.
+4. Of parallel workers alleen meerdere clientIds gebruiken op dezelfde poort, of later ook meerdere
+   poorten/TWS instanties mogen verdelen.
 
 ---
 

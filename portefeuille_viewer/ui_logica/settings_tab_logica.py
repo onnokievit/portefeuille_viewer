@@ -1,4 +1,8 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout, QDoubleSpinBox
+import subprocess
+import sys
+from pathlib import Path
+
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout, QDoubleSpinBox, QMessageBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
@@ -55,6 +59,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
 
         self._init_ui_color_settings()
         self._init_state_engine_task_controls()
+        self._init_option_scanner_controls()
         self._init_cash_management_controls()
 
     def _init_ui_color_settings(self):
@@ -139,6 +144,36 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._state_engine_tasks_dialog.show()
         self._state_engine_tasks_dialog.raise_()
         self._state_engine_tasks_dialog.activateWindow()
+
+    def _init_option_scanner_controls(self):
+        group = QGroupBox("Optie Scanner")
+        layout = QVBoxLayout(group)
+        row = QHBoxLayout()
+        label = QLabel("Optiechain contractDetails ophalen naar parquet, met eigen proces en eigen TWS client-id.")
+        row.addWidget(label)
+        row.addStretch(1)
+        button = QPushButton("Open Optie Scanner")
+        button.clicked.connect(self._open_option_scanner_process)
+        row.addWidget(button)
+        layout.addLayout(row)
+
+        insert_index = max(0, self.verticalLayout_main.count() - 1)
+        self.verticalLayout_main.insertWidget(insert_index, group)
+
+    def _open_option_scanner_process(self):
+        root = Path(__file__).resolve().parents[2]
+        script = root / "optie_scanner.py"
+        if not script.exists():
+            QMessageBox.critical(self, "Optie Scanner", f"Script niet gevonden:\n{script}")
+            return
+        try:
+            subprocess.Popen(
+                [sys.executable, str(script)],
+                cwd=str(root),
+                close_fds=True,
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Optie Scanner", f"Kon scanner niet starten:\n{exc}")
 
     def _init_cash_management_controls(self):
         group = QGroupBox("Cash Management")
