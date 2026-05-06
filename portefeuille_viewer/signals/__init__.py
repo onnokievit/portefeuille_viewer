@@ -65,6 +65,9 @@ class Signals(QObject):
     # Emitted when the global test-orders enabled state changes.
     testOrdersEnabledChanged = Signal(bool)
 
+    # Emitted when asset_rollup_data changed enough that live subscriptions should be re-evaluated.
+    assetSubscriptionsRefreshRequested = Signal(dict)
+
     _databaseChangedRequested = Signal(str)
     _snapshotUpdatedRequested = Signal(str)
     _stateRebuildRequestedRequested = Signal(dict)
@@ -80,6 +83,7 @@ class Signals(QObject):
     _projectionPublishTickRequested = Signal(str)
     _testOrderScenariosChangedRequested = Signal()
     _testOrdersEnabledChangedRequested = Signal(bool)
+    _assetSubscriptionsRefreshRequestedRequested = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -105,6 +109,10 @@ class Signals(QObject):
         )
         self._testOrdersEnabledChangedRequested.connect(
             self._emit_testOrdersEnabledChanged,
+            Qt.QueuedConnection,
+        )
+        self._assetSubscriptionsRefreshRequestedRequested.connect(
+            self._emit_assetSubscriptionsRefreshRequested,
             Qt.QueuedConnection,
         )
 
@@ -172,6 +180,10 @@ class Signals(QObject):
     def _emit_testOrdersEnabledChanged(self, enabled: bool):
         self.testOrdersEnabledChanged.emit(bool(enabled))
 
+    @Slot(dict)
+    def _emit_assetSubscriptionsRefreshRequested(self, payload: dict):
+        self.assetSubscriptionsRefreshRequested.emit(payload)
+
     def queued_emit_databaseChanged(self, db_name: str):
         self._databaseChangedRequested.emit(db_name)
 
@@ -216,6 +228,9 @@ class Signals(QObject):
 
     def queued_emit_testOrdersEnabledChanged(self, enabled: bool):
         self._testOrdersEnabledChangedRequested.emit(bool(enabled))
+
+    def queued_emit_assetSubscriptionsRefreshRequested(self, payload: dict):
+        self._assetSubscriptionsRefreshRequestedRequested.emit(payload)
 
 
 

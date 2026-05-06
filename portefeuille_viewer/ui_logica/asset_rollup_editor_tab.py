@@ -437,6 +437,10 @@ class AssetRollupEditorTab(QWidget):
             QMessageBox.information(self, "Asset Rollup Data", "Selecteer eerst een rij om op te slaan.")
             return
         payload = self._payload_from_table_row(row_idx)
+        self._last_save_subscription_payload = {
+            "reason": "asset_rollup_saved",
+            "asset_rollup": str(payload.get("asset_rollup") or "").strip(),
+        }
         self._set_busy(True, "Opslaan...")
         self._save_worker = _AssetRollupSaveWorker(payload, self)
         self._save_worker.done.connect(self._on_save_done)
@@ -448,6 +452,8 @@ class AssetRollupEditorTab(QWidget):
         self._selected_id = int(row_id)
         self._has_new_row = False
         self.lbl_status.setText("Record opgeslagen. Tabel vernieuwen...")
+        payload = getattr(self, "_last_save_subscription_payload", None) or {"reason": "asset_rollup_saved"}
+        signals.assetSubscriptionsRefreshRequested.emit(payload)
         self.reload()
 
     def _on_save_error(self, message: str) -> None:
@@ -596,6 +602,9 @@ class AssetRollupEditorTab(QWidget):
         self._append_history_output(f"\nKlaar voor {asset}.\n")
         if self._history_dialog is not None:
             self._history_dialog.set_status(f"Klaar: {asset}")
+        signals.assetSubscriptionsRefreshRequested.emit(
+            {"reason": "single_asset_long_history_finished", "asset_rollup": str(asset or "").strip()}
+        )
         self._history_runner = None
         self._set_history_busy(False, f"Lange historie klaar voor {asset}")
 

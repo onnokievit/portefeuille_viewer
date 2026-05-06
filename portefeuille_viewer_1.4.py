@@ -1384,6 +1384,18 @@ def main():
         if option_timevalue_service is not None:
             option_timevalue_service.schedule_rebuild({"reason": "database_changed"})
 
+    def _run_asset_subscription_refresh(payload: dict | None = None):
+        reason = (payload or {}).get("reason", "asset_subscription_refresh")
+        asset = (payload or {}).get("asset_rollup", "")
+        try:
+            portfolio_engine.start_subscriptions()
+            if asset:
+                _log(f"[subscriptions] refreshed after {reason}: {asset}")
+            else:
+                _log(f"[subscriptions] refreshed after {reason}")
+        except Exception as exc:
+            _log(f"[subscriptions] refresh failed after {reason}: {type(exc).__name__}: {exc}")
+
     def _on_database_changed_refresh(db_name: str):
         _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
         refresh_timer.stop()
@@ -1463,6 +1475,7 @@ def main():
     signals.priceUpdateFailed.connect(
         lambda message: _log(f"[price-update] failed: {message}")
     )
+    signals.assetSubscriptionsRefreshRequested.connect(_run_asset_subscription_refresh)
     settings = get_settings()
     price_feed = PriceFeedService(
         settings.get_ib_host(),
