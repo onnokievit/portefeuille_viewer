@@ -53,8 +53,13 @@ LOCAL_ONLY_KEYS = {
         "chart_line_width_px",
         "chart_line_widths_by_series",
         "chart_line_styles_by_series",
+        "chart_visible_series_by_chart",
         "chart_start_dates_by_chart",
         "year_result_vs_indices_start_date",
+        "cash_dashboard_start_date",
+        "cash_dashboard_panel_state",
+        "cash_dashboard_year_percent_mode",
+        "cash_dashboard_chart_height_px",
     },
     "app": {"last_database"},
 }
@@ -444,6 +449,53 @@ class SettingsManager:
         self.config.set('ui', 'chart_line_styles_by_series', json.dumps(data, ensure_ascii=False))
         self.save()
 
+    def get_chart_visible_series_by_chart(self) -> dict:
+        raw = self.config.get('ui', 'chart_visible_series_by_chart', fallback='{}')
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out = {}
+        for chart_id, values in data.items():
+            chart_key = str(chart_id or '').strip()
+            if not chart_key or not isinstance(values, list):
+                continue
+            clean = []
+            seen = set()
+            for value in values:
+                series_key = str(value or '').strip()
+                if series_key and series_key not in seen:
+                    seen.add(series_key)
+                    clean.append(series_key)
+            out[chart_key] = clean
+        return out
+
+    def get_chart_visible_series_for_chart(self, chart_id: str) -> list[str]:
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return []
+        return self.get_chart_visible_series_by_chart().get(chart_key, [])
+
+    def set_chart_visible_series_for_chart(self, chart_id: str, series_ids: list[str]):
+        chart_key = str(chart_id or '').strip()
+        if not chart_key:
+            return
+        clean = []
+        seen = set()
+        for value in series_ids or []:
+            series_key = str(value or '').strip()
+            if series_key and series_key not in seen:
+                seen.add(series_key)
+                clean.append(series_key)
+        data = self.get_chart_visible_series_by_chart()
+        data[chart_key] = clean
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'chart_visible_series_by_chart', json.dumps(data, ensure_ascii=False))
+        self.save()
+
     def get_chart_start_dates_by_chart(self) -> dict:
         raw = self.config.get('ui', 'chart_start_dates_by_chart', fallback='{}')
         try:
@@ -730,7 +782,9 @@ class SettingsManager:
         self.save()
 
     def get_year_result_vs_indices_selected_portfolio(self) -> list[str]:
-        raw = self.config.get('ui', 'year_result_vs_indices_selected_portfolio', fallback='[\"total\"]')
+        raw = self.config.get('ui', 'year_result_vs_indices_selected_portfolio', fallback=None)
+        if raw is None:
+            return ["total"]
         try:
             values = json.loads(raw)
         except Exception:
@@ -738,7 +792,7 @@ class SettingsManager:
         if not isinstance(values, list):
             return ["total"]
         clean = [str(v).strip().lower() for v in values if str(v).strip()]
-        return clean or ["total"]
+        return clean
 
     def set_year_result_vs_indices_selected_portfolio(self, values: list[str]):
         if not self.config.has_section('ui'):
@@ -751,7 +805,7 @@ class SettingsManager:
             if text in allowed and text not in seen:
                 seen.add(text)
                 clean.append(text)
-        self.config.set('ui', 'year_result_vs_indices_selected_portfolio', json.dumps(clean or ["total"], ensure_ascii=False))
+        self.config.set('ui', 'year_result_vs_indices_selected_portfolio', json.dumps(clean, ensure_ascii=False))
         self.save()
 
     def get_year_result_vs_indices_start_date(self) -> str:
@@ -761,6 +815,61 @@ class SettingsManager:
         if not self.config.has_section('ui'):
             self.config.add_section('ui')
         self.config.set('ui', 'year_result_vs_indices_start_date', str(value or '').strip())
+        self.save()
+
+    def get_cash_dashboard_start_date(self) -> str:
+        return self.config.get('ui', 'cash_dashboard_start_date', fallback='2021-01-01') or '2021-01-01'
+
+    def set_cash_dashboard_start_date(self, value: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean = str(value or '').strip() or '2021-01-01'
+        self.config.set('ui', 'cash_dashboard_start_date', clean)
+        self.save()
+
+    def get_cash_dashboard_panel_state(self) -> dict:
+        raw = self.config.get('ui', 'cash_dashboard_panel_state', fallback='{}')
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def set_cash_dashboard_panel_state(self, state: dict):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'cash_dashboard_panel_state', json.dumps(state or {}, ensure_ascii=False))
+        self.save()
+
+    def get_cash_dashboard_year_percent_mode(self) -> str:
+        mode = self.config.get('ui', 'cash_dashboard_year_percent_mode', fallback='average')
+        mode = str(mode or '').strip().lower()
+        return mode if mode in {'average', 'start'} else 'average'
+
+    def set_cash_dashboard_year_percent_mode(self, mode: str):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        clean = str(mode or '').strip().lower()
+        if clean not in {'average', 'start'}:
+            clean = 'average'
+        self.config.set('ui', 'cash_dashboard_year_percent_mode', clean)
+        self.save()
+
+    def get_cash_dashboard_chart_height_px(self) -> int:
+        try:
+            value = self.config.getint('ui', 'cash_dashboard_chart_height_px', fallback=320)
+        except Exception:
+            value = 320
+        return min(900, max(160, int(value)))
+
+    def set_cash_dashboard_chart_height_px(self, value: int):
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        try:
+            clean = min(900, max(160, int(value)))
+        except Exception:
+            clean = 320
+        self.config.set('ui', 'cash_dashboard_chart_height_px', str(clean))
         self.save()
 
     def get_tab_order(self) -> list[str]:

@@ -5,6 +5,9 @@ import threading
 from collections import defaultdict
 from datetime import date, datetime
 
+import polars as pl
+
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.repository import get_connection
 from portefeuille_viewer.services.cash_management_result_chart_service import (
     build_cash_management_result_chart_payload,
@@ -59,6 +62,27 @@ def list_index_asset_rollups() -> list[str]:
     with _CACHE_LOCK:
         if _INDEX_OPTIONS_CACHE is not None:
             return list(_INDEX_OPTIONS_CACHE)
+    snapshot = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
+    if snapshot is not None and not snapshot.is_empty():
+        try:
+            if {"asset_rollup", "type"}.issubset(set(snapshot.columns)):
+                options = _normalize_list(
+                    snapshot
+                    .filter(
+                        pl.col("asset_rollup").is_not_null()
+                        & (pl.col("type").cast(pl.Utf8).str.to_lowercase() == "index")
+                    )
+                    .select(pl.col("asset_rollup").cast(pl.Utf8))
+                    .unique()
+                    .sort("asset_rollup")
+                    .get_column("asset_rollup")
+                    .to_list()
+                )
+                with _CACHE_LOCK:
+                    _INDEX_OPTIONS_CACHE = list(options)
+                return options
+        except Exception:
+            pass
     with get_connection() as conn:
         cur = conn.cursor()
         try:
@@ -77,6 +101,57 @@ def list_index_asset_rollups() -> list[str]:
     with _CACHE_LOCK:
         _INDEX_OPTIONS_CACHE = list(options)
     return options
+
+
+def _load_index_series_from_snapshot(missing: list[str]) -> dict[str, dict]:
+    selected = _normalize_list(missing)
+    if not selected:
+        return {}
+    df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+    if df is None or df.is_empty():
+        return {}
+    required = {"datum", "asset_rollup", "close_price"}
+    if not required.issubset(set(df.columns)):
+        return {}
+    try:
+        raw = (
+            df.filter(
+                pl.col("asset_rollup").cast(pl.Utf8).str.to_uppercase().is_in(selected)
+                & pl.col("datum").is_not_null()
+                & pl.col("close_price").is_not_null()
+            )
+            .select(
+                [
+                    pl.col("datum"),
+                    pl.col("asset_rollup").cast(pl.Utf8).str.to_uppercase().alias("asset_rollup"),
+                    pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"),
+                ]
+            )
+            .sort(["asset_rollup", "datum"])
+            .to_dicts()
+        )
+    except Exception:
+        return {}
+    raw_by_asset = defaultdict(list)
+    for row in raw:
+        date_value = _to_iso_date(row.get("datum"))
+        asset = str(row.get("asset_rollup") or "").strip().upper()
+        close_price = row.get("close_price")
+        if date_value and asset and close_price is not None:
+            raw_by_asset[asset].append({"date": date_value, "value": float(close_price)})
+    loaded = {}
+    for asset in selected:
+        asset_raw = raw_by_asset.get(asset) or []
+        if not asset_raw:
+            continue
+        loaded[asset] = {
+            "id": f"index:{asset}",
+            "label": f"{asset} per jaar",
+            "color": INDEX_COLORS[0],
+            "width": 1.4,
+            "points": _yearly_percent_from_value(asset_raw, "value"),
+        }
+    return loaded
 
 
 def _load_portfolio_payload() -> dict:
@@ -209,6 +284,13 @@ def _load_index_series(selected_indices: list[str]) -> list[dict]:
         return []
     with _CACHE_LOCK:
         missing = [asset for asset in selected if asset not in _INDEX_SERIES_CACHE]
+
+    if missing:
+        loaded_from_snapshot = _load_index_series_from_snapshot(missing)
+        if loaded_from_snapshot:
+            with _CACHE_LOCK:
+                _INDEX_SERIES_CACHE.update(copy.deepcopy(loaded_from_snapshot))
+            missing = [asset for asset in missing if asset not in loaded_from_snapshot]
 
     if missing:
         placeholders = ", ".join("?" for _ in missing)

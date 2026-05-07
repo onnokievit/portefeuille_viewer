@@ -15,6 +15,7 @@ from portefeuille_viewer.ui_logica.maand_eind_web_tab import MaandEindWebTab
 from portefeuille_viewer.ui_logica.asset_indicator_web_tab import AssetIndicatorWebTab
 from portefeuille_viewer.ui_logica.asset_indicator_changes_tab import AssetIndicatorChangesTab
 from portefeuille_viewer.ui_logica.asset_rollup_editor_tab import AssetRollupEditorTab
+from portefeuille_viewer.ui_logica.cash_management_web_tab import CashManagementWebTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.asset_indicator_changes_tab = AssetIndicatorChangesTab()
         self.asset_rollup_editor_tab = AssetRollupEditorTab()
         self.portfolio_value_tab = PortfolioValueTab()
+        self.cash_management_tab = CashManagementWebTab()
         self.maand_eind_tab = MaandEindWebTab()
         self.sector_analysis_tab = SectorAnalysisTab()
         self.sprinters_open_tab = SprintersOpenWebPilotTab()
@@ -111,6 +113,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ("asset_indicator_changes", "Indicator Changes", self.asset_indicator_changes_tab),
             ("asset_rollup_editor", "Asset Rollup Data", self.asset_rollup_editor_tab),
             ("portfolio_value", "Portfolio Value", self.portfolio_value_tab),
+            ("cash_management", "Cash Management", self.cash_management_tab),
             ("maand_eind", "Maand Eind", self.maand_eind_tab),
             ("sector_analysis", "Sector Analysis", self.sector_analysis_tab),
             ("sprinters_open", "Sprinters Open", self.sprinters_open_tab),
@@ -179,6 +182,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
         if hasattr(self, "maand_eind_tab") and hasattr(self.maand_eind_tab, "set_active"):
             self.maand_eind_tab.set_active(index == self.tabWidget.indexOf(self.maand_eind_tab))
+        if hasattr(self, "cash_management_tab") and hasattr(self.cash_management_tab, "set_active"):
+            self.cash_management_tab.set_active(index == self.tabWidget.indexOf(self.cash_management_tab))
 
     def _apply_tab_style(self):
         settings = get_settings()
