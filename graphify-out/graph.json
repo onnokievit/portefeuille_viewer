@@ -17745,17 +17745,17 @@
     {
       "label": "sector_tab.py",
       "file_type": "code",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
       "source_location": "L1",
-      "id": "portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_sector_tab_py",
+      "id": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_sector_tab_py",
       "community": 7,
       "norm_label": "sector_tab.py"
     },
     {
       "label": "Ui_Form",
       "file_type": "code",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L21",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L22",
       "id": "sector_tab_ui_form",
       "community": 7,
       "norm_label": "ui_form"
@@ -17763,8 +17763,8 @@
     {
       "label": ".setupUi()",
       "file_type": "code",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L22",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L23",
       "id": "sector_tab_ui_form_setupui",
       "community": 7,
       "norm_label": ".setupui()"
@@ -17772,8 +17772,8 @@
     {
       "label": ".retranslateUi()",
       "file_type": "code",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L92",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L99",
       "id": "sector_tab_ui_form_retranslateui",
       "community": 7,
       "norm_label": ".retranslateui()"
@@ -25728,16 +25728,16 @@
     {
       "label": "sector_analysis_tab_logica.py",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L1",
-      "id": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
+      "id": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
       "community": 7,
       "norm_label": "sector_analysis_tab_logica.py"
     },
     {
       "label": "SectorAnalysisTab",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L18",
       "id": "sector_analysis_tab_logica_sectoranalysistab",
       "community": 7,
@@ -25746,7 +25746,7 @@
     {
       "label": ".__init__()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L19",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init",
       "community": 7,
@@ -25755,8 +25755,8 @@
     {
       "label": "._open_generated_options_dialog()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L85",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L83",
       "id": "sector_analysis_tab_logica_sectoranalysistab_open_generated_options_dialog",
       "community": 1,
       "norm_label": "._open_generated_options_dialog()"
@@ -25764,8 +25764,8 @@
     {
       "label": "._apply_test_orders_enabled_state()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L88",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L86",
       "id": "sector_analysis_tab_logica_sectoranalysistab_apply_test_orders_enabled_state",
       "community": 1,
       "norm_label": "._apply_test_orders_enabled_state()"
@@ -25773,8 +25773,8 @@
     {
       "label": "._on_toggle_enable_test_orders()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L98",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L96",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_toggle_enable_test_orders",
       "community": 1,
       "norm_label": "._on_toggle_enable_test_orders()"
@@ -25782,8 +25782,8 @@
     {
       "label": "._on_test_orders_enabled_changed()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L101",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L99",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_test_orders_enabled_changed",
       "community": 7,
       "norm_label": "._on_test_orders_enabled_changed()"
@@ -25791,8 +25791,8 @@
     {
       "label": "._get_pie_frame()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L108",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L106",
       "id": "sector_analysis_tab_logica_sectoranalysistab_get_pie_frame",
       "community": 7,
       "norm_label": "._get_pie_frame()"
@@ -25800,8 +25800,8 @@
     {
       "label": "._init_pie_chart()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L115",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L113",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_pie_chart",
       "community": 7,
       "norm_label": "._init_pie_chart()"
@@ -25809,8 +25809,8 @@
     {
       "label": "._init_sector_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L135",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L133",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table",
       "community": 7,
       "norm_label": "._init_sector_table()"
@@ -25818,8 +25818,8 @@
     {
       "label": "._init_sector_table_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L163",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L161",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table_delta",
       "community": 7,
       "norm_label": "._init_sector_table_delta()"
@@ -25827,8 +25827,8 @@
     {
       "label": "._init_value_grow_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L191",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L189",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table",
       "community": 7,
       "norm_label": "._init_value_grow_table()"
@@ -25836,8 +25836,8 @@
     {
       "label": "._init_value_grow_table_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L219",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L217",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table_delta",
       "community": 7,
       "norm_label": "._init_value_grow_table_delta()"
@@ -25845,8 +25845,8 @@
     {
       "label": "._on_snapshot_updated()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L247",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L245",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_snapshot_updated",
       "community": 0,
       "norm_label": "._on_snapshot_updated()"
@@ -25854,8 +25854,8 @@
     {
       "label": "._on_state_rebuild_finished()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L251",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L249",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_state_rebuild_finished",
       "community": 7,
       "norm_label": "._on_state_rebuild_finished()"
@@ -25863,8 +25863,8 @@
     {
       "label": "._on_put_otm_ratio_changed()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L255",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L253",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_changed",
       "community": 7,
       "norm_label": "._on_put_otm_ratio_changed()"
@@ -25872,8 +25872,8 @@
     {
       "label": "._on_put_otm_ratio_value_grow_changed()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L262",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L260",
       "id": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_value_grow_changed",
       "community": 7,
       "norm_label": "._on_put_otm_ratio_value_grow_changed()"
@@ -25881,8 +25881,8 @@
     {
       "label": ".reload_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L269",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L267",
       "id": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "community": 7,
       "norm_label": ".reload_data()"
@@ -25890,8 +25890,8 @@
     {
       "label": "._build_sector_sum()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L431",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L429",
       "id": "sector_analysis_tab_logica_sectoranalysistab_build_sector_sum",
       "community": 7,
       "norm_label": "._build_sector_sum()"
@@ -25899,8 +25899,8 @@
     {
       "label": "._build_value_grow_sum()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L444",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L442",
       "id": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_sum",
       "community": 7,
       "norm_label": "._build_value_grow_sum()"
@@ -25908,8 +25908,8 @@
     {
       "label": "._set_sector_table_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L457",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L455",
       "id": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_data",
       "community": 7,
       "norm_label": "._set_sector_table_data()"
@@ -25917,8 +25917,8 @@
     {
       "label": "._set_value_grow_table_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L487",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L485",
       "id": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_data",
       "community": 7,
       "norm_label": "._set_value_grow_table_data()"
@@ -25926,8 +25926,8 @@
     {
       "label": "._set_sector_table_delta_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L517",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L515",
       "id": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_delta_data",
       "community": 7,
       "norm_label": "._set_sector_table_delta_data()"
@@ -25935,8 +25935,8 @@
     {
       "label": "._set_value_grow_table_delta_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L619",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L617",
       "id": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_delta_data",
       "community": 7,
       "norm_label": "._set_value_grow_table_delta_data()"
@@ -25944,8 +25944,8 @@
     {
       "label": "._build_sector_delta_chart_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L721",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L719",
       "id": "sector_analysis_tab_logica_sectoranalysistab_build_sector_delta_chart_data",
       "community": 7,
       "norm_label": "._build_sector_delta_chart_data()"
@@ -25953,8 +25953,8 @@
     {
       "label": "._build_value_grow_delta_chart_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L794",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L792",
       "id": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_delta_chart_data",
       "community": 7,
       "norm_label": "._build_value_grow_delta_chart_data()"
@@ -25962,8 +25962,8 @@
     {
       "label": "._get_sector_order_from_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L867",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L865",
       "id": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_table",
       "community": 7,
       "norm_label": "._get_sector_order_from_table()"
@@ -25971,8 +25971,8 @@
     {
       "label": "._get_value_grow_order_from_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L885",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L883",
       "id": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_table",
       "community": 7,
       "norm_label": "._get_value_grow_order_from_table()"
@@ -25980,8 +25980,8 @@
     {
       "label": "._get_sector_order_from_delta_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L903",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L901",
       "id": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_delta_table",
       "community": 7,
       "norm_label": "._get_sector_order_from_delta_table()"
@@ -25989,8 +25989,8 @@
     {
       "label": "._get_value_grow_order_from_delta_table()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L921",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L919",
       "id": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_delta_table",
       "community": 7,
       "norm_label": "._get_value_grow_order_from_delta_table()"
@@ -25998,8 +25998,8 @@
     {
       "label": "._ensure_sector_colors()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L939",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L937",
       "id": "sector_analysis_tab_logica_sectoranalysistab_ensure_sector_colors",
       "community": 7,
       "norm_label": "._ensure_sector_colors()"
@@ -26007,8 +26007,8 @@
     {
       "label": "._ensure_value_grow_colors()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L965",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L963",
       "id": "sector_analysis_tab_logica_sectoranalysistab_ensure_value_grow_colors",
       "community": 7,
       "norm_label": "._ensure_value_grow_colors()"
@@ -26016,8 +26016,8 @@
     {
       "label": "._update_charts_from_table_order()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L991",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L989",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
       "community": 7,
       "norm_label": "._update_charts_from_table_order()"
@@ -26025,8 +26025,8 @@
     {
       "label": "._update_delta_charts_from_table_order()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1000",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L998",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
       "community": 7,
       "norm_label": "._update_delta_charts_from_table_order()"
@@ -26034,8 +26034,8 @@
     {
       "label": "._update_value_grow_charts_from_table_order()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1008",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1006",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
       "community": 7,
       "norm_label": "._update_value_grow_charts_from_table_order()"
@@ -26043,8 +26043,8 @@
     {
       "label": "._update_value_grow_delta_charts_from_table_order()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1017",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1015",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
       "community": 7,
       "norm_label": "._update_value_grow_delta_charts_from_table_order()"
@@ -26052,8 +26052,8 @@
     {
       "label": "._set_pie_data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1025",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1023",
       "id": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
       "community": 7,
       "norm_label": "._set_pie_data()"
@@ -26061,8 +26061,8 @@
     {
       "label": "._init_sector_totals_footer()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1073",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1071",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer",
       "community": 7,
       "norm_label": "._init_sector_totals_footer()"
@@ -26070,8 +26070,8 @@
     {
       "label": "._init_value_grow_totals_footer()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1115",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1113",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer",
       "community": 7,
       "norm_label": "._init_value_grow_totals_footer()"
@@ -26079,8 +26079,8 @@
     {
       "label": "._init_footer_sync()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1157",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1155",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync",
       "community": 7,
       "norm_label": "._init_footer_sync()"
@@ -26088,8 +26088,8 @@
     {
       "label": "._init_footer_sync_value_grow()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1175",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1173",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow",
       "community": 7,
       "norm_label": "._init_footer_sync_value_grow()"
@@ -26097,8 +26097,8 @@
     {
       "label": "._sync_footer_scrollbar_gap()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1193",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1191",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap",
       "community": 7,
       "norm_label": "._sync_footer_scrollbar_gap()"
@@ -26106,8 +26106,8 @@
     {
       "label": "._sync_footer_scrollbar_gap_value_grow()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1199",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1197",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow",
       "community": 7,
       "norm_label": "._sync_footer_scrollbar_gap_value_grow()"
@@ -26115,8 +26115,8 @@
     {
       "label": "._update_sector_totals()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1205",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1203",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals",
       "community": 7,
       "norm_label": "._update_sector_totals()"
@@ -26124,8 +26124,8 @@
     {
       "label": "._update_value_grow_totals()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1240",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1238",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals",
       "community": 7,
       "norm_label": "._update_value_grow_totals()"
@@ -26133,8 +26133,8 @@
     {
       "label": "._apply_sector_table_widths()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1275",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1273",
       "id": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_widths",
       "community": 7,
       "norm_label": "._apply_sector_table_widths()"
@@ -26142,8 +26142,8 @@
     {
       "label": "._apply_value_grow_table_widths()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1294",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1292",
       "id": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_widths",
       "community": 7,
       "norm_label": "._apply_value_grow_table_widths()"
@@ -26151,8 +26151,8 @@
     {
       "label": "._apply_sector_table_delta_widths()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1313",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1311",
       "id": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_delta_widths",
       "community": 7,
       "norm_label": "._apply_sector_table_delta_widths()"
@@ -26160,8 +26160,8 @@
     {
       "label": "._apply_value_grow_table_delta_widths()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1332",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1330",
       "id": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_delta_widths",
       "community": 7,
       "norm_label": "._apply_value_grow_table_delta_widths()"
@@ -26169,8 +26169,8 @@
     {
       "label": "._init_sector_totals_footer_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1351",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1349",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer_delta",
       "community": 7,
       "norm_label": "._init_sector_totals_footer_delta()"
@@ -26178,8 +26178,8 @@
     {
       "label": "._init_value_grow_totals_footer_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1393",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1391",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer_delta",
       "community": 7,
       "norm_label": "._init_value_grow_totals_footer_delta()"
@@ -26187,8 +26187,8 @@
     {
       "label": "._init_footer_sync_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1435",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1433",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_delta",
       "community": 7,
       "norm_label": "._init_footer_sync_delta()"
@@ -26196,8 +26196,8 @@
     {
       "label": "._init_footer_sync_value_grow_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1453",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1451",
       "id": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow_delta",
       "community": 7,
       "norm_label": "._init_footer_sync_value_grow_delta()"
@@ -26205,8 +26205,8 @@
     {
       "label": "._sync_footer_scrollbar_gap_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1471",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1469",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_delta",
       "community": 7,
       "norm_label": "._sync_footer_scrollbar_gap_delta()"
@@ -26214,8 +26214,8 @@
     {
       "label": "._sync_footer_scrollbar_gap_value_grow_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1477",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1475",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow_delta",
       "community": 7,
       "norm_label": "._sync_footer_scrollbar_gap_value_grow_delta()"
@@ -26223,8 +26223,8 @@
     {
       "label": "._update_sector_totals_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1483",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1481",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals_delta",
       "community": 7,
       "norm_label": "._update_sector_totals_delta()"
@@ -26232,8 +26232,8 @@
     {
       "label": "._update_value_grow_totals_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1518",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1516",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals_delta",
       "community": 7,
       "norm_label": "._update_value_grow_totals_delta()"
@@ -26241,8 +26241,8 @@
     {
       "label": "._sync_footer_section_sizes()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1553",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1551",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes",
       "community": 7,
       "norm_label": "._sync_footer_section_sizes()"
@@ -26250,8 +26250,8 @@
     {
       "label": "._sync_footer_section_sizes_value_grow()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1563",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1561",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow",
       "community": 7,
       "norm_label": "._sync_footer_section_sizes_value_grow()"
@@ -26259,8 +26259,8 @@
     {
       "label": "._sync_footer_section_sizes_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1573",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1571",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_delta",
       "community": 7,
       "norm_label": "._sync_footer_section_sizes_delta()"
@@ -26268,8 +26268,8 @@
     {
       "label": "._sync_footer_section_sizes_value_grow_delta()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1583",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1581",
       "id": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow_delta",
       "community": 7,
       "norm_label": "._sync_footer_section_sizes_value_grow_delta()"
@@ -26277,8 +26277,8 @@
     {
       "label": "._wrap_in_scroll_area()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1593",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1591",
       "id": "sector_analysis_tab_logica_sectoranalysistab_wrap_in_scroll_area",
       "community": 7,
       "norm_label": "._wrap_in_scroll_area()"
@@ -26286,8 +26286,8 @@
     {
       "label": "._update_scroll_content_size()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1624",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1622",
       "id": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
       "community": 7,
       "norm_label": "._update_scroll_content_size()"
@@ -26295,8 +26295,8 @@
     {
       "label": ".resizeEvent()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1640",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1638",
       "id": "sector_analysis_tab_logica_sectoranalysistab_resizeevent",
       "community": 7,
       "norm_label": ".resizeevent()"
@@ -26304,8 +26304,8 @@
     {
       "label": "SectorTableModel",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1646",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1644",
       "id": "sector_analysis_tab_logica_sectortablemodel",
       "community": 7,
       "norm_label": "sectortablemodel"
@@ -26322,8 +26322,8 @@
     {
       "label": ".data()",
       "file_type": "code",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1647",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1645",
       "id": "sector_analysis_tab_logica_sectortablemodel_data",
       "community": 7,
       "norm_label": ".data()"
@@ -45826,7 +45826,7 @@
     {
       "relation": "inherits",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L18",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
@@ -45838,8 +45838,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1094",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1092",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer",
       "_tgt": "qwidget",
@@ -45850,8 +45850,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1136",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1134",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer",
       "_tgt": "qwidget",
@@ -45862,8 +45862,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1372",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1370",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer_delta",
       "_tgt": "qwidget",
@@ -45874,8 +45874,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1414",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1412",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer_delta",
       "_tgt": "qwidget",
@@ -45886,8 +45886,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1598",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1596",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_wrap_in_scroll_area",
       "_tgt": "qwidget",
@@ -113998,8 +113998,8 @@
     {
       "relation": "inherits",
       "confidence": "EXTRACTED",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L21",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L22",
       "weight": 1.0,
       "_src": "sector_tab_ui_form",
       "_tgt": "object",
@@ -117106,20 +117106,20 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L21",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L22",
       "weight": 1.0,
-      "_src": "portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_sector_tab_py",
+      "_src": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_sector_tab_py",
       "_tgt": "sector_tab_ui_form",
-      "source": "portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_sector_tab_py",
+      "source": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_sector_tab_py",
       "target": "sector_tab_ui_form",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L22",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L23",
       "weight": 1.0,
       "_src": "sector_tab_ui_form",
       "_tgt": "sector_tab_ui_form_setupui",
@@ -117130,8 +117130,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L92",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L99",
       "weight": 1.0,
       "_src": "sector_tab_ui_form",
       "_tgt": "sector_tab_ui_form_retranslateui",
@@ -117166,8 +117166,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui\\sector_tab.py",
-      "source_location": "L87",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui\\sector_tab.py",
+      "source_location": "L94",
       "weight": 1.0,
       "_src": "sector_tab_ui_form_setupui",
       "_tgt": "sector_tab_ui_form_retranslateui",
@@ -142834,7 +142834,7 @@
     {
       "relation": "inherits",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L18",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
@@ -143458,31 +143458,31 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L18",
       "weight": 1.0,
-      "_src": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
+      "_src": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab",
-      "source": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
+      "source": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
       "target": "sector_analysis_tab_logica_sectoranalysistab",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1646",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1644",
       "weight": 1.0,
-      "_src": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
+      "_src": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel",
-      "source": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_2_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
+      "source": "c_python_coding_portefeuille_viewer_portefeuille_viewer_1_4_portefeuille_viewer_ui_logica_sector_analysis_tab_logica_py",
       "target": "sector_analysis_tab_logica_sectortablemodel",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L19",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
@@ -143494,8 +143494,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L85",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L83",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_open_generated_options_dialog",
@@ -143506,8 +143506,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L88",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L86",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_test_orders_enabled_state",
@@ -143518,8 +143518,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L98",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L96",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_toggle_enable_test_orders",
@@ -143530,8 +143530,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L101",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L99",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_test_orders_enabled_changed",
@@ -143542,8 +143542,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L108",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L106",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_pie_frame",
@@ -143554,8 +143554,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L115",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L113",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_pie_chart",
@@ -143566,8 +143566,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L135",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L133",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table",
@@ -143578,8 +143578,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L163",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L161",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table_delta",
@@ -143590,8 +143590,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L191",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L189",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table",
@@ -143602,8 +143602,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L219",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L217",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table_delta",
@@ -143614,8 +143614,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L247",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L245",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_snapshot_updated",
@@ -143626,8 +143626,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L251",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L249",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_state_rebuild_finished",
@@ -143638,8 +143638,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L255",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L253",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_changed",
@@ -143650,8 +143650,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L262",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L260",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_value_grow_changed",
@@ -143662,8 +143662,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L269",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L267",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
@@ -143674,8 +143674,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L431",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L429",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_sector_sum",
@@ -143686,8 +143686,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L444",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L442",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_sum",
@@ -143698,8 +143698,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L457",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L455",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_data",
@@ -143710,8 +143710,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L487",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L485",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_data",
@@ -143722,8 +143722,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L517",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L515",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_delta_data",
@@ -143734,8 +143734,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L619",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L617",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_delta_data",
@@ -143746,8 +143746,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L721",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L719",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_sector_delta_chart_data",
@@ -143758,8 +143758,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L794",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L792",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_delta_chart_data",
@@ -143770,8 +143770,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L867",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L865",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_table",
@@ -143782,8 +143782,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L885",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L883",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_table",
@@ -143794,8 +143794,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L903",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L901",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_delta_table",
@@ -143806,8 +143806,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L921",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L919",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_delta_table",
@@ -143818,8 +143818,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L939",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L937",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_ensure_sector_colors",
@@ -143830,8 +143830,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L965",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L963",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_ensure_value_grow_colors",
@@ -143842,8 +143842,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L991",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L989",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
@@ -143854,8 +143854,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1000",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L998",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
@@ -143866,8 +143866,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1008",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1006",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
@@ -143878,8 +143878,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1017",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1015",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
@@ -143890,8 +143890,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1025",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1023",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
@@ -143902,8 +143902,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1073",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1071",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer",
@@ -143914,8 +143914,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1115",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1113",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer",
@@ -143926,8 +143926,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1157",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1155",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync",
@@ -143938,8 +143938,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1175",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1173",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow",
@@ -143950,8 +143950,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1193",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1191",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap",
@@ -143962,8 +143962,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1199",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1197",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow",
@@ -143974,8 +143974,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1205",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1203",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals",
@@ -143986,8 +143986,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1240",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1238",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals",
@@ -143998,8 +143998,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1275",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1273",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_widths",
@@ -144010,8 +144010,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1294",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1292",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_widths",
@@ -144022,8 +144022,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1313",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1311",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_delta_widths",
@@ -144034,8 +144034,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1332",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1330",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_delta_widths",
@@ -144046,8 +144046,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1351",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1349",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer_delta",
@@ -144058,8 +144058,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1393",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1391",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer_delta",
@@ -144070,8 +144070,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1435",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1433",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_delta",
@@ -144082,8 +144082,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1453",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1451",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow_delta",
@@ -144094,8 +144094,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1471",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1469",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_delta",
@@ -144106,8 +144106,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1477",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1475",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow_delta",
@@ -144118,8 +144118,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1483",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1481",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals_delta",
@@ -144130,8 +144130,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1518",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1516",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals_delta",
@@ -144142,8 +144142,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1553",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1551",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes",
@@ -144154,8 +144154,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1563",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1561",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow",
@@ -144166,8 +144166,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1573",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1571",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_delta",
@@ -144178,8 +144178,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1583",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1581",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow_delta",
@@ -144190,8 +144190,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1593",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1591",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_wrap_in_scroll_area",
@@ -144202,8 +144202,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1624",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1622",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
@@ -144214,8 +144214,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1640",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1638",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_resizeevent",
@@ -144226,7 +144226,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L22",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144238,7 +144238,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L24",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144250,7 +144250,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L32",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144262,7 +144262,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L33",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144274,7 +144274,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L34",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144286,7 +144286,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L35",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144298,7 +144298,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L36",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144310,7 +144310,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L37",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144322,7 +144322,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L38",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144334,7 +144334,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L39",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144346,7 +144346,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L59",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144358,7 +144358,7 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
       "source_location": "L67",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
@@ -144370,8 +144370,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L81",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L79",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_value_grow_changed",
@@ -144394,8 +144394,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L99",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L97",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_on_toggle_enable_test_orders",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_test_orders_enabled_state",
@@ -144406,8 +144406,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L116",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L114",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_pie_chart",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_pie_frame",
@@ -144418,8 +144418,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L140",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L138",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel",
@@ -144430,8 +144430,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L150",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L148",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_widths",
@@ -144442,8 +144442,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L152",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L150",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
@@ -144466,8 +144466,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L168",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L166",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel",
@@ -144478,8 +144478,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L178",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L176",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
@@ -144490,8 +144490,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L181",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L179",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_delta_widths",
@@ -144514,8 +144514,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L196",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L194",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel",
@@ -144526,8 +144526,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L206",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L204",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_widths",
@@ -144538,8 +144538,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L208",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L206",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
@@ -144562,8 +144562,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L224",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L222",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel",
@@ -144574,8 +144574,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L234",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L232",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
@@ -144586,8 +144586,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L237",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L235",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_table_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_delta_widths",
@@ -144610,8 +144610,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L253",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L251",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_on_state_rebuild_finished",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
@@ -144634,8 +144634,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L260",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L258",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_changed",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
@@ -144646,8 +144646,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L267",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L265",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_on_put_otm_ratio_value_grow_changed",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
@@ -144658,8 +144658,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L322",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L320",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_sector_sum",
@@ -144670,8 +144670,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L343",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L341",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_data",
@@ -144682,8 +144682,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L344",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L342",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_sector_delta_chart_data",
@@ -144694,8 +144694,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L345",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L343",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_delta_data",
@@ -144706,8 +144706,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L388",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L386",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_sum",
@@ -144718,8 +144718,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L415",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L413",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_data",
@@ -144730,8 +144730,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L416",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L414",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_build_value_grow_delta_chart_data",
@@ -144742,8 +144742,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L417",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L415",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_delta_data",
@@ -144754,8 +144754,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L424",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L422",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_ensure_sector_colors",
@@ -144766,8 +144766,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L425",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L423",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_ensure_value_grow_colors",
@@ -144778,8 +144778,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L426",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L424",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
@@ -144790,8 +144790,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L427",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L425",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
@@ -144802,8 +144802,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L428",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L426",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
@@ -144814,8 +144814,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L429",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L427",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_reload_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
@@ -144838,8 +144838,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L484",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L482",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_widths",
@@ -144850,8 +144850,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L485",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L483",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals",
@@ -144874,8 +144874,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L514",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L512",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_widths",
@@ -144886,8 +144886,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L515",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L513",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals",
@@ -144910,8 +144910,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L616",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L614",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_delta_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_delta_widths",
@@ -144922,8 +144922,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L617",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L615",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_sector_table_delta_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals_delta",
@@ -144934,8 +144934,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L718",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L716",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_delta_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_delta_widths",
@@ -144946,8 +144946,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L719",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L717",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_set_value_grow_table_delta_data",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals_delta",
@@ -144958,8 +144958,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L992",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L990",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_table",
@@ -144970,8 +144970,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1009",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1007",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_table",
@@ -144982,8 +144982,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1001",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L999",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_sector_order_from_delta_table",
@@ -144994,8 +144994,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1018",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1016",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_get_value_grow_order_from_delta_table",
@@ -145006,8 +145006,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L998",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L996",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
@@ -145018,8 +145018,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1006",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1004",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_delta_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
@@ -145042,8 +145042,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1015",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1013",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
@@ -145054,8 +145054,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1023",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1021",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_delta_charts_from_table_order",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_set_pie_data",
@@ -145090,8 +145090,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1112",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1110",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync",
@@ -145102,8 +145102,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1113",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1111",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
@@ -145114,8 +145114,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1154",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1152",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow",
@@ -145126,8 +145126,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1155",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1153",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
@@ -145138,8 +145138,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1170",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1168",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap",
@@ -145162,8 +145162,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1188",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1186",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow",
@@ -145186,8 +145186,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1238",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1236",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes",
@@ -145210,8 +145210,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1273",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1271",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow",
@@ -145234,8 +145234,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1292",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1290",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_widths",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes",
@@ -145246,8 +145246,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1311",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1309",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_widths",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow",
@@ -145258,8 +145258,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1330",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1328",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_apply_sector_table_delta_widths",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_delta",
@@ -145270,8 +145270,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1349",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1347",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_apply_value_grow_table_delta_widths",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow_delta",
@@ -145282,8 +145282,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1390",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1388",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_delta",
@@ -145294,8 +145294,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1391",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1389",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_sector_totals_footer_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
@@ -145306,8 +145306,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1432",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1430",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow_delta",
@@ -145318,8 +145318,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1433",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1431",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_value_grow_totals_footer_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_update_scroll_content_size",
@@ -145330,8 +145330,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1448",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1446",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_delta",
@@ -145354,8 +145354,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1466",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1464",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_init_footer_sync_value_grow_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_scrollbar_gap_value_grow_delta",
@@ -145378,8 +145378,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1516",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1514",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_sector_totals_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_delta",
@@ -145402,8 +145402,8 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1551",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1549",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectoranalysistab_update_value_grow_totals_delta",
       "_tgt": "sector_analysis_tab_logica_sectoranalysistab_sync_footer_section_sizes_value_grow_delta",
@@ -145426,8 +145426,8 @@
     {
       "relation": "inherits",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1646",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1644",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectortablemodel",
       "_tgt": "polarstablemodel",
@@ -145438,8 +145438,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.2\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
-      "source_location": "L1647",
+      "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\sector_analysis_tab_logica.py",
+      "source_location": "L1645",
       "weight": 1.0,
       "_src": "sector_analysis_tab_logica_sectortablemodel",
       "_tgt": "sector_analysis_tab_logica_sectortablemodel_data",

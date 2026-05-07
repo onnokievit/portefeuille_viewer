@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView, QPushButton, QCheckBox, QApplication
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView, QApplication
 from PySide6.QtCore import QSortFilterProxyModel, QTimer
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
 from PySide6.QtCore import Qt
@@ -67,11 +67,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 self._on_put_otm_ratio_changed(self.putOTMRatio.value())
             except Exception:
                 pass
-        self.btnGeneratedOptions = QPushButton("Optie Scenario", self)
-        self.btnGeneratedOptions.setGeometry(10, 34, 150, 28)
+        self.btnGeneratedOptions = self.pushButtonOptieScenarios
         self.btnGeneratedOptions.clicked.connect(self._open_generated_options_dialog)
-        self.checkEnableTestOrders = QCheckBox("Enable", self)
-        self.checkEnableTestOrders.setGeometry(170, 38, 80, 22)
+        self.checkEnableTestOrders = self.checkBoxOptieScenario
         self.checkEnableTestOrders.setChecked(bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)))
         self.checkEnableTestOrders.toggled.connect(self._on_toggle_enable_test_orders)
         if hasattr(self, "putOTMRatioValueGrow"):

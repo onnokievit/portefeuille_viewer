@@ -15,14 +15,15 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QFrame, QHeaderView, QSizePolicy,
-    QSlider, QTableView, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFrame, QHeaderView,
+    QPushButton, QSizePolicy, QSlider, QTableView,
+    QWidget)
 
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
-        Form.resize(2500, 2000)
+        Form.resize(2500, 3000)
         self.pieChartValueLineair = QFrame(Form)
         self.pieChartValueLineair.setObjectName(u"pieChartValueLineair")
         self.pieChartValueLineair.setGeometry(QRect(690, 70, 561, 481))
@@ -83,6 +84,12 @@ class Ui_Form(object):
         self.pieChartValueGrowDeltaPutITM.setGeometry(QRect(1270, 1810, 561, 481))
         self.pieChartValueGrowDeltaPutITM.setFrameShape(QFrame.Shape.StyledPanel)
         self.pieChartValueGrowDeltaPutITM.setFrameShadow(QFrame.Shadow.Raised)
+        self.pushButtonOptieScenarios = QPushButton(Form)
+        self.pushButtonOptieScenarios.setObjectName(u"pushButtonOptieScenarios")
+        self.pushButtonOptieScenarios.setGeometry(QRect(690, 20, 141, 31))
+        self.checkBoxOptieScenario = QCheckBox(Form)
+        self.checkBoxOptieScenario.setObjectName(u"checkBoxOptieScenario")
+        self.checkBoxOptieScenario.setGeometry(QRect(850, 27, 151, 20))
 
         self.retranslateUi(Form)
 
@@ -91,5 +98,7 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         Form.setWindowTitle(QCoreApplication.translate("Form", u"Form", None))
+        self.pushButtonOptieScenarios.setText(QCoreApplication.translate("Form", u"Optie einde scenario's", None))
+        self.checkBoxOptieScenario.setText(QCoreApplication.translate("Form", u"Optie Scenario aan/uit", None))
     # retranslateUi
 

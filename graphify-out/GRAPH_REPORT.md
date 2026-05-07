@@ -1,7 +1,7 @@
 # Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4  (2026-05-07)
 
 ## Corpus Check
-- 211 files · ~757,838 words
+- 211 files · ~757,853 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -1983,12 +1983,12 @@ Nodes (1): Header-menu met extra sorteeropties op kleur voor de commentkolom.
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
+- **Why does `get_stockdata_connection()` connect `Community 0` to `Community 1`, `Community 2`, `Community 35`, `Community 4`, `Community 37`, `Community 6`, `Community 3`, `Community 9`, `Community 13`, `Community 14`, `Community 16`, `Community 22`?**
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **Why does `SingleAssetAnalyseTab` connect `Community 1` to `Community 0`, `Community 8`, `Community 5`, `Community 7`?**
-  _High betweenness centrality (0.037) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Community 3` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 12`, `Community 16`, `Community 17`, `Community 21`, `Community 22`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Why does `get_connection()` connect `Community 1` to `Community 0`, `Community 32`, `Community 4`, `Community 5`, `Community 6`, `Community 10`, `Community 11`, `Community 13`, `Community 14`, `Community 17`, `Community 19`?**
-  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `MainWindow` and `_TabBarNoFocusRectStyle`) actually correct?**
   _`SingleAssetAnalyseTab` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 77 inferred relationships involving `get_settings()` (e.g. with `_apply_env_defaults_from_settings()` and `_resolve_database_alias()`) actually correct?**
