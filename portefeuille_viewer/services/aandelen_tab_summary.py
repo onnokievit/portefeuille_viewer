@@ -1,10 +1,9 @@
 from collections import OrderedDict
-import time
 
 import polars as pl
 
 from portefeuille_viewer.config import get_settings
-from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.price_utils import build_prices_df
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
@@ -20,9 +19,6 @@ _STATIC_SNAPSHOT_KEYS = (
 	"repository_snapshot_historical_close_latest",
 )
 _STATIC_SUMMARY_CACHE: OrderedDict[tuple, pl.DataFrame] = OrderedDict()
-_LAST_PRICES_CACHE: dict[tuple[str, str], float] | None = None
-_LAST_PRICES_CACHE_TS: float = 0.0
-_LAST_PRICES_TTL_SEC = 60.0
 
 
 def _safe_df(df: pl.DataFrame | None) -> pl.DataFrame:
@@ -211,16 +207,7 @@ def _build_static_summary(selected_brokers=None, asset_rollup: str | None = None
 
 
 def _get_last_prices_cached() -> dict[tuple[str, str], float]:
-	global _LAST_PRICES_CACHE, _LAST_PRICES_CACHE_TS
-	now = time.time()
-	if _LAST_PRICES_CACHE is not None and (now - _LAST_PRICES_CACHE_TS) < _LAST_PRICES_TTL_SEC:
-		return _LAST_PRICES_CACHE
-	try:
-		_LAST_PRICES_CACHE = load_last_prices_dict() or {}
-	except Exception:
-		_LAST_PRICES_CACHE = {}
-	_LAST_PRICES_CACHE_TS = now
-	return _LAST_PRICES_CACHE
+	return ASSET_LAST_PRICE_STORE.get_snapshot()
 
 
 def _asset_price_fallback_df(asset_rollup: str | None = None) -> pl.DataFrame:

@@ -4,7 +4,7 @@ import time
 import os
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.price_utils import apply_runtime_beta_shift, build_prices_df
 
 
@@ -24,7 +24,7 @@ class LiveAggregatorOpties(QObject):
             0.0,
             float(os.getenv("LIVE_OPTIES_PUBLISH_MIN_INTERVAL_SEC", "15.0")),
         )
-        self.last_prices = load_last_prices_dict()
+        self.last_prices = ASSET_LAST_PRICE_STORE.get_snapshot()
         self.live_prices = {}
         self._initialize_data()
 
@@ -144,5 +144,5 @@ class LiveAggregatorOpties(QObject):
         self.df = pl.DataFrame()
         self._last_published_df = None
         self._last_publish_ts = 0.0
-        self.last_prices = load_last_prices_dict()
+        self.last_prices = ASSET_LAST_PRICE_STORE.get_snapshot()
         self.live_prices = {}

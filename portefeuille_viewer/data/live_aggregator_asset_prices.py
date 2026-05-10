@@ -1,18 +1,14 @@
 
 import threading
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 
 def initialize_live_prices():
     """
     Vul SNAPSHOT_STORE.live_prices altijd eerst met de laatste bekende prijzen uit de database.
     Daarna kan deze dict live worden bijgewerkt met prijzen uit de price_feed.
     """
-    last_prices = load_last_prices_dict()
-    SNAPSHOT_STORE.set_live_prices(last_prices.copy() if last_prices else {})
-
-# Roep deze functie aan bij het opstarten van de app of voordat de price_feed wordt gestart.
-initialize_live_prices()
+    ASSET_LAST_PRICE_STORE.ensure_loaded()
 
 def update_live_prices(new_prices: dict):
     """

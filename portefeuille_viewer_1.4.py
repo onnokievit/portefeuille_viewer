@@ -412,6 +412,10 @@ def _invalidate_snapshots_for_database_change(
     empty_metrics = _empty_metrics_payload()
     _reset_projection_publish_caches()
     SNAPSHOT_STORE.clear_live_prices()
+    with contextlib.suppress(Exception):
+        from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+
+        ASSET_LAST_PRICE_STORE.reset_for_database_change()
     live_aggregator_aandelen.reset_for_database_change()
     live_aggregator_opties.reset_for_database_change()
     live_aggregator_sprinters.reset_for_database_change()
@@ -1212,6 +1216,13 @@ def main():
     except Exception as exc:
         _log(f"[startup-db] {exc}")
         raise SystemExit(2) from exc
+    with contextlib.suppress(Exception):
+        from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+
+        ASSET_LAST_PRICE_STORE.ensure_loaded()
+        live_aggregator_aandelen.reset_for_database_change()
+        live_aggregator_opties.reset_for_database_change()
+        live_aggregator_sprinters.reset_for_database_change()
     if ENABLE_ENGINE_CORE_RUNTIME:
         _log("[engine-core] runtime enabled via USE_ENGINE_CORE_RUNTIME_V1=1")
         if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
@@ -1410,6 +1421,8 @@ def main():
             with contextlib.suppress(Exception):
                 timer.stop()
         _invalidate_snapshots_for_database_change(option_timevalue_service)
+        with contextlib.suppress(Exception):
+            price_feed.reload_asset_last_prices_from_store()
         db_change_refresh_timer.start()
 
     db_change_refresh_timer.timeout.connect(_run_db_change_refresh)

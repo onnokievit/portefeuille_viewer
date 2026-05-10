@@ -3,11 +3,12 @@ import pyodbc
 from datetime import datetime
 from time import sleep
 
+from portefeuille_viewer.data import repository as data_repository
 from portefeuille_viewer.data.repository import get_connection
 
 
 ACCOUNT_DAILY_BALANCES_TABLE = "account_daily_balances"
-_SCHEMA_READY = False
+_SCHEMA_READY_PATHS: set[str] = set()
 
 
 def _table_exists(cur: pyodbc.Cursor, table_name: str) -> bool:
@@ -40,8 +41,8 @@ def _get_connection_with_retry(retries: int = 4, delay_s: float = 0.25):
 
 
 def ensure_account_daily_balances_schema() -> None:
-    global _SCHEMA_READY
-    if _SCHEMA_READY:
+    db_key = str(data_repository.db_path or "")
+    if db_key and db_key in _SCHEMA_READY_PATHS:
         return
     with _get_connection_with_retry() as conn:
         cur = conn.cursor()
@@ -92,7 +93,8 @@ def ensure_account_daily_balances_schema() -> None:
             except Exception:
                 pass
         conn.commit()
-    _SCHEMA_READY = True
+    if db_key:
+        _SCHEMA_READY_PATHS.add(db_key)
 
 
 def list_account_daily_balances(limit: int | None = 3000) -> list[dict]:

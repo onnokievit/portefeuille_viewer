@@ -7,7 +7,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.ui.models import PandasTableModel
 from portefeuille_viewer.ui.filter_popup import ColumnFilterPopup
 from portefeuille_viewer.signals import signals
-from portefeuille_viewer.data.repository import load_last_prices_dict
+from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.repository import build_uniek_id
 from portefeuille_viewer.data.repository import fetch_open_optie_comments
 import polars as pl
@@ -109,7 +109,7 @@ class OptieEindTab(QWidget, Ui_OptieEindTab):
         super().__init__(parent)
         self.setupUi(self)
         self.live_prices = SNAPSHOT_STORE.get_live_prices_snapshot()
-        self.last_prices = load_last_prices_dict()
+        self.last_prices = ASSET_LAST_PRICE_STORE.get_snapshot()
         self.asset = asset
         self.active_db_name = "transacties_bron_data_test_accounts"
         self.selected_brokers = None

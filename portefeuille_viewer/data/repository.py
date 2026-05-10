@@ -50,6 +50,10 @@ def switch_database(name: str):
     global DEFAULT_DB_NAME, db_path, conn_str
     if name not in DB_MAP:
         raise ValueError(f"Onbekende database: {name}")
+    # flush dirty live asset-prijzen naar huidige DB voordat we overschakelen
+    with contextlib.suppress(Exception):
+        from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+        ASSET_LAST_PRICE_STORE.flush()
     # flush eventuele dirty comments naar huidige DB voordat we overschakelen
     with contextlib.suppress(Exception):
         flush_dirty_open_optie_comments_to_db()
@@ -75,6 +79,10 @@ def switch_database(name: str):
         SNAPSHOT_STORE.repository_dirty_test_orders_assets = set()
     except Exception:
         pass
+    with contextlib.suppress(Exception):
+        from portefeuille_viewer.services.year_result_vs_indices_service import clear_year_result_vs_indices_cache
+
+        clear_year_result_vs_indices_cache()
     # Sla ook de actieve database-naam op in de snapshot store voor UI-consumptie
     try:
         SNAPSHOT_STORE.active_database_name = name
@@ -1745,25 +1753,18 @@ def get_next_order_item_no(order_id: int) -> int:
 
 
 def load_last_prices_dict():
-    from portefeuille_viewer.data.repository import get_connection
-    last_prices = {}
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT ib_symbol, ib_currency, price FROM asset_last_prices")
-        for row in cursor.fetchall():
-            symbol, currency, price = row
-            last_prices[(symbol,currency)] = price
-    # print(f"[DEBUG load last prices werkt] Loaded last_prices: {len(last_prices)} items, sample: {list(last_prices.items())[:5]}")
-    return last_prices
+    from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+
+    return ASSET_LAST_PRICE_STORE.ensure_loaded()
 
 def load_live_prices():
     """
     Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.
     Eerst vullen met laatste bekende prijzen uit de database.
     """
-    from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-    last_prices = load_last_prices_dict()
-    SNAPSHOT_STORE.set_live_prices(last_prices)
+    from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+
+    ASSET_LAST_PRICE_STORE.ensure_loaded()
 
 def build_repository_active_asset_rollup_data():
     """

@@ -23,8 +23,10 @@ from portefeuille_viewer.services.cash_management_result_chart_service import (
 )
 from portefeuille_viewer.services.year_result_vs_indices_service import (
     build_year_result_vs_indices_payload,
+    clear_year_result_vs_indices_cache,
     list_index_asset_rollups,
 )
+from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui_logica.chart_dialog_settings import (
     cash_series_definitions,
     inject_line_settings,
@@ -475,6 +477,7 @@ class CashManagementWebTab(QWidget):
         self._js_ready = False
         self._is_active = False
         self._payload_cache: dict | None = None
+        self._needs_force_reload = True
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -492,16 +495,24 @@ class CashManagementWebTab(QWidget):
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_load_finished)
         self.web.setHtml(self._html())
+        signals.databaseChanged.connect(self._on_database_changed)
 
     def set_active(self, active: bool):
         self._is_active = bool(active)
         if self._is_active and self._js_ready:
-            self.publish_payload()
+            self.publish_payload(force_reload=self._needs_force_reload)
 
     def _on_load_finished(self, ok: bool):
         self._js_ready = bool(ok)
         if ok and self._is_active:
-            self.publish_payload()
+            self.publish_payload(force_reload=self._needs_force_reload)
+
+    def _on_database_changed(self, _db_name: str):
+        self._payload_cache = None
+        self._needs_force_reload = True
+        clear_year_result_vs_indices_cache()
+        if self._is_active and self._js_ready:
+            self.publish_payload(force_reload=True, status="Database gewisseld; data herladen.")
 
     def publish_status(self, status: str):
         if not self._js_ready:
@@ -511,6 +522,7 @@ class CashManagementWebTab(QWidget):
     def publish_payload(self, force_reload: bool = False, status: str = "", reuse_cache: bool = False):
         if not self._is_active:
             return
+        force_reload = bool(force_reload or self._needs_force_reload)
         if reuse_cache and self._payload_cache is not None:
             payload = self._refresh_display_settings(dict(self._payload_cache))
         elif force_reload or self._payload_cache is None:
@@ -522,6 +534,7 @@ class CashManagementWebTab(QWidget):
         self._payload_cache = payload
         if not self._js_ready:
             return
+        self._needs_force_reload = False
         raw = json.dumps(payload, ensure_ascii=False, default=_json_default)
         self.web.page().runJavaScript(f"window.renderCashDashboard({raw});")
 
@@ -593,7 +606,7 @@ class CashManagementWebTab(QWidget):
                 selected_indices=index_options,
                 selected_portfolio=["total", "degiro", "lynx", "interactive"],
                 start_date=start_date,
-                force_reload=False,
+                force_reload=force_reload,
             )
         except Exception as exc:
             status_messages.append(f"% vs indices niet geladen: {exc}")
