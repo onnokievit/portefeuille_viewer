@@ -4,6 +4,7 @@ import pyodbc
 import polars as pl
 
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database, get_settings, get_stockdata_db_path
 from portefeuille_viewer.signals import signals
@@ -1843,18 +1844,35 @@ def portfolio_value_asset_rollup_opties_put():
 
 
 
-    df_opties_waarde_2 = df_opties_waarde_2.with_columns(
-        pl.struct(["optie_call_put", "Koers", "optie_strike"])
+    delta_lookup = build_option_delta_lookup()
+    df_opties_waarde_2 = df_opties_waarde_2.with_columns([
+        pl.struct(["asset_rollup", "optie_call_put", "optie_exp_date", "optie_strike", "Koers"])
         .map_elements(
-            lambda row: estimate_delta(
+            lambda row: resolve_option_delta(
+                row["asset_rollup"],
                 row["optie_call_put"],
+                row["optie_exp_date"],
+                row["optie_strike"],
                 row["Koers"],
-                row["optie_strike"]
+                delta_lookup,
             ),
             return_dtype=pl.Float64  # <-- specify the return type here
         )
-        .alias("delta")
-    )
+        .alias("delta"),
+        pl.struct(["asset_rollup", "optie_call_put", "optie_exp_date", "optie_strike", "Koers"])
+        .map_elements(
+            lambda row: resolve_option_delta_source(
+                row["asset_rollup"],
+                row["optie_call_put"],
+                row["optie_exp_date"],
+                row["optie_strike"],
+                row["Koers"],
+                delta_lookup,
+            ),
+            return_dtype=pl.Utf8,
+        )
+        .alias("delta_source"),
+    ])
     if df_opties_waarde_2 is None:
         raise ValueError("aggregator_snapshot_aandelen_live is niet gevuld!")
     else:
@@ -1980,6 +1998,135 @@ def estimate_delta(option_type: str, spot: float, strike: float) -> float:
 
     # Fallback (zou niet bereikt moeten worden)
     return None
+
+
+def _option_key_asset(value) -> str | None:
+    text = str(value or "").strip().upper()
+    return text or None
+
+
+def _option_key_type(value) -> str | None:
+    text = str(value or "").strip().lower()
+    if text in {"c", "call"}:
+        return "call"
+    if text in {"p", "put"}:
+        return "put"
+    return None
+
+
+def _option_key_expiry(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d"):
+        try:
+            return datetime.strptime(text[:10] if fmt == "%Y-%m-%d" else text, fmt).date().isoformat()
+        except Exception:
+            pass
+    return text[:10]
+
+
+def _option_key_strike(value) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        value = float(value)
+    if isinstance(value, str):
+        value = value.strip().replace(",", ".")
+    try:
+        return round(float(value), 6)
+    except Exception:
+        return None
+
+
+def _option_delta_key(asset_rollup, option_type, expiry, strike) -> tuple[str, str, str, float] | None:
+    asset = _option_key_asset(asset_rollup)
+    cp = _option_key_type(option_type)
+    exp = _option_key_expiry(expiry)
+    strike_f = _option_key_strike(strike)
+    if asset is None or cp is None or exp is None or strike_f is None:
+        return None
+    return (asset, cp, exp, strike_f)
+
+
+def _valid_delta(value) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip().replace(",", ".")
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out != out:
+        return None
+    return out
+
+
+def build_option_delta_lookup() -> dict[tuple[str, str, str, float], float]:
+    """
+    Brokerloze delta-map uit snapshot_optie_timevalue_live.
+
+    snapshot_optie_timevalue_live is positie-gebaseerd en kan dezelfde optie
+    meerdere keren bevatten. Voor pricing/greeks gebruiken we daarom alleen de
+    instrument-key en nemen we de eerste niet-null delta.
+    """
+    df = getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None)
+    if df is None or df.is_empty():
+        return {}
+    required = {"asset", "c_p", "exp", "strike", "delta"}
+    if not required.issubset(set(df.columns)):
+        return {}
+
+    lookup: dict[tuple[str, str, str, float], float] = {}
+    for row in df.select(["asset", "c_p", "exp", "strike", "delta"]).to_dicts():
+        key = _option_delta_key(row.get("asset"), row.get("c_p"), row.get("exp"), row.get("strike"))
+        if key is None or key in lookup:
+            continue
+        delta = _valid_delta(row.get("delta"))
+        if delta is not None:
+            lookup[key] = delta
+    return lookup
+
+
+def resolve_option_delta(
+    asset_rollup,
+    option_type,
+    expiry,
+    strike,
+    spot,
+    delta_lookup: dict[tuple[str, str, str, float], float] | None = None,
+) -> float | None:
+    lookup = delta_lookup if delta_lookup is not None else build_option_delta_lookup()
+    key = _option_delta_key(asset_rollup, option_type, expiry, strike)
+    if key is not None:
+        delta = _valid_delta(lookup.get(key))
+        if delta is not None:
+            return delta
+    return estimate_delta(option_type, spot, strike)
+
+
+def resolve_option_delta_source(
+    asset_rollup,
+    option_type,
+    expiry,
+    strike,
+    spot,
+    delta_lookup: dict[tuple[str, str, str, float], float] | None = None,
+) -> str:
+    lookup = delta_lookup if delta_lookup is not None else build_option_delta_lookup()
+    key = _option_delta_key(asset_rollup, option_type, expiry, strike)
+    if key is not None and _valid_delta(lookup.get(key)) is not None:
+        return "pricefeed"
+    if estimate_delta(option_type, spot, strike) is not None:
+        return "estimate"
+    return ""
 
 
 

@@ -1,7 +1,7 @@
 import polars as pl
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.data.repository import estimate_delta
+from portefeuille_viewer.data.repository import build_option_delta_lookup, resolve_option_delta
 from portefeuille_viewer.services.scenario_order_resolver import resolve_active_scenario_orders_df
 
 CHANGE_KIND_MARKET_CLOSE = "market_close"
@@ -130,7 +130,12 @@ def _normalize_numeric_target(target: dict) -> dict:
     return target
 
 
-def _apply_order_delta(target: dict, row: dict, spot_price: float) -> None:
+def _apply_order_delta(
+    target: dict,
+    row: dict,
+    spot_price: float,
+    delta_lookup: dict | None = None,
+) -> None:
     asset_type = str(row.get("asset_type") or "").strip().lower()
     qty = _signed_qty(row.get("transactie_type"), row.get("transactie_aantal"))
     if qty == 0:
@@ -171,7 +176,14 @@ def _apply_order_delta(target: dict, row: dict, spot_price: float) -> None:
 
     if call_put == "put":
         target["opt_waarde_bezit"] += qty * strike * -1.0
-        delta = estimate_delta("put", spot_price, strike) or 0.0
+        delta = resolve_option_delta(
+            row.get("asset_rollup"),
+            "put",
+            row.get("optie_exp_date"),
+            strike,
+            spot_price,
+            delta_lookup,
+        ) or 0.0
         target["opt_waarde_bezit_delta"] += qty * spot_price * delta
         if strike > spot_price:
             target["opt_aantal_ITM_put"] += qty
@@ -227,6 +239,7 @@ def build_portfolio_value_scenario_overlay_df(
     base_rows = [dict(row) for row in base_df.to_dicts()]
     price_lookup = _price_lookup()
     meta_lookup = _meta_lookup()
+    delta_lookup = build_option_delta_lookup()
     by_asset: dict[str, dict] = {}
     for row in base_rows:
         asset = _norm_asset(row.get("asset_rollup"))
@@ -244,7 +257,7 @@ def build_portfolio_value_scenario_overlay_df(
         spot_price = _to_float(target.get("koers")) or price_lookup.get(asset, 0.0)
         if spot_price == 0.0:
             continue
-        _apply_order_delta(target, row, spot_price)
+        _apply_order_delta(target, row, spot_price, delta_lookup)
 
     out_df = pl.DataFrame(list(by_asset.values())) if by_asset else _empty_df_like_base()
     return _recompute_totals(out_df)
