@@ -96,9 +96,11 @@ def _to_float(value: object) -> float | None:
 def build_option_contract(asset: OptionScanAsset, month: str, right: str) -> Contract:
     contract = Contract()
     contract.symbol = asset.ib_symbol
-    contract.secType = "OPT"
+    contract.secType = asset.option_sec_type or ("FOP" if asset.ib_asset_type.upper() == "FUT" else "OPT")
     contract.exchange = asset.option_exchange or "SMART"
     contract.currency = asset.ib_currency
+    if asset.opt_tradingclass:
+        contract.tradingClass = asset.opt_tradingclass
     if right:
         contract.right = right
     contract.lastTradeDateOrContractMonth = month
@@ -141,6 +143,9 @@ def normalize_rows(
             "multiplier": _to_float(row.get("multiplier")) if row.get("multiplier") is not None else None,
             "contract_month": contract_month,
             "source": "tws_contract_details",
+            "requested_option_sec_type": asset.option_sec_type,
+            "requested_trading_class": asset.opt_tradingclass,
+            "requested_option_variant": asset.option_variant,
             "first_seen_at": seen_at,
             "last_seen_at": seen_at,
             "last_refresh_run_id": run_id,
@@ -167,10 +172,13 @@ class OptionChainScanner:
             ib_symbol=asset.ib_symbol,
             ib_currency=asset.ib_currency,
             option_exchange=asset.option_exchange,
+            option_sec_type=asset.option_sec_type,
+            opt_tradingclass=asset.opt_tradingclass,
+            option_variant=asset.option_variant,
             status="running",
             client_id=client_id,
         )
-        if asset.ib_asset_type.upper() != "STK":
+        if asset.ib_asset_type.upper() not in {"STK", "FUT"}:
             result.status = "skipped"
             result.error_message = f"unsupported_ib_asset_type={asset.ib_asset_type}"
             self.log(f"[skip] {asset.asset_rollup}: {result.error_message}")
@@ -212,7 +220,7 @@ class OptionChainScanner:
                     app.errors.clear()
                     contract = build_option_contract(asset, month, right)
                     self.log(
-                        f"[scan] {asset.asset_rollup} {asset.ib_symbol} {asset.option_exchange} "
+                        f"[scan] {asset.asset_rollup} {asset.ib_symbol} {asset.option_sec_type} {asset.option_exchange} "
                         f"month={month} right={right or 'BOTH'}"
                     )
                     started = time.perf_counter()

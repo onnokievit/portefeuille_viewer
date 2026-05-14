@@ -30,6 +30,22 @@ class OptionScanAsset:
     ib_asset_type: str
     option_exchange: str
     opt_tradingclass: str = ""
+    option_sec_type: str = ""
+    option_variant: str = ""
+
+    def __post_init__(self) -> None:
+        asset_type = str(self.ib_asset_type or "").upper()
+        option_type = str(self.option_sec_type or "").upper()
+        if not option_type:
+            option_type = "FOP" if asset_type == "FUT" else "OPT"
+        object.__setattr__(self, "ib_asset_type", asset_type or "STK")
+        object.__setattr__(self, "option_sec_type", option_type)
+        if not self.option_variant:
+            parts = [option_type, str(self.option_exchange or "").upper(), str(self.opt_tradingclass or "").upper()]
+            object.__setattr__(self, "option_variant", "/".join(part for part in parts if part))
+
+    def scan_key(self) -> str:
+        return f"{self.asset_rollup}|{self.option_variant}"
 
 
 @dataclass
@@ -39,6 +55,9 @@ class AssetScanResult:
     ib_currency: str
     option_exchange: str
     status: str
+    option_sec_type: str = ""
+    opt_tradingclass: str = ""
+    option_variant: str = ""
     parquet_path: str = ""
     months_requested: int = 0
     requests_sent: int = 0

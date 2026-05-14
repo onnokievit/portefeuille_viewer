@@ -522,8 +522,8 @@ class IvSurfaceWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Scanner assets laden mislukt", str(exc))
             return
-        current = next((item for item in scan_assets if item.asset_rollup == asset["asset_rollup"]), None)
-        if current is None:
+        current_variants = [item for item in scan_assets if item.asset_rollup == asset["asset_rollup"]]
+        if not current_variants:
             QMessageBox.information(self, "Asset ontbreekt", f"Geen scanner-config gevonden voor {asset['asset_rollup']}.")
             return
         settings = self._chain_scanner_settings()
@@ -531,7 +531,7 @@ class IvSurfaceWindow(QMainWindow):
         self.scan_current_btn.setEnabled(False)
         self.scan_stop_btn.setEnabled(True)
         self._scan_thread = QThread(self)
-        self._scan_worker = ChainScanWorker(settings, self.stock_db_path, [current])
+        self._scan_worker = ChainScanWorker(settings, self.stock_db_path, current_variants)
         self._scan_worker.moveToThread(self._scan_thread)
         self._scan_thread.started.connect(self._scan_worker.run)
         self._scan_worker.log.connect(self._append_log)
@@ -542,7 +542,7 @@ class IvSurfaceWindow(QMainWindow):
         self._scan_worker.finished.connect(self._scan_thread.quit)
         self._scan_thread.finished.connect(self._scan_thread.deleteLater)
         self._append_log(
-            f"[chain-scan] start {current.asset_rollup} months={settings.horizon_months} "
+            f"[chain-scan] start {asset['asset_rollup']} variants={len(current_variants)} months={settings.horizon_months} "
             f"rights={settings.right_request_mode} clientId={settings.client_id_min}-{settings.client_id_max}"
         )
         self._scan_thread.start()
@@ -592,7 +592,7 @@ class IvSurfaceWindow(QMainWindow):
             result.contracts_inserted,
             result.contracts_updated,
             result.contracts_rejected,
-            result.option_exchange,
+            result.option_variant or result.option_exchange,
             result.parquet_path or result.error_message,
         ]
         for col, value in enumerate(values):

@@ -73,30 +73,38 @@ def load_scan_assets(stock_db_path: str | Path, include_disabled: bool = False) 
         if not ib_asset_type:
             ib_asset_type = "STK"
         asset_exchange = _clean(row[idx["exchange"]]).upper() if has_exchange else ""
-        ref = opt_ref.get(asset_rollup, {})
-        option_exchange = _clean(ref.get("opt_exchange")).upper() or _fallback_option_exchange(
-            ib_currency=ib_currency,
-            asset_exchange=asset_exchange,
-        )
-        assets.append(
-            OptionScanAsset(
-                asset_rollup=asset_rollup,
-                ib_symbol=ib_symbol,
+        refs = opt_ref.get(asset_rollup) or [{}]
+        for ref in refs:
+            option_exchange = _clean(ref.get("opt_exchange")).upper() or _fallback_option_exchange(
                 ib_currency=ib_currency,
-                ib_asset_type=ib_asset_type,
-                option_exchange=option_exchange,
-                opt_tradingclass=_clean(ref.get("opt_tradingclass")).upper(),
+                asset_exchange=asset_exchange,
             )
-        )
+            option_sec_type = _clean(ref.get("option_sec_type") or ref.get("opt_sec_type")).upper()
+            if not option_sec_type:
+                option_sec_type = "FOP" if ib_asset_type == "FUT" else "OPT"
+            opt_tradingclass = _clean(ref.get("opt_tradingclass")).upper()
+            variant = "/".join(part for part in (option_sec_type, option_exchange, opt_tradingclass) if part)
+            assets.append(
+                OptionScanAsset(
+                    asset_rollup=asset_rollup,
+                    ib_symbol=ib_symbol,
+                    ib_currency=ib_currency,
+                    ib_asset_type=ib_asset_type,
+                    option_exchange=option_exchange,
+                    opt_tradingclass=opt_tradingclass,
+                    option_sec_type=option_sec_type,
+                    option_variant=variant,
+                )
+            )
     return assets
 
 
-def _load_option_reference(cursor) -> dict[str, dict]:
+def _load_option_reference(cursor) -> dict[str, list[dict]]:
     cols = table_columns(cursor, "optie_referentie_data")
     if not cols or "asset_rollup" not in cols:
         return {}
     wanted = ["asset_rollup"]
-    for col in ("opt_exchange", "opt_tradingclass", "opt_multiplier", "opt_week"):
+    for col in ("opt_exchange", "opt_tradingclass", "opt_multiplier", "opt_week", "option_sec_type", "opt_sec_type"):
         if col in cols:
             wanted.append(col)
     try:
@@ -104,20 +112,22 @@ def _load_option_reference(cursor) -> dict[str, dict]:
     except Exception:
         return {}
     idx = {name: pos for pos, name in enumerate(wanted)}
-    out: dict[str, dict] = {}
+    out: dict[str, list[dict]] = {}
+    seen: dict[str, set[tuple[str, str, str]]] = {}
     for row in rows:
         asset = _clean(row[idx["asset_rollup"]]).upper()
         if not asset:
             continue
-        week = 0
-        if "opt_week" in idx:
-            try:
-                week = int(row[idx["opt_week"]] or 0)
-            except Exception:
-                week = 0
-        # Prefer generic week=0 mapping; otherwise keep first row for now.
-        if asset not in out or week == 0:
-            out[asset] = {name: row[pos] for name, pos in idx.items()}
+        ref = {name: row[pos] for name, pos in idx.items()}
+        dedupe_key = (
+            _clean(ref.get("opt_exchange")).upper(),
+            _clean(ref.get("opt_tradingclass")).upper(),
+            _clean(ref.get("option_sec_type") or ref.get("opt_sec_type")).upper(),
+        )
+        if dedupe_key in seen.setdefault(asset, set()):
+            continue
+        seen[asset].add(dedupe_key)
+        out.setdefault(asset, []).append(ref)
     return out
 
 

@@ -297,25 +297,25 @@ class OptionChainRetrieverWindow(QMainWindow):
             check = SortableTableWidgetItem("")
             check.setFlags(check.flags() | Qt.ItemIsUserCheckable)
             check.setCheckState(Qt.Checked)
-            check.setData(ASSET_KEY_ROLE, asset.asset_rollup)
+            check.setData(ASSET_KEY_ROLE, asset.scan_key())
             self.asset_table.setItem(row, 0, check)
             values = [
                 asset.asset_rollup,
                 asset.ib_symbol,
                 asset.ib_currency,
-                f"{asset.ib_asset_type} / {asset.option_exchange}",
+                f"{asset.ib_asset_type} / {asset.option_variant}",
             ]
             for col, value in enumerate(values, start=1):
                 item = SortableTableWidgetItem(str(value))
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                item.setData(ASSET_KEY_ROLE, asset.asset_rollup)
+                item.setData(ASSET_KEY_ROLE, asset.scan_key())
                 item.setData(SORT_VALUE_ROLE, str(value))
                 self.asset_table.setItem(row, col, item)
         self.asset_table.setSortingEnabled(True)
         self._append_log(f"[assets] geladen: {len(self.assets)}")
 
     def _selected_assets(self) -> list[OptionScanAsset]:
-        by_asset = {asset.asset_rollup: asset for asset in self.assets}
+        by_asset = {asset.scan_key(): asset for asset in self.assets}
         out = []
         for row in range(self.asset_table.rowCount()):
             item = self.asset_table.item(row, 0)
@@ -407,7 +407,7 @@ class OptionChainRetrieverWindow(QMainWindow):
             result.contracts_inserted,
             result.contracts_updated,
             result.contracts_rejected,
-            result.option_exchange,
+            result.option_variant or result.option_exchange,
             result.parquet_path or result.error_message,
         ]
         for col, value in enumerate(values):
@@ -415,17 +415,17 @@ class OptionChainRetrieverWindow(QMainWindow):
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             self.result_table.setItem(row, col, item)
         if result.status == "success":
-            asset_row = self._asset_current_row(result.asset_rollup)
+            asset_row = self._asset_current_row(f"{result.asset_rollup}|{result.option_variant}")
             if asset_row is not None:
                 check = self.asset_table.item(asset_row, 0)
                 if check is not None:
                     check.setCheckState(Qt.Unchecked)
             self._append_log(f"[batch] {result.asset_rollup} succesvol; uitgevinkt")
 
-    def _asset_current_row(self, asset_rollup: str) -> int | None:
+    def _asset_current_row(self, asset_key: str) -> int | None:
         for row in range(self.asset_table.rowCount()):
             item = self.asset_table.item(row, 0)
-            if item and item.data(ASSET_KEY_ROLE) == asset_rollup:
+            if item and item.data(ASSET_KEY_ROLE) == asset_key:
                 return row
         return None
 

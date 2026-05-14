@@ -182,7 +182,7 @@ def collect_option_snapshot(
                 all_rows.append(out)
             progress(min(batch_start + len(batch), total), total, msg)
         log(f"[IV] snapshot rows={len(all_rows)}")
-        return pl.DataFrame(all_rows)
+        return pl.from_dicts(all_rows, infer_schema_length=None)
     finally:
         try:
             app.disconnect()
