@@ -2,7 +2,7 @@ import contextlib
 import os
 import time
 import threading
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Dict, Tuple, Optional, List
 
 import pandas as pd
@@ -560,30 +560,55 @@ class PriceFeedIB(QObject):
         """
         if not self._app:
             return
+        desired_labels: set[tuple[int, int, str, str]] = set()
+        normalized_rows: list[tuple[int, int, str, str]] = []
         for row in rows:
             if not isinstance(row, (list, tuple)) or len(row) < 2:
                 continue
-            series_id = row[0]
-            conid = row[1]
-            exchange_code = row[2] if len(row) > 2 else "SMART"
-            ib_currency = row[3] if len(row) > 3 else ""
             try:
-                series_id_i = int(series_id)
-                conid_i = int(conid)
+                series_id_i = int(row[0])
+                conid_i = int(row[1])
             except Exception:
                 continue
             if conid_i <= 0:
                 continue
-            label = (series_id_i, conid_i, str(exchange_code or "").upper(), str(ib_currency or "").upper())
+            exchange_code = str((row[2] if len(row) > 2 else "SMART") or "SMART").upper()
+            ib_currency = str((row[3] if len(row) > 3 else "") or "").upper()
+            label = (series_id_i, conid_i, exchange_code, ib_currency)
+            desired_labels.add(label)
+            normalized_rows.append(label)
+
+        stale_tids: list[int] = []
+        with self._lock:
+            for tid, meta in list(self._option_tid_meta.items()):
+                try:
+                    label = (
+                        int(meta.get("series_id")),
+                        int(meta.get("conid")),
+                        str(meta.get("exchange") or "SMART").upper(),
+                        str(meta.get("currency") or "").upper(),
+                    )
+                except Exception:
+                    continue
+                if label not in desired_labels:
+                    stale_tids.append(tid)
+                    self._option_tid_meta.pop(tid, None)
+                    self._option_subscribed.discard(label)
+        for tid in stale_tids:
+            with contextlib.suppress(Exception):
+                self._app.cancelMktData(tid)
+
+        for series_id_i, conid_i, exchange_code, ib_currency in normalized_rows:
+            label = (series_id_i, conid_i, exchange_code, ib_currency)
             if label in self._option_subscribed:
                 continue
 
             contract = self._Contract()
             contract.secType = "OPT"
             contract.conId = conid_i
-            contract.exchange = str(exchange_code or "SMART").upper()
+            contract.exchange = exchange_code or "SMART"
             if ib_currency:
-                contract.currency = str(ib_currency).upper()
+                contract.currency = ib_currency
 
             with self._lock:
                 tid = self._tid_next
@@ -638,6 +663,10 @@ class PriceFeedService(QObject):
         self._feed.optionTickUpdated.connect(self._on_option_tick)
         self._option_lock = threading.Lock()
         self._option_prices: Dict[int, dict] = {}
+        self._active_option_series_ids: set[int] = set()
+        self._active_option_series_known = False
+        self._dirty_option_series_ids: set[int] = set()
+        self._option_cleanup_date: date | None = None
         self._asset_save_state_lock = threading.Lock()
         self._asset_save_inflight = False
         self._asset_save_pending = False
@@ -654,7 +683,11 @@ class PriceFeedService(QObject):
         self._save_timer.start(300_000)  # elke 5 minuten
         self._option_save_timer = QTimer(self)
         self._option_save_timer.timeout.connect(self.save_option_last_prices_to_db)
-        self._option_save_timer.start(300_000)  # elke 5 minuten
+        option_save_interval_ms = max(
+            60_000,
+            int(os.getenv("OPTION_LAST_PRICES_SAVE_INTERVAL_MS", "900000")),
+        )
+        self._option_save_timer.start(option_save_interval_ms)  # default elke 15 minuten
 
     @staticmethod
     def _table_columns(cursor, table_name: str) -> set[str]:
@@ -782,6 +815,54 @@ class PriceFeedService(QObject):
         with self._option_lock:
             self._option_prices = loaded
 
+    def set_active_option_series_ids(self, series_ids) -> None:
+        active: set[int] = set()
+        for sid in series_ids or []:
+            try:
+                active.add(int(sid))
+            except Exception:
+                continue
+        with self._option_lock:
+            self._active_option_series_ids = active
+            self._active_option_series_known = True
+            self._option_prices = {
+                sid: row for sid, row in self._option_prices.items() if sid in active
+            }
+            self._dirty_option_series_ids.intersection_update(active)
+
+    def _cleanup_expired_option_last_prices_if_due(self) -> None:
+        today = date.today()
+        if self._option_cleanup_date == today:
+            return
+        self._option_cleanup_date = today
+        grace_days = max(0, int(os.getenv("OPTION_LAST_PRICES_EXPIRY_GRACE_DAYS", "7")))
+        cutoff = datetime.combine(today - timedelta(days=grace_days), datetime.min.time())
+        try:
+            with self._connect_option_last_prices_db() as conn:
+                cursor = conn.cursor()
+                self._ensure_option_last_prices_table(cursor)
+                cols = self._table_columns(cursor, "option_last_prices")
+                expiry_col = None
+                for candidate in ("optie_exp_date", "expiry", "exp_date"):
+                    if candidate in cols:
+                        expiry_col = candidate
+                        break
+                if not expiry_col:
+                    return
+                cursor.execute(
+                    f"DELETE FROM option_last_prices WHERE {expiry_col} IS NOT NULL AND {expiry_col} < ?",
+                    (cutoff,),
+                )
+                deleted = cursor.rowcount
+                conn.commit()
+                if _PRICE_FEED_PERF_LOG and deleted:
+                    print(
+                        f"[price-feed] cleanup=option_last_prices_expired rows={deleted} cutoff={cutoff.date().isoformat()}"
+                    )
+        except Exception as exc:
+            if _PRICE_FEED_PERF_LOG:
+                print(f"[price-feed] cleanup=option_last_prices_expired failed: {exc}")
+
     def _save_last_prices_to_db_sync(self, prices: dict[tuple[str, str], float] | None = None, *, force: bool = False):
         t0 = time.perf_counter()
         if prices:
@@ -794,6 +875,7 @@ class PriceFeedService(QObject):
 
     def _save_option_last_prices_to_db_sync(self, rows: list[dict]):
         t0 = time.perf_counter()
+        self._cleanup_expired_option_last_prices_if_due()
         if not rows:
             if _PRICE_FEED_PERF_LOG:
                 print("[price-feed] timer=save_option_last_prices_to_db rows=0 total_ms=0.0")
@@ -981,8 +1063,17 @@ class PriceFeedService(QObject):
         try:
             while True:
                 with self._option_lock:
-                    rows = [dict(v) for v in self._option_prices.values()]
+                    dirty_ids = set(self._dirty_option_series_ids)
+                    if self._active_option_series_known:
+                        dirty_ids.intersection_update(self._active_option_series_ids)
+                    rows = [
+                        dict(self._option_prices[sid])
+                        for sid in dirty_ids
+                        if sid in self._option_prices
+                    ]
                 self._save_option_last_prices_to_db_sync(rows)
+                with self._option_lock:
+                    self._dirty_option_series_ids.difference_update(dirty_ids)
                 with self._option_save_state_lock:
                     if self._option_save_pending:
                         self._option_save_pending = False
@@ -1028,24 +1119,28 @@ class PriceFeedService(QObject):
         except Exception:
             sid = None
         if sid is not None:
+            is_inactive = False
             with self._option_lock:
-                entry = self._option_prices.get(sid) or {"series_id": sid}
-                conid = payload.get("conid")
-                if conid is not None:
-                    entry["conid"] = conid
-                field = payload.get("field")
-                value = payload.get("value")
-                if field:
-                    entry[str(field)] = value
-                for gk in ("iv", "delta", "gamma", "theta", "model_price", "underlying_price"):
-                    if payload.get(gk) is not None:
-                        entry[gk] = payload.get(gk)
-                last_px, src = self._pick_option_price_from_entry(entry)
-                if last_px is not None:
-                    entry["last_px"] = last_px
-                    entry["px_source"] = src
-                entry["last_update"] = datetime.now()
-                self._option_prices[sid] = entry
+                is_inactive = self._active_option_series_known and sid not in self._active_option_series_ids
+                if not is_inactive:
+                    entry = self._option_prices.get(sid) or {"series_id": sid}
+                    conid = payload.get("conid")
+                    if conid is not None:
+                        entry["conid"] = conid
+                    field = payload.get("field")
+                    value = payload.get("value")
+                    if field:
+                        entry[str(field)] = value
+                    for gk in ("iv", "delta", "gamma", "theta", "model_price", "underlying_price"):
+                        if payload.get(gk) is not None:
+                            entry[gk] = payload.get(gk)
+                    last_px, src = self._pick_option_price_from_entry(entry)
+                    if last_px is not None:
+                        entry["last_px"] = last_px
+                        entry["px_source"] = src
+                    entry["last_update"] = datetime.now()
+                    self._option_prices[sid] = entry
+                    self._dirty_option_series_ids.add(sid)
         self.optionTickUpdated.emit(payload)
 
     def get_option_last(self, series_id: int) -> Optional[dict]:
@@ -1084,6 +1179,13 @@ class PriceFeedService(QObject):
                 self._option_save_timer.stop()
             self._save_last_prices_to_db_sync(force=True)
             with self._option_lock:
-                rows = [dict(v) for v in self._option_prices.values()]
+                dirty_ids = set(self._dirty_option_series_ids)
+                if self._active_option_series_known:
+                    dirty_ids.intersection_update(self._active_option_series_ids)
+                rows = [
+                    dict(self._option_prices[sid])
+                    for sid in dirty_ids
+                    if sid in self._option_prices
+                ]
             self._save_option_last_prices_to_db_sync(rows)
         self._feed.shutdown()

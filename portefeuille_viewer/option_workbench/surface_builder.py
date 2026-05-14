@@ -187,6 +187,163 @@ def build_metric_heatmap(
     return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
 
 
+def build_gex_by_strike(df: pd.DataFrame, gamma_flip: float | None = None, spot: float | None = None) -> str:
+    data = df.copy()
+    if data.empty or "strike" not in data.columns or "net_dealer_gex_1pct" not in data.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Geen GEX data beschikbaar", showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5)
+        fig.update_layout(height=560, margin=dict(l=55, r=30, t=45, b=45), title="Dealer Gamma Exposure per Strike")
+        return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+    for col in ("strike", "net_dealer_gex_1pct", "cumulative_dealer_gex_1pct"):
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+    data = data.sort_values("strike").dropna(subset=["strike", "net_dealer_gex_1pct"])
+
+    colors = np.where(data["net_dealer_gex_1pct"] >= 0, "#2E7D32", "#C62828")
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Bar(
+            x=data["strike"],
+            y=data["net_dealer_gex_1pct"],
+            marker_color=colors,
+            name="Net dealer GEX 1%",
+            hovertemplate="Strike: %{x:.2f}<br>Net GEX: %{y:,.0f}<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+    if "cumulative_dealer_gex_1pct" in data.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=data["strike"],
+                y=data["cumulative_dealer_gex_1pct"],
+                mode="lines+markers",
+                line=dict(color="#1565C0", width=2),
+                marker=dict(size=5),
+                name="Cumulative GEX",
+                hovertemplate="Strike: %{x:.2f}<br>Cum GEX: %{y:,.0f}<extra></extra>",
+            ),
+            secondary_y=True,
+        )
+    if gamma_flip is not None and np.isfinite(gamma_flip):
+        fig.add_vline(
+            x=float(gamma_flip),
+            line_width=2,
+            line_dash="dash",
+            line_color="#6A1B9A",
+            annotation_text=f"Gamma flip {float(gamma_flip):.2f}",
+            annotation_position="top left",
+        )
+    if spot is not None and np.isfinite(spot):
+        fig.add_vline(
+            x=float(spot),
+            line_width=2,
+            line_dash="dot",
+            line_color="#424242",
+            annotation_text=f"Spot {float(spot):.2f}",
+            annotation_position="bottom left",
+        )
+    left_range, right_range = _aligned_zero_axis_ranges(
+        data["net_dealer_gex_1pct"],
+        data["cumulative_dealer_gex_1pct"] if "cumulative_dealer_gex_1pct" in data.columns else pd.Series(dtype=float),
+    )
+    fig.update_yaxes(title_text="Net dealer GEX per 1% move", range=left_range, zeroline=True, secondary_y=False)
+    fig.update_yaxes(title_text="Cumulative dealer GEX", range=right_range, zeroline=True, secondary_y=True)
+    fig.update_layout(
+        height=560,
+        margin=dict(l=55, r=45, t=45, b=45),
+        title="Dealer Gamma Exposure per Strike",
+        xaxis_title="Strike",
+        bargap=0.08,
+        hovermode="x unified",
+    )
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
+def _aligned_zero_axis_ranges(left_values: pd.Series, right_values: pd.Series) -> tuple[list[float] | None, list[float] | None]:
+    left_min, left_max = _padded_axis_limits(left_values)
+    right_min, right_max = _padded_axis_limits(right_values)
+    if left_min is None or right_min is None:
+        return None, None
+
+    zero_pos = (0.0 - left_min) / (left_max - left_min)
+    zero_pos = min(max(zero_pos, 0.05), 0.95)
+
+    right_min, right_max = _range_with_zero_position(right_min, right_max, zero_pos)
+    return [left_min, left_max], [right_min, right_max]
+
+
+def _padded_axis_limits(values: pd.Series) -> tuple[float | None, float | None]:
+    numeric = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+    if numeric.empty:
+        return None, None
+    low = min(float(numeric.min()), 0.0)
+    high = max(float(numeric.max()), 0.0)
+    if np.isclose(low, high):
+        pad = max(abs(high), 1.0) * 0.1
+        return low - pad, high + pad
+    pad = (high - low) * 0.05
+    return low - pad, high + pad
+
+
+def _range_with_zero_position(data_min: float, data_max: float, zero_pos: float) -> tuple[float, float]:
+    below = max(abs(min(data_min, 0.0)), 1e-9)
+    above = max(max(data_max, 0.0), 1e-9)
+    span = max(below / zero_pos, above / (1.0 - zero_pos))
+    return -span * zero_pos, span * (1.0 - zero_pos)
+
+
+def build_gex_heatmap(df: pd.DataFrame) -> str:
+    data = df.copy()
+    metric = "dealer_gex_1pct"
+    required = {"strike", "dte", metric}
+    if data.empty or not required.issubset(data.columns):
+        fig = go.Figure()
+        fig.add_annotation(text="Geen GEX data beschikbaar", showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5)
+        fig.update_layout(height=540, margin=dict(l=50, r=30, t=45, b=45), title="GEX Heatmap")
+        return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+    for col in ("strike", "dte", metric):
+        data[col] = pd.to_numeric(data[col], errors="coerce")
+    data = data.dropna(subset=["strike", "dte", metric])
+    if data.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="Geen GEX data beschikbaar", showarrow=False, xref="paper", yref="paper", x=0.5, y=0.5)
+        fig.update_layout(height=540, margin=dict(l=50, r=30, t=45, b=45), title="GEX Heatmap")
+        return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+    pivot = (
+        data.groupby(["dte", "strike"], dropna=True)[metric]
+        .sum()
+        .reset_index()
+        .pivot(index="dte", columns="strike", values=metric)
+        .sort_index()
+    )
+    z_abs = np.nanmax(np.abs(pivot.to_numpy(dtype=float))) if pivot.size else 0.0
+    z_lim = float(z_abs) if np.isfinite(z_abs) and z_abs > 0 else 1.0
+    fig = go.Figure(
+        go.Heatmap(
+            x=pivot.columns.astype(float),
+            y=pivot.index.astype(float),
+            z=pivot.to_numpy(dtype=float),
+            colorscale="RdBu",
+            zmid=0,
+            zmin=-z_lim,
+            zmax=z_lim,
+            colorbar=dict(title="GEX 1%", thickness=14),
+            hovertemplate="Strike: %{x:.2f}<br>DTE: %{y:.0f}<br>GEX: %{z:,.0f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        height=540,
+        margin=dict(l=50, r=30, t=45, b=45),
+        title="Dealer GEX Heatmap",
+        xaxis_title="Strike",
+        yaxis_title="DTE",
+    )
+    return fig.to_html(include_plotlyjs=_PLOTLY_CDN, full_html=True)
+
+
 def _sides(right: str) -> list[tuple[str, str, str]]:
     if right == "C":
         return [("C", "Blues", "Calls")]

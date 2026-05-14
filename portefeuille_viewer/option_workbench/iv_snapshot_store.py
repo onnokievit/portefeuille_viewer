@@ -6,7 +6,7 @@ from pathlib import Path
 
 import polars as pl
 
-from iv_models import SnapshotPaths
+from .iv_models import SnapshotPaths
 
 
 def snapshot_paths(parquet_dir: str | Path, asset_rollup: str, snapshot_ts: datetime | None = None) -> SnapshotPaths:

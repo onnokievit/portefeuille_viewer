@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import polars as pl
@@ -33,15 +34,20 @@ except Exception:  # pragma: no cover
     QWebEngineView = None
 
 from portefeuille_viewer.config import get_settings
+from .asset_source import load_scan_assets
+from .models import AssetScanResult, OptionScanAsset, ScannerSettings
+from .orchestrator import OptionChainRetrievalJob
 
-import surface_builder as surface
-from chain_registry_reader import chain_summary, load_chain
-from db_access import load_assets, load_latest_spot
-from iv_models import IvRequestSettings, SurfaceSelectionSettings
-from iv_snapshot_store import load_latest, write_snapshot
-from option_market_collector import collect_option_snapshot
-from option_selector import select_option_universe
-from theta_scanner import build_theta_scan, filter_theta_candidates
+from . import surface_builder as surface
+from .chain_registry_reader import chain_summary, load_chain
+from .db_access import load_assets, load_latest_spot
+from .gex_scanner import aggregate_gex_by_strike, build_gex_scan, estimate_gamma_flip
+from .iv_models import IvRequestSettings, SurfaceSelectionSettings
+from .iv_snapshot_store import load_latest, write_snapshot
+from .option_market_collector import collect_option_snapshot
+from .option_selector import select_option_universe
+from .spot_resolver import load_asset_last_price, resolve_spot
+from .theta_scanner import build_theta_scan, filter_theta_candidates
 
 
 class IvFetchWorker(QObject):
@@ -67,6 +73,40 @@ class IvFetchWorker(QObject):
             self.finished.emit(df)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class ChainScanWorker(QObject):
+    log = Signal(str)
+    result = Signal(object)
+    finished = Signal()
+    failed = Signal(str)
+
+    def __init__(self, settings: ScannerSettings, stock_db_path: str, assets: list[OptionScanAsset]) -> None:
+        super().__init__()
+        self.settings = settings
+        self.stock_db_path = stock_db_path
+        self.assets = assets
+        self._job: OptionChainRetrievalJob | None = None
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self._job = OptionChainRetrievalJob(
+                self.settings,
+                self.stock_db_path,
+                self.assets,
+                log=self.log.emit,
+                on_asset_result=self.result.emit,
+            )
+            self._job.run()
+            self.finished.emit()
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            self.finished.emit()
+
+    def stop(self) -> None:
+        if self._job is not None:
+            self._job.stop()
 
 
 class SortableTableWidgetItem(QTableWidgetItem):
@@ -96,8 +136,14 @@ class IvSurfaceWindow(QMainWindow):
         self.snapshot_df = pl.DataFrame()
         self.theta_df = pl.DataFrame()
         self.theta_display_df = pl.DataFrame()
+        self.gex_df = pl.DataFrame()
+        self.gex_strike_df = pl.DataFrame()
+        self.gamma_flip = None
+        self.spot_source = ""
         self._thread: QThread | None = None
         self._worker: IvFetchWorker | None = None
+        self._scan_thread: QThread | None = None
+        self._scan_worker: ChainScanWorker | None = None
 
         self._build_ui(scanner_cfg)
         self._load_assets()
@@ -245,6 +291,8 @@ class IvSurfaceWindow(QMainWindow):
         self.selection_table = QTableWidget()
         self.snapshot_table = QTableWidget()
         self.theta_table = QTableWidget()
+        self.gex_table = QTableWidget()
+        self.gex_strike_table = QTableWidget()
         self.theta_filter_col = QComboBox()
         self.theta_filter_text = QLineEdit()
         self.theta_filter_text.setPlaceholderText("tekst bevat")
@@ -253,13 +301,18 @@ class IvSurfaceWindow(QMainWindow):
         self.theta_filter_max = QLineEdit()
         self.theta_filter_max.setPlaceholderText("max")
         self.tabs.addTab(self.chain_table, "Chain parquet")
+        self.tabs.addTab(self._chain_scanner_tab(scanner_cfg), "Chain scanner")
         self.tabs.addTab(self.selection_table, "Selectie")
         self.tabs.addTab(self.snapshot_table, "IV snapshot")
         self.tabs.addTab(self._theta_tab(), "Theta scanner")
+        self.tabs.addTab(self.gex_table, "Gamma Exposure")
+        self.tabs.addTab(self.gex_strike_table, "GEX per strike")
         self.tabs.addTab(self._web_widget("surface3d"), "3D Surface")
         self.tabs.addTab(self._web_widget("smile"), "Smile")
         self.tabs.addTab(self._web_widget("heatmap"), "Heatmap")
         self.tabs.addTab(self._web_widget("thetaheatmap"), "Theta heatmap")
+        self.tabs.addTab(self._web_widget("gexstrike"), "GEX chart")
+        self.tabs.addTab(self._web_widget("gexheatmap"), "GEX heatmap")
         splitter.addWidget(self.tabs)
         self.log_edit = QTextEdit()
         self.log_edit.setReadOnly(True)
@@ -267,6 +320,55 @@ class IvSurfaceWindow(QMainWindow):
         splitter.setSizes([620, 180])
         root.addWidget(splitter)
         self.setCentralWidget(central)
+
+    def _chain_scanner_tab(self, scanner_cfg: dict) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        controls = QHBoxLayout()
+        self.scan_horizon_spin = QSpinBox()
+        self.scan_horizon_spin.setRange(1, 120)
+        self.scan_horizon_spin.setValue(int(scanner_cfg.get("horizon_months") or 3))
+        self.scan_request_pause_spin = QDoubleSpinBox()
+        self.scan_request_pause_spin.setRange(0.0, 60.0)
+        self.scan_request_pause_spin.setDecimals(2)
+        self.scan_request_pause_spin.setSingleStep(0.25)
+        self.scan_request_pause_spin.setValue(float(scanner_cfg.get("request_pause_sec") or 1.0))
+        self.scan_asset_pause_spin = QDoubleSpinBox()
+        self.scan_asset_pause_spin.setRange(0.0, 300.0)
+        self.scan_asset_pause_spin.setDecimals(2)
+        self.scan_asset_pause_spin.setSingleStep(0.5)
+        self.scan_asset_pause_spin.setValue(float(scanner_cfg.get("asset_pause_sec") or 2.0))
+        self.scan_right_mode_combo = QComboBox()
+        self.scan_right_mode_combo.addItem("C/P gescheiden", "separate")
+        self.scan_right_mode_combo.addItem("C+P in 1 request", "combined")
+        mode_idx = self.scan_right_mode_combo.findData(str(scanner_cfg.get("right_request_mode") or "separate"))
+        self.scan_right_mode_combo.setCurrentIndex(mode_idx if mode_idx >= 0 else 0)
+        self.scan_current_btn = QPushButton("Scan huidige asset")
+        self.scan_current_btn.clicked.connect(self._start_chain_scan_current)
+        self.scan_stop_btn = QPushButton("Stop scan")
+        self.scan_stop_btn.setEnabled(False)
+        self.scan_stop_btn.clicked.connect(self._stop_chain_scan)
+        for label, control in [
+            ("Maanden", self.scan_horizon_spin),
+            ("Req pauze", self.scan_request_pause_spin),
+            ("Asset pauze", self.scan_asset_pause_spin),
+            ("Rights", self.scan_right_mode_combo),
+        ]:
+            controls.addWidget(QLabel(label))
+            controls.addWidget(control)
+        controls.addStretch(1)
+        controls.addWidget(self.scan_current_btn)
+        controls.addWidget(self.scan_stop_btn)
+        layout.addLayout(controls)
+        self.scan_result_table = QTableWidget(0, 9)
+        self.scan_result_table.setHorizontalHeaderLabels(
+            ["asset", "clientId", "status", "returned", "inserted", "updated", "rejected", "exchange", "parquet/error"]
+        )
+        self.scan_result_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.scan_result_table.horizontalHeader().setDefaultSectionSize(120)
+        self.scan_result_table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(self.scan_result_table)
+        return widget
 
     def _theta_tab(self) -> QWidget:
         widget = QWidget()
@@ -319,12 +421,23 @@ class IvSurfaceWindow(QMainWindow):
         asset = self._current_asset()
         if not asset:
             return
-        spot, info = load_latest_spot(self.stock_db_path, asset["asset_rollup"])
-        if spot:
-            self.spot_edit.setText(f"{spot:.4f}")
-            self.spot_label.setText(f"spot uit DB: {info}")
+        quote = load_asset_last_price(self.stock_db_path, asset)
+        if quote.price is None:
+            spot, info = load_latest_spot(self.stock_db_path, asset["asset_rollup"])
+            quote_price = spot
+            source = "historical_data_correct"
+            detail = str(info)
         else:
-            self.spot_label.setText(info)
+            quote_price = quote.price
+            source = quote.source
+            detail = quote.detail
+        if quote_price:
+            self.spot_edit.setText(f"{quote_price:.4f}")
+            self.spot_source = source
+            self.spot_label.setText(f"spot uit {source}: {detail}")
+        else:
+            self.spot_source = ""
+            self.spot_label.setText(detail)
 
     def _load_chain_for_asset(self) -> None:
         asset = self._current_asset()
@@ -341,7 +454,10 @@ class IvSurfaceWindow(QMainWindow):
 
     def _apply_selection(self) -> None:
         if self.chain_df.is_empty():
+            self._log_cli("[selectie] overgeslagen: chain is leeg")
             return
+        started = time.perf_counter()
+        self._refresh_spot_from_ibkr()
         spot = self._spot_value()
         settings = SurfaceSelectionSettings(
             dte_min=self.dte_min_spin.value(),
@@ -351,9 +467,23 @@ class IvSurfaceWindow(QMainWindow):
             max_strikes_per_expiry=self.max_strikes_spin.value(),
             right_mode=str(self.right_combo.currentData() or "B"),
         )
+        self._log_cli(
+            "[selectie] start "
+            f"chain_rows={self.chain_df.height} spot={spot} "
+            f"dte={settings.dte_min}-{settings.dte_max} "
+            f"k_s={settings.moneyness_min:.3f}-{settings.moneyness_max:.3f} "
+            f"max_strikes={settings.max_strikes_per_expiry} right={settings.right_mode}"
+        )
         self.selected_df = select_option_universe(self.chain_df, spot, settings)
+        selected_ms = (time.perf_counter() - started) * 1000.0
         self._append_log(f"[selectie] rows={self.selected_df.height}")
+        self._log_cli(f"[selectie] selected_rows={self.selected_df.height} select_ms={selected_ms:.1f}")
+        table_started = time.perf_counter()
         self._fill_table(self.selection_table, self.selected_df.head(1000))
+        table_ms = (time.perf_counter() - table_started) * 1000.0
+        total_ms = (time.perf_counter() - started) * 1000.0
+        self._log_cli(f"[selectie] table_rows={min(self.selected_df.height, 1000)} table_ms={table_ms:.1f}")
+        self._log_cli(f"[selectie] klaar total_ms={total_ms:.1f}")
         self.fetch_btn.setEnabled(not self.selected_df.is_empty())
 
     def _fetch_iv(self) -> None:
@@ -383,6 +513,96 @@ class IvSurfaceWindow(QMainWindow):
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
 
+    def _start_chain_scan_current(self) -> None:
+        asset = self._current_asset()
+        if not asset:
+            return
+        try:
+            scan_assets = load_scan_assets(self.stock_db_path, include_disabled=True)
+        except Exception as exc:
+            QMessageBox.critical(self, "Scanner assets laden mislukt", str(exc))
+            return
+        current = next((item for item in scan_assets if item.asset_rollup == asset["asset_rollup"]), None)
+        if current is None:
+            QMessageBox.information(self, "Asset ontbreekt", f"Geen scanner-config gevonden voor {asset['asset_rollup']}.")
+            return
+        settings = self._chain_scanner_settings()
+        self.scan_result_table.setRowCount(0)
+        self.scan_current_btn.setEnabled(False)
+        self.scan_stop_btn.setEnabled(True)
+        self._scan_thread = QThread(self)
+        self._scan_worker = ChainScanWorker(settings, self.stock_db_path, [current])
+        self._scan_worker.moveToThread(self._scan_thread)
+        self._scan_thread.started.connect(self._scan_worker.run)
+        self._scan_worker.log.connect(self._append_log)
+        self._scan_worker.log.connect(self._log_cli)
+        self._scan_worker.result.connect(self._append_chain_scan_result)
+        self._scan_worker.failed.connect(self._chain_scan_failed)
+        self._scan_worker.finished.connect(self._chain_scan_finished)
+        self._scan_worker.finished.connect(self._scan_thread.quit)
+        self._scan_thread.finished.connect(self._scan_thread.deleteLater)
+        self._append_log(
+            f"[chain-scan] start {current.asset_rollup} months={settings.horizon_months} "
+            f"rights={settings.right_request_mode} clientId={settings.client_id_min}-{settings.client_id_max}"
+        )
+        self._scan_thread.start()
+
+    def _chain_scanner_settings(self) -> ScannerSettings:
+        return ScannerSettings(
+            parquet_dir=Path(self.parquet_dir_edit.text().strip()),
+            horizon_months=self.scan_horizon_spin.value(),
+            parallel_workers=1,
+            right_request_mode=str(self.scan_right_mode_combo.currentData() or "separate"),
+            tws_host=self.host_edit.text().strip() or "127.0.0.1",
+            tws_port=self.port_spin.value(),
+            client_id_base=min(self.client_min_spin.value(), self.client_max_spin.value()),
+            client_id_min=min(self.client_min_spin.value(), self.client_max_spin.value()),
+            client_id_max=max(self.client_min_spin.value(), self.client_max_spin.value()),
+            request_pause_sec=self.scan_request_pause_spin.value(),
+            asset_pause_sec=self.scan_asset_pause_spin.value(),
+        )
+
+    def _stop_chain_scan(self) -> None:
+        if self._scan_worker is not None:
+            self._scan_worker.stop()
+            self._append_log("[chain-scan] stop gevraagd")
+
+    @Slot(str)
+    def _chain_scan_failed(self, message: str) -> None:
+        QMessageBox.critical(self, "Chain scan mislukt", message)
+        self._append_log(f"[chain-scan error] {message}")
+
+    @Slot()
+    def _chain_scan_finished(self) -> None:
+        self.scan_current_btn.setEnabled(True)
+        self.scan_stop_btn.setEnabled(False)
+        self._scan_worker = None
+        self._scan_thread = None
+        self._append_log("[chain-scan] klaar")
+
+    @Slot(object)
+    def _append_chain_scan_result(self, result: AssetScanResult) -> None:
+        row = self.scan_result_table.rowCount()
+        self.scan_result_table.insertRow(row)
+        values = [
+            result.asset_rollup,
+            result.client_id,
+            result.status,
+            result.contracts_returned,
+            result.contracts_inserted,
+            result.contracts_updated,
+            result.contracts_rejected,
+            result.option_exchange,
+            result.parquet_path or result.error_message,
+        ]
+        for col, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self.scan_result_table.setItem(row, col, item)
+        current = self._current_asset()
+        if current and result.asset_rollup == current["asset_rollup"] and result.status == "success":
+            self._append_log(f"[chain-scan] {result.asset_rollup} gereed; klik 'Laad chain' om de nieuwe chain te laden")
+
     @Slot(object)
     def _fetch_finished(self, df: pl.DataFrame) -> None:
         self.snapshot_df = df
@@ -396,6 +616,7 @@ class IvSurfaceWindow(QMainWindow):
             self._append_log(f"[snapshot] geschreven: {paths.snapshot_path}")
             self._append_log(f"[snapshot] latest: {paths.latest_path}")
         self._build_theta_scan()
+        self._build_gex_scan()
         self._render_charts()
 
     @Slot(str)
@@ -423,6 +644,7 @@ class IvSurfaceWindow(QMainWindow):
         self._fill_table(self.snapshot_table, df.head(1000))
         self._append_log(f"[snapshot] latest geladen rows={df.height}")
         self._build_theta_scan()
+        self._build_gex_scan()
         self._render_charts()
 
     def _render_charts(self) -> None:
@@ -446,6 +668,11 @@ class IvSurfaceWindow(QMainWindow):
                 right,
             )
             self._set_html(self.thetaheatmap_view, html_theta)
+        self._set_html(
+            self.gexstrike_view,
+            surface.build_gex_by_strike(self.gex_strike_df.to_pandas(), self.gamma_flip, self._spot_value()),
+        )
+        self._set_html(self.gexheatmap_view, surface.build_gex_heatmap(self.gex_df.to_pandas()))
 
     def _build_theta_scan(self) -> None:
         spot = self._spot_value()
@@ -461,6 +688,30 @@ class IvSurfaceWindow(QMainWindow):
         self._append_log(f"[theta] candidates={self.theta_df.height} raw={raw.height}")
         self._populate_theta_filter_columns()
         self._refresh_theta_table()
+
+    def _build_gex_scan(self) -> None:
+        spot = self._spot_value()
+        self.gex_df = build_gex_scan(
+            self.snapshot_df,
+            fallback_spot=spot,
+            prefer_fallback_spot=self.spot_source.startswith("ibkr"),
+        )
+        if self.gex_df.is_empty():
+            self.gex_strike_df = pl.DataFrame()
+            self.gamma_flip = None
+            self._fill_table(self.gex_table, self.gex_df)
+            self._fill_table(self.gex_strike_table, self.gex_strike_df)
+            self._append_log("[gex] geen bruikbare gamma/open-interest data")
+            return
+        self.gex_strike_df = aggregate_gex_by_strike(self.gex_df)
+        self.gamma_flip = estimate_gamma_flip(self.gex_strike_df, reference_spot=spot)
+        self._fill_table(self.gex_table, self.gex_df.head(1000))
+        self._fill_table(self.gex_strike_table, self.gex_strike_df.head(1000))
+        flip_text = f"{self.gamma_flip:.3f}" if self.gamma_flip is not None else "n.v.t."
+        self._append_log(
+            f"[gex] contracts={self.gex_df.height} strikes={self.gex_strike_df.height} "
+            f"gamma_flip={flip_text} spot={spot} spot_source={self.spot_source or 'manual'}"
+        )
 
     def _populate_theta_filter_columns(self) -> None:
         current = self.theta_filter_col.currentData()
@@ -543,22 +794,30 @@ class IvSurfaceWindow(QMainWindow):
             widget.setPlainText(html)
 
     def _fill_table(self, table: QTableWidget, df: pl.DataFrame) -> None:
+        table.setUpdatesEnabled(False)
         table.setSortingEnabled(False)
-        cols = df.columns
-        table.setColumnCount(len(cols))
-        table.setHorizontalHeaderLabels(cols)
-        table.setRowCount(df.height)
-        for r_idx, row in enumerate(df.to_dicts()):
-            for c_idx, col in enumerate(cols):
-                value = row.get(col, "")
-                item = SortableTableWidgetItem(self._display_value(col, value))
-                sort_value = self._sort_value(value)
-                if sort_value is not None:
-                    item.setData(Qt.UserRole, sort_value)
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                table.setItem(r_idx, c_idx, item)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        table.setSortingEnabled(True)
+        try:
+            cols = df.columns
+            table.clearContents()
+            table.setColumnCount(len(cols))
+            table.setHorizontalHeaderLabels(cols)
+            table.setRowCount(df.height)
+            for r_idx, row in enumerate(df.to_dicts()):
+                for c_idx, col in enumerate(cols):
+                    value = row.get(col, "")
+                    item = SortableTableWidgetItem(self._display_value(col, value))
+                    sort_value = self._sort_value(value)
+                    if sort_value is not None:
+                        item.setData(Qt.UserRole, sort_value)
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    table.setItem(r_idx, c_idx, item)
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(QHeaderView.Interactive)
+            header.setDefaultSectionSize(115)
+            header.setStretchLastSection(False)
+        finally:
+            table.setSortingEnabled(True)
+            table.setUpdatesEnabled(True)
 
     def _sort_value(self, value):
         if value is None:
@@ -610,6 +869,22 @@ class IvSurfaceWindow(QMainWindow):
             "model_theta",
             "model_moneyness",
             "multiplier",
+            "spot_used",
+            "gamma_used",
+            "open_interest_used",
+            "call_open_interest",
+            "put_open_interest",
+            "multiplier_used",
+            "gex_1pct",
+            "dealer_gex_1pct",
+            "abs_dealer_gex_1pct",
+            "net_dealer_gex_1pct",
+            "call_gex_1pct",
+            "put_gex_1pct",
+            "gross_gex_1pct",
+            "open_interest",
+            "cumulative_dealer_gex_1pct",
+            "abs_net_dealer_gex_1pct",
         }
         if col in numeric_cols:
             return f"{numeric:.3f}"
@@ -623,6 +898,31 @@ class IvSurfaceWindow(QMainWindow):
     def _current_asset(self) -> dict | None:
         return self.asset_combo.currentData()
 
+    def _refresh_spot_from_ibkr(self) -> None:
+        asset = self._current_asset()
+        if not asset:
+            return
+        current = self._spot_value()
+        self._log_cli(f"[spot] refresh start asset={asset.get('asset_rollup')} current={current}")
+        quote = resolve_spot(
+            asset=asset,
+            stock_db_path=self.stock_db_path,
+            host=self.host_edit.text().strip() or "127.0.0.1",
+            port=self.port_spin.value(),
+            client_id_min=min(self.client_min_spin.value(), self.client_max_spin.value()),
+            client_id_max=max(self.client_min_spin.value(), self.client_max_spin.value()),
+            market_data_type=int(self.market_type_combo.currentData() or 1),
+            log=self._log_cli,
+            timeout_sec=4.0,
+        )
+        if quote.price is None:
+            self._log_cli(f"[spot] refresh failed source={quote.source} detail={quote.detail}")
+            return
+        self.spot_edit.setText(f"{quote.price:.4f}")
+        self.spot_source = quote.source
+        self.spot_label.setText(f"spot uit {quote.source}: {quote.detail}")
+        self._log_cli(f"[spot] refresh ok price={quote.price:.4f} source={quote.source} detail={quote.detail}")
+
     def _spot_value(self) -> float | None:
         try:
             return float(self.spot_edit.text().strip().replace(",", "."))
@@ -632,3 +932,6 @@ class IvSurfaceWindow(QMainWindow):
     @Slot(str)
     def _append_log(self, msg: str) -> None:
         self.log_edit.append(str(msg))
+
+    def _log_cli(self, msg: str) -> None:
+        print(str(msg), flush=True)

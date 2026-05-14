@@ -11,7 +11,7 @@ from ibapi.client import EClient
 from ibapi.contract import Contract
 from ibapi.wrapper import EWrapper
 
-from iv_models import IvRequestSettings
+from .iv_models import IvRequestSettings
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int, int, str], None]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from iv_models import SurfaceSelectionSettings
+from .iv_models import SurfaceSelectionSettings
 
 
 def select_option_universe(

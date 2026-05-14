@@ -883,9 +883,15 @@ class OptionTimevalueService(QObject):
             self._underlying_close = result.get("close_map") or {}
             self._rows = result.get("rows") or []
             subs = result.get("subs") or []
-            if subs:
-                with contextlib.suppress(Exception):
-                    self.price_feed.ensure_option_subscriptions(subs)
+            active_series_ids = {
+                int(r.series_id)
+                for r in self._rows
+                if r.series_id
+            }
+            with contextlib.suppress(Exception):
+                self.price_feed.set_active_option_series_ids(active_series_ids)
+            with contextlib.suppress(Exception):
+                self.price_feed.ensure_option_subscriptions(subs)
             self._publish_snapshot(trigger="rebuild_apply")
             self._log(
                 f"[option-timevalue] universe refreshed: open_series={len(self._rows)} "
