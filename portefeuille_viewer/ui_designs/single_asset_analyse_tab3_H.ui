@@ -1068,6 +1068,16 @@ margin-top: 0px;  /* ruimte voor de titel */</string>
        </property>
       </widget>
      </widget>
+     <widget class="QComboBox" name="comboBoxBrokerFilter">
+      <property name="geometry">
+       <rect>
+        <x>2120</x>
+        <y>20</y>
+        <width>161</width>
+        <height>24</height>
+       </rect>
+      </property>
+     </widget>
     </widget>
    </item>
   </layout>

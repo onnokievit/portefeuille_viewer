@@ -383,6 +383,9 @@ class Ui_SingleAssetAnalyseTab(object):
         self.labelDivDate_3.setObjectName(u"labelDivDate_3")
         self.labelDivDate_3.setGeometry(QRect(140, 10, 61, 20))
         self.labelDivDate_3.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignTrailing|Qt.AlignmentFlag.AlignVCenter)
+        self.comboBoxBrokerFilter = QComboBox(self.widget)
+        self.comboBoxBrokerFilter.setObjectName(u"comboBoxBrokerFilter")
+        self.comboBoxBrokerFilter.setGeometry(QRect(2120, 20, 161, 24))
 
         self.verticalLayout_2.addWidget(self.widget)
 

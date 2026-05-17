@@ -391,6 +391,8 @@ def build_margin_efficiency_report(
             premium_per_margin = None
             result_per_margin = None
             ann_premium_per_margin = None
+            strike_spot_factor = None
+            strike_adjusted_ann_premium_per_margin = None
             extrinsic_per_share = None
             remaining_extrinsic = None
             entry_cashflow_per_margin = None
@@ -406,6 +408,7 @@ def build_margin_efficiency_report(
             remaining_extrinsic = extrinsic_per_share * abs_underlying_qty
             if pos.qty > 0:
                 remaining_extrinsic *= -1.0
+            strike_spot_factor = min(pos.strike, spot) / max(pos.strike, spot) if pos.strike > 0 and spot > 0 else None
             regt_margin = _margin_estimate_per_share(pos.right, pos.strike, spot, option_value_proxy) * abs_underlying_qty
             cash_secured = pos.strike * abs_underlying_qty if pos.right == "put" and pos.qty < 0 else None
             margin_used = min(regt_margin, cash_secured) if cash_secured else regt_margin
@@ -421,6 +424,11 @@ def build_margin_efficiency_report(
             result_per_margin = result_proxy / margin_used if margin_used else None
             dte = max((pos.exp_date - today).days, 1)
             ann_premium_per_margin = premium_per_margin * 365.0 / dte if premium_per_margin is not None else None
+            strike_adjusted_ann_premium_per_margin = (
+                ann_premium_per_margin / strike_spot_factor
+                if ann_premium_per_margin is not None and strike_spot_factor
+                else None
+            )
             entry_cashflow_per_margin = entry_premium_received / margin_used if margin_used else None
             ann_entry_cashflow_per_margin = entry_cashflow_per_margin * 365.0 / dte if entry_cashflow_per_margin is not None else None
 
@@ -460,6 +468,7 @@ def build_margin_efficiency_report(
                 "extrinsic_per_share": extrinsic_per_share,
                 "remaining_extrinsic": remaining_extrinsic,
                 "result_proxy": result_proxy,
+                "strike_spot_factor": strike_spot_factor if spot is not None and pos.strike > 0 else None,
                 "regt_margin_est": None if spot is None else _margin_estimate_per_share(
                     pos.right,
                     pos.strike,
@@ -473,6 +482,7 @@ def build_margin_efficiency_report(
                 "entry_cashflow_per_margin": entry_cashflow_per_margin,
                 "result_per_margin": result_per_margin,
                 "ann_premium_per_margin": ann_premium_per_margin,
+                "strike_adjusted_ann_premium_per_margin": strike_adjusted_ann_premium_per_margin if spot is not None else None,
                 "ann_entry_cashflow_per_margin": ann_entry_cashflow_per_margin,
                 "stress_10_result": stress_10_result,
                 "stress_20_result": stress_20_result,
@@ -641,6 +651,8 @@ def main() -> int:
         "margin_used",
         "premium_per_margin",
         "ann_premium_per_margin",
+        "strike_spot_factor",
+        "strike_adjusted_ann_premium_per_margin",
         "entry_cashflow_per_margin",
     ]
     display_df = pl.DataFrame(_format_rows_for_export(df.select(display_cols)))

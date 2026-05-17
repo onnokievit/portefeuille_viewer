@@ -9,8 +9,8 @@ import polars as pl
 import pyodbc
 import pyqtgraph as pg
 
-from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget
-from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator
+from PySide6.QtWidgets import QWidget, QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QStyledItemDelegate, QMenu, QColorDialog, QInputDialog, QScrollArea, QAbstractItemView, QStyleOptionViewItem, QStyle, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QLabel
+from PySide6.QtGui import QFont, QColor, QDoubleValidator, QAction, QPalette, QPen, QRegularExpressionValidator, QStandardItemModel, QStandardItem
 from PySide6.QtCore import QLocale, QDate, Slot, QSortFilterProxyModel, Qt, QTimer, QRegularExpression, QSignalBlocker
 
 try:
@@ -186,6 +186,10 @@ class NumberDelegate(QStyledItemDelegate):
             model.setData(index, txt, Qt.EditRole)
             return
         model.setData(index, _format_decimal_comma(val, 2), Qt.EditRole)
+
+
+def _normalize_broker(value) -> str:
+    return str(value or "").strip().lower()
 
 
 def _parse_decimal_text(value) -> float | None:
@@ -587,7 +591,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 return
             self.testOrdersTable.setItemDelegateForColumn(self.test_order_columns.index(colname), delegate)
 
-        _set_delegate("broker", ComboDelegate(["degiro", "lynx", "interactive"], self))
+        _set_delegate("broker", ComboDelegate(self._available_brokers(), self))
         _set_delegate("asset_rollup", ComboDelegate(asset_rollups, self))
         _set_delegate("asset_type", ComboDelegate(["aandeel", "optie"], self))
         _set_delegate("transactie_type", ComboDelegate(["koop", "verkoop"], self))
@@ -663,6 +667,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self.payoff_table.setFont(font)        
                 
         self.logic = SingleAssetAnalyseLogic()
+        self._init_broker_filter()
         #self.update_opties_open_table()
         
         self.asset_selector.addItems(self.logic.load_assets())
@@ -776,6 +781,157 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._init_test_order_scenarios()
         QTimer.singleShot(0, self._bind_state_engine_controls)
         signals.stateRebuildFinished.connect(lambda _payload: self._refresh_state_engine_controls())
+
+    def _available_brokers(self) -> list[str]:
+        brokers = [str(b).strip() for b in get_settings().get_brokers() if str(b).strip()]
+        if brokers:
+            return sorted(dict.fromkeys(brokers), key=str.lower)
+        seen: dict[str, str] = {}
+        for snapshot_name in (
+            "repository_snapshot_aandelen",
+            "repository_snapshot_load_open_opties",
+            "repository_snapshot_open_sprinters",
+            "aggregator_snapshot_aandelen_live",
+            "aggregator_snapshot_load_open_opties_from_tx_live",
+            "aggregator_snapshot_open_sprinters_live",
+        ):
+            df = getattr(SNAPSHOT_STORE, snapshot_name, None)
+            if df is None or getattr(df, "is_empty", lambda: True)() or "broker" not in df.columns:
+                continue
+            for value in df["broker"].to_list():
+                text = str(value or "").strip()
+                key = _normalize_broker(text)
+                if key and key not in seen:
+                    seen[key] = text
+        return sorted(seen.values(), key=str.lower)
+
+    def _init_broker_filter(self) -> None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        if combo is None:
+            self.brokerFilterLabel = QLabel("Broker:", self.horizontalLayoutWidget)
+            self.horizontalLayout.addWidget(self.brokerFilterLabel)
+            combo = QComboBox(self.horizontalLayoutWidget)
+            combo.setObjectName("comboBoxBrokerFilter")
+            self.horizontalLayout.addWidget(combo)
+            self.comboBoxBrokerFilter = combo
+        combo.setMaximumSize(150, 16777215)
+        combo.setStyleSheet("background-color: rgb(230, 230, 230);")
+        combo.setEditable(True)
+        combo.lineEdit().setReadOnly(True)
+        combo.lineEdit().setFocusPolicy(Qt.NoFocus)
+        combo.setModel(QStandardItemModel(combo))
+        combo.view().pressed.connect(self._on_broker_filter_item_pressed)
+        self._set_broker_filter_options(self._available_brokers())
+        self.logic.set_broker_filter(self._selected_brokers())
+
+    def _set_broker_filter_options(self, brokers: list[str]) -> None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        if combo is None:
+            return
+        current = set(self._selected_brokers() or [])
+        model = QStandardItemModel(combo)
+        all_item = QStandardItem("Alle brokers")
+        all_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        all_item.setData(Qt.Checked if not current else Qt.Unchecked, Qt.CheckStateRole)
+        model.appendRow(all_item)
+        for broker in brokers:
+            text = str(broker or "").strip()
+            if not text:
+                continue
+            item = QStandardItem(text)
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+            state = Qt.Checked if _normalize_broker(text) in current else Qt.Unchecked
+            item.setData(state, Qt.CheckStateRole)
+            model.appendRow(item)
+        combo.setModel(model)
+        self._ensure_broker_filter_state()
+        self._update_broker_filter_text()
+
+    def _selected_brokers(self) -> list[str] | None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        if combo is None:
+            return None
+        model = combo.model()
+        if model is None or model.rowCount() == 0:
+            return None
+        all_item = model.item(0)
+        if all_item is not None and all_item.checkState() == Qt.Checked:
+            return None
+        selected = []
+        for row in range(1, model.rowCount()):
+            item = model.item(row)
+            if item is not None and item.checkState() == Qt.Checked:
+                selected.append(_normalize_broker(item.text()))
+        return selected or None
+
+    def _ensure_broker_filter_state(self) -> None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        model = combo.model() if combo is not None else None
+        if model is None or model.rowCount() == 0:
+            return
+        has_selected = any(
+            model.item(row) is not None and model.item(row).checkState() == Qt.Checked
+            for row in range(1, model.rowCount())
+        )
+        all_item = model.item(0)
+        if all_item is not None and not has_selected and all_item.checkState() != Qt.Checked:
+            all_item.setCheckState(Qt.Checked)
+
+    def _update_broker_filter_text(self) -> None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        if combo is None or combo.lineEdit() is None:
+            return
+        selected = self._selected_brokers()
+        if not selected:
+            text = "Alle brokers"
+        elif len(selected) <= 2:
+            text = ", ".join(selected)
+        else:
+            text = f"{len(selected)} brokers"
+        combo.lineEdit().setText(text)
+
+    def _on_broker_filter_item_pressed(self, index) -> None:
+        combo = getattr(self, "comboBoxBrokerFilter", None)
+        model = combo.model() if combo is not None else None
+        if model is None:
+            return
+        item = model.itemFromIndex(index)
+        if item is None:
+            return
+        new_state = Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked
+        item.setCheckState(new_state)
+        if index.row() == 0 and new_state == Qt.Checked:
+            for row in range(1, model.rowCount()):
+                child = model.item(row)
+                if child is not None:
+                    child.setCheckState(Qt.Unchecked)
+        elif index.row() > 0:
+            all_item = model.item(0)
+            if all_item is not None:
+                all_item.setCheckState(Qt.Unchecked)
+        self._ensure_broker_filter_state()
+        self._update_broker_filter_text()
+        self._on_broker_filter_changed()
+
+    def _apply_broker_filter_to_df(self, df: pl.DataFrame | None) -> pl.DataFrame | None:
+        selected = self._selected_brokers()
+        if df is None or not selected or "broker" not in df.columns:
+            return df
+        selected_values = sorted({_normalize_broker(b) for b in selected})
+        return df.filter(pl.col("broker").cast(pl.Utf8, strict=False).str.strip_chars().str.to_lowercase().is_in(selected_values))
+
+    def _on_broker_filter_changed(self) -> None:
+        selected = self._selected_brokers()
+        self.logic.set_broker_filter(selected)
+        self._live_summary_asset = None
+        self._live_summary_row = None
+        current_asset = self.asset_selector.currentText()
+        if current_asset:
+            self.logic.set_asset(current_asset)
+        self.update_payoff_table()
+        self.update_opties_open_table()
+        self.update_aandelen_table()
+        self.update_sprinters_table()
 
     def _init_asset_indicator_strip(self) -> None:
         parent = getattr(self, "groupBox_3", None)
@@ -983,6 +1139,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         self._schedule_opties_reload()
 
     def _reload_asset_selector_from_snapshots(self):
+        if hasattr(self, "comboBoxBrokerFilter"):
+            self._set_broker_filter_options(self._available_brokers())
+            self.logic.set_broker_filter(self._selected_brokers())
         self._on_filter_changed()
         current_asset = self.asset_selector.currentText()
         self._refresh_test_orders_view_for_active_asset(current_asset)
@@ -3123,6 +3282,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             asset = self.asset_selector.currentText()
             df = df.filter(pl.col("asset_rollup") == asset)
+            df = self._apply_broker_filter_to_df(df)
         required_cols = {
             "broker",
             "asset_rollup",
@@ -3190,6 +3350,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
         asset = self.asset_selector.currentText()
         df = self.logic._filter_asset_snapshot(df, asset)
+        df = self._apply_broker_filter_to_df(df)
         if df is None or df.is_empty():
             self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
             self._update_summary_labels()
@@ -3447,15 +3608,19 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         return row
 
     def _get_summary_source_df(self):
+        selected_brokers = self._selected_brokers()
         if self._use_projection_v2_for_summary:
             df_proj = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
             if isinstance(df_proj, pl.DataFrame) and not df_proj.is_empty():
-                return df_proj
-        return build_aandelen_tab_summary()
+                if not selected_brokers or "broker" in df_proj.columns:
+                    df_proj = self._apply_broker_filter_to_df(df_proj)
+                    return df_proj
+        return build_aandelen_tab_summary(selected_brokers=selected_brokers)
 
     def _get_summary_row_for_asset(self, asset: str):
         if not asset:
             return None
+        selected_brokers = self._selected_brokers()
         if self._use_projection_v2_for_summary:
             df_proj = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
             if (
@@ -3463,10 +3628,12 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 and not df_proj.is_empty()
                 and "asset_rollup" in df_proj.columns
             ):
-                row_df = df_proj.filter(pl.col("asset_rollup") == asset)
-                if not row_df.is_empty():
-                    return row_df.row(0, named=True)
-        df_sum = build_aandelen_tab_summary(asset_rollup=asset)
+                if not selected_brokers or "broker" in df_proj.columns:
+                    df_proj = self._apply_broker_filter_to_df(df_proj)
+                    row_df = df_proj.filter(pl.col("asset_rollup") == asset)
+                    if not row_df.is_empty():
+                        return row_df.row(0, named=True)
+        df_sum = build_aandelen_tab_summary(selected_brokers=selected_brokers, asset_rollup=asset)
         if df_sum is None or df_sum.is_empty():
             return None
         return df_sum.row(0, named=True)
@@ -3571,7 +3738,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         df = self.logic.load_option_open_data()
         asset = self.asset_selector.currentText()
         # Voor de eerste tabel géén asset-filtering, volledige tabel tonen
-        df_all = df.drop("totaal_fees")
+        df_all = df.drop("totaal_fees") if "totaal_fees" in df.columns else df
         df_all = df_all.sort(["optie_exp_date", "asset_rollup"])
         if "uniek_id" in df_all.columns:
             uniek_ids = df_all["uniek_id"].to_list()
@@ -4815,6 +4982,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 class SingleAssetAnalyseLogic:
     def __init__(self):
         self.enable_test_orders = True
+        self.selected_brokers: list[str] | None = None
         self.df_open_opties = None
         self.df_gesloten_opties = None
         self.df_open_sprinters = None
@@ -4823,6 +4991,21 @@ class SingleAssetAnalyseLogic:
         self.df_gesloten_aandelen = None
         self.currency_factor = 1.0
         self.snapshot_df = None
+
+    def set_broker_filter(self, selected_brokers: list[str] | None) -> None:
+        clean = sorted({_normalize_broker(b) for b in (selected_brokers or []) if _normalize_broker(b)})
+        self.selected_brokers = clean or None
+
+    def _filter_broker_snapshot(self, df: pl.DataFrame | None) -> pl.DataFrame | None:
+        if df is None or not self.selected_brokers or "broker" not in df.columns:
+            return df
+        return df.filter(
+            pl.col("broker")
+            .cast(pl.Utf8, strict=False)
+            .str.strip_chars()
+            .str.to_lowercase()
+            .is_in(self.selected_brokers)
+        )
 
     def load_assets(self, regio=None, status=None, value_grow=None, sector=None):
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_active_asset_rollup_data", None)
@@ -4852,6 +5035,9 @@ class SingleAssetAnalyseLogic:
 
     def _augment_with_test_orders(self, asset_rollup: str):
         df_test = get_effective_test_orders_for_asset(asset_rollup)
+        if df_test is None or df_test.is_empty():
+            return
+        df_test = self._filter_broker_snapshot(df_test)
         if df_test is None or df_test.is_empty():
             return
         if "include" in df_test.columns:
@@ -4960,7 +5146,8 @@ class SingleAssetAnalyseLogic:
             return None
         if "asset_rollup" not in df.columns:
             return df.clear()
-        return df.filter(pl.col("asset_rollup") == asset_rollup)
+        df = df.filter(pl.col("asset_rollup") == asset_rollup)
+        return self._filter_broker_snapshot(df)
 
     def _get_asset_rollup_row(self, asset_rollup: str) -> dict | None:
         df = getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None)
@@ -5035,6 +5222,7 @@ class SingleAssetAnalyseLogic:
 
     def get_dividend(self, asset_rollup):
         df_div = getattr(SNAPSHOT_STORE, "repository_portfolio_dividend", None)
+        df_div = self._filter_broker_snapshot(df_div)
         dividend_val = 0.0
         if df_div is not None and hasattr(df_div, "filter"):
             with contextlib.suppress(Exception):
@@ -5222,11 +5410,19 @@ class SingleAssetAnalyseLogic:
                 "totaal_resultaat_optie": pl.Float64,
                 "totaal_fees": pl.Float64,
                 "itm_otm": pl.Float64,
+                "time_per_unit": pl.Float64,
+                "time_value": pl.Float64,
+                "uniek_id": pl.Utf8,
+                "optie_comment": pl.Utf8,
+                "optie_comment_color": pl.Utf8,
+                "optie_comment_textcolor": pl.Utf8,
+                "optie_comment_updated_at": pl.Datetime,
             }
         )
         df = SNAPSHOT_STORE.aggregator_snapshot_load_open_opties_from_tx_live
         if df is None:
             return empty_result
+        df = self._filter_broker_snapshot(df)
         required_cols = {
             "broker",
             "asset_rollup",
@@ -5374,7 +5570,7 @@ class SingleAssetAnalyseLogic:
             ])
 
         if df is None or df.is_empty():
-            df = pl.DataFrame()
+            return empty_result
 
         if not df.is_empty():
             # Voeg uniek_id toe op basis van optiekenmerken (hidden kolom in de tabel)

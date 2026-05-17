@@ -510,7 +510,31 @@ def build_aandelen_tab_summary(selected_brokers=None, asset_rollup: str | None =
 			).alias("totaal_fee"),
 		])
 	else:
-		df_sum = df
+		df_sum = _empty_df({
+			"asset_rollup": pl.Utf8,
+			"close_price": pl.Float64,
+			"koers": pl.Float64,
+			"pct_change": pl.Float64,
+			"eq_aantal_bezit": pl.Float64,
+			"open_sp_aantal": pl.Float64,
+			"eq_total_result": pl.Float64,
+			"clos_opt_transactie_euro_totaal": pl.Float64,
+			"clos_sp_transactie_euro_totaal": pl.Float64,
+			"open_opt_total_result": pl.Float64,
+			"open_sp_result": pl.Float64,
+			"div_en_bel": pl.Float64,
+			"totaal_ex_fee": pl.Float64,
+			"totaal_inc_fee": pl.Float64,
+			"totaal_fee": pl.Float64,
+			"totaal": pl.Float64,
+			"regio": pl.Utf8,
+			"sector": pl.Utf8,
+			"value_grow": pl.Utf8,
+			"status": pl.Utf8,
+			"portfolio_total_waarde_lineair_pct": pl.Float64,
+			"portfolio_total_waarde_delta_pct": pl.Float64,
+			"optie_tijdswaarde_signed_eur": pl.Float64,
+		})
 
 	df_sum = df_sum.with_columns((pl.col("totaal_inc_fee") - pl.col("totaal")).alias("net_change"))
 	df_sum = df_sum.select([
