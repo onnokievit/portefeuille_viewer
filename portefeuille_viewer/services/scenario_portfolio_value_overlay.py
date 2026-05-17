@@ -50,7 +50,7 @@ def _price_lookup() -> dict[str, float]:
             asset = _norm_asset(row.get("asset_rollup"))
             if asset and asset not in prices:
                 prices[asset] = _to_float(row.get("koers"))
-    hist_df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close_latest", None)
+    hist_df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv_latest", None)
     if hist_df is not None and not hist_df.is_empty() and "asset_rollup" in hist_df.columns and "close_price" in hist_df.columns:
         for row in hist_df.select(["asset_rollup", "close_price"]).to_dicts():
             asset = _norm_asset(row.get("asset_rollup"))

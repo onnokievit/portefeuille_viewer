@@ -982,7 +982,7 @@ def _refresh_phase_repository_core() -> None:
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
-    repository.load_historical_close_snapshot()
+    repository.load_historical_ohlcv_snapshot()
     repository.load_asset_driver_beta_snapshot()
     repository.load_asset_dividend_calendar_snapshot()
     repository.load_per_dag_asset_result_v2_snapshot()
@@ -1246,7 +1246,7 @@ def main():
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
     signals.priceUpdateFinished.connect(
         lambda payload: (
-            repository.load_historical_close_snapshot(),
+            repository.load_historical_ohlcv_snapshot(),
             repository.load_asset_driver_beta_snapshot()
         ) if (payload or {}).get("status") in {"ok", "skipped"} else None
     )
@@ -1260,7 +1260,7 @@ def main():
             f"db_ms={payload.get('duration_ms')}"
         )
         if status in {"ok", "partial"}:
-            repository.load_historical_close_snapshot()
+            repository.load_historical_ohlcv_snapshot()
             rebuild_asset_indicator_snapshots()
 
     asset_volatility_history_update_runner.started.connect(

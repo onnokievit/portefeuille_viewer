@@ -54,7 +54,7 @@ def hydrate_snapshots() -> None:
     repository.load_asset_rollup_data()
     repository.load_sprinter_referentie_data()
     repository.load_dividend_data()
-    repository.load_historical_close_snapshot()
+    repository.load_historical_ohlcv_snapshot()
     repository.load_per_dag_asset_result_v2_snapshot()
     repository.load_optie_referentie_data()
     repository.build_repository_active_asset_rollup_data()

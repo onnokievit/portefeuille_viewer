@@ -71,7 +71,7 @@ class SingleAssetLongHistoryRunner(QObject):
         self._step_index += 1
         if self._step_index >= len(self._steps):
             try:
-                repository.load_historical_close_snapshot()
+                repository.load_historical_ohlcv_snapshot()
             except Exception as exc:
                 message = f"Historie staat in DB, maar herladen van app-snapshots faalde: {type(exc).__name__}: {exc}"
                 self.output.emit(f"\n{message}\n")

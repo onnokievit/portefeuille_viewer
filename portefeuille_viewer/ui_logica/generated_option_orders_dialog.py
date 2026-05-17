@@ -806,7 +806,7 @@ class GeneratedOptionOrdersDialog(QDialog):
             ("repository_snapshot_active_asset_rollup_data", "koers"),
             ("repository_snapshot_asset_rollup_data", "koers"),
             ("repository_snapshot_portfolio_value_total_combined_put", "koers"),
-            ("repository_snapshot_historical_close_latest", "close_price"),
+            ("repository_snapshot_historical_ohlcv_latest", "close_price"),
         ):
             df = getattr(SNAPSHOT_STORE, attr, None)
             if df is None or df.is_empty() or "asset_rollup" not in df.columns or price_col not in df.columns:

@@ -21,10 +21,9 @@ def main() -> int:
     args = parse_args()
     print("Loading source snapshots...")
     assets_df = repository.load_asset_rollup_data()
-    close_df = repository.load_historical_close_snapshot()
+    ohlcv_df = repository.load_historical_ohlcv_snapshot()
     ohlcv_df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None)
     print(f"asset_rollup_data rows={assets_df.height if isinstance(assets_df, pl.DataFrame) else 0}")
-    print(f"historical_close rows={close_df.height if isinstance(close_df, pl.DataFrame) else 0}")
     print(f"historical_ohlcv rows={ohlcv_df.height if isinstance(ohlcv_df, pl.DataFrame) else 0}")
 
     cutoff_dates = latest_trading_days(ohlcv_df, args.days)

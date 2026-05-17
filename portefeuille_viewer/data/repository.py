@@ -113,9 +113,9 @@ def load_asset_rollup_data() -> pl.DataFrame:
     SNAPSHOT_STORE.safe_write("repository_snapshot_asset_rollup_data", df)
     return compact_float64(df)
 
-def load_historical_close_snapshot() -> pl.DataFrame:
+def load_historical_ohlcv_snapshot() -> pl.DataFrame:
     """
-    Laad historical OHLCV-data in memory en publiceer tevens een afgeslankte close-snapshot.
+    Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
     """
     with get_connection() as conn:
         table_cols = {str(row.column_name).lower() for row in conn.cursor().columns(table="historical_data_correct")}
@@ -140,14 +140,12 @@ def load_historical_close_snapshot() -> pl.DataFrame:
         """
         df = pl.read_database(sql, conn)
     df_ohlcv = _prepare_historical_ohlcv_snapshot(df)
-    df_close = _build_historical_close_from_ohlcv(df_ohlcv)
     SNAPSHOT_STORE.safe_write("repository_snapshot_historical_ohlcv", df_ohlcv)
-    SNAPSHOT_STORE.safe_write("repository_snapshot_historical_close", df_close)
     SNAPSHOT_STORE.safe_write(
-        "repository_snapshot_historical_close_latest",
-        _build_historical_close_latest_snapshot(df_close),
+        "repository_snapshot_historical_ohlcv_latest",
+        _build_historical_ohlcv_latest_snapshot(df_ohlcv),
     )
-    return compact_float64(df_close)
+    return compact_float64(df_ohlcv)
 
 
 def load_asset_driver_beta_snapshot() -> pl.DataFrame:
@@ -347,16 +345,6 @@ def _normalize_date_column(df: pl.DataFrame, col_name: str = "datum") -> pl.Data
     )
 
 
-def _prepare_historical_close_snapshot(df: pl.DataFrame) -> pl.DataFrame:
-    if df is None or df.is_empty():
-        return pl.DataFrame(schema={"datum": pl.Date, "asset_rollup": pl.Utf8, "close_price": pl.Float64})
-    df = _normalize_date_column(df, "datum")
-    df = _normalize_asset_rollup_column(df, "asset_rollup")
-    if "close_price" in df.columns:
-        df = df.with_columns(pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"))
-    return compact_float64(df)
-
-
 def _prepare_historical_ohlcv_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     if df is None or df.is_empty():
         return pl.DataFrame(
@@ -389,16 +377,6 @@ def _prepare_historical_ohlcv_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     return compact_float64(df)
 
 
-def _build_historical_close_from_ohlcv(df: pl.DataFrame) -> pl.DataFrame:
-    if df is None or df.is_empty():
-        return pl.DataFrame(schema={"datum": pl.Date, "asset_rollup": pl.Utf8, "close_price": pl.Float64})
-    cols = [c for c in ("datum", "asset_rollup", "close_price") if c in df.columns]
-    out = df.select(cols)
-    if "close_price" in out.columns:
-        out = out.with_columns(pl.col("close_price").cast(pl.Float64, strict=False).alias("close_price"))
-    return compact_float64(out)
-
-
 def _prepare_per_dag_asset_result_v2_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     if df is None or df.is_empty():
         return pl.DataFrame(
@@ -423,15 +401,20 @@ def _prepare_per_dag_asset_result_v2_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     return compact_float64(df)
 
 
-def _build_historical_close_latest_snapshot(df: pl.DataFrame) -> pl.DataFrame:
+def _build_historical_ohlcv_latest_snapshot(df: pl.DataFrame) -> pl.DataFrame:
     if df is None or df.is_empty():
-        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "close_price": pl.Float64})
+        return pl.DataFrame(schema={"asset_rollup": pl.Utf8, "datum": pl.Date, "close_price": pl.Float64})
     today = date.today()
     latest_df = (
         df.filter(pl.col("datum").is_not_null() & (pl.col("datum") < today) & pl.col("close_price").is_not_null())
         .sort(["asset_rollup", "datum"])
         .group_by("asset_rollup")
-        .agg(pl.col("close_price").last().alias("close_price"))
+        .agg(
+            [
+                pl.col("datum").last().alias("datum"),
+                pl.col("close_price").last().alias("close_price"),
+            ]
+        )
     )
     return compact_float64(latest_df)
 
@@ -2316,7 +2299,7 @@ def refresh_all_snapshots():
     load_asset_rollup_data()
     load_sprinter_referentie_data()
     load_dividend_data()
-    load_historical_close_snapshot()
+    load_historical_ohlcv_snapshot()
     load_asset_driver_beta_snapshot()
     load_per_dag_asset_result_v2_snapshot()
     load_optie_referentie_data()

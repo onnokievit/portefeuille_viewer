@@ -35,7 +35,7 @@ def rebuild_asset_driver_beta_snapshot(stock_db_path: str) -> dict[str, Any]:
     with repository.get_stockdata_connection() as conn:
         _ensure_beta_snapshot_table(conn)
         meta = _load_asset_metadata(conn)
-        prices = _load_historical_close(conn)
+        prices = _load_historical_ohlcv_close_series(conn)
 
         if meta.empty or prices.empty:
             _replace_snapshot_rows(conn, [])
@@ -86,7 +86,7 @@ def _load_asset_metadata(conn: pyodbc.Connection) -> pd.DataFrame:
     return _read_sql_dataframe(conn, sql)
 
 
-def _load_historical_close(conn: pyodbc.Connection) -> pd.DataFrame:
+def _load_historical_ohlcv_close_series(conn: pyodbc.Connection) -> pd.DataFrame:
     sql = """
         SELECT datum, asset_rollup, [close] AS close_price
         FROM historical_data_correct

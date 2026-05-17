@@ -107,7 +107,7 @@ def _load_index_series_from_snapshot(missing: list[str]) -> dict[str, dict]:
     selected = _normalize_list(missing)
     if not selected:
         return {}
-    df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+    df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None)
     if df is None or df.is_empty():
         return {}
     required = {"datum", "asset_rollup", "close_price"}

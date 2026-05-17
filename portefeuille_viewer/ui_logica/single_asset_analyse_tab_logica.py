@@ -5298,14 +5298,8 @@ class SingleAssetAnalyseLogic:
             return pl.DataFrame({})
 
         # Prices (calendar source for market days)
-        df_prices = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+        df_prices = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None)
         if df_prices is None or df_prices.height == 0:
-            # OBSOLETE-KANDIDAAT:
-            # `repository_per_dag_asset_result` was hier alleen nog legacy fallback wanneer
-            # `repository_snapshot_historical_close` niet beschikbaar was. Tijdens de staged
-            # cleanup van updateflow/legacy paden schakelen we die fallback nu expliciet uit.
-            # Als dit in rooktests problemen geeft, moet de oorzaak in historical-close loading
-            # worden opgelost en niet opnieuw via de oude per_dag_asset_result fallback.
             return pl.DataFrame({})
 
         df_prices = (

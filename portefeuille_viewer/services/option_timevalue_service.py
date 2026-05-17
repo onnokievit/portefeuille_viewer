@@ -99,7 +99,7 @@ class OptionTimevalueService(QObject):
 
     _snapshot_rebuild_keys = {
         "aggregator_snapshot_load_open_opties_from_tx_live",
-        "repository_snapshot_historical_close_latest",
+        "repository_snapshot_historical_ohlcv_latest",
         "repository_snapshot_asset_rollup_data",
         "repository_snapshot_optie_referentie_data",
     }
@@ -814,7 +814,7 @@ class OptionTimevalueService(QObject):
         return failed
 
     def _load_underlying_close_map(self) -> dict[str, float]:
-        h = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close_latest", None)
+        h = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv_latest", None)
         if h is None or h.is_empty():
             return {}
         try:

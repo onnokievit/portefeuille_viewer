@@ -49,8 +49,7 @@ class SnapshotStore:
     snapshot_aandelen_projection_v2_scenario: pl.DataFrame | None
     repository_portfolio_dividend: pl.DataFrame | None
     repository_snapshot_historical_ohlcv: pl.DataFrame | None
-    repository_snapshot_historical_close: pl.DataFrame | None
-    repository_snapshot_historical_close_latest: pl.DataFrame | None
+    repository_snapshot_historical_ohlcv_latest: pl.DataFrame | None
     repository_snapshot_asset_driver_beta: pl.DataFrame | None
     repository_snapshot_asset_dividend_calendar: pl.DataFrame | None
     repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None
@@ -125,8 +124,7 @@ class SnapshotStore:
             "snapshot_aandelen_projection_v2_scenario": None,
             "repository_portfolio_dividend": None,
             "repository_snapshot_historical_ohlcv": None,
-            "repository_snapshot_historical_close": None,
-            "repository_snapshot_historical_close_latest": None,
+            "repository_snapshot_historical_ohlcv_latest": None,
             "repository_snapshot_asset_driver_beta": None,
             "repository_snapshot_asset_dividend_calendar": None,
             "repository_snapshot_per_dag_asset_result_v2": None,
@@ -231,8 +229,7 @@ class SnapshotStore:
                 self.snapshot_aandelen_projection_v2_scenario is not None,
                 self.repository_portfolio_dividend is not None,
                 self.repository_snapshot_historical_ohlcv is not None,
-                self.repository_snapshot_historical_close is not None,
-                self.repository_snapshot_historical_close_latest is not None,
+                self.repository_snapshot_historical_ohlcv_latest is not None,
                 self.repository_snapshot_per_dag_asset_result_v2 is not None,
                 self.repository_snapshot_asset_dividend_calendar is not None,
                 self.repository_snapshot_per_dag_asset_result_v2_latest is not None,
@@ -308,11 +305,9 @@ class SnapshotStore:
             parts.append(f"Repository Portfolio Dividend data: {len(self.repository_portfolio_dividend)} rijen")
         if self.repository_snapshot_historical_ohlcv is not None:
             parts.append(f"Repository Historical OHLCV data: {len(self.repository_snapshot_historical_ohlcv)} rijen")
-        if self.repository_snapshot_historical_close is not None:
-            parts.append(f"Repository Historical Close data: {len(self.repository_snapshot_historical_close)} rijen")
-        if self.repository_snapshot_historical_close_latest is not None:
+        if self.repository_snapshot_historical_ohlcv_latest is not None:
             parts.append(
-                f"Repository Historical Close Latest data: {len(self.repository_snapshot_historical_close_latest)} rijen"
+                f"Repository Historical OHLCV Latest data: {len(self.repository_snapshot_historical_ohlcv_latest)} rijen"
             )
         if self.repository_snapshot_per_dag_asset_result_v2 is not None:
             parts.append(

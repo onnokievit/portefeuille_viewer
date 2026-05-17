@@ -269,26 +269,15 @@ class OptiesOpenWebPilotTab(QWidget):
         if "pct_change_prev" not in out.columns:
             out = out.with_columns(pl.lit(None).cast(pl.Float64).alias("pct_change_prev"))
 
-        # Join latest koers_prev from v2-compatible source: historical_close snapshot
+        # Join latest koers_prev from the OHLCV-derived latest-close snapshot.
         try:
-            prev_df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_close", None)
+            prev_df = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv_latest", None)
             if isinstance(prev_df, pl.DataFrame) and not prev_df.is_empty():
-                p = prev_df
-                if "datum" in p.columns:
-                    p = p.with_columns(
-                        pl.coalesce(
-                            [
-                                pl.col("datum").cast(pl.Date, strict=False),
-                                pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%Y-%m-%d", strict=False),
-                                pl.col("datum").cast(pl.Utf8).str.strptime(pl.Date, "%d/%m/%Y", strict=False),
-                            ]
-                        ).alias("datum")
-                    )
-                p = p.filter(pl.col("datum") < date.today())
-                latest = (
-                    p.sort(["asset_rollup", "datum"])
-                    .group_by("asset_rollup")
-                    .agg(pl.col("close_price").drop_nulls().last().alias("koers_prev_latest"))
+                latest = prev_df.select(
+                    [
+                        pl.col("asset_rollup").cast(pl.Utf8, strict=False).alias("asset_rollup"),
+                        pl.col("close_price").cast(pl.Float64, strict=False).alias("koers_prev_latest"),
+                    ]
                 )
                 out = out.drop("koers_prev", strict=False).join(latest, on="asset_rollup", how="left")
                 out = out.with_columns(pl.col("koers_prev_latest").alias("koers_prev")).drop("koers_prev_latest")

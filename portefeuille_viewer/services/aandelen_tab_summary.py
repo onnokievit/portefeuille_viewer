@@ -16,7 +16,7 @@ _STATIC_SNAPSHOT_KEYS = (
 	"repository_snapshot_active_asset_rollup_data",
 	"repository_snapshot_portfolio_value_total_combined_put",
 	"repository_snapshot_per_dag_asset_result_v2_latest",
-	"repository_snapshot_historical_close_latest",
+	"repository_snapshot_historical_ohlcv_latest",
 )
 _STATIC_SUMMARY_CACHE: OrderedDict[tuple, pl.DataFrame] = OrderedDict()
 
@@ -182,7 +182,7 @@ def _build_static_summary(selected_brokers=None, asset_rollup: str | None = None
 		df_asset_result_latest = _normalize_asset_rollup(df_asset_result_latest)
 
 	df_close_latest = _apply_filters(
-		_safe_df(SNAPSHOT_STORE.repository_snapshot_historical_close_latest),
+		_safe_df(SNAPSHOT_STORE.repository_snapshot_historical_ohlcv_latest),
 		None,
 		asset_rollup,
 	)
