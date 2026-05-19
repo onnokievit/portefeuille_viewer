@@ -10,6 +10,7 @@ from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui_logica.state_engine_tasks_dialog import StateEngineTasksDialog
+from portefeuille_viewer.ui_logica.price_update_dialog import PriceUpdateDialog
 from portefeuille_viewer.ui_logica.cash_management_chart_dialog import (
     open_cash_management_chart_dialog,
 )
@@ -39,6 +40,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self.setupUi(self)
         self.settings_manager = get_settings()
         self._state_engine_tasks_dialog = None
+        self._price_update_dialog = None
         # Laad EUR/USD waarde uit settings.ini
         eurusd = self.settings_manager.get_eurusd()
         self.txtEURUSD.setText(str(eurusd))
@@ -58,6 +60,7 @@ class SettingsTab(QWidget, Ui_SettingsTab):
             self.load_comment_colors()
 
         self._init_ui_color_settings()
+        self._init_price_update_controls()
         self._init_state_engine_task_controls()
         self._init_option_scanner_controls()
         self._init_cash_management_controls()
@@ -119,6 +122,55 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._refresh_tab_inactive_button()
         self._refresh_tab_active_button()
         self._refresh_tab_hover_button()
+
+    def _init_price_update_controls(self):
+        group = QGroupBox("Price Update")
+        layout = QVBoxLayout(group)
+        row = QHBoxLayout()
+        label = QLabel("Historische koersen ophalen via dezelfde flow als de dagelijkse startup price update.")
+        row.addWidget(label)
+        row.addStretch(1)
+        self._price_update_status_label = QLabel("Idle")
+        row.addWidget(self._price_update_status_label)
+        self._button_price_update = QPushButton("Start Price Update")
+        self._button_price_update.clicked.connect(self._request_price_update)
+        row.addWidget(self._button_price_update)
+        layout.addLayout(row)
+
+        signals.priceUpdateStarted.connect(self._on_price_update_started)
+        signals.priceUpdateFinished.connect(self._on_price_update_finished)
+        signals.priceUpdateFailed.connect(self._on_price_update_failed)
+
+        insert_index = max(0, self.verticalLayout_main.count() - 1)
+        self.verticalLayout_main.insertWidget(insert_index, group)
+
+    def _request_price_update(self):
+        if self._price_update_dialog is None:
+            self._price_update_dialog = PriceUpdateDialog(self)
+            self._price_update_dialog.destroyed.connect(
+                lambda *_args: setattr(self, "_price_update_dialog", None)
+            )
+        self._price_update_dialog.show()
+        self._price_update_dialog.raise_()
+        self._price_update_dialog.activateWindow()
+        self._price_update_dialog.start_update()
+
+    def _on_price_update_started(self, payload: dict):
+        self._button_price_update.setEnabled(False)
+        self._price_update_status_label.setText("Loopt...")
+
+    def _on_price_update_finished(self, payload: dict):
+        self._button_price_update.setEnabled(True)
+        status = str((payload or {}).get("status") or "ok")
+        if status == "skipped":
+            self._price_update_status_label.setText("Overgeslagen: vandaag al uitgevoerd")
+        else:
+            start = (payload or {}).get("fetch_start_date", "n/a")
+            self._price_update_status_label.setText(f"Klaar ({start} -> vandaag)")
+
+    def _on_price_update_failed(self, message: str):
+        self._button_price_update.setEnabled(True)
+        self._price_update_status_label.setText("Fout")
 
     def _init_state_engine_task_controls(self):
         group = QGroupBox("State Engine")

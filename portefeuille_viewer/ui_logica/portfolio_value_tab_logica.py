@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QPushButton, QCheckBox, QApplication
+from PySide6.QtWidgets import QWidget, QHeaderView, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QPushButton, QCheckBox, QApplication, QLabel, QComboBox
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QTimer
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
@@ -13,6 +13,9 @@ from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_sc
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
+from portefeuille_viewer.services.portfolio_broker_filter_state import PORTFOLIO_BROKER_FILTER_STATE
+from portefeuille_viewer.services.portfolio_value_broker_view import build_filtered_portfolio_value_df
+from portefeuille_viewer.ui_logica.portfolio_broker_filter_combo import PortfolioBrokerFilterController
 
 class PercentColoredPolarsModel(QAbstractTableModel):
     """
@@ -29,6 +32,8 @@ class PercentColoredPolarsModel(QAbstractTableModel):
         self._pct_cols = {
             "portfolio_total_waarde_lineair_pct",
             "portfolio_total_waarde_delta_pct",
+            "portfolio_total_waarde_lineair_pct_all_brokers",
+            "portfolio_total_waarde_delta_pct_all_brokers",
         }
         # Store min/max per pct col for color mapping
         self._col_minmax = {col: (0.0, 1.0) for col in self._pct_cols}
@@ -232,6 +237,14 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.comboBoxRegion = getattr(self.ui, "comboBoxRegion", None) or getattr(self.ui, "comboBox_3", None)
         if self.comboBoxRegion is not None:
             self.comboBoxRegion.currentTextChanged.connect(self._on_region_changed)
+        self.comboBoxBrokerFilter = getattr(self.ui, "comboBoxBrokerFilter", None) or getattr(self.ui, "comboBox_4", None)
+        if self.comboBoxBrokerFilter is None:
+            self.comboBoxBrokerFilter = QComboBox(self.ui.widget)
+            parent_layout = self.ui.widget.layout()
+            if parent_layout is not None:
+                parent_layout.addWidget(QLabel("Broker:", self.ui.widget))
+                parent_layout.addWidget(self.comboBoxBrokerFilter)
+        self._broker_filter_controller = PortfolioBrokerFilterController(self, self.comboBoxBrokerFilter)
         self.btnClearFilter = getattr(self.ui, "btnClearFilter", None) or getattr(self.ui, "pushButton_2", None)
         if self.btnClearFilter is not None:
             self.btnClearFilter.clicked.connect(self._on_clear_filters_clicked)
@@ -276,6 +289,9 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "repository_snapshot_portfolio_value_optie",
             "repository_snapshot_portfolio_value_optie_call_put_detailed",
             "repository_snapshot_portfolio_value_sprinters",
+            "repository_snapshot_portfolio_value_aandelen_scenario",
+            "repository_snapshot_portfolio_value_optie_call_put_detailed_scenario",
+            "repository_snapshot_portfolio_value_sprinters_scenario",
         }
 
         # React to central signals: reload when relevant snapshots are rewritten.
@@ -462,13 +478,13 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self.comboBoxRegion.blockSignals(False)
 
     def reload_snapshot(self):
-        # Expected snapshot key: repository_snapshot_portfolio_value_total_combined
-        # print("🔄 PortfolioValueTab: snapshot herladen...")
-        df = None
-        if bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False)):
-            df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_scenario", None)
-        if df is None:
-            df = getattr(SNAPSHOT_STORE, "repository_snapshot_portfolio_value_total_combined_put", None)
+        if hasattr(self, "_broker_filter_controller"):
+            self._broker_filter_controller.refresh_options()
+        use_scenario = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False))
+        df = build_filtered_portfolio_value_df(
+            PORTFOLIO_BROKER_FILTER_STATE.selected_set(),
+            use_scenario=use_scenario,
+        )
         if df is None or (hasattr(df, "is_empty") and df.is_empty()):
             self.model.set_df(pl.DataFrame({}))
             self._clear_totals()
@@ -494,6 +510,8 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "total_waarde_delta",
             "portfolio_total_waarde_lineair_pct",
             "portfolio_total_waarde_delta_pct",
+            "portfolio_total_waarde_lineair_pct_all_brokers",
+            "portfolio_total_waarde_delta_pct_all_brokers",
             # enzovoort: alleen wat je in deze tab wilt tonen/filteren
         ]
         df = df.select([c for c in cols_to_keep if c in df.columns])
@@ -566,6 +584,8 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             "total_waarde_delta": 130,
             "portfolio_total_waarde_lineair_pct": 160,
             "portfolio_total_waarde_delta_pct": 160,
+            "portfolio_total_waarde_lineair_pct_all_brokers": 180,
+            "portfolio_total_waarde_delta_pct_all_brokers": 180,
         }
         header = self.ui.tableView.horizontalHeader()
         for i, col in enumerate(df.columns):
@@ -662,7 +682,12 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
     def _format_total_value(self, col: str, val):
         if val is None:
             return ""
-        if col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
+        if col in (
+            "portfolio_total_waarde_lineair_pct",
+            "portfolio_total_waarde_delta_pct",
+            "portfolio_total_waarde_lineair_pct_all_brokers",
+            "portfolio_total_waarde_delta_pct_all_brokers",
+        ):
             try:
                 return f"{float(val) * 100:.1f}%"
             except Exception:
@@ -707,6 +732,11 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 totalen[col] = ""
             elif col in ("portfolio_total_waarde_lineair_pct", "portfolio_total_waarde_delta_pct"):
                 totalen[col] = 1.0
+            elif col in ("portfolio_total_waarde_lineair_pct_all_brokers", "portfolio_total_waarde_delta_pct_all_brokers"):
+                try:
+                    totalen[col] = df[col].sum()
+                except Exception:
+                    totalen[col] = ""
             elif col in (
                 "aantal_sprinters",
                 "opt_aantal_ITM_put",

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView, QApplication
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QSizePolicy, QScrollArea, QHeaderView, QApplication, QLabel, QComboBox
 from PySide6.QtCore import QSortFilterProxyModel, QTimer
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
 from PySide6.QtCore import Qt
@@ -13,12 +13,16 @@ from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_sc
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
+from portefeuille_viewer.services.portfolio_broker_filter_state import PORTFOLIO_BROKER_FILTER_STATE
+from portefeuille_viewer.services.portfolio_value_broker_view import filter_brokers
+from portefeuille_viewer.ui_logica.portfolio_broker_filter_combo import PortfolioBrokerFilterController
 
 
 class SectorAnalysisTab(QWidget, Ui_Form):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self._init_broker_filter()
         self._wrap_in_scroll_area()
         self._chart_views = {}
         self._init_pie_chart("pieChartValueLineair", "pieChartValue1")
@@ -55,6 +59,7 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             "repository_snapshot_portfolio_value_sprinters",
             "repository_snapshot_portfolio_value_sprinters_scenario",
             "repository_snapshot_portfolio_value_total_combined_put",
+            "repository_snapshot_portfolio_value_total_combined_scenario",
         }
         self.reload_data()
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
@@ -79,6 +84,17 @@ class SectorAnalysisTab(QWidget, Ui_Form):
                 self._on_put_otm_ratio_value_grow_changed(self.putOTMRatioValueGrow.value())
             except Exception:
                 pass
+
+    def _init_broker_filter(self) -> None:
+        self.labelBrokerFilter = QLabel("Broker:", self)
+        self.labelBrokerFilter.setGeometry(1020, 24, 55, 22)
+        self.comboBoxBrokerFilter = QComboBox(self)
+        self.comboBoxBrokerFilter.setGeometry(1080, 20, 170, 28)
+        self._broker_filter_controller = PortfolioBrokerFilterController(
+            self,
+            self.comboBoxBrokerFilter,
+            self.labelBrokerFilter,
+        )
 
     def _open_generated_options_dialog(self) -> None:
         open_scenario_dialog()
@@ -290,6 +306,12 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         df_opties = df_opties if df_opties is not None else pl.DataFrame()
         df_aandelen = df_aandelen if df_aandelen is not None else pl.DataFrame()
         df_sprinters = df_sprinters if df_sprinters is not None else pl.DataFrame()
+        if hasattr(self, "_broker_filter_controller"):
+            self._broker_filter_controller.refresh_options()
+        selected_brokers = PORTFOLIO_BROKER_FILTER_STATE.selected_set()
+        df_opties = filter_brokers(df_opties, selected_brokers)
+        df_aandelen = filter_brokers(df_aandelen, selected_brokers)
+        df_sprinters = filter_brokers(df_sprinters, selected_brokers)
 
         frames_lineair = []
         if not df_opties.is_empty() and "sector" in df_opties.columns:

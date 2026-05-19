@@ -1243,6 +1243,12 @@ def main():
     # 1) request -> alleen state-engine starten
     # 2) finished(ok) -> daarna afgeleide snapshots verversen
     signals.stateRebuildRequested.connect(state_engine_runner.handle_rebuild_requested)
+    def _handle_price_update_requested(payload: dict):
+        reason = str((payload or {}).get("reason") or "startup_price_update")
+        force = bool((payload or {}).get("force"))
+        historical_price_update_runner.request_update(reason=reason, force=force)
+
+    signals.priceUpdateRequested.connect(_handle_price_update_requested)
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
     signals.priceUpdateFinished.connect(
         lambda payload: (

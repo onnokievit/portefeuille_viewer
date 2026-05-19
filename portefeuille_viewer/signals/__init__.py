@@ -46,6 +46,9 @@ class Signals(QObject):
     # Emitted when a historical price update fails. Payload: error message.
     priceUpdateFailed = Signal(str)
 
+    # Emitted while a historical price update process writes output. Payload: dict
+    priceUpdateOutput = Signal(dict)
+
     # Optional debug signal
     debugSignal = Signal(str)
 
@@ -79,6 +82,7 @@ class Signals(QObject):
     _priceUpdateStartedRequested = Signal(dict)
     _priceUpdateFinishedRequested = Signal(dict)
     _priceUpdateFailedRequested = Signal(str)
+    _priceUpdateOutputRequested = Signal(dict)
     _aandelenProjectionFilterChangedRequested = Signal(dict)
     _projectionPublishTickRequested = Signal(str)
     _testOrderScenariosChangedRequested = Signal()
@@ -98,6 +102,7 @@ class Signals(QObject):
         self._priceUpdateStartedRequested.connect(self._emit_priceUpdateStarted, Qt.QueuedConnection)
         self._priceUpdateFinishedRequested.connect(self._emit_priceUpdateFinished, Qt.QueuedConnection)
         self._priceUpdateFailedRequested.connect(self._emit_priceUpdateFailed, Qt.QueuedConnection)
+        self._priceUpdateOutputRequested.connect(self._emit_priceUpdateOutput, Qt.QueuedConnection)
         self._aandelenProjectionFilterChangedRequested.connect(
             self._emit_aandelenProjectionFilterChanged,
             Qt.QueuedConnection,
@@ -165,6 +170,10 @@ class Signals(QObject):
         self.priceUpdateFailed.emit(message)
 
     @Slot(dict)
+    def _emit_priceUpdateOutput(self, payload: dict):
+        self.priceUpdateOutput.emit(payload)
+
+    @Slot(dict)
     def _emit_aandelenProjectionFilterChanged(self, payload: dict):
         self.aandelenProjectionFilterChanged.emit(payload)
 
@@ -216,6 +225,9 @@ class Signals(QObject):
 
     def queued_emit_priceUpdateFailed(self, message: str):
         self._priceUpdateFailedRequested.emit(message)
+
+    def queued_emit_priceUpdateOutput(self, payload: dict):
+        self._priceUpdateOutputRequested.emit(payload)
 
     def queued_emit_aandelenProjectionFilterChanged(self, payload: dict):
         self._aandelenProjectionFilterChangedRequested.emit(payload)

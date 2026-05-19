@@ -95,6 +95,8 @@ def _synthetic_option_rows(active_df: pl.DataFrame, price_lookup: dict[str, floa
                 "waarde_bezit": waarde_bezit,
                 "waarde_ITM": waarde_bezit if is_itm else 0.0,
                 "waarde_OTM": 0.0 if is_itm else waarde_bezit,
+                "aantal_ITM": qty if is_itm else 0.0,
+                "aantal_OTM": 0.0 if is_itm else qty,
                 "waarde_bezit_delta": waarde_bezit_delta,
             }
         )
@@ -118,6 +120,7 @@ def _synthetic_sprinter_rows(active_df: pl.DataFrame, price_lookup: dict[str, fl
         meta = dict(meta_lookup.get(asset, {}) or {})
         rows.append(
             {
+                "broker": str(row.get("broker") or "").strip() or None,
                 "asset_rollup": asset,
                 "regio": meta.get("regio"),
                 "sector": meta.get("sector"),

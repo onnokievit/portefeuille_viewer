@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
@@ -142,6 +143,21 @@ def build_payload() -> dict:
     }
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run historical price update scripts.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Run even if a successful startup price update already ran today.",
+    )
+    parser.add_argument(
+        "--reason",
+        default="startup_price_update",
+        help="Run reason stored in price_update_runs/update_runs.",
+    )
+    return parser.parse_args()
+
+
 def run_script(script_dir: Path, script_name: str, extra_args: list[str]) -> tuple[int, str, str]:
     proc = subprocess.run(
         [sys.executable, script_name, *extra_args],
@@ -153,8 +169,10 @@ def run_script(script_dir: Path, script_name: str, extra_args: list[str]) -> tup
 
 
 def main() -> int:
+    args = parse_args()
     payload = build_payload()
-    if has_successful_run_today("startup_price_update"):
+    payload["reason"] = str(args.reason or "startup_price_update").strip() or "startup_price_update"
+    if not args.force and has_successful_run_today("startup_price_update"):
         print(json.dumps({"status": "skipped", "reason": "startup_price_update_already_ran_today"}))
         return 0
 
@@ -170,9 +188,11 @@ def main() -> int:
         ("1 C - delete temp stock price table.py", []),
         ("rebuild_asset_driver_beta_snapshot.py", []),
     ]:
+        print(f"[startup-price-update] START {script_name}", flush=True)
         exit_code, stdout, stderr = run_script(script_dir, script_name, extra_args)
         stdout_parts.append(stdout)
         stderr_parts.append(stderr)
+        print(f"[startup-price-update] FINISH {script_name} exit_code={exit_code}", flush=True)
         if exit_code != 0:
             merged_stdout = "".join(stdout_parts)
             merged_stderr = "".join(stderr_parts)

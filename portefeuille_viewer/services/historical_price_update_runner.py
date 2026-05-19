@@ -25,13 +25,22 @@ class HistoricalPriceUpdateRunner(QObject):
 
     @Slot()
     def request_startup_update(self) -> None:
+        self.request_update(reason="startup_price_update", force=False)
+
+    def request_manual_update(self) -> None:
+        self.request_update(reason="manual_settings_price_update", force=True)
+
+    def request_update(self, *, reason: str = "startup_price_update", force: bool = False) -> None:
         if self._process is not None:
             return
 
         script_path = Path(__file__).resolve().parents[2] / "price_update_scripts" / "startup_price_update.py"
         process = QProcess(self)
         process.setProgram(sys.executable)
-        process.setArguments([str(script_path)])
+        args = [str(script_path), "--reason", str(reason or "startup_price_update")]
+        if force:
+            args.append("--force")
+        process.setArguments(args)
         process.readyReadStandardOutput.connect(self._on_ready_stdout)
         process.readyReadStandardError.connect(self._on_ready_stderr)
         process.finished.connect(self._on_process_finished)
@@ -39,18 +48,26 @@ class HistoricalPriceUpdateRunner(QObject):
         self._process = process
         self._stdout_chunks = []
         self._stderr_chunks = []
-        signals.priceUpdateStarted.emit({"reason": "startup_price_update"})
+        signals.priceUpdateStarted.emit({"reason": reason, "force": bool(force)})
         process.start()
 
     def _on_ready_stdout(self) -> None:
         if self._process is None:
             return
-        self._stdout_chunks.append(bytes(self._process.readAllStandardOutput()))
+        chunk = bytes(self._process.readAllStandardOutput())
+        self._stdout_chunks.append(chunk)
+        text = chunk.decode("utf-8", errors="replace")
+        if text:
+            signals.priceUpdateOutput.emit({"stream": "stdout", "text": text})
 
     def _on_ready_stderr(self) -> None:
         if self._process is None:
             return
-        self._stderr_chunks.append(bytes(self._process.readAllStandardError()))
+        chunk = bytes(self._process.readAllStandardError())
+        self._stderr_chunks.append(chunk)
+        text = chunk.decode("utf-8", errors="replace")
+        if text:
+            signals.priceUpdateOutput.emit({"stream": "stderr", "text": text})
 
     def _on_process_finished(self, exit_code: int, exit_status) -> None:
         process = self._process

@@ -2153,8 +2153,14 @@ def portfolio_value_asset_rollup_sprinters():
         SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_sprinters", pl.DataFrame({}))
         return
 
+    broker_expr = (
+        pl.col("broker").fill_null("onbekend").alias("broker")
+        if "broker" in df_sprinters.columns
+        else pl.lit("onbekend").alias("broker")
+    )
     df_sprinters_waarde = df_sprinters.with_columns(
         [
+            broker_expr,
             pl.col("SomVantransactie_aantal").cast(pl.Float64).alias("SomVantransactie_aantal"),
             pl.col("optie_strike").cast(pl.Float64).alias("optie_strike"),
             (
@@ -2171,7 +2177,7 @@ def portfolio_value_asset_rollup_sprinters():
     )
 
     df_sprinters_waarde = df_sprinters_waarde.group_by(
-        ["asset_rollup", "regio", "sector", "value_grow"]
+        ["broker", "asset_rollup", "regio", "sector", "value_grow"]
     ).agg(
         [
             pl.sum("SomVantransactie_aantal").alias("aantal_sprinters"),
@@ -2183,6 +2189,7 @@ def portfolio_value_asset_rollup_sprinters():
 
 def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+    from portefeuille_viewer.services.portfolio_value_broker_view import build_combined_portfolio_value_df
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
     df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie
     df_sprinters = SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters
@@ -2191,99 +2198,7 @@ def portfolio_value_asset_rollup_combined():
         raise ValueError("Een van de benodigde dataframes is niet gevuld!")
     if df_sprinters is None:
         df_sprinters = pl.DataFrame({})
-
-    df_opties_put = df_opties_put.group_by("asset_rollup",  "regio", "sector", "value_grow").agg([
-        pl.sum("waarde_bezit").alias("opt_waarde_bezit"),
-        pl.sum("waarde_ITM").alias("opt_waarde_ITM"),
-        pl.sum("waarde_bezit_delta").alias("opt_waarde_bezit_delta"),
-        pl.sum("aantal_ITM_put").alias("opt_aantal_ITM_put"),
-        pl.sum("aantal_OTM_put").alias("opt_aantal_OTM_put"),
-        pl.sum("aantal_ITM_call").alias("opt_aantal_ITM_call"),
-        pl.sum("aantal_OTM_call").alias("opt_aantal_OTM_call"),
-        ])
-    df_opties_put = df_opties_put.drop(["regio", "sector", "value_grow"])
-    if not df_sprinters.is_empty():
-        df_sprinters = df_sprinters.group_by("asset_rollup", "regio", "sector", "value_grow").agg([
-            pl.sum("aantal_sprinters").alias("aantal_sprinters"),
-            pl.sum("spr_waarde_bezit").alias("spr_waarde_bezit"),
-        ])
-        df_sprinters = df_sprinters.drop(["regio", "sector", "value_grow"])
-    else:
-        df_sprinters = pl.DataFrame(
-            schema={
-                "asset_rollup": pl.Utf8,
-                "aantal_sprinters": pl.Float64,
-                "spr_waarde_bezit": pl.Float64,
-            }
-        )
-
-
-    df_aandelen = df_aandelen.group_by("asset_rollup", "regio", "sector", "value_grow","koers").agg([
-        pl.sum("aantal_bezit").alias("aand_aantal_bezit"),
-        pl.sum("waarde_bezit").alias("aand_waarde_bezit"),
-        ])
-
-    # Ensure join key uses a stable dtype across sources.
-    if "asset_rollup" in df_aandelen.columns:
-        df_aandelen = df_aandelen.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
-    if "asset_rollup" in df_opties_put.columns:
-        df_opties_put = df_opties_put.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
-    if "asset_rollup" in df_sprinters.columns:
-        df_sprinters = df_sprinters.with_columns(pl.col("asset_rollup").cast(pl.Utf8))
-
-
-    
-    # Join op asset_rollup en broker
-    df_combined = df_aandelen.join(
-        df_opties_put,
-        on=["asset_rollup"],
-        how="outer",
-        # suffix="opt_"
-    )
-
-    if "asset_rollup_right" in df_combined.columns:
-        df_combined = df_combined.drop(["asset_rollup_right"])
-
-    df_combined = df_combined.join(
-        df_sprinters,
-        on=["asset_rollup"],
-        how="outer",
-    )
-    if "asset_rollup_right" in df_combined.columns:
-        df_combined = df_combined.drop(["asset_rollup_right"])
-
-    # Vervang nullen door 0 voor sommaties
-    df_combined = df_combined.with_columns([
-        pl.col("aand_aantal_bezit").fill_null(0).alias("aand_aantal_bezit"),
-        pl.col("aand_waarde_bezit").fill_null(0).alias("aand_waarde_bezit"),
-        pl.col("opt_waarde_bezit").fill_null(0).alias("opt_waarde_bezit"),
-        pl.col("opt_waarde_ITM").fill_null(0).alias("opt_waarde_ITM"),
-        pl.col("opt_waarde_bezit_delta").fill_null(0).alias("opt_waarde_bezit_delta"),
-        pl.col("opt_aantal_ITM_put").fill_null(0).alias("opt_aantal_ITM_put"),
-        pl.col("opt_aantal_OTM_put").fill_null(0).alias("opt_aantal_OTM_put"),
-        pl.col("opt_aantal_ITM_call").fill_null(0).alias("opt_aantal_ITM_call"),
-        pl.col("opt_aantal_OTM_call").fill_null(0).alias("opt_aantal_OTM_call"),
-        pl.col("aantal_sprinters").fill_null(0).alias("aantal_sprinters"),
-        pl.col("spr_waarde_bezit").fill_null(0).alias("spr_waarde_bezit"),
-    ])
-
-
-
-    # Bereken totale waarde per asset_rollup en broker
-    df_combined = df_combined.with_columns([
-        (pl.col("aand_aantal_bezit") + (-1* pl.col("opt_aantal_ITM_put"))).alias("total_aantal_lineair"),
-
-        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit") + pl.col("spr_waarde_bezit")).alias("total_waarde_lineair"),
-        (pl.col("aand_waarde_bezit") + pl.col("opt_waarde_bezit_delta") + pl.col("spr_waarde_bezit")).alias("total_waarde_delta"),
-    ])
-
-    total_portfolio_value_lineair = df_combined['total_waarde_lineair'].sum()
-    total_portfolio_value_delta = df_combined['total_waarde_delta'].sum()
-
-    df_combined = df_combined.with_columns([
-        (pl.col("total_waarde_lineair")/total_portfolio_value_lineair).alias("portfolio_total_waarde_lineair_pct"),
-        (pl.col("total_waarde_delta")/total_portfolio_value_delta).alias("portfolio_total_waarde_delta_pct"),
-    ])
+    df_combined = build_combined_portfolio_value_df(df_aandelen, df_opties_put, df_sprinters)
 
     SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_total_combined_put", df_combined)
     #return df_combined
