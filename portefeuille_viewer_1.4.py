@@ -1405,6 +1405,34 @@ def main():
         reason = (payload or {}).get("reason", "asset_subscription_refresh")
         asset = (payload or {}).get("asset_rollup", "")
         try:
+            if reason in {"asset_rollup_saved", "asset_rollup_deleted"}:
+                repository.load_asset_rollup_data()
+                repository.build_repository_active_asset_rollup_data()
+                live_aggregator_aandelen.process_live_update(force_publish=True)
+                live_aggregator_opties.process_live_update(force_publish=True)
+                live_aggregator_sprinters.process_live_update(force_publish=True)
+                repository.portfolio_value_asset_rollup_opties_put()
+                repository.portfolio_value_asset_rollup_aandelen()
+                repository.portfolio_value_asset_rollup_sprinters()
+                repository.portfolio_value_asset_rollup_combined()
+                if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
+                    _runtime_recompute_selected(
+                        {"aandelen_v2", "opties_open_v2", "optie_tijdswaarde_v2", "sprinters_open_v2"},
+                        "asset_metadata_changed",
+                        {"REPOSITORY_SNAPSHOT_ASSET_ROLLUP_DATA"},
+                    )
+                else:
+                    refresh_aandelen_projection(
+                        "asset_metadata_changed",
+                        {"REPOSITORY_SNAPSHOT_ASSET_ROLLUP_DATA"},
+                        force_sync=True,
+                    )
+                    refresh_opties_open_projection("asset_metadata_changed")
+                    refresh_optie_tijdswaarde_projection("asset_metadata_changed")
+                    refresh_sprinters_open_projection("asset_metadata_changed")
+                _reset_aandelen_tv_overlay_regime(f"asset_metadata_changed:{reason}")
+                if option_timevalue_service is not None:
+                    option_timevalue_service.schedule_rebuild({"reason": "asset_metadata_changed"})
             portfolio_engine.start_subscriptions()
             if asset:
                 _log(f"[subscriptions] refreshed after {reason}: {asset}")

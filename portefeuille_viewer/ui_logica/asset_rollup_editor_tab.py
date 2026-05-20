@@ -486,6 +486,7 @@ class AssetRollupEditorTab(QWidget):
         self._has_new_row = False
         self._selected_id = None
         self.lbl_status.setText("Record verwijderd. Tabel vernieuwen...")
+        signals.assetSubscriptionsRefreshRequested.emit({"reason": "asset_rollup_deleted"})
         self.reload()
 
     def _on_delete_error(self, message: str) -> None:

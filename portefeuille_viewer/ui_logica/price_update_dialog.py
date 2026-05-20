@@ -30,7 +30,6 @@ class PriceUpdateDialog(QDialog):
         self.buttonStart.clicked.connect(self.start_update)
         row.addWidget(self.buttonStart)
         self.buttonClear = QPushButton("Clear log")
-        self.buttonClear.clicked.connect(self.logOutput.clear)
         row.addWidget(self.buttonClear)
         root.addLayout(row)
 
@@ -38,6 +37,7 @@ class PriceUpdateDialog(QDialog):
         self.logOutput.setReadOnly(True)
         self.logOutput.setFont(QFont("Consolas", 9))
         root.addWidget(self.logOutput, 1)
+        self.buttonClear.clicked.connect(self.logOutput.clear)
 
     def _connect_signals(self) -> None:
         signals.priceUpdateStarted.connect(self._on_price_update_started)
