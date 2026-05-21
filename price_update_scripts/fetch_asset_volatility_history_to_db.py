@@ -208,6 +208,7 @@ def main() -> int:
                     assets_ok += 1
                 total_hv_rows += len(hv_rows)
                 total_iv_rows += len(iv_rows)
+                log_missing_series(asset.asset_rollup, hv_rows, iv_rows)
                 log_progress(
                     f"{asset.asset_rollup}: hv_rows={len(hv_rows)} iv_rows={len(iv_rows)} "
                     f"updated=0 db_ms=0 error={error}"
@@ -227,6 +228,7 @@ def main() -> int:
                         assets_ok += 1
                     total_hv_rows += len(hv_rows)
                     total_iv_rows += len(iv_rows)
+                    log_missing_series(asset.asset_rollup, hv_rows, iv_rows)
                     asset_temp_rows = build_temp_rows(asset.asset_rollup, hv_rows, iv_rows)
                     temp_rows.extend(asset_temp_rows)
                     log_progress(
@@ -593,6 +595,14 @@ def connect_access(db_path: str):
 
 def log_progress(message: str) -> None:
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [vol-history] {message}", flush=True)
+
+
+def log_missing_series(asset_rollup: str, hv_rows: list[dict[str, Any]], iv_rows: list[dict[str, Any]]) -> None:
+    asset = clean(asset_rollup).upper()
+    if not hv_rows:
+        log_progress(f"{asset}: melding: geen HISTORICAL_VOLATILITY data ontvangen/opgeslagen")
+    if not iv_rows:
+        log_progress(f"{asset}: melding: geen OPTION_IMPLIED_VOLATILITY data ontvangen/opgeslagen")
 
 
 def parse_ib_date(value: Any) -> date | None:

@@ -25,7 +25,10 @@ from portefeuille_viewer.data.asset_rollup_repository import (
     list_asset_rollup_rows,
     upsert_asset_rollup_row,
 )
-from portefeuille_viewer.services.single_asset_long_history_runner import SingleAssetLongHistoryRunner
+from portefeuille_viewer.services.single_asset_long_history_runner import (
+    SingleAssetLongHistoryRunner,
+    SingleAssetLongVolatilityRunner,
+)
 from portefeuille_viewer.signals import signals
 
 
@@ -102,9 +105,9 @@ class _SortableTableItem(QTableWidgetItem):
 
 
 class _LongHistoryOutputDialog(QDialog):
-    def __init__(self, asset_rollup: str, parent=None):
+    def __init__(self, asset_rollup: str, parent=None, *, title: str = "Lange historie ophalen"):
         super().__init__(parent)
-        self.setWindowTitle(f"Lange historie ophalen - {asset_rollup}")
+        self.setWindowTitle(f"{title} - {asset_rollup}")
         self.resize(1100, 720)
         root = QVBoxLayout(self)
         self.lbl_status = QLabel("Start...", self)
@@ -155,7 +158,7 @@ class AssetRollupEditorTab(QWidget):
         self._load_worker = None
         self._save_worker = None
         self._delete_worker = None
-        self._history_runner: SingleAssetLongHistoryRunner | None = None
+        self._history_runner: SingleAssetLongHistoryRunner | SingleAssetLongVolatilityRunner | None = None
         self._history_dialog: _LongHistoryOutputDialog | None = None
         self._has_new_row = False
 
@@ -179,8 +182,22 @@ class AssetRollupEditorTab(QWidget):
         self.btn_new = QPushButton("Nieuw", self)
         self.btn_save = QPushButton("Opslaan", self)
         self.btn_delete = QPushButton("Verwijderen", self)
-        self.btn_long_history = QPushButton("Lange historie ophalen", self)
-        for button in (self.btn_reload, self.btn_new, self.btn_save, self.btn_delete, self.btn_long_history):
+        self.btn_long_history = QPushButton("Lang hist. OHLCV", self)
+        self.combo_long_iv_hv_duration = QComboBox(self)
+        for duration in ("1 Y", "2 Y", "5 Y", "10 Y", "20 Y"):
+            self.combo_long_iv_hv_duration.addItem(duration, duration)
+        self.combo_long_iv_hv_duration.setCurrentText("10 Y")
+        self.btn_long_iv_hv = QPushButton("Lang hist. HV/IV", self)
+        for button in (
+            self.btn_reload,
+            self.btn_new,
+            self.btn_save,
+            self.btn_delete,
+            self.btn_long_history,
+            self.btn_long_iv_hv,
+        ):
+            if button is self.btn_long_iv_hv:
+                tools.addWidget(self.combo_long_iv_hv_duration)
             tools.addWidget(button)
 
         self.filter_bar = QHBoxLayout()
@@ -212,12 +229,15 @@ class AssetRollupEditorTab(QWidget):
         self.btn_save.clicked.connect(self._save_row)
         self.btn_delete.clicked.connect(self._delete_row)
         self.btn_long_history.clicked.connect(self._run_long_history_for_selection)
+        self.btn_long_iv_hv.clicked.connect(self._run_long_iv_hv_for_selection)
         signals.databaseChanged.connect(self._on_database_changed)
 
         self.lbl_database.setText(f"Database: {data_repository.db_path}")
         self.lbl_status.setText("Nog niet geladen")
         self.btn_delete.setEnabled(False)
         self.btn_long_history.setEnabled(False)
+        self.combo_long_iv_hv_duration.setEnabled(False)
+        self.btn_long_iv_hv.setEnabled(False)
 
     def set_active(self, active: bool) -> None:
         if active and not self._rows and self._load_worker is None:
@@ -301,6 +321,8 @@ class AssetRollupEditorTab(QWidget):
             self._selected_id = None
             self.btn_delete.setEnabled(False)
             self.btn_long_history.setEnabled(False)
+            self.combo_long_iv_hv_duration.setEnabled(False)
+            self.btn_long_iv_hv.setEnabled(False)
 
     def _build_filter_controls(self) -> None:
         while self.filter_bar.count():
@@ -394,11 +416,15 @@ class AssetRollupEditorTab(QWidget):
             self._selected_id = None
             self.btn_delete.setEnabled(False)
             self.btn_long_history.setEnabled(False)
+            self.combo_long_iv_hv_duration.setEnabled(False)
+            self.btn_long_iv_hv.setEnabled(False)
             return
         row_id = self._table_value(row_idx, "Id")
         self._selected_id = int(row_id) if row_id not in ("", None) else None
         self.btn_delete.setEnabled(self._selected_id is not None)
         self.btn_long_history.setEnabled(self._selected_id is not None and not self._history_is_running())
+        self.combo_long_iv_hv_duration.setEnabled(self._selected_id is not None and not self._history_is_running())
+        self.btn_long_iv_hv.setEnabled(self._selected_id is not None and not self._history_is_running())
 
     def _new_row(self) -> None:
         if not self._columns:
@@ -427,6 +453,8 @@ class AssetRollupEditorTab(QWidget):
         self.table.setCurrentCell(0, self._first_editable_column_index())
         self.btn_delete.setEnabled(False)
         self.btn_long_history.setEnabled(False)
+        self.combo_long_iv_hv_duration.setEnabled(False)
+        self.btn_long_iv_hv.setEnabled(False)
         self.lbl_status.setText("Nieuwe rij bovenaan toegevoegd. Vul de cellen en klik Opslaan.")
 
     def _save_row(self) -> None:
@@ -582,6 +610,36 @@ class AssetRollupEditorTab(QWidget):
         self._set_history_busy(True, f"Lange historie bezig voor {asset_rollup}...")
         runner.start(asset_rollup)
 
+    def _run_long_iv_hv_for_selection(self) -> None:
+        if self._history_is_running():
+            return
+        if self._selected_id is None:
+            QMessageBox.information(
+                self,
+                "Lang IV/HV",
+                "Selecteer eerst een bestaande asset_rollup-regel.",
+            )
+            return
+        asset_rollup = self._selected_asset_rollup()
+        if not asset_rollup:
+            QMessageBox.warning(self, "Lang IV/HV", "De geselecteerde rij heeft geen asset_rollup.")
+            return
+        self._history_dialog = _LongHistoryOutputDialog(asset_rollup, self, title="Lang IV/HV")
+        self._history_dialog.show()
+        self._history_dialog.raise_()
+        self._history_dialog.activateWindow()
+
+        runner = SingleAssetLongVolatilityRunner(self)
+        runner.started.connect(self._on_long_history_started)
+        runner.stepStarted.connect(self._on_long_history_step_started)
+        runner.output.connect(self._on_long_history_output)
+        runner.finished.connect(self._on_long_history_finished)
+        runner.failed.connect(self._on_long_history_failed)
+        self._history_runner = runner
+        duration = str(self.combo_long_iv_hv_duration.currentData() or "10 Y")
+        self._set_history_busy(True, f"Lang IV/HV bezig voor {asset_rollup} ({duration})...")
+        runner.start(asset_rollup, duration=duration)
+
     def _on_long_history_started(self, payload: dict) -> None:
         asset = payload.get("asset_rollup", "")
         self._append_history_output(f"Runner gestart voor {asset}\n")
@@ -626,6 +684,8 @@ class AssetRollupEditorTab(QWidget):
 
     def _set_history_busy(self, busy: bool, status: str = "") -> None:
         self.btn_long_history.setEnabled((not busy) and self._selected_id is not None)
+        self.combo_long_iv_hv_duration.setEnabled((not busy) and self._selected_id is not None)
+        self.btn_long_iv_hv.setEnabled((not busy) and self._selected_id is not None)
         self.btn_reload.setEnabled(not busy)
         self.btn_new.setEnabled(not busy)
         self.btn_save.setEnabled(not busy)
@@ -638,6 +698,9 @@ class AssetRollupEditorTab(QWidget):
         self.btn_new.setEnabled(not busy)
         self.btn_save.setEnabled(not busy)
         self.btn_delete.setEnabled((not busy) and self._selected_id is not None)
-        self.btn_long_history.setEnabled((not busy) and self._selected_id is not None and not self._history_is_running())
+        history_enabled = (not busy) and self._selected_id is not None and not self._history_is_running()
+        self.btn_long_history.setEnabled(history_enabled)
+        self.combo_long_iv_hv_duration.setEnabled(history_enabled)
+        self.btn_long_iv_hv.setEnabled(history_enabled)
         self.table.setEnabled(not busy)
         self.lbl_status.setText(status if busy else self.lbl_status.text())

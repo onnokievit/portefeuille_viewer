@@ -156,3 +156,144 @@ class SingleAssetLongHistoryRunner(QObject):
         message = f"Procesfout tijdens lange historie update: {process_error}"
         self.output.emit(f"\n{message}\n")
         self.failed.emit(message)
+
+
+class SingleAssetLongVolatilityRunner(QObject):
+    started = Signal(dict)
+    stepStarted = Signal(dict)
+    output = Signal(str)
+    finished = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._process: QProcess | None = None
+        self._asset_rollup = ""
+        self._stdout_chunks: list[bytes] = []
+        self._stderr_chunks: list[bytes] = []
+        self._all_output: list[str] = []
+
+    @property
+    def is_running(self) -> bool:
+        return self._process is not None
+
+    def start(self, asset_rollup: str, *, duration: str = "10 Y") -> None:
+        if self._process is not None:
+            return
+        asset = str(asset_rollup or "").strip()
+        if not asset:
+            self.failed.emit("Geen asset_rollup opgegeven.")
+            return
+        duration = str(duration or "10 Y").strip().upper()
+        if duration not in {"1 Y", "2 Y", "5 Y", "10 Y", "20 Y"}:
+            duration = "10 Y"
+
+        script_path = (
+            Path(__file__).resolve().parents[2]
+            / "price_update_scripts_single_stock_fetch_long_history"
+            / "fetch_hv_iv_ibkr_single_stock.py"
+        )
+        if not script_path.exists():
+            self.failed.emit(f"Script niet gevonden: {script_path}")
+            return
+
+        self._asset_rollup = asset
+        self._all_output = []
+        self._stdout_chunks = []
+        self._stderr_chunks = []
+        self.started.emit({"asset_rollup": asset, "steps": 1})
+        self.stepStarted.emit(
+            {
+                "asset_rollup": asset,
+                "step_index": 1,
+                "steps": 1,
+                "label": "HV/IV lange historie ophalen via IBKR",
+            }
+        )
+        self.output.emit(f"Start lange IV/HV voor {asset} duration={duration}\n")
+        self.output.emit("\n=== Stap 1/1: HV/IV lange historie ophalen via IBKR ===\n")
+
+        process = QProcess(self)
+        process.setProgram(sys.executable)
+        process.setArguments(
+            [
+                "-u",
+                str(script_path),
+                "--asset",
+                asset,
+                "--duration",
+                duration,
+                "--what",
+                "both",
+                "--max-in-flight",
+                "1",
+                "--timeout-sec",
+                "120",
+                "--log",
+            ]
+        )
+        process.setWorkingDirectory(str(script_path.parent))
+        process.readyReadStandardOutput.connect(self._on_ready_stdout)
+        process.readyReadStandardError.connect(self._on_ready_stderr)
+        process.finished.connect(self._on_process_finished)
+        process.errorOccurred.connect(self._on_process_error)
+        self._process = process
+        process.start()
+
+    def _on_ready_stdout(self) -> None:
+        if self._process is None:
+            return
+        data = bytes(self._process.readAllStandardOutput())
+        self._stdout_chunks.append(data)
+        self._emit_output(data)
+
+    def _on_ready_stderr(self) -> None:
+        if self._process is None:
+            return
+        data = bytes(self._process.readAllStandardError())
+        self._stderr_chunks.append(data)
+        self._emit_output(data)
+
+    def _emit_output(self, data: bytes) -> None:
+        if not data:
+            return
+        text = data.decode("utf-8", errors="replace")
+        self._all_output.append(text)
+        self.output.emit(text)
+
+    def _on_process_finished(self, exit_code: int, _exit_status) -> None:
+        process = self._process
+        if process is not None:
+            stdout_tail = bytes(process.readAllStandardOutput())
+            stderr_tail = bytes(process.readAllStandardError())
+            self._stdout_chunks.append(stdout_tail)
+            self._stderr_chunks.append(stderr_tail)
+            self._emit_output(stdout_tail)
+            self._emit_output(stderr_tail)
+        self._process = None
+        if exit_code != 0:
+            message = f"Lange IV/HV faalde met exit_code={exit_code}"
+            self.output.emit(f"\n{message}\n")
+            self.failed.emit(message)
+            return
+        try:
+            repository.load_historical_ohlcv_snapshot()
+        except Exception as exc:
+            message = f"IV/HV staat in DB, maar herladen van app-snapshots faalde: {type(exc).__name__}: {exc}"
+            self.output.emit(f"\n{message}\n")
+            self.failed.emit(message)
+            return
+        payload = {
+            "status": "ok",
+            "asset_rollup": self._asset_rollup,
+            "steps": 1,
+            "output": "\n".join(self._all_output),
+        }
+        self.output.emit("\nLange IV/HV succesvol afgerond.\n")
+        self.finished.emit(payload)
+
+    def _on_process_error(self, process_error) -> None:
+        self._process = None
+        message = f"Procesfout tijdens lange IV/HV update: {process_error}"
+        self.output.emit(f"\n{message}\n")
+        self.failed.emit(message)
