@@ -4,11 +4,13 @@ from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QPen
 import polars as pl
+import json
 
 from portefeuille_viewer.ui.sector_tab import Ui_Form
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui.models import PolarsTableModel
+from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.ui_logica.generated_option_orders_dialog import open_scenario_dialog
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
@@ -16,6 +18,7 @@ from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aande
 from portefeuille_viewer.services.portfolio_broker_filter_state import PORTFOLIO_BROKER_FILTER_STATE
 from portefeuille_viewer.services.portfolio_value_broker_view import filter_brokers
 from portefeuille_viewer.ui_logica.portfolio_broker_filter_combo import PortfolioBrokerFilterController
+from portefeuille_viewer.ui_logica.checkable_filter_combo import CheckableFilterComboController
 
 
 class SectorAnalysisTab(QWidget, Ui_Form):
@@ -23,6 +26,9 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         super().__init__(parent)
         self.setupUi(self)
         self._init_broker_filter()
+        self._init_sector_filter()
+        self._init_value_grow_filter()
+        self._init_region_filter()
         self._wrap_in_scroll_area()
         self._chart_views = {}
         self._init_pie_chart("pieChartValueLineair", "pieChartValue1")
@@ -95,6 +101,192 @@ class SectorAnalysisTab(QWidget, Ui_Form):
             self.comboBoxBrokerFilter,
             self.labelBrokerFilter,
         )
+
+    def _init_sector_filter(self) -> None:
+        self.labelSectorFilter = QLabel("Sector:", self)
+        self.labelSectorFilter.setGeometry(1270, 24, 55, 22)
+        self.comboBoxSectorFilter = QComboBox(self)
+        self.comboBoxSectorFilter.setGeometry(1330, 20, 190, 28)
+        self._sector_filter_controller = CheckableFilterComboController(
+            self,
+            self.comboBoxSectorFilter,
+            all_label="Alle sectoren",
+            item_label="Sectoren",
+            label=self.labelSectorFilter,
+            on_changed=self._on_sector_selection_changed,
+        )
+        self._load_sector_selection_from_settings()
+
+    def _on_sector_selection_changed(self) -> None:
+        self._save_filter_selection_to_settings(
+            "sector_analysis_sector_selection",
+            self._selected_sectors(),
+        )
+        self.reload_data()
+
+    def _init_value_grow_filter(self) -> None:
+        self.labelValueGrowFilter = QLabel("Waarde/groei:", self)
+        self.labelValueGrowFilter.setGeometry(1540, 24, 85, 22)
+        self.comboBoxValueGrowFilter = QComboBox(self)
+        self.comboBoxValueGrowFilter.setGeometry(1630, 20, 170, 28)
+        self._value_grow_filter_controller = CheckableFilterComboController(
+            self,
+            self.comboBoxValueGrowFilter,
+            all_label="Waarde & groei",
+            item_label="Waarde & groei",
+            label=self.labelValueGrowFilter,
+            on_changed=self._on_value_grow_selection_changed,
+        )
+        self._load_filter_selection_from_settings(
+            self._value_grow_filter_controller,
+            "sector_analysis_value_grow_selection",
+        )
+
+    def _on_value_grow_selection_changed(self) -> None:
+        self._save_filter_selection_to_settings(
+            "sector_analysis_value_grow_selection",
+            self._selected_value_grow_values(),
+        )
+        self.reload_data()
+
+    def _init_region_filter(self) -> None:
+        self.labelRegionFilter = QLabel("Regio:", self)
+        self.labelRegionFilter.setGeometry(1820, 24, 55, 22)
+        self.comboBoxRegionFilter = QComboBox(self)
+        self.comboBoxRegionFilter.setGeometry(1875, 20, 170, 28)
+        self._region_filter_controller = CheckableFilterComboController(
+            self,
+            self.comboBoxRegionFilter,
+            all_label="Alle regions",
+            item_label="Regio's",
+            label=self.labelRegionFilter,
+            on_changed=self._on_region_selection_changed,
+        )
+        self._load_filter_selection_from_settings(
+            self._region_filter_controller,
+            "sector_analysis_region_selection",
+        )
+
+    def _on_region_selection_changed(self) -> None:
+        self._save_filter_selection_to_settings(
+            "sector_analysis_region_selection",
+            self._selected_region_values(),
+        )
+        self.reload_data()
+
+    def _refresh_sector_filter_options(self, frames: list[pl.DataFrame]) -> None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
+            return
+        sectors: set[str] = set()
+        for df in frames:
+            if df is None or df.is_empty() or "sector" not in df.columns:
+                continue
+            for value in df["sector"].unique().to_list():
+                text = str(value or "").strip()
+                if text:
+                    sectors.add(text)
+        controller.set_options(sectors)
+
+    def _refresh_value_grow_filter_options(self, frames: list[pl.DataFrame]) -> None:
+        controller = getattr(self, "_value_grow_filter_controller", None)
+        if controller is None:
+            return
+        values: set[str] = set()
+        for df in frames:
+            if df is None or df.is_empty() or "value_grow" not in df.columns:
+                continue
+            for value in df["value_grow"].unique().to_list():
+                text = str(value or "").strip()
+                if text:
+                    values.add(text)
+        controller.set_options(values)
+
+    def _refresh_region_filter_options(self, frames: list[pl.DataFrame]) -> None:
+        controller = getattr(self, "_region_filter_controller", None)
+        if controller is None:
+            return
+        values: set[str] = set()
+        region_col = "regio"
+        for df in frames:
+            if df is None or df.is_empty():
+                continue
+            col = "regio" if "regio" in df.columns else "region" if "region" in df.columns else None
+            if col is None:
+                continue
+            region_col = col
+            for value in df[col].unique().to_list():
+                text = str(value or "").strip()
+                if text:
+                    values.add(text)
+        self._region_col = region_col
+        controller.set_options(values)
+
+    def _selected_sectors(self) -> list[str] | None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
+    def _selected_value_grow_values(self) -> list[str] | None:
+        controller = getattr(self, "_value_grow_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
+    def _selected_region_values(self) -> list[str] | None:
+        controller = getattr(self, "_region_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
+    def _load_sector_selection_from_settings(self) -> None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
+            return
+        self._load_filter_selection_from_settings(controller, "sector_analysis_sector_selection")
+
+    def _load_filter_selection_from_settings(self, controller, key: str) -> None:
+        raw = get_settings().config.get("ui", key, fallback="")
+        if not raw:
+            return
+        try:
+            values = json.loads(raw)
+        except Exception:
+            return
+        if isinstance(values, list):
+            controller.set_selected_values([str(value) for value in values])
+
+    def _save_filter_selection_to_settings(self, key: str, selected: list[str] | None) -> None:
+        settings = get_settings()
+        if not settings.config.has_section("ui"):
+            settings.config.add_section("ui")
+        if selected is None:
+            settings.config.remove_option("ui", key)
+        else:
+            settings.config.set("ui", key, json.dumps(selected, ensure_ascii=False))
+        settings.save()
+
+    def _filter_sector_df(self, df: pl.DataFrame) -> pl.DataFrame:
+        selected = self._selected_sectors()
+        if selected is None or df is None or df.is_empty() or "sector" not in df.columns:
+            return df
+        return df.filter(pl.col("sector").cast(pl.Utf8, strict=False).str.strip_chars().is_in(selected))
+
+    def _filter_value_grow_df(self, df: pl.DataFrame) -> pl.DataFrame:
+        selected = self._selected_value_grow_values()
+        if selected is None or df is None or df.is_empty() or "value_grow" not in df.columns:
+            return df
+        return df.filter(pl.col("value_grow").cast(pl.Utf8, strict=False).str.strip_chars().is_in(selected))
+
+    def _filter_region_df(self, df: pl.DataFrame) -> pl.DataFrame:
+        selected = self._selected_region_values()
+        if selected is None or df is None or df.is_empty():
+            return df
+        col = "regio" if "regio" in df.columns else "region" if "region" in df.columns else None
+        if col is None:
+            return df
+        return df.filter(pl.col(col).cast(pl.Utf8, strict=False).str.strip_chars().is_in(selected))
 
     def _open_generated_options_dialog(self) -> None:
         open_scenario_dialog()
@@ -312,6 +504,18 @@ class SectorAnalysisTab(QWidget, Ui_Form):
         df_opties = filter_brokers(df_opties, selected_brokers)
         df_aandelen = filter_brokers(df_aandelen, selected_brokers)
         df_sprinters = filter_brokers(df_sprinters, selected_brokers)
+        self._refresh_sector_filter_options([df_opties, df_aandelen, df_sprinters])
+        self._refresh_value_grow_filter_options([df_opties, df_aandelen, df_sprinters])
+        self._refresh_region_filter_options([df_opties, df_aandelen, df_sprinters])
+        df_opties = self._filter_sector_df(df_opties)
+        df_aandelen = self._filter_sector_df(df_aandelen)
+        df_sprinters = self._filter_sector_df(df_sprinters)
+        df_opties = self._filter_value_grow_df(df_opties)
+        df_aandelen = self._filter_value_grow_df(df_aandelen)
+        df_sprinters = self._filter_value_grow_df(df_sprinters)
+        df_opties = self._filter_region_df(df_opties)
+        df_aandelen = self._filter_region_df(df_aandelen)
+        df_sprinters = self._filter_region_df(df_sprinters)
 
         frames_lineair = []
         if not df_opties.is_empty() and "sector" in df_opties.columns:

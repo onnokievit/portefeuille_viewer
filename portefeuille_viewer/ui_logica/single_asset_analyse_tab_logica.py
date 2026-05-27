@@ -911,7 +911,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 all_item.setCheckState(Qt.Unchecked)
         self._ensure_broker_filter_state()
         self._update_broker_filter_text()
-        self._on_broker_filter_changed()
+        QTimer.singleShot(0, self._on_broker_filter_changed)
 
     def _apply_broker_filter_to_df(self, df: pl.DataFrame | None) -> pl.DataFrame | None:
         selected = self._selected_brokers()
@@ -3343,23 +3343,40 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
 
     def update_aandelen_table(self):
         import polars as pl
+
+        def _set_empty_table() -> None:
+            empty_df = pl.DataFrame(
+                {
+                    "broker": pl.Series([], dtype=pl.Utf8),
+                    "asset_rollup": pl.Series([], dtype=pl.Utf8),
+                    "koers": pl.Series([], dtype=pl.Float64),
+                    "aantal_bezit": pl.Series([], dtype=pl.Float64),
+                    "waarde_bezit": pl.Series([], dtype=pl.Float64),
+                }
+            )
+            self.tableViewAandelen.setModel(AandelenTableModel(empty_df, [], lambda *_args: None, self))
+
         df = getattr(SNAPSHOT_STORE, "aggregator_snapshot_aandelen_live", None)
         if df is None or df.is_empty() or "asset_rollup" not in df.columns:
-            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            _set_empty_table()
             self._update_summary_labels()
             return
         asset = self.asset_selector.currentText()
         df = self.logic._filter_asset_snapshot(df, asset)
         df = self._apply_broker_filter_to_df(df)
         if df is None or df.is_empty():
-            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            _set_empty_table()
             self._update_summary_labels()
             return
         if "aantal_bezit" not in df.columns:
-            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            _set_empty_table()
             self._update_summary_labels()
             return
         df = df.filter(pl.col("aantal_bezit") != 0)
+        if df.is_empty():
+            _set_empty_table()
+            self._update_summary_labels()
+            return
         # Voeg berekende kolom toe: waarde_bezit = koers * aantal_bezit
         if "koers" in df.columns and "aantal_bezit" in df.columns:
             df = df.with_columns([
@@ -3368,7 +3385,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             ])
         required_cols = {"broker", "asset_rollup", "koers", "aantal_bezit", "waarde_bezit"}
         if not required_cols.issubset(set(df.columns)):
-            self.tableViewAandelen.setModel(AandelenTableModel(pl.DataFrame(), [], lambda *_args: None, self))
+            _set_empty_table()
             self._update_summary_labels()
             return
         # Selecteer de gewenste kolommen

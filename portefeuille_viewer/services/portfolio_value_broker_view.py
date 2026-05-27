@@ -169,11 +169,32 @@ def _group_opties(df: pl.DataFrame) -> pl.DataFrame:
     for col in ("regio", "sector", "value_grow"):
         if col not in df.columns:
             df = df.with_columns(pl.lit(None).cast(pl.Utf8).alias(col))
+    cp_expr = (
+        pl.col("optie_call_put").cast(pl.Utf8, strict=False).str.to_lowercase()
+        if "optie_call_put" in df.columns
+        else pl.lit("put")
+    )
+    df = df.with_columns(
+        [
+            pl.when(cp_expr == "put")
+            .then(pl.col("waarde_bezit").cast(pl.Float64, strict=False))
+            .otherwise(0.0)
+            .alias("_put_waarde_bezit"),
+            pl.when(cp_expr == "put")
+            .then(pl.col("waarde_ITM").cast(pl.Float64, strict=False))
+            .otherwise(0.0)
+            .alias("_put_waarde_ITM"),
+            pl.when(cp_expr == "put")
+            .then(pl.col("waarde_bezit_delta").cast(pl.Float64, strict=False))
+            .otherwise(0.0)
+            .alias("_put_waarde_bezit_delta"),
+        ]
+    )
     return df.group_by(["asset_rollup", "regio", "sector", "value_grow"]).agg(
         [
-            pl.col("waarde_bezit").cast(pl.Float64, strict=False).sum().alias("opt_waarde_bezit"),
-            pl.col("waarde_ITM").cast(pl.Float64, strict=False).sum().alias("opt_waarde_ITM"),
-            pl.col("waarde_bezit_delta").cast(pl.Float64, strict=False).sum().alias("opt_waarde_bezit_delta"),
+            pl.col("_put_waarde_bezit").sum().alias("opt_waarde_bezit"),
+            pl.col("_put_waarde_ITM").sum().alias("opt_waarde_ITM"),
+            pl.col("_put_waarde_bezit_delta").sum().alias("opt_waarde_bezit_delta"),
             pl.col("_aantal_ITM_put").sum().alias("opt_aantal_ITM_put"),
             pl.col("_aantal_OTM_put").sum().alias("opt_aantal_OTM_put"),
             pl.col("_aantal_ITM_call").sum().alias("opt_aantal_ITM_call"),

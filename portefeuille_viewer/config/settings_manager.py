@@ -60,6 +60,12 @@ LOCAL_ONLY_KEYS = {
         "cash_dashboard_panel_state",
         "cash_dashboard_year_percent_mode",
         "cash_dashboard_chart_height_px",
+        "portfolio_value_sector_selection",
+        "portfolio_value_value_grow_selection",
+        "portfolio_value_region_selection",
+        "sector_analysis_sector_selection",
+        "sector_analysis_value_grow_selection",
+        "sector_analysis_region_selection",
     },
     "app": {"last_database"},
 }

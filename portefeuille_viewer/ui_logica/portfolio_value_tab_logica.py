@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSortFilterProx
 from PySide6.QtGui import QColor, QBrush
 import polars as pl
 import contextlib
+import json
 
 from portefeuille_viewer.ui.portfolio_value_ui import Ui_Form
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -16,6 +17,7 @@ from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aande
 from portefeuille_viewer.services.portfolio_broker_filter_state import PORTFOLIO_BROKER_FILTER_STATE
 from portefeuille_viewer.services.portfolio_value_broker_view import build_filtered_portfolio_value_df
 from portefeuille_viewer.ui_logica.portfolio_broker_filter_combo import PortfolioBrokerFilterController
+from portefeuille_viewer.ui_logica.checkable_filter_combo import CheckableFilterComboController
 
 class PercentColoredPolarsModel(QAbstractTableModel):
     """
@@ -230,13 +232,40 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._region_combo_label = "Alle regions"
         self.comboBoxSector = getattr(self.ui, "comboBoxSector", None) or getattr(self.ui, "comboBox", None)
         if self.comboBoxSector is not None:
-            self.comboBoxSector.currentTextChanged.connect(self._on_sector_changed)
+            self._sector_filter_controller = CheckableFilterComboController(
+                self,
+                self.comboBoxSector,
+                all_label=self._sector_combo_label,
+                item_label="Sectoren",
+                on_changed=self._on_sector_selection_changed,
+            )
+            self._load_sector_selection_from_settings()
         self.comboBoxValueGrow = getattr(self.ui, "comboBoxValueGrow", None) or getattr(self.ui, "comboBox_2", None)
         if self.comboBoxValueGrow is not None:
-            self.comboBoxValueGrow.currentTextChanged.connect(self._on_value_grow_changed)
+            self._value_grow_filter_controller = CheckableFilterComboController(
+                self,
+                self.comboBoxValueGrow,
+                all_label=self._value_grow_combo_label,
+                item_label="Waarde & groei",
+                on_changed=self._on_value_grow_selection_changed,
+            )
+            self._load_filter_selection_from_settings(
+                self._value_grow_filter_controller,
+                "portfolio_value_value_grow_selection",
+            )
         self.comboBoxRegion = getattr(self.ui, "comboBoxRegion", None) or getattr(self.ui, "comboBox_3", None)
         if self.comboBoxRegion is not None:
-            self.comboBoxRegion.currentTextChanged.connect(self._on_region_changed)
+            self._region_filter_controller = CheckableFilterComboController(
+                self,
+                self.comboBoxRegion,
+                all_label=self._region_combo_label,
+                item_label="Regio's",
+                on_changed=self._on_region_selection_changed,
+            )
+            self._load_filter_selection_from_settings(
+                self._region_filter_controller,
+                "portfolio_value_region_selection",
+            )
         self.comboBoxBrokerFilter = getattr(self.ui, "comboBoxBrokerFilter", None) or getattr(self.ui, "comboBox_4", None)
         if self.comboBoxBrokerFilter is None:
             self.comboBoxBrokerFilter = QComboBox(self.ui.widget)
@@ -369,31 +398,91 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
             self._col_filters[colname] = {"in": selected}
         self.apply_filters()
 
-    def _on_sector_changed(self, text: str):
-        if not text or text == self._sector_combo_label:
+    def _on_sector_selection_changed(self):
+        self._sync_sector_filter_from_selection()
+        self._save_sector_selection_to_settings()
+        self.apply_filters()
+
+    def _sync_sector_filter_from_selection(self):
+        selected = self._selected_sectors()
+        if selected is None:
             self._col_filters.pop("sector", None)
         else:
-            self._col_filters["sector"] = {"eq": text}
-        self.apply_filters()
+            self._col_filters["sector"] = {"in": selected}
+
+    def _selected_sectors(self) -> list[str] | None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
+    def _load_sector_selection_from_settings(self) -> None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
+            return
+        self._load_filter_selection_from_settings(controller, "portfolio_value_sector_selection")
+
+    def _load_filter_selection_from_settings(self, controller, key: str) -> None:
+        raw = get_settings().config.get("ui", key, fallback="")
+        if not raw:
+            return
+        try:
+            values = json.loads(raw)
+        except Exception:
+            return
+        if isinstance(values, list):
+            controller.set_selected_values([str(value) for value in values])
+
+    def _save_sector_selection_to_settings(self) -> None:
+        self._save_filter_selection_to_settings(
+            "portfolio_value_sector_selection",
+            self._selected_sectors(),
+        )
+
+    def _save_filter_selection_to_settings(self, key: str, selected: list[str] | None) -> None:
+        settings = get_settings()
+        if not settings.config.has_section("ui"):
+            settings.config.add_section("ui")
+        if selected is None:
+            settings.config.remove_option("ui", key)
+        else:
+            settings.config.set("ui", key, json.dumps(selected, ensure_ascii=False))
+        settings.save()
 
     def _on_clear_filters_clicked(self):
         if self.comboBoxSector is not None:
-            self.comboBoxSector.blockSignals(True)
-            self.comboBoxSector.setCurrentIndex(0)
-            self.comboBoxSector.blockSignals(False)
+            controller = getattr(self, "_sector_filter_controller", None)
+            if controller is not None:
+                controller.set_all_selected()
+            else:
+                self.comboBoxSector.blockSignals(True)
+                self.comboBoxSector.setCurrentIndex(0)
+                self.comboBoxSector.blockSignals(False)
         if self.comboBoxValueGrow is not None:
-            self.comboBoxValueGrow.blockSignals(True)
-            self.comboBoxValueGrow.setCurrentIndex(0)
-            self.comboBoxValueGrow.blockSignals(False)
+            controller = getattr(self, "_value_grow_filter_controller", None)
+            if controller is not None:
+                controller.set_all_selected()
+            else:
+                self.comboBoxValueGrow.blockSignals(True)
+                self.comboBoxValueGrow.setCurrentIndex(0)
+                self.comboBoxValueGrow.blockSignals(False)
         if self.comboBoxRegion is not None:
-            self.comboBoxRegion.blockSignals(True)
-            self.comboBoxRegion.setCurrentIndex(0)
-            self.comboBoxRegion.blockSignals(False)
+            controller = getattr(self, "_region_filter_controller", None)
+            if controller is not None:
+                controller.set_all_selected()
+            else:
+                self.comboBoxRegion.blockSignals(True)
+                self.comboBoxRegion.setCurrentIndex(0)
+                self.comboBoxRegion.blockSignals(False)
+        self._save_filter_selection_to_settings("portfolio_value_sector_selection", None)
+        self._save_filter_selection_to_settings("portfolio_value_value_grow_selection", None)
+        self._save_filter_selection_to_settings("portfolio_value_region_selection", None)
         self._col_filters.clear()
         self.apply_filters()
 
     def _refresh_sector_combo(self, df: pl.DataFrame):
-        if self.comboBoxSector is None:
+        controller = getattr(self, "_sector_filter_controller", None)
+        if controller is None:
             return
         sectors = []
         if df is not None and not df.is_empty() and "sector" in df.columns:
@@ -401,28 +490,32 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 str(v) for v in df["sector"].unique().to_list()
                 if v is not None and str(v).strip() != ""
             ]
-        sectors = sorted(set(sectors), key=str.lower)
-        current = self.comboBoxSector.currentText()
-        self.comboBoxSector.blockSignals(True)
-        self.comboBoxSector.clear()
-        self.comboBoxSector.addItem(self._sector_combo_label)
-        for sector in sectors:
-            self.comboBoxSector.addItem(sector)
-        if current and current in sectors:
-            self.comboBoxSector.setCurrentText(current)
-        else:
-            self.comboBoxSector.setCurrentIndex(0)
-        self.comboBoxSector.blockSignals(False)
+        controller.set_options(sectors)
 
-    def _on_value_grow_changed(self, text: str):
-        if not text or text == self._value_grow_combo_label:
-            self._col_filters.pop("value_grow", None)
-        else:
-            self._col_filters["value_grow"] = {"eq": text}
+    def _on_value_grow_selection_changed(self):
+        self._sync_value_grow_filter_from_selection()
+        self._save_filter_selection_to_settings(
+            "portfolio_value_value_grow_selection",
+            self._selected_value_grow_values(),
+        )
         self.apply_filters()
 
+    def _sync_value_grow_filter_from_selection(self):
+        selected = self._selected_value_grow_values()
+        if selected is None:
+            self._col_filters.pop("value_grow", None)
+        else:
+            self._col_filters["value_grow"] = {"in": selected}
+
+    def _selected_value_grow_values(self) -> list[str] | None:
+        controller = getattr(self, "_value_grow_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
     def _refresh_value_grow_combo(self, df: pl.DataFrame):
-        if self.comboBoxValueGrow is None:
+        controller = getattr(self, "_value_grow_filter_controller", None)
+        if controller is None:
             return
         values = []
         if df is not None and not df.is_empty() and "value_grow" in df.columns:
@@ -430,33 +523,40 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 str(v) for v in df["value_grow"].unique().to_list()
                 if v is not None and str(v).strip() != ""
             ]
-        values = sorted(set(values), key=str.lower)
-        current = self.comboBoxValueGrow.currentText()
-        self.comboBoxValueGrow.blockSignals(True)
-        self.comboBoxValueGrow.clear()
-        self.comboBoxValueGrow.addItem(self._value_grow_combo_label)
-        for val in values:
-            self.comboBoxValueGrow.addItem(val)
-        if current and current in values:
-            self.comboBoxValueGrow.setCurrentText(current)
-        else:
-            self.comboBoxValueGrow.setCurrentIndex(0)
-        self.comboBoxValueGrow.blockSignals(False)
+        controller.set_options(values)
 
-    def _on_region_changed(self, text: str):
-        col = getattr(self, "_region_col", "regio")
-        if not text or text == self._region_combo_label:
-            self._col_filters.pop(col, None)
-        else:
-            self._col_filters[col] = {"eq": text}
+    def _on_region_selection_changed(self):
+        self._sync_region_filter_from_selection()
+        self._save_filter_selection_to_settings(
+            "portfolio_value_region_selection",
+            self._selected_region_values(),
+        )
         self.apply_filters()
 
+    def _sync_region_filter_from_selection(self):
+        col = getattr(self, "_region_col", "regio")
+        selected = self._selected_region_values()
+        if selected is None:
+            self._col_filters.pop(col, None)
+        else:
+            self._col_filters[col] = {"in": selected}
+
+    def _selected_region_values(self) -> list[str] | None:
+        controller = getattr(self, "_region_filter_controller", None)
+        if controller is None:
+            return None
+        return controller.selected_values()
+
     def _refresh_region_combo(self, df: pl.DataFrame):
-        if self.comboBoxRegion is None:
+        controller = getattr(self, "_region_filter_controller", None)
+        if controller is None:
             return
         col = "regio"
         if df is not None and "regio" not in df.columns and "region" in df.columns:
             col = "region"
+        old_col = getattr(self, "_region_col", col)
+        if old_col != col:
+            self._col_filters.pop(old_col, None)
         self._region_col = col
         values = []
         if df is not None and not df.is_empty() and col in df.columns:
@@ -464,18 +564,7 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 str(v) for v in df[col].unique().to_list()
                 if v is not None and str(v).strip() != ""
             ]
-        values = sorted(set(values), key=str.lower)
-        current = self.comboBoxRegion.currentText()
-        self.comboBoxRegion.blockSignals(True)
-        self.comboBoxRegion.clear()
-        self.comboBoxRegion.addItem(self._region_combo_label)
-        for val in values:
-            self.comboBoxRegion.addItem(val)
-        if current and current in values:
-            self.comboBoxRegion.setCurrentText(current)
-        else:
-            self.comboBoxRegion.setCurrentIndex(0)
-        self.comboBoxRegion.blockSignals(False)
+        controller.set_options(values)
 
     def reload_snapshot(self):
         if hasattr(self, "_broker_filter_controller"):
@@ -518,6 +607,9 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
         self._refresh_sector_combo(df)
         self._refresh_value_grow_combo(df)
         self._refresh_region_combo(df)
+        self._sync_sector_filter_from_selection()
+        self._sync_value_grow_filter_from_selection()
+        self._sync_region_filter_from_selection()
 
         df = self._ensure_percent_columns(df)
 
@@ -527,7 +619,10 @@ class PortfolioValueTab(QWidget, Ui_Form, HeaderFilterMenuMixin):
                 if key.startswith("__in__"):
                     col = key.replace("__in__", "")
                     if col in df.columns:
-                        df = df.filter(pl.col(col).is_in(value))
+                        if col in {"sector", "value_grow", "regio", "region"}:
+                            df = df.filter(pl.col(col).cast(pl.Utf8, strict=False).str.strip_chars().is_in(value))
+                        else:
+                            df = df.filter(pl.col(col).is_in(value))
                 elif key.startswith("__contains__"):
                     col = key.replace("__contains__", "")
                     if col in df.columns:

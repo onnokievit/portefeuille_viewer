@@ -15,6 +15,7 @@ from portefeuille_viewer.ui_logica.maand_eind_web_tab import MaandEindWebTab
 from portefeuille_viewer.ui_logica.asset_indicator_web_tab import AssetIndicatorWebTab
 from portefeuille_viewer.ui_logica.asset_indicator_changes_tab import AssetIndicatorChangesTab
 from portefeuille_viewer.ui_logica.asset_rollup_editor_tab import AssetRollupEditorTab
+from portefeuille_viewer.ui_logica.option_reference_editor_tab import OptionReferenceEditorTab
 from portefeuille_viewer.ui_logica.cash_management_web_tab import CashManagementWebTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.asset_indicator_tab = AssetIndicatorWebTab()
         self.asset_indicator_changes_tab = AssetIndicatorChangesTab()
         self.asset_rollup_editor_tab = AssetRollupEditorTab()
+        self.option_reference_editor_tab = OptionReferenceEditorTab()
         self.portfolio_value_tab = PortfolioValueTab()
         self.cash_management_tab = CashManagementWebTab()
         self.maand_eind_tab = MaandEindWebTab()
@@ -112,6 +114,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ("asset_indicator", "Asset Indicator", self.asset_indicator_tab),
             ("asset_indicator_changes", "Indicator Changes", self.asset_indicator_changes_tab),
             ("asset_rollup_editor", "Asset Rollup Data", self.asset_rollup_editor_tab),
+            ("option_reference_editor", "Optie Referentie Data", self.option_reference_editor_tab),
             ("portfolio_value", "Portfolio Value", self.portfolio_value_tab),
             ("cash_management", "Cash Management", self.cash_management_tab),
             ("maand_eind", "Maand Eind", self.maand_eind_tab),
@@ -178,6 +181,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.asset_indicator_changes_tab.set_active(index == self.tabWidget.indexOf(self.asset_indicator_changes_tab))
         if hasattr(self, "asset_rollup_editor_tab") and hasattr(self.asset_rollup_editor_tab, "set_active"):
             self.asset_rollup_editor_tab.set_active(index == self.tabWidget.indexOf(self.asset_rollup_editor_tab))
+        if hasattr(self, "option_reference_editor_tab") and hasattr(self.option_reference_editor_tab, "set_active"):
+            self.option_reference_editor_tab.set_active(index == self.tabWidget.indexOf(self.option_reference_editor_tab))
         if hasattr(self, "sprinters_open_tab") and hasattr(self.sprinters_open_tab, "set_active"):
             self.sprinters_open_tab.set_active(index == self.tabWidget.indexOf(self.sprinters_open_tab))
         if hasattr(self, "maand_eind_tab") and hasattr(self.maand_eind_tab, "set_active"):

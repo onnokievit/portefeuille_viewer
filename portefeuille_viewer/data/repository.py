@@ -449,10 +449,10 @@ def load_sprinter_referentie_data() -> pl.DataFrame:
 # # ------------------------------------------------------------
 def load_optie_referentie_data() -> pl.DataFrame:
     """
-    Laadt de sprinter referentie tabel  uit de database.
+    Laadt de optie referentie tabel uit de stock database.
     """
     sql = "SELECT * FROM optie_referentie_data"
-    with get_connection() as conn:
+    with get_stockdata_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.safe_write("repository_snapshot_optie_referentie_data", df)
     # return compact_float64(df)
@@ -1900,8 +1900,23 @@ def portfolio_value_asset_rollup_opties_put():
     df_opties_waarde_2 = df_opties_waarde_2.join(
         df_opties_calls,
         on=group_keys,
-        how="left",
-    ).with_columns([
+        how="outer",
+    )
+    coalesce_exprs = []
+    drop_cols = []
+    for key in group_keys:
+        right_key = f"{key}_right"
+        if right_key in df_opties_waarde_2.columns:
+            coalesce_exprs.append(pl.coalesce([pl.col(key), pl.col(right_key)]).alias(key))
+            drop_cols.append(right_key)
+    if coalesce_exprs:
+        df_opties_waarde_2 = df_opties_waarde_2.with_columns(coalesce_exprs).drop(drop_cols)
+    df_opties_waarde_2 = df_opties_waarde_2.with_columns([
+        pl.col("waarde_bezit").fill_null(0).alias("waarde_bezit"),
+        pl.col("waarde_ITM").fill_null(0).alias("waarde_ITM"),
+        pl.col("waarde_bezit_delta").fill_null(0).alias("waarde_bezit_delta"),
+        pl.col("aantal_ITM_put").fill_null(0).alias("aantal_ITM_put"),
+        pl.col("aantal_OTM_put").fill_null(0).alias("aantal_OTM_put"),
         pl.col("aantal_ITM_call").fill_null(0).alias("aantal_ITM_call"),
         pl.col("aantal_OTM_call").fill_null(0).alias("aantal_OTM_call"),
     ])
@@ -2191,14 +2206,16 @@ def portfolio_value_asset_rollup_combined():
     from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
     from portefeuille_viewer.services.portfolio_value_broker_view import build_combined_portfolio_value_df
     df_aandelen = SNAPSHOT_STORE.repository_snapshot_portfolio_value_aandelen
-    df_opties_put = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie
+    df_opties = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie_call_put_detailed
+    if df_opties is None or df_opties.is_empty():
+        df_opties = SNAPSHOT_STORE.repository_snapshot_portfolio_value_optie
     df_sprinters = SNAPSHOT_STORE.repository_snapshot_portfolio_value_sprinters
 
-    if df_aandelen is None or df_opties_put is None:
+    if df_aandelen is None or df_opties is None:
         raise ValueError("Een van de benodigde dataframes is niet gevuld!")
     if df_sprinters is None:
         df_sprinters = pl.DataFrame({})
-    df_combined = build_combined_portfolio_value_df(df_aandelen, df_opties_put, df_sprinters)
+    df_combined = build_combined_portfolio_value_df(df_aandelen, df_opties, df_sprinters)
 
     SNAPSHOT_STORE.safe_write("repository_snapshot_portfolio_value_total_combined_put", df_combined)
     #return df_combined
