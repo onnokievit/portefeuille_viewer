@@ -3160,19 +3160,67 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         # print(f"DEBUG: _filter_dataframe filters = {filters}")
         import re
         import polars as pl
+
+        def _is_date_like(value) -> bool:
+            if isinstance(value, (date, datetime)):
+                return True
+            text = str(value or "").strip()
+            return bool(
+                re.match(r"^\d{4}-\d{2}-\d{2}", text)
+                or re.match(r"^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$", text)
+            )
+
+        def _date_key(value) -> str:
+            if isinstance(value, datetime):
+                return value.date().isoformat()
+            if isinstance(value, date):
+                return value.isoformat()
+            text = str(value or "").strip()
+            if not text:
+                return ""
+            for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d-%m-%y", "%d-%m-%Y", "%d/%m/%y", "%d/%m/%Y"):
+                with contextlib.suppress(Exception):
+                    return datetime.strptime(text[:19] if "%H" in fmt else text, fmt).date().isoformat()
+            return text
+
+        def _date_expr(colname: str):
+            return pl.col(colname).map_elements(_date_key, return_dtype=pl.Utf8)
+
         for key, value in filters.items():
+            if df is None or df.is_empty():
+                return df
             if key.startswith("__in__"):
                 col = key.replace("__in__", "")
-                df = df.filter(pl.col(col).is_in(value))
+                if col not in df.columns or not value:
+                    continue
+                values = list(value)
+                col_dtype = df[col].dtype
+                if (
+                    isinstance(col_dtype, (pl.Date, pl.Datetime))
+                    or "date" in col.lower()
+                    or any(_is_date_like(v) for v in values)
+                ):
+                    date_values = [_date_key(v) for v in values if _date_key(v)]
+                    df = df.filter(_date_expr(col).is_in(date_values))
+                elif col_dtype == pl.Utf8:
+                    df = df.filter(pl.col(col).cast(pl.Utf8, strict=False).is_in(["" if v is None else str(v) for v in values]))
+                else:
+                    df = df.filter(pl.col(col).is_in(values))
             elif key.startswith("__contains__"):
                 col = key.replace("__contains__","")
+                if col not in df.columns:
+                    continue
                 df = df.filter(pl.col(col).cast(str).str.contains(value))
             elif key.startswith("__eq__"):
                 col = key.replace("__eq__","")
+                if col not in df.columns:
+                    continue
                 df = df.filter(pl.col(col) == value)
             elif key.startswith("__date_on__"):
                 col = key.replace("__date_on__","")
-                df = df.filter(pl.col(col) == value)
+                if col not in df.columns:
+                    continue
+                df = df.filter(_date_expr(col) == _date_key(value))
             elif key == "q":
                 terms = [t.strip() for t in value.split(",") if t.strip()]
                 include_comment = bool(filters.get("__q_include_comment__", True))
