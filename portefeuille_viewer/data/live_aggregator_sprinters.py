@@ -53,7 +53,12 @@ class LiveAggregatorSprinters(QObject):
         asset_map = asset_map.select(["asset_rollup", "ib_symbol", "ib_currency"])
         df = SNAPSHOT_STORE.repository_snapshot_open_sprinters.clone()
         df = df.join(asset_map, on="asset_rollup", how="left")
-        sprinter_ref = sprinter_ref.select(["asset_detail", "sprinter_funding", "sprinter_ratio"])
+        sprinter_ref = (
+            sprinter_ref
+            .select(["asset_detail", "sprinter_funding", "sprinter_ratio"])
+            .with_columns(pl.col("asset_detail").cast(pl.Utf8).str.strip_chars())
+            .unique(subset=["asset_detail"], keep="first")
+        )
         df = df.join(sprinter_ref, on="asset_detail", how="left")
 
         prices_df = build_prices_df(self.live_prices, self.last_prices)

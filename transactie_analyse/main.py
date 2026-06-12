@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableView,
     QTabWidget,
@@ -88,6 +89,7 @@ class TransactionAnalysisWindow(QMainWindow):
         self.field_lists: dict[str, FieldListWidget] = {}
 
         self._build_ui()
+        self._resize_to_available_screen()
         self.reload_data()
 
     def _build_ui(self) -> None:
@@ -117,8 +119,16 @@ class TransactionAnalysisWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def _build_filter_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(300)
+        scroll.setMaximumWidth(430)
+
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         controls = QGroupBox("Rapport")
         grid = QGridLayout(controls)
@@ -161,6 +171,8 @@ class TransactionAnalysisWindow(QMainWindow):
             box = QGroupBox(FILTER_TITLES.get(col, col))
             box_layout = QVBoxLayout(box)
             list_widget = QListWidget()
+            list_widget.setMinimumHeight(70)
+            list_widget.setMaximumHeight(110)
             list_widget.itemChanged.connect(self.refresh_views)
             box_layout.addWidget(list_widget)
             buttons = QHBoxLayout()
@@ -175,7 +187,8 @@ class TransactionAnalysisWindow(QMainWindow):
             layout.addWidget(box)
 
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     def _build_pivot_fields_panel(self) -> QWidget:
         box = QGroupBox("Pivot velden")
@@ -188,7 +201,8 @@ class TransactionAnalysisWindow(QMainWindow):
         ):
             layout.addWidget(QLabel(title))
             list_widget = FieldListWidget(self._on_field_layout_changed)
-            list_widget.setMinimumHeight(70)
+            list_widget.setMinimumHeight(54)
+            list_widget.setMaximumHeight(82)
             self.field_lists[key] = list_widget
             layout.addWidget(list_widget)
 
@@ -261,6 +275,22 @@ class TransactionAnalysisWindow(QMainWindow):
                 widget.item(widget.count() - 1).setData(Qt.UserRole, field)
         if refresh:
             self.refresh_views()
+
+    def _resize_to_available_screen(self) -> None:
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            self.resize(1400, 800)
+            return
+        available = screen.availableGeometry()
+        width = min(1500, max(1100, int(available.width() * 0.92)))
+        height = min(850, max(650, int(available.height() * 0.88)))
+        width = min(width, available.width())
+        height = min(height, available.height())
+        self.resize(width, height)
+        self.move(
+            available.x() + max(0, (available.width() - width) // 2),
+            available.y() + max(0, (available.height() - height) // 2),
+        )
 
     def _on_field_layout_changed(self) -> None:
         self._deduplicate_field_lists()
