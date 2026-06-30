@@ -11,6 +11,7 @@ from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui_logica.maand_eind_chart_dialog import open_month_end_chart_dialog
+from portefeuille_viewer.ui_logica.maand_eind_compare_dialog import MonthEndCompareDialog
 from portefeuille_viewer.ui_logica.maand_eind_diff_chart_dialog import open_month_end_diff_chart_dialog
 
 try:
@@ -170,6 +171,7 @@ class MaandEindWebTab(QWidget):
         self._filter_value_grow = ""
         self._filter_sector = ""
         self._year_perf_period = "month"
+        self._compare_dialog: MonthEndCompareDialog | None = None
 
         layout = QVBoxLayout(self)
         if QWebEngineView is None:
@@ -596,6 +598,13 @@ class MaandEindWebTab(QWidget):
             self._filter_value_grow,
         )
 
+    def _open_compare_dialog(self) -> None:
+        if self._compare_dialog is None:
+            self._compare_dialog = MonthEndCompareDialog(self, self)
+        self._compare_dialog.show()
+        self._compare_dialog.raise_()
+        self._compare_dialog.activateWindow()
+
     def _html_template(self) -> str:
         return """
 <!doctype html>
@@ -692,6 +701,7 @@ class MaandEindWebTab(QWidget):
         <button id="btn_refresh">Refresh</button>
         <button id="btn_endvalue_chart">Eindwaarde Chart</button>
         <button id="btn_diff_chart">Verschil Chart</button>
+        <button id="btn_compare_dates">Vergelijk Datums</button>
         <button id="btn_year_perf_period">Performance: maand</button>
       </div>
       <div class="meta" id="meta">Nog niet geladen.</div>
@@ -1118,6 +1128,7 @@ class MaandEindWebTab(QWidget):
         document.getElementById("btn_refresh")?.addEventListener("click", ()=> bridgeState.bridge?.refresh?.());
         document.getElementById("btn_endvalue_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openEndValueChart?.());
         document.getElementById("btn_diff_chart")?.addEventListener("click", ()=> bridgeState.bridge?.openDiffValueChart?.());
+        document.getElementById("btn_compare_dates")?.addEventListener("click", ()=> bridgeState.bridge?.openCompareDates?.());
         document.getElementById("btn_year_perf_period")?.addEventListener("click", ()=> bridgeState.bridge?.toggleYearPerfPeriod?.());
         bindDateCommit("start_date", (value)=> bridgeState.bridge?.setStartDate?.(value));
         bindDateCommit("end_date", (value)=> bridgeState.bridge?.setEndDate?.(value));
@@ -1228,6 +1239,10 @@ class _MaandEindWebBridge(QObject):
     @Slot()
     def openDiffValueChart(self) -> None:
         self._tab._open_diff_value_chart_dialog()
+
+    @Slot()
+    def openCompareDates(self) -> None:
+        self._tab._open_compare_dialog()
 
     @Slot()
     def toggleYearPerfPeriod(self) -> None:
