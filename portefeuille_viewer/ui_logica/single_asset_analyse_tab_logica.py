@@ -238,12 +238,52 @@ class CommentNoSelectDelegate(QStyledItemDelegate):
 class CommentablePolarsTableModel(ColoredPolarsTableModel):
     """Voegt bewerkbare kolom(men) toe voor opmerkingen op open opties."""
 
-    def __init__(self, df, kleur_kolommen=None, kleur_func=None, parent=None, editable_cols=None, commit_callback=None, *args, **kwargs):
+    def __init__(
+        self,
+        df,
+        kleur_kolommen=None,
+        kleur_func=None,
+        parent=None,
+        editable_cols=None,
+        commit_callback=None,
+        price_decimal_cols=None,
+        price_decimals_by_asset=None,
+        default_price_decimals=2,
+        *args,
+        **kwargs,
+    ):
         super().__init__(df, kleur_kolommen, kleur_func, parent, *args, **kwargs)
         self._editable_cols = set(editable_cols or [])
         self._commit_callback = commit_callback
         self._color_priority_map = {}
         self._comment_color_fg_map = {}
+        self._price_decimal_cols = set(price_decimal_cols or [])
+        self._price_decimals_by_asset = price_decimals_by_asset or {}
+        self._default_price_decimals = int(default_price_decimals)
+
+    def set_price_decimal_formatting(
+        self,
+        price_decimal_cols=None,
+        price_decimals_by_asset=None,
+        default_price_decimals=2,
+    ) -> None:
+        self._price_decimal_cols = set(price_decimal_cols or [])
+        self._price_decimals_by_asset = price_decimals_by_asset or {}
+        self._default_price_decimals = int(default_price_decimals)
+
+    def _price_decimals_for_row(self, row_idx: int) -> int:
+        decimals = self._default_price_decimals
+        try:
+            asset_col = self._df.columns.index("asset_rollup")
+            asset = str(self._df[row_idx, asset_col] or "").strip()
+            cfg = self._price_decimals_by_asset.get(asset)
+            if isinstance(cfg, dict):
+                cfg = cfg.get("price_decimals")
+            if cfg is not None:
+                decimals = int(cfg)
+        except Exception:
+            pass
+        return max(0, min(6, decimals))
 
     def set_color_priority_map(self, prio_map: dict):
         self._color_priority_map = prio_map or {}
@@ -264,7 +304,16 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
                     return f"{float(val):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return str(val)
-            if colname in {"optie_strike", "premie"}:
+            if colname in self._price_decimal_cols:
+                val = self._df[index.row(), index.column()]
+                if val is None:
+                    return ""
+                try:
+                    decimals = self._price_decimals_for_row(index.row())
+                    return f"{float(val):,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
+            if colname == "premie":
                 val = self._df[index.row(), index.column()]
                 if val is None:
                     return ""
@@ -276,7 +325,7 @@ class CommentablePolarsTableModel(ColoredPolarsTableModel):
             if not index.isValid() or self._df.is_empty():
                 return None
             colname = self._df.columns[index.column()]
-            if colname in {"strike", "optie_strike", "premie","aantal_bezit"}:
+            if colname in {"strike", "optie_strike", "premie", "aantal_bezit", "Koers"}:
                 return Qt.AlignRight | Qt.AlignVCenter
         if role == Qt.EditRole:
             if not index.isValid() or self._df.is_empty():
@@ -3919,6 +3968,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             "optie_comment": "comment",
             "optie_comment_updated_at": "updated",
         }
+        price_decimal_cols = {"optie_strike", "Koers"}
+        price_decimals_by_asset = dict(getattr(self, "_step_settings_by_asset", {}) or {})
+        default_price_decimals = int(self._step_defaults.get("price_decimals", 2))
 
         model_all = getattr(self, "_model_opties_all", None)
         proxy_model = getattr(self, "_proxy_model_opties_all", None)
@@ -3932,6 +3984,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
                 self,
                 editable_cols={"optie_comment"},
                 commit_callback=self._on_comment_commit,
+                price_decimal_cols=price_decimal_cols,
+                price_decimals_by_asset=price_decimals_by_asset,
+                default_price_decimals=default_price_decimals,
             )
             proxy_model = CommentSortProxy(self)
             proxy_model.setSourceModel(model_all)
@@ -3939,6 +3994,11 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         else:
             model_all.kleur_kolommen = kleur_kolommen
             model_all.kleur_func = kleur_func
+            model_all.set_price_decimal_formatting(
+                price_decimal_cols=price_decimal_cols,
+                price_decimals_by_asset=price_decimals_by_asset,
+                default_price_decimals=default_price_decimals,
+            )
             model_all.set_df(df_all_filtered)
 
         model_all.set_color_priority_map(color_priority_map)
@@ -4034,6 +4094,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self,
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
+            price_decimal_cols=price_decimal_cols,
+            price_decimals_by_asset=price_decimals_by_asset,
+            default_price_decimals=default_price_decimals,
         )
         model_put.set_color_priority_map(color_priority_map)
         model_put.set_comment_color_text_map(get_settings().get_comment_color_text_map())
@@ -4075,6 +4138,9 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             self,
             editable_cols={"optie_comment"},
             commit_callback=self._on_comment_commit,
+            price_decimal_cols=price_decimal_cols,
+            price_decimals_by_asset=price_decimals_by_asset,
+            default_price_decimals=default_price_decimals,
         )
         model_call.set_color_priority_map(color_priority_map)
         model_call.set_comment_color_text_map(get_settings().get_comment_color_text_map())
@@ -4563,6 +4629,7 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
         if asset:
             self._get_live_summary_row(asset, refresh=False)
         self.update_payoff_table()
+        self.update_opties_open_table()
         self.update_chart()
 
     def flush_step_settings_to_db(self) -> None:
