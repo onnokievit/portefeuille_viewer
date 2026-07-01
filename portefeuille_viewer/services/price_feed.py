@@ -76,17 +76,22 @@ class PriceFeedIB(QObject):
     optionTickUpdated = Signal(dict)  # option tick payload for one series_id
     log = Signal(str)
     ready = Signal()
+    statusChanged = Signal(str)
+    connectionLost = Signal(str)
 
     def __init__(self, host: str, port: int, client_id: int, parent=None):
         super().__init__(parent)
-        self._lock = threading.Lock()
-        self._subscribed = set()
+        self._lock = threading.RLock()
+        self._desired_subscriptions: Dict[Tuple, dict] = {}
+        self._active_subscriptions = set()
         self._tid_next = 5200
         self._tid_by_key: Dict[int, Tuple[str, str]] = {}
         self._sub_meta: Dict[int, dict] = {}
-        self._option_subscribed = set()
+        self._desired_option_subscriptions: set[tuple[int, int, str, str]] = set()
+        self._active_option_subscriptions = set()
         self._option_tid_meta: Dict[int, dict] = {}
         self._app = None
+        self._app_thread = None
         self._prices: Dict[Tuple[str,str], Dict[str, float]] = {}
         self.host, self.port, self.client_id = host, port, client_id
         # Dispatcher dicts
@@ -96,10 +101,29 @@ class PriceFeedIB(QObject):
         self._sd_end_handlers = {}  # reqId -> on_end
         # Connection state + reconnect guard
         self._is_ready = False
+        self._status = "disconnected"
+        self._last_disconnect_reason = ""
+        self._reconnect_lock = threading.Lock()
+        self._reconnect_inflight = False
+        self._shutdown_requested = False
         self._reconnect_attempted = False
-        self._start()
+        if not self._start_session("initial"):
+            self._schedule_reconnect(reason="initial_connect_failed", delay=2.0)
 
-    def _start(self):
+    def _set_status(self, status: str) -> None:
+        if self._status == status:
+            return
+        self._status = status
+        self.statusChanged.emit(status)
+        self.log.emit(f"[ibkr] status={status} endpoint={self.host}:{self.port} clientId={self.client_id}")
+
+    def connection_status(self) -> str:
+        return self._status
+
+    def endpoint(self) -> tuple[str, int, int]:
+        return self.host, int(self.port), int(self.client_id)
+
+    def _start_session(self, reason: str = "start") -> bool:
         from ibapi.client import EClient
         from ibapi.wrapper import EWrapper
         from ibapi.contract import Contract
@@ -111,10 +135,18 @@ class PriceFeedIB(QObject):
                 EClient.__init__(self, self)
 
             def nextValidId(self, orderId: int):
-                feed._is_ready = True
+                with feed._lock:
+                    feed._is_ready = True
+                    feed._active_subscriptions.clear()
+                    feed._active_option_subscriptions.clear()
+                    feed._tid_by_key.clear()
+                    feed._sub_meta.clear()
+                    feed._option_tid_meta.clear()
+                feed._set_status("connected")
                 # Prefer delayed feed so indices without realtime entitlement still stream.
                 with contextlib.suppress(Exception):
                     self.reqMarketDataType(3)
+                feed._resubscribe_all_desired()
                 feed.ready.emit()
 
             def error(self, reqId, *args):
@@ -136,17 +168,7 @@ class PriceFeedIB(QObject):
                         feed._reconnect_attempted = True
                         new_id = feed.client_id + 1
                         feed.log.emit(f"ERROR 326: Client ID {feed.client_id} in use; retrying with {new_id}...")
-                        def _do():
-                            try:
-                                if feed._app:
-                                    feed._app.disconnect()
-                                time.sleep(0.5)
-                                feed.client_id = new_id
-                                feed._is_ready = False
-                                feed._app.connect(feed.host, feed.port, clientId=feed.client_id)
-                            except Exception as e:
-                                feed.log.emit(f"Reconnect failed: {e}")
-                        threading.Thread(target=_do, daemon=True).start()
+                        feed.reconnect(client_id=new_id, reason="client_id_conflict", delay=0.5)
                     return
                 if errorCode not in (2103,2104,2106,2158):
                     # Try to find which symbol caused the error
@@ -302,11 +324,133 @@ class PriceFeedIB(QObject):
                 if end:
                     end()
 
+            def connectionClosed(self):
+                feed._handle_connection_lost("connectionClosed")
+
         self._Contract = Contract
-        self._app = App()
-        self._app.connect(self.host, self.port, clientId=self.client_id)
-        t = threading.Thread(target=self._app.run, daemon=True)
+        self._set_status("connecting")
+        app = App()
+        with self._lock:
+            self._app = app
+            self._is_ready = False
+        try:
+            app.connect(self.host, self.port, clientId=self.client_id)
+        except Exception as exc:
+            self.log.emit(f"[ibkr] connect failed reason={reason}: {exc}")
+            self._set_status("disconnected")
+            return False
+        t = threading.Thread(target=app.run, daemon=True)
+        with self._lock:
+            self._app_thread = t
         t.start()
+        return True
+
+    def _disconnect_current_app(self) -> None:
+        app = None
+        thread = None
+        with self._lock:
+            app = self._app
+            thread = self._app_thread
+            self._app = None
+            self._app_thread = None
+            self._is_ready = False
+            self._active_subscriptions.clear()
+            self._active_option_subscriptions.clear()
+            self._tid_by_key.clear()
+            self._sub_meta.clear()
+            self._option_tid_meta.clear()
+            self._cd_handlers.clear()
+            self._cd_end_handlers.clear()
+            self._sd_handlers.clear()
+            self._sd_end_handlers.clear()
+        with contextlib.suppress(Exception):
+            if app is not None:
+                app.disconnect()
+        if thread is not None and thread is not threading.current_thread():
+            with contextlib.suppress(Exception):
+                thread.join(timeout=1.0)
+
+    def _handle_connection_lost(self, reason: str) -> None:
+        if self._shutdown_requested:
+            return
+        self._last_disconnect_reason = str(reason or "unknown")
+        self.connectionLost.emit(self._last_disconnect_reason)
+        self.log.emit(f"[ibkr] connection lost reason={self._last_disconnect_reason}")
+        with self._lock:
+            self._is_ready = False
+            self._active_subscriptions.clear()
+            self._active_option_subscriptions.clear()
+            self._tid_by_key.clear()
+            self._sub_meta.clear()
+            self._option_tid_meta.clear()
+            self._cd_handlers.clear()
+            self._cd_end_handlers.clear()
+            self._sd_handlers.clear()
+            self._sd_end_handlers.clear()
+        self._schedule_reconnect(reason=self._last_disconnect_reason, delay=2.0)
+
+    def _schedule_reconnect(self, reason: str = "connection_lost", delay: float = 0.0) -> None:
+        with self._reconnect_lock:
+            if self._reconnect_inflight or self._shutdown_requested:
+                return
+            self._reconnect_inflight = True
+        self._set_status("reconnecting")
+
+        def _run():
+            try:
+                if delay > 0:
+                    time.sleep(delay)
+                backoffs = [2.0, 5.0, 10.0, 30.0]
+                attempt = 0
+                while not self._shutdown_requested:
+                    attempt += 1
+                    self._disconnect_current_app()
+                    self.log.emit(
+                        f"[ibkr] reconnect attempt={attempt} reason={reason} "
+                        f"endpoint={self.host}:{self.port} clientId={self.client_id}"
+                    )
+                    started = self._start_session(reason)
+                    if started:
+                        deadline = time.time() + 8.0
+                        while time.time() < deadline and not self._shutdown_requested:
+                            if self._is_ready:
+                                return
+                            time.sleep(0.2)
+                    if self._shutdown_requested:
+                        return
+                    wait_sec = backoffs[min(attempt - 1, len(backoffs) - 1)]
+                    self.log.emit(f"[ibkr] reconnect waiting {wait_sec:.1f}s")
+                    time.sleep(wait_sec)
+            finally:
+                with self._reconnect_lock:
+                    self._reconnect_inflight = False
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def reconnect(self, host: str | None = None, port: int | None = None, client_id: int | None = None, reason: str = "manual", delay: float = 0.0) -> None:
+        if host is not None:
+            self.host = str(host).strip() or self.host
+        if port is not None:
+            self.port = int(port)
+        if client_id is not None:
+            self.client_id = int(client_id)
+        self._reconnect_attempted = False
+        self._schedule_reconnect(reason=reason, delay=delay)
+
+    def _resubscribe_all_desired(self) -> None:
+        with self._lock:
+            desired = list(self._desired_subscriptions.items())
+            desired_options = list(self._desired_option_subscriptions)
+        stocks = 0
+        options = 0
+        for label, meta in desired:
+            if self._request_subscription(label, meta):
+                stocks += 1
+        for label in desired_options:
+            if self._request_option_subscription(label):
+                options += 1
+        if stocks or options:
+            self.log.emit(f"[ibkr] resubscribe stocks={stocks} options={options}")
 
     def next_tid(self):
         with self._lock:
@@ -332,6 +476,9 @@ class PriceFeedIB(QObject):
 
     def is_ready(self) -> bool:
         return self._is_ready
+
+    def _can_request_market_data(self) -> bool:
+        return bool(self._app is not None and self._is_ready)
 
     def _make_stock(self, symbol, currency, primaryExchange):
         c = self._Contract()
@@ -440,7 +587,7 @@ class PriceFeedIB(QObject):
         return c
 
     def _retry_with_conid_if_needed(self, req_id: int) -> None:
-        if not self._app:
+        if not self._can_request_market_data():
             return
         with self._lock:
             meta = dict(self._sub_meta.get(req_id) or {})
@@ -472,7 +619,7 @@ class PriceFeedIB(QObject):
         self._app.reqMktData(new_tid, contract, "", False, False, [])
 
     def _retry_option_as_fop(self, req_id: int) -> None:
-        if not self._app:
+        if not self._can_request_market_data():
             return
         with self._lock:
             meta = dict(self._option_tid_meta.get(req_id) or {})
@@ -505,6 +652,73 @@ class PriceFeedIB(QObject):
         self.log.emit(f"Retry option as FOP for series_id={series_id} conId={conid}")
         self._app.reqMktData(new_tid, contract, "", False, False, [])
 
+    def _normalize_subscription_row(self, row) -> tuple[Tuple | None, dict | None]:
+        sym = cur = None
+        asset_type = "aandeel"
+        exch = None
+        pex = None
+        cid = None
+        if isinstance(row, (list, tuple)):
+            if len(row) >= 6:
+                sym, cur, asset_type, exch, pex, cid = row[:6]
+            elif len(row) >= 5:
+                sym, cur, asset_type, exch, pex = row[:5]
+            elif len(row) >= 3:
+                sym, cur, pex = row[:3]
+            elif len(row) >= 2:
+                sym, cur = row[:2]
+        if not sym or not cur:
+            return None, None
+        sym_s = str(sym).strip()
+        cur_s = str(cur).strip()
+        if not sym_s or not cur_s:
+            return None, None
+        meta = {
+            "sym": sym_s,
+            "cur": cur_s,
+            "asset_type": (asset_type or "aandeel").strip().lower() if isinstance(asset_type, str) else str(asset_type or "aandeel").strip().lower(),
+            "exch": str(exch or "").strip(),
+            "pex": str(pex or "").strip(),
+            "cid": cid,
+            "retried_with_conid": False,
+        }
+        label = (meta["sym"], meta["cur"], meta["asset_type"], meta["exch"], meta["pex"], str(cid or ""))
+        return label, meta
+
+    def _request_subscription(self, label: Tuple, meta: dict) -> bool:
+        if not self._can_request_market_data():
+            return False
+        with self._lock:
+            if label in self._active_subscriptions:
+                return False
+            tid = self._tid_next
+            self._tid_next += 1
+            request_meta = dict(meta)
+            request_meta["retried_with_conid"] = False
+            self._tid_by_key[tid] = (request_meta["sym"], request_meta["cur"])
+            self._sub_meta[tid] = request_meta
+            self._active_subscriptions.add(label)
+        contract = self._build_contract(
+            request_meta["sym"],
+            request_meta["cur"],
+            request_meta["asset_type"],
+            request_meta.get("exch"),
+            request_meta.get("pex"),
+            request_meta.get("cid"),
+            use_conid=False,
+        )
+        try:
+            self._app.reqMktData(tid, contract, "", False, False, [])
+            time.sleep(0.01)
+            return True
+        except Exception as exc:
+            with self._lock:
+                self._active_subscriptions.discard(label)
+                self._tid_by_key.pop(tid, None)
+                self._sub_meta.pop(tid, None)
+            self.log.emit(f"[ibkr] reqMktData failed for {request_meta['sym']} ({request_meta['cur']}): {exc}")
+            return False
+
     @Slot(list)
     def ensure_subscriptions(self, rows: List[Tuple]):
         """Vraag marktdata aan voor subscriptions.
@@ -513,44 +727,54 @@ class PriceFeedIB(QObject):
         - legacy: (sym, cur, prim_exch)
         - nieuw:   (sym, cur, asset_type, exchange, prim_exch[, contractid])
         """
-        if not self._app:
-            return
+        normalized: list[tuple[Tuple, dict]] = []
         for row in rows:
-            sym = cur = None
-            asset_type = "aandeel"
-            exch = None
-            pex = None
-            cid = None
-            if isinstance(row, (list, tuple)):
-                if len(row) >= 6:
-                    sym, cur, asset_type, exch, pex, cid = row[:6]
-                elif len(row) >= 5:
-                    sym, cur, asset_type, exch, pex = row[:5]
-                elif len(row) >= 3:
-                    sym, cur, pex = row[:3]
-                elif len(row) >= 2:
-                    sym, cur = row[:2]
-            if not sym or not cur:
+            label, meta = self._normalize_subscription_row(row)
+            if label is None or meta is None:
                 continue
-            label = (sym, cur, (asset_type or "").strip().lower(), exch or "", pex or "", str(cid or ""))
-            if label in self._subscribed:
-                continue
+            normalized.append((label, meta))
+        with self._lock:
+            for label, meta in normalized:
+                self._desired_subscriptions[label] = dict(meta)
+        for label, meta in normalized:
+            self._request_subscription(label, meta)
+
+    def _request_option_subscription(self, label: tuple[int, int, str, str]) -> bool:
+        if not self._can_request_market_data():
+            return False
+        series_id_i, conid_i, exchange_code, ib_currency = label
+        with self._lock:
+            if label in self._active_option_subscriptions:
+                return False
             tid = self._tid_next
             self._tid_next += 1
-            self._tid_by_key[tid] = (sym, cur)
-            self._sub_meta[tid] = {
-                "sym": sym,
-                "cur": cur,
-                "asset_type": (asset_type or "").strip().lower(),
-                "exch": exch,
-                "pex": pex,
-                "cid": cid,
-                "retried_with_conid": False,
+            self._active_option_subscriptions.add(label)
+
+        contract = self._Contract()
+        contract.secType = "OPT"
+        contract.conId = conid_i
+        contract.exchange = exchange_code or "SMART"
+        if ib_currency:
+            contract.currency = ib_currency
+
+        with self._lock:
+            self._option_tid_meta[tid] = {
+                "series_id": series_id_i,
+                "conid": conid_i,
+                "exchange": contract.exchange,
+                "currency": contract.currency if hasattr(contract, "currency") else "",
+                "retried_fop": False,
             }
-            contract = self._build_contract(sym, cur, asset_type, exch, pex, cid, use_conid=False)
+        try:
             self._app.reqMktData(tid, contract, "", False, False, [])
-            self._subscribed.add(label)
             time.sleep(0.01)
+            return True
+        except Exception as exc:
+            with self._lock:
+                self._active_option_subscriptions.discard(label)
+                self._option_tid_meta.pop(tid, None)
+            self.log.emit(f"[ibkr] option reqMktData failed series_id={series_id_i} conId={conid_i}: {exc}")
+            return False
 
     @Slot(list)
     def ensure_option_subscriptions(self, rows: List[Tuple]):
@@ -558,10 +782,7 @@ class PriceFeedIB(QObject):
 
         rows format: (series_id, conid, exchange_code, ib_currency)
         """
-        if not self._app:
-            return
         desired_labels: set[tuple[int, int, str, str]] = set()
-        normalized_rows: list[tuple[int, int, str, str]] = []
         for row in rows:
             if not isinstance(row, (list, tuple)) or len(row) < 2:
                 continue
@@ -576,10 +797,10 @@ class PriceFeedIB(QObject):
             ib_currency = str((row[3] if len(row) > 3 else "") or "").upper()
             label = (series_id_i, conid_i, exchange_code, ib_currency)
             desired_labels.add(label)
-            normalized_rows.append(label)
 
         stale_tids: list[int] = []
         with self._lock:
+            self._desired_option_subscriptions = set(desired_labels)
             for tid, meta in list(self._option_tid_meta.items()):
                 try:
                     label = (
@@ -593,46 +814,24 @@ class PriceFeedIB(QObject):
                 if label not in desired_labels:
                     stale_tids.append(tid)
                     self._option_tid_meta.pop(tid, None)
-                    self._option_subscribed.discard(label)
+                    self._active_option_subscriptions.discard(label)
         for tid in stale_tids:
             with contextlib.suppress(Exception):
-                self._app.cancelMktData(tid)
+                if self._app:
+                    self._app.cancelMktData(tid)
 
-        for series_id_i, conid_i, exchange_code, ib_currency in normalized_rows:
-            label = (series_id_i, conid_i, exchange_code, ib_currency)
-            if label in self._option_subscribed:
-                continue
-
-            contract = self._Contract()
-            contract.secType = "OPT"
-            contract.conId = conid_i
-            contract.exchange = exchange_code or "SMART"
-            if ib_currency:
-                contract.currency = ib_currency
-
-            with self._lock:
-                tid = self._tid_next
-                self._tid_next += 1
-                self._option_tid_meta[tid] = {
-                    "series_id": series_id_i,
-                    "conid": conid_i,
-                    "exchange": contract.exchange,
-                    "currency": contract.currency if hasattr(contract, "currency") else "",
-                    "retried_fop": False,
-                }
-
-            self._app.reqMktData(tid, contract, "", False, False, [])
-            self._option_subscribed.add(label)
-            time.sleep(0.01)
+        for label in desired_labels:
+            self._request_option_subscription(label)
 
     def snapshot_prices(self) -> Dict[Tuple[str,str], Dict[str,float]]:
         with self._lock:
             return {k: v.copy() for k, v in self._prices.items()}
 
     def shutdown(self):
+        self._shutdown_requested = True
+        self._set_status("disconnected")
         with contextlib.suppress(Exception):
-            if self._app:
-                self._app.disconnect()
+            self._disconnect_current_app()
 
 
 # ------------------------------------------------------------
@@ -652,6 +851,8 @@ class PriceFeedService(QObject):
     """
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
     optionTickUpdated = Signal(dict)
+    statusChanged = Signal(str)
+    connectionLost = Signal(str)
 
     def __init__(self, host, port, client_id, parent=None):
         # print("[DEBUG] PriceFeedService aangemaakt:", id(self))
@@ -661,6 +862,8 @@ class PriceFeedService(QObject):
         self._feed = PriceFeedIB(host, port, client_id)
         self._feed.priceUpdated.connect(self._on_price)
         self._feed.optionTickUpdated.connect(self._on_option_tick)
+        self._feed.statusChanged.connect(self.statusChanged.emit)
+        self._feed.connectionLost.connect(self.connectionLost.emit)
         self._option_lock = threading.Lock()
         self._option_prices: Dict[int, dict] = {}
         self._active_option_series_ids: set[int] = set()
@@ -1164,6 +1367,15 @@ class PriceFeedService(QObject):
 
     def is_ready(self) -> bool:
         return self._feed.is_ready()
+
+    def connection_status(self) -> str:
+        return self._feed.connection_status()
+
+    def endpoint(self) -> tuple[str, int, int]:
+        return self._feed.endpoint()
+
+    def reconnect(self, host: str | None = None, port: int | None = None, client_id: int | None = None):
+        self._feed.reconnect(host=host, port=port, client_id=client_id, reason="manual")
 
     def ensure_subscriptions(self, rows: List[tuple]):
         self._feed.ensure_subscriptions(rows)

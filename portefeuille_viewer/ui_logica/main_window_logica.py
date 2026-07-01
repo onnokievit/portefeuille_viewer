@@ -43,6 +43,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._restoring_tab_order = False
         
         self._register_tabs()
+        if hasattr(self, "settings_tab") and hasattr(self.settings_tab, "set_price_feed"):
+            self.settings_tab.set_price_feed(self.price_feed)
         self._apply_saved_tab_order()
         self._restore_geometry()
 

@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -41,10 +42,12 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self.settings_manager = get_settings()
         self._state_engine_tasks_dialog = None
         self._price_update_dialog = None
+        self._price_feed = None
         # Laad EUR/USD waarde uit settings.ini
         eurusd = self.settings_manager.get_eurusd()
         self.txtEURUSD.setText(str(eurusd))
         self.btnSaveEURUSD.clicked.connect(self.save_eurusd)
+        self._init_ib_controls()
 
         # Database config table setup
         self.btnNewDatabase.clicked.connect(self.add_database)
@@ -64,6 +67,99 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._init_state_engine_task_controls()
         self._init_option_scanner_controls()
         self._init_cash_management_controls()
+
+    def _init_ib_controls(self):
+        if not hasattr(self, "grpIB"):
+            return
+        self.txtIBHost.setText(self.settings_manager.get_ib_host())
+        self.txtIBPort.setText(str(self.settings_manager.get_ib_port()))
+        self.btnSaveIB.clicked.connect(self.save_ib_settings)
+
+        self._ib_status_label = QLabel("IBKR: niet gekoppeld")
+        self.layoutIB.addWidget(self._ib_status_label, 2, 0, 1, 3)
+
+        self._button_ib_reconnect = QPushButton("Reconnect")
+        self._button_ib_reconnect.clicked.connect(self._reconnect_ib)
+        self.layoutIB.addWidget(self._button_ib_reconnect, 3, 0, 1, 1)
+
+        self._button_ib_7496 = QPushButton("Switch 7496")
+        self._button_ib_7496.clicked.connect(lambda: self._switch_ib_port(7496))
+        self.layoutIB.addWidget(self._button_ib_7496, 3, 1, 1, 1)
+
+        self._button_ib_7498 = QPushButton("Switch 7498")
+        self._button_ib_7498.clicked.connect(lambda: self._switch_ib_port(7498))
+        self.layoutIB.addWidget(self._button_ib_7498, 3, 2, 1, 1)
+
+    def set_price_feed(self, price_feed) -> None:
+        self._price_feed = price_feed
+        if price_feed is not None:
+            with contextlib.suppress(Exception):
+                price_feed.statusChanged.connect(self._on_ib_status_changed)
+                price_feed.connectionLost.connect(self._on_ib_connection_lost)
+        self._refresh_ib_status()
+
+    def _current_ib_host(self) -> str:
+        return (self.txtIBHost.text() or "").strip() or "127.0.0.1"
+
+    def _current_ib_port(self) -> int:
+        try:
+            return int((self.txtIBPort.text() or "").strip())
+        except Exception:
+            return self.settings_manager.get_ib_port()
+
+    def save_ib_settings(self):
+        host = self._current_ib_host()
+        port = self._current_ib_port()
+        client_id = self.settings_manager.get_ib_client_id()
+        self.settings_manager.set_ib_settings(host, port, client_id)
+        self._refresh_ib_status()
+
+    def _reconnect_ib(self):
+        self.save_ib_settings()
+        if self._price_feed is None:
+            QMessageBox.warning(self, "IBKR", "Price feed is niet gekoppeld aan de Settings-tab.")
+            return
+        self._price_feed.reconnect(
+            host=self._current_ib_host(),
+            port=self._current_ib_port(),
+            client_id=self.settings_manager.get_ib_client_id(),
+        )
+        self._refresh_ib_status("reconnect aangevraagd")
+
+    def _switch_ib_port(self, port: int):
+        self.txtIBPort.setText(str(int(port)))
+        self.save_ib_settings()
+        if self._price_feed is None:
+            QMessageBox.warning(self, "IBKR", "Price feed is niet gekoppeld aan de Settings-tab.")
+            return
+        self._price_feed.reconnect(
+            host=self._current_ib_host(),
+            port=int(port),
+            client_id=self.settings_manager.get_ib_client_id(),
+        )
+        self._refresh_ib_status(f"switch naar {port} aangevraagd")
+
+    def _on_ib_status_changed(self, status: str):
+        self._refresh_ib_status(status)
+
+    def _on_ib_connection_lost(self, reason: str):
+        self._refresh_ib_status(f"verbinding weg: {reason}")
+
+    def _refresh_ib_status(self, suffix: str | None = None):
+        if not hasattr(self, "_ib_status_label"):
+            return
+        host = self._current_ib_host()
+        port = self._current_ib_port()
+        client_id = self.settings_manager.get_ib_client_id()
+        status = "niet gekoppeld"
+        if self._price_feed is not None:
+            with contextlib.suppress(Exception):
+                status = self._price_feed.connection_status()
+                host, port, client_id = self._price_feed.endpoint()
+        text = f"IBKR: {status} ({host}:{port} clientId={client_id})"
+        if suffix:
+            text += f" - {suffix}"
+        self._ib_status_label.setText(text)
 
     def _init_ui_color_settings(self):
         if not hasattr(self, "groupBox_2"):
