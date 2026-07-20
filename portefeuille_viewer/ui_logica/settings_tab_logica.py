@@ -1,10 +1,11 @@
 import contextlib
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGroupBox, QVBoxLayout, QDoubleSpinBox, QMessageBox
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from portefeuille_viewer.ui.settting_ui import Ui_SettingsTab
 
@@ -90,6 +91,10 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         self._button_ib_7498.clicked.connect(lambda: self._switch_ib_port(7498))
         self.layoutIB.addWidget(self._button_ib_7498, 3, 2, 1, 1)
 
+        self._ib_status_timer = QTimer(self)
+        self._ib_status_timer.timeout.connect(self._refresh_ib_status)
+        self._ib_status_timer.start(5000)
+
     def set_price_feed(self, price_feed) -> None:
         self._price_feed = price_feed
         if price_feed is not None:
@@ -145,6 +150,13 @@ class SettingsTab(QWidget, Ui_SettingsTab):
     def _on_ib_connection_lost(self, reason: str):
         self._refresh_ib_status(f"verbinding weg: {reason}")
 
+    @staticmethod
+    def _fmt_ts(ts) -> str:
+        try:
+            return time.strftime("%H:%M:%S", time.localtime(float(ts)))
+        except Exception:
+            return "-"
+
     def _refresh_ib_status(self, suffix: str | None = None):
         if not hasattr(self, "_ib_status_label"):
             return
@@ -152,14 +164,49 @@ class SettingsTab(QWidget, Ui_SettingsTab):
         port = self._current_ib_port()
         client_id = self.settings_manager.get_ib_client_id()
         status = "niet gekoppeld"
+        last_hb = "-"
+        last_tick = "-"
+        missed = 0
+        desired = active = desired_options = active_options = 0
+        reason = ""
         if self._price_feed is not None:
             with contextlib.suppress(Exception):
-                status = self._price_feed.connection_status()
-                host, port, client_id = self._price_feed.endpoint()
-        text = f"IBKR: {status} ({host}:{port} clientId={client_id})"
+                info = self._price_feed.connection_info()
+                status = str(info.get("status") or self._price_feed.connection_status())
+                host = info.get("host") or host
+                port = int(info.get("port") or port)
+                client_id = int(info.get("client_id") or client_id)
+                last_hb = self._fmt_ts(info.get("last_heartbeat_response_at"))
+                last_tick = self._fmt_ts(info.get("last_tick_at"))
+                missed = int(info.get("missed_heartbeats") or 0)
+                desired = int(info.get("desired_subscriptions") or 0)
+                active = int(info.get("active_subscriptions") or 0)
+                desired_options = int(info.get("desired_option_subscriptions") or 0)
+                active_options = int(info.get("active_option_subscriptions") or 0)
+                reason = str(info.get("last_disconnect_reason") or "")
+        warning = ""
+        if status in {"stale", "reconnecting", "disconnected"}:
+            warning = " - WAARSCHUWING: prijzen kunnen oud zijn"
+        text = (
+            f"IBKR: {status} ({host}:{port} clientId={client_id})"
+            f" | heartbeat {last_hb} | tick {last_tick}"
+            f" | missed {missed}"
+            f" | subs {active}/{desired}, opt {active_options}/{desired_options}"
+            f"{warning}"
+        )
+        if reason and status in {"stale", "reconnecting", "disconnected"}:
+            text += f" | reden: {reason}"
         if suffix:
             text += f" - {suffix}"
         self._ib_status_label.setText(text)
+        if status == "connected":
+            self._ib_status_label.setStyleSheet("color: #1f6f3f; font-weight: 600;")
+        elif status == "stale":
+            self._ib_status_label.setStyleSheet("color: #9a5a00; font-weight: 700;")
+        elif status in {"reconnecting", "disconnected"}:
+            self._ib_status_label.setStyleSheet("color: #b00020; font-weight: 700;")
+        else:
+            self._ib_status_label.setStyleSheet("")
 
     def _init_ui_color_settings(self):
         if not hasattr(self, "groupBox_2"):

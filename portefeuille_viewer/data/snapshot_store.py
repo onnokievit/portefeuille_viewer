@@ -55,6 +55,7 @@ class SnapshotStore:
     repository_snapshot_per_dag_asset_result_v2: pl.DataFrame | None
     repository_snapshot_per_dag_asset_result_v2_latest: pl.DataFrame | None
     live_prices: dict | None
+    live_price_status: dict | None
     repository_snapshot_test_orders_cache: dict
     repository_dirty_test_orders_assets: set
     repository_snapshot_test_order_scenarios: pl.DataFrame | None
@@ -130,6 +131,7 @@ class SnapshotStore:
             "repository_snapshot_per_dag_asset_result_v2": None,
             "repository_snapshot_per_dag_asset_result_v2_latest": None,
             "live_prices": None,
+            "live_price_status": None,
             "repository_snapshot_test_orders_cache": {},
             "repository_dirty_test_orders_assets": set(),
             "repository_snapshot_test_order_scenarios": None,
@@ -196,6 +198,14 @@ class SnapshotStore:
     def get_live_prices_snapshot(self) -> dict:
         with self._live_prices_lock:
             return dict(self.live_prices or {})
+
+    def set_live_price_status(self, status: dict | None) -> None:
+        with self._live_prices_lock:
+            self.live_price_status = dict(status or {})
+
+    def get_live_price_status(self) -> dict:
+        with self._live_prices_lock:
+            return dict(self.live_price_status or {})
 
     def is_loaded(self) -> bool:
         """Controleer of er al data is geladen."""

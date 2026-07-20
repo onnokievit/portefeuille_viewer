@@ -9,6 +9,7 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal, Slot
 
 from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
+from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 
 
 _PRICE_FEED_PERF_LOG = str(os.getenv("PRICE_FEED_PERF_LOG", "1")).strip() == "1"
@@ -107,6 +108,17 @@ class PriceFeedIB(QObject):
         self._reconnect_inflight = False
         self._shutdown_requested = False
         self._reconnect_attempted = False
+        self._heartbeat_interval_sec = max(5.0, float(os.getenv("IB_HEARTBEAT_INTERVAL_SEC", "15")))
+        self._heartbeat_timeout_sec = max(5.0, float(os.getenv("IB_HEARTBEAT_TIMEOUT_SEC", "30")))
+        self._heartbeat_max_missed = max(1, int(os.getenv("IB_HEARTBEAT_MAX_MISSED", "2")))
+        self._last_heartbeat_request_at: float | None = None
+        self._last_heartbeat_response_at: float | None = None
+        self._last_tick_at: float | None = None
+        self._missed_heartbeats = 0
+        self._reconnect_attempt_count = 0
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog_thread.start()
         if not self._start_session("initial"):
             self._schedule_reconnect(reason="initial_connect_failed", delay=2.0)
 
@@ -114,6 +126,7 @@ class PriceFeedIB(QObject):
         if self._status == status:
             return
         self._status = status
+        self._publish_status_snapshot()
         self.statusChanged.emit(status)
         self.log.emit(f"[ibkr] status={status} endpoint={self.host}:{self.port} clientId={self.client_id}")
 
@@ -122,6 +135,85 @@ class PriceFeedIB(QObject):
 
     def endpoint(self) -> tuple[str, int, int]:
         return self.host, int(self.port), int(self.client_id)
+
+    def connection_info(self) -> dict:
+        with self._lock:
+            return {
+                "status": self._status,
+                "host": self.host,
+                "port": int(self.port),
+                "client_id": int(self.client_id),
+                "is_ready": bool(self._is_ready),
+                "last_disconnect_reason": self._last_disconnect_reason,
+                "last_heartbeat_request_at": self._last_heartbeat_request_at,
+                "last_heartbeat_response_at": self._last_heartbeat_response_at,
+                "last_tick_at": self._last_tick_at,
+                "missed_heartbeats": int(self._missed_heartbeats),
+                "reconnect_attempt_count": int(self._reconnect_attempt_count),
+                "desired_subscriptions": len(self._desired_subscriptions),
+                "active_subscriptions": len(self._active_subscriptions),
+                "desired_option_subscriptions": len(self._desired_option_subscriptions),
+                "active_option_subscriptions": len(self._active_option_subscriptions),
+            }
+
+    def _publish_status_snapshot(self) -> None:
+        with contextlib.suppress(Exception):
+            SNAPSHOT_STORE.set_live_price_status(self.connection_info())
+
+    def _mark_tick_seen(self) -> None:
+        with self._lock:
+            self._last_tick_at = time.time()
+        self._publish_status_snapshot()
+
+    def _handle_heartbeat_ok(self, ib_time=None) -> None:
+        with self._lock:
+            self._last_heartbeat_response_at = time.time()
+            self._missed_heartbeats = 0
+        if self._status == "stale":
+            self._set_status("connected")
+        else:
+            self._publish_status_snapshot()
+
+    def _request_heartbeat(self) -> None:
+        app = self._app
+        if app is None or not self._is_ready:
+            return
+        with self._lock:
+            self._last_heartbeat_request_at = time.time()
+        with contextlib.suppress(Exception):
+            app.reqCurrentTime()
+        self._publish_status_snapshot()
+
+    def _watchdog_loop(self) -> None:
+        while not self._watchdog_stop.wait(self._heartbeat_interval_sec):
+            if self._shutdown_requested:
+                return
+            if self._status not in {"connected", "stale"} or not self._is_ready:
+                continue
+            now = time.time()
+            with self._lock:
+                req_at = self._last_heartbeat_request_at
+                resp_at = self._last_heartbeat_response_at
+                heartbeat_outstanding = req_at is not None and (resp_at is None or resp_at < req_at)
+                heartbeat_overdue = (
+                    heartbeat_outstanding
+                    and now - req_at >= self._heartbeat_timeout_sec
+                )
+                if heartbeat_overdue:
+                    self._missed_heartbeats += 1
+                    missed = self._missed_heartbeats
+                else:
+                    missed = self._missed_heartbeats
+            if heartbeat_overdue:
+                self.log.emit(f"[ibkr] heartbeat missed count={missed}")
+                if missed >= self._heartbeat_max_missed:
+                    self._handle_connection_lost(f"heartbeat_timeout missed={missed}")
+                    continue
+                self._set_status("stale")
+            elif heartbeat_outstanding:
+                self._publish_status_snapshot()
+                continue
+            self._request_heartbeat()
 
     def _start_session(self, reason: str = "start") -> bool:
         from ibapi.client import EClient
@@ -137,6 +229,8 @@ class PriceFeedIB(QObject):
             def nextValidId(self, orderId: int):
                 with feed._lock:
                     feed._is_ready = True
+                    feed._missed_heartbeats = 0
+                    feed._last_heartbeat_response_at = time.time()
                     feed._active_subscriptions.clear()
                     feed._active_option_subscriptions.clear()
                     feed._tid_by_key.clear()
@@ -217,6 +311,7 @@ class PriceFeedIB(QObject):
                                 "value": px,
                                 "ts": time.time(),
                             }
+                            feed._mark_tick_seen()
                             feed.optionTickUpdated.emit(payload)
                     return
 
@@ -233,6 +328,7 @@ class PriceFeedIB(QObject):
                         entry = feed._prices.setdefault((sym, cur), {})
                         entry["last"] = px
                         entry["ts"] = time.time()
+                    feed._mark_tick_seen()
                     feed.priceUpdated.emit(sym, cur, px)
                     return
 
@@ -246,6 +342,7 @@ class PriceFeedIB(QObject):
                             entry["close"] = px
                             entry["ts"] = time.time()
                     if not has_last:
+                        feed._mark_tick_seen()
                         feed.priceUpdated.emit(sym, cur, px)
                     return
 
@@ -264,6 +361,7 @@ class PriceFeedIB(QObject):
                         last = entry.get("last")
                     if last is None and bid is not None and ask is not None:
                         mid = (bid + ask) / 2.0
+                        feed._mark_tick_seen()
                         feed.priceUpdated.emit(sym, cur, mid)
 
             def tickOptionComputation(  # noqa: N802
@@ -298,7 +396,11 @@ class PriceFeedIB(QObject):
                     "underlying_price": None if undPrice is None else float(undPrice),
                     "ts": time.time(),
                 }
+                feed._mark_tick_seen()
                 feed.optionTickUpdated.emit(payload)
+
+            def currentTime(self, time_):
+                feed._handle_heartbeat_ok(time_)
 
             # Dispatcher for contractDetails
             def contractDetails(self, reqId, contractDetails):
@@ -404,6 +506,8 @@ class PriceFeedIB(QObject):
                 attempt = 0
                 while not self._shutdown_requested:
                     attempt += 1
+                    with self._lock:
+                        self._reconnect_attempt_count = attempt
                     self._disconnect_current_app()
                     self.log.emit(
                         f"[ibkr] reconnect attempt={attempt} reason={reason} "
@@ -829,6 +933,7 @@ class PriceFeedIB(QObject):
 
     def shutdown(self):
         self._shutdown_requested = True
+        self._watchdog_stop.set()
         self._set_status("disconnected")
         with contextlib.suppress(Exception):
             self._disconnect_current_app()
@@ -1373,6 +1478,21 @@ class PriceFeedService(QObject):
 
     def endpoint(self) -> tuple[str, int, int]:
         return self._feed.endpoint()
+
+    def connection_info(self) -> dict:
+        return self._feed.connection_info()
+
+    def last_heartbeat_at(self) -> float | None:
+        return self.connection_info().get("last_heartbeat_response_at")
+
+    def last_tick_at(self) -> float | None:
+        return self.connection_info().get("last_tick_at")
+
+    def last_disconnect_reason(self) -> str:
+        return str(self.connection_info().get("last_disconnect_reason") or "")
+
+    def is_price_stale(self) -> bool:
+        return self.connection_status() in {"stale", "reconnecting", "disconnected"}
 
     def reconnect(self, host: str | None = None, port: int | None = None, client_id: int | None = None):
         self._feed.reconnect(host=host, port=port, client_id=client_id, reason="manual")
