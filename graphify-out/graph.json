@@ -11429,36 +11429,36 @@
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\data\\snapshot_store.py",
       "source_location": "L175",
-      "id": "snapshot_store_rationale_175",
       "community": 28,
-      "norm_label": "reset alle snapshots naar leeg."
+      "norm_label": "reset alle snapshots naar leeg.",
+      "id": "snapshot_store_rationale_175"
     },
     {
       "label": "Controleer of er al data is geladen.",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\data\\snapshot_store.py",
       "source_location": "L211",
-      "id": "snapshot_store_rationale_211",
       "community": 28,
-      "norm_label": "controleer of er al data is geladen."
+      "norm_label": "controleer of er al data is geladen.",
+      "id": "snapshot_store_rationale_211"
     },
     {
       "label": "Korte tekstuele samenvatting voor debug/log.",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\data\\snapshot_store.py",
       "source_location": "L256",
-      "id": "snapshot_store_rationale_256",
       "community": 28,
-      "norm_label": "korte tekstuele samenvatting voor debug/log."
+      "norm_label": "korte tekstuele samenvatting voor debug/log.",
+      "id": "snapshot_store_rationale_256"
     },
     {
       "label": "Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\data\\snapshot_store.py",
       "source_location": "L365",
-      "id": "snapshot_store_rationale_365",
       "community": 9,
-      "norm_label": "schrijf een snapshot-attribuut op een veilige manier.          - voert de seta"
+      "norm_label": "schrijf een snapshot-attribuut op een veilige manier.          - voert de seta",
+      "id": "snapshot_store_rationale_365"
     },
     {
       "label": "test_order_repository.py",
@@ -18314,72 +18314,72 @@
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L22",
-      "id": "price_feed_rationale_22",
       "community": 0,
-      "norm_label": "houdt actuele koersen per (ib_symbol, currency) bij in een dict/df-cache."
+      "norm_label": "houdt actuele koersen per (ib_symbol, currency) bij in een dict/df-cache.",
+      "id": "price_feed_rationale_22"
     },
     {
       "label": "Voeg of update prijs in de cache.",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L38",
-      "id": "price_feed_rationale_38",
       "community": 1,
-      "norm_label": "voeg of update prijs in de cache."
+      "norm_label": "voeg of update prijs in de cache.",
+      "id": "price_feed_rationale_38"
     },
     {
       "label": "Haal prijs op, of None.",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L55",
-      "id": "price_feed_rationale_55",
       "community": 0,
-      "norm_label": "haal prijs op, of none."
+      "norm_label": "haal prijs op, of none.",
+      "id": "price_feed_rationale_55"
     },
     {
       "label": "Geeft dict (sym,cur)->prijs terug.",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L61",
-      "id": "price_feed_rationale_61",
       "community": 0,
-      "norm_label": "geeft dict (sym,cur)->prijs terug."
+      "norm_label": "geeft dict (sym,cur)->prijs terug.",
+      "id": "price_feed_rationale_61"
     },
     {
       "label": "Geeft DataFrame met kolommen [_ib_symbol, _ib_currency, Koers].",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L65",
-      "id": "price_feed_rationale_65",
       "community": 0,
-      "norm_label": "geeft dataframe met kolommen [_ib_symbol, _ib_currency, koers]."
+      "norm_label": "geeft dataframe met kolommen [_ib_symbol, _ib_currency, koers].",
+      "id": "price_feed_rationale_65"
     },
     {
       "label": "Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L828",
-      "id": "price_feed_rationale_828",
       "community": 62,
-      "norm_label": "vraag marktdata aan voor subscriptions.          ondersteunt:         - legacy:"
+      "norm_label": "vraag marktdata aan voor subscriptions.          ondersteunt:         - legacy:",
+      "id": "price_feed_rationale_828"
     },
     {
       "label": "Start option market-data subscriptions.          rows format: (series_id, conid,",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L885",
-      "id": "price_feed_rationale_885",
       "community": 63,
-      "norm_label": "start option market-data subscriptions.          rows format: (series_id, conid,"
+      "norm_label": "start option market-data subscriptions.          rows format: (series_id, conid,",
+      "id": "price_feed_rationale_885"
     },
     {
       "label": "Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:",
       "file_type": "rationale",
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L947",
-      "id": "price_feed_rationale_947",
       "community": 0,
-      "norm_label": "geeft alle actuele prijzen terug als dict met tuple key.         voor aandelen:"
+      "norm_label": "geeft alle actuele prijzen terug als dict met tuple key.         voor aandelen:",
+      "id": "price_feed_rationale_947"
     },
     {
       "label": "scenario_aandelen_overlay.py",
@@ -85872,8 +85872,8 @@
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L161",
       "weight": 1.0,
-      "_src": "price_feed_pricefeedib_publish_status_snapshot",
-      "_tgt": "snapshot_store_snapshotstore_set_live_price_status",
+      "_src": "snapshot_store_snapshotstore_set_live_price_status",
+      "_tgt": "price_feed_pricefeedib_publish_status_snapshot",
       "source": "snapshot_store_snapshotstore_set_live_price_status",
       "target": "price_feed_pricefeedib_publish_status_snapshot"
     },
@@ -88932,8 +88932,8 @@
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\services\\price_feed.py",
       "source_location": "L119",
       "weight": 1.0,
-      "_src": "price_feed_pricefeedib_init",
-      "_tgt": "events_event",
+      "_src": "events_event",
+      "_tgt": "price_feed_pricefeedib_init",
       "source": "events_event",
       "target": "price_feed_pricefeedib_init"
     },
@@ -112500,8 +112500,8 @@
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\settings_tab_logica.py",
       "source_location": "L174",
       "weight": 1.0,
-      "_src": "settings_tab_logica_settingstab_refresh_ib_status",
-      "_tgt": "price_feed_pricefeedservice_connection_info",
+      "_src": "price_feed_pricefeedservice_connection_info",
+      "_tgt": "settings_tab_logica_settingstab_refresh_ib_status",
       "source": "price_feed_pricefeedservice_connection_info",
       "target": "settings_tab_logica_settingstab_refresh_ib_status"
     },
@@ -116604,8 +116604,8 @@
       "source_file": "C:\\python_coding\\portefeuille_viewer\\portefeuille_viewer_1.4\\portefeuille_viewer\\ui_logica\\settings_tab_logica.py",
       "source_location": "L96",
       "weight": 1.0,
-      "_src": "settings_tab_logica_settingstab_init_ib_controls",
-      "_tgt": "single_asset_long_history_runner_singleassetlongvolatilityrunner_start",
+      "_src": "single_asset_long_history_runner_singleassetlongvolatilityrunner_start",
+      "_tgt": "settings_tab_logica_settingstab_init_ib_controls",
       "source": "single_asset_long_history_runner_singleassetlongvolatilityrunner_start",
       "target": "settings_tab_logica_settingstab_init_ib_controls"
     },

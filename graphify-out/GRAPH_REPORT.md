@@ -1,7 +1,7 @@
-# Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4  (2026-07-01)
+# Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4  (2026-09-21)
 
 ## Corpus Check
-- 253 files · ~786,603 words
+- 253 files · ~789,132 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -806,12 +806,12 @@ Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Signals` connect `Community 2` to `Community 8`, `Community 16`, `Community 42`, `Community 26`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
+- **Why does `get_stockdata_connection()` connect `Community 9` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 8`, `Community 13`, `Community 15`, `Community 19`, `Community 22`, `Community 24`, `Community 26`, `Community 29`, `Community 30`, `Community 39`, `Community 40`, `Community 41`, `Community 43`, `Community 44`?**
+  _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **Why does `MainWindow` connect `Community 11` to `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 6`, `Community 7`, `Community 14`, `Community 16`, `Community 18`, `Community 20`, `Community 21`, `Community 22`, `Community 24`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
-- **Why does `SingleAssetAnalyseTab` connect `Community 2` to `Community 11`, `Community 3`, `Community 6`, `Community 7`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+- **Why does `get_connection()` connect `Community 16` to `Community 0`, `Community 2`, `Community 3`, `Community 4`, `Community 10`, `Community 14`, `Community 17`, `Community 18`, `Community 28`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `MainWindow` and `_TabBarNoFocusRectStyle`) actually correct?**
   _`SingleAssetAnalyseTab` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 86 inferred relationships involving `get_settings()` (e.g. with `_apply_env_defaults_from_settings()` and `_resolve_database_alias()`) actually correct?**
