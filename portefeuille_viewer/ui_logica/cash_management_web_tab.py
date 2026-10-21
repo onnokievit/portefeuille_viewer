@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Slot
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.data import repository as broker_repository
 from portefeuille_viewer.data.account_daily_balance_repository import (
     list_account_daily_balances,
     upsert_account_daily_balance,
@@ -17,9 +18,6 @@ from portefeuille_viewer.data.account_daily_balance_repository import (
 from portefeuille_viewer.services.cash_management_chart_service import (
     PREFERRED_BROKER_ORDER,
     build_cash_management_chart_payload,
-)
-from portefeuille_viewer.services.cash_management_result_chart_service import (
-    build_cash_management_result_chart_payload,
 )
 from portefeuille_viewer.services.year_result_vs_indices_service import (
     build_year_result_vs_indices_payload,
@@ -52,13 +50,6 @@ CHART_YEAR_RESULT = "cash_management_year_result"
 CHART_YEAR_PERCENT = "cash_management_year_result_percent"
 CHART_VS_INDICES = "year_result_vs_indices"
 
-PIVOT_BROKERS = ["degiro", "interactive", "lynx"]
-PORTFOLIO_OPTIONS = [
-    {"id": "total", "label": "Totaal"},
-    {"id": "degiro", "label": "Degiro"},
-    {"id": "interactive", "label": "Interactive"},
-    {"id": "lynx", "label": "Lynx"},
-]
 
 
 def _json_default(value: Any) -> Any:
@@ -228,13 +219,13 @@ def _year_percent_series(points: list[dict], brokers: list[str], mode: str) -> l
     return series
 
 
-def _build_pivot_rows() -> list[dict]:
+def _build_pivot_rows(brokers: list[str]) -> list[dict]:
     rows = list_account_daily_balances(limit=None)
     cells: dict[tuple[str, str], dict] = {}
     dates = set()
     for row in rows:
         broker = str(row.get("broker") or "").strip().lower()
-        if broker not in PIVOT_BROKERS:
+        if broker not in brokers:
             continue
         date_value = _iso_date(row.get("datum"))
         if not date_value:
@@ -251,7 +242,7 @@ def _build_pivot_rows() -> list[dict]:
     for date_value in sorted(dates, reverse=True):
         item = {"date": date_value, "date_nl": _date_to_nl(date_value), "brokers": {}, "total": 0.0}
         total = 0.0
-        for broker in PIVOT_BROKERS:
+        for broker in brokers:
             cell = cells.get((date_value, broker))
             item["brokers"][broker] = cell
             if cell and cell.get("value") is not None:
@@ -261,8 +252,8 @@ def _build_pivot_rows() -> list[dict]:
     return out
 
 
-def _build_pivot_summary(pivot_rows: list[dict], result_points: list[dict]) -> dict:
-    columns = list(PIVOT_BROKERS) + ["total"]
+def _build_pivot_summary(pivot_rows: list[dict], result_points: list[dict], brokers: list[str]) -> dict:
+    columns = list(brokers) + ["total"]
     max_balance = {
         column: {"value": None, "date": "", "date_nl": ""}
         for column in columns
@@ -284,7 +275,7 @@ def _build_pivot_summary(pivot_rows: list[dict], result_points: list[dict]) -> d
     for row in pivot_rows or []:
         date_value = str(row.get("date") or "")
         date_nl = str(row.get("date_nl") or _date_to_nl(date_value))
-        for broker in PIVOT_BROKERS:
+        for broker in brokers:
             cell = (row.get("brokers") or {}).get(broker)
             value = None if not cell else cell.get("value")
             if value is None:
@@ -309,9 +300,9 @@ def _build_pivot_summary(pivot_rows: list[dict], result_points: list[dict]) -> d
             continue
         date_nl = _date_to_nl(date_value)
         broker = str(point.get("broker") or "").strip().lower()
-        if broker in PIVOT_BROKERS and point.get("invested_cumulative") is not None:
+        if broker in brokers and point.get("invested_cumulative") is not None:
             invested_by_column_date[broker][date_value] = float(point["invested_cumulative"])
-        if broker in PIVOT_BROKERS and point.get("profit") is not None:
+        if broker in brokers and point.get("profit") is not None:
             value = float(point["profit"])
             current = max_profit[broker].get("value")
             if current is None or value > float(current):
@@ -434,6 +425,31 @@ class _CashDashboardBridge(QObject):
             series_ids = []
         get_settings().set_chart_visible_series_for_chart(chart_id, [str(item) for item in series_ids])
         self._tab.publish_payload(reuse_cache=True)
+
+    @Slot(str)
+    def setBrokers(self, payload: str):
+        try:
+            values = json.loads(payload)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(values, list):
+            return
+        allowed = broker_repository.load_brokers()
+        selected = [b for b in allowed if b in values]
+        if not selected:
+            self._tab.publish_payload(status="Selecteer minimaal één broker.", reuse_cache=True)
+            return
+        settings = get_settings()
+        settings.set_cash_selected_brokers(broker_repository.db_path, selected)
+        defaults = {CHART_VALUE: "total_value", CHART_RESULT: "total_result",
+                    CHART_YEAR_RESULT: "total_year_result", CHART_YEAR_PERCENT: "total_year_percent"}
+        saved_visibility = settings.get_chart_visible_series_by_chart()
+        for chart_id, total_id in defaults.items():
+            current = saved_visibility.get(chart_id, [total_id])
+            totals = [value for value in current if not value.startswith("broker:")]
+            settings.set_chart_visible_series_for_chart(chart_id, totals + [f"broker:{b}" for b in selected])
+        settings.set_year_result_vs_indices_selected_portfolio(["total"] + selected)
+        self._tab.publish_payload(force_reload=True)
 
     @Slot(str)
     def setStartDate(self, value: str):
@@ -560,11 +576,19 @@ class CashManagementWebTab(QWidget):
         year_percent_mode = settings.get_cash_dashboard_year_percent_mode()
         status_messages: list[str] = []
 
-        raw_payload = build_cash_management_chart_payload()
-        result_payload = build_cash_management_result_chart_payload()
+        broker_options = broker_repository.load_brokers()
+        saved = settings.get_cash_selected_brokers(broker_repository.db_path)
+        brokers = [b for b in broker_options if b in saved] if saved is not None else [b for b in broker_options if b in ("degiro", "interactive", "lynx")]
+        if not brokers:
+            brokers = broker_options[:1]
+        raw_payload = build_cash_management_chart_payload(brokers)
+        result_payload = raw_payload
+        missing = [b for b in brokers if b not in raw_payload.get("brokers", [])]
+        if missing:
+            status_messages.append("Geen gegevens: " + ", ".join(missing))
         points = _filter_points(raw_payload.get("points") or [], start_date)
         result_points = _filter_points(result_payload.get("points") or [], start_date)
-        brokers = _sorted_brokers(raw_payload.get("brokers") or [])
+
 
         value_series = _series_from_cash_points(
             points,
@@ -604,7 +628,8 @@ class CashManagementWebTab(QWidget):
         try:
             vs_payload = build_year_result_vs_indices_payload(
                 selected_indices=index_options,
-                selected_portfolio=["total", "degiro", "lynx", "interactive"],
+                selected_portfolio=["total"] + brokers,
+                portfolio_payload=raw_payload,
                 start_date=start_date,
                 force_reload=force_reload,
             )
@@ -614,7 +639,7 @@ class CashManagementWebTab(QWidget):
                 "series": [],
                 "index_options": index_options,
                 "selected_indices": index_options,
-                "selected_portfolio": ["total", "degiro", "lynx", "interactive"],
+                "selected_portfolio": ["total"] + brokers,
                 "stats": {},
             }
         vs_payload = inject_line_settings(vs_payload, settings, CHART_VS_INDICES)
@@ -646,21 +671,23 @@ class CashManagementWebTab(QWidget):
         for chart in charts:
             chart["visible_series"] = self._visible_series_for_chart(chart)
 
-        pivot_rows = _build_pivot_rows()
+        pivot_rows = _build_pivot_rows(brokers)
         return {
+            "broker_options": broker_options,
+            "selected_brokers": brokers,
             "start_date": start_date,
             "panel_state": settings.get_cash_dashboard_panel_state(),
             "year_percent_mode": year_percent_mode,
             "chart_height": settings.get_cash_dashboard_chart_height_px(),
             "charts": charts,
             "pivot": {
-                "brokers": PIVOT_BROKERS,
+                "brokers": brokers,
                 "rows": pivot_rows,
-                "summary": _build_pivot_summary(pivot_rows, result_points),
+                "summary": _build_pivot_summary(pivot_rows, result_points, brokers),
             },
-            "entry": {"today": date.today().isoformat(), "brokers": PIVOT_BROKERS},
+            "entry": {"today": date.today().isoformat(), "brokers": broker_options},
             "vs_indices": {
-                "portfolio_options": PORTFOLIO_OPTIONS,
+                "portfolio_options": [{"id": "total", "label": "Totaal"}] + [{"id": b, "label": b} for b in brokers],
                 "index_options": index_options,
                 "selected_portfolio": settings.get_year_result_vs_indices_selected_portfolio(),
                 "selected_indices": settings.get_year_result_vs_indices_selected_indices(),
@@ -734,6 +761,11 @@ class CashManagementWebTab(QWidget):
     .topbar { height:42px; display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--line); background:#fafafa; position:sticky; top:0; z-index:5; }
     .topbar input { height:26px; padding:2px 7px; border:1px solid #bbb; border-radius:4px; }
     .topbar button, .drawer-toggle, .form button { height:26px; padding:2px 10px; border:1px solid #aaa; border-radius:4px; background:#fff; cursor:pointer; }
+    #brokerSelection { display:flex; flex-wrap:wrap; gap:12px; max-width:600px; padding:8px; }
+    .topbar details { position:relative; }
+    .topbar details summary { cursor:pointer; white-space:nowrap; }
+    .topbar details[open] #brokerSelection { position:absolute; top:28px; left:0; width:350px; max-height:240px; overflow:auto; background:white; border:1px solid #bbb; box-shadow:0 3px 9px #0002; }
+    #brokerSelection label { display:flex; align-items:center; gap:4px; }
     .status { margin-left:auto; color:var(--muted); }
     .shell { display:grid; grid-template-columns: minmax(760px, 1fr) 430px; gap:10px; height:calc(100vh - 42px); padding:8px; overflow:hidden; }
     .shell.right-collapsed { grid-template-columns: minmax(760px, 1fr) 34px; }
@@ -770,12 +802,12 @@ class CashManagementWebTab(QWidget):
     .form .actions { grid-column:2; display:flex; gap:6px; }
     .pivot-wrap { min-height:0; overflow:auto; position:relative; }
     .pivot-spacer { width:1px; opacity:0; }
-    .pivot-head table, .pivot-wrap table { table-layout:fixed; }
+    .pivot-head table, .pivot-wrap table { table-layout:fixed; min-width:var(--pivot-width,400px); }
     .pivot-head { overflow:hidden; border-bottom:1px solid #ddd; }
     .pivot-head th { position:static; }
     .pivot-wrap table { position:absolute; left:0; top:0; }
-    .pivot-summary { border-top:1px solid #d0d0d0; background:#fafafa; padding:0 17px 0 0; }
-    .pivot-summary table { table-layout:fixed; font-size:12px; }
+    .pivot-summary { overflow-x:auto; border-top:1px solid #d0d0d0; background:#fafafa; padding:0 17px 0 0; }
+    .pivot-summary table { min-width:var(--pivot-width,400px); table-layout:fixed; font-size:12px; }
     .pivot-summary th { position:static; background:#f1f1f1; }
     .pivot-summary td { height:auto; vertical-align:top; white-space:normal; line-height:1.25; }
     .pivot-summary tr.summary-section-start td { border-top:2px solid #9f9f9f; }
@@ -794,6 +826,7 @@ class CashManagementWebTab(QWidget):
 <body>
   <div class="topbar">
     <button onclick="togglePanel('left')">☰ Instellingen</button>
+    <details><summary id="brokerSummary">Brokers</summary><div id="brokerSelection"></div></details>
     <label>Startdatum</label>
     <input id="startDate" type="date">
     <label>Chart hoogte</label>
@@ -851,6 +884,15 @@ function lineStyle(chart, item){ return chart.line_styles?.[item.id] ?? item.def
 function visibleSet(chart){ return new Set(chart.visible_series || (chart.config_series||[]).map(item=>item.id)); }
 function renderCashDashboard(payload){
   DATA=payload||{};
+  document.getElementById("brokerSummary").textContent="Brokers ("+(DATA.selected_brokers||[]).length+")";
+  const choices=document.getElementById("brokerSelection");
+  choices.replaceChildren();
+  (DATA.broker_options||[]).forEach(b=>{
+    const label=document.createElement("label"), input=document.createElement("input");
+    input.type="checkbox"; input.value=b; input.checked=(DATA.selected_brokers||[]).includes(b);
+    input.onchange=()=>bridgeCall("setBrokers",JSON.stringify(Array.from(choices.querySelectorAll("input:checked")).map(x=>x.value)));
+    label.append(input,document.createTextNode(b)); choices.append(label);
+  });
   document.getElementById("startDate").value=DATA.start_date||"2021-01-01";
   document.getElementById("chartHeight").value=DATA.chart_height||320;
   document.getElementById("chartHeight").onchange=saveChartHeight;
@@ -1177,21 +1219,25 @@ function formatDateTick(iso){
   const [y,m,d]=String(iso).split("-");
   return `${d}-${m}-${String(y).slice(2)}`;
 }
-function renderEntryForm(){ const sel=document.getElementById("entryBroker"); sel.innerHTML=(DATA.entry?.brokers||[]).map(b=>`<option value="${b}">${b}</option>`).join(""); resetEntry(); }
+function renderEntryForm(){ const sel=document.getElementById("entryBroker"); sel.replaceChildren(...(DATA.entry?.brokers||[]).map(b=>new Option(b,b))); resetEntry(); }
 function resetEntry(){ document.getElementById("entryId").value=""; document.getElementById("entryDate").value=DATA.entry?.today||""; document.getElementById("entryBroker").value=(DATA.entry?.brokers||["degiro"])[0]; document.getElementById("entryValue").value=""; document.getElementById("entryComment").value=""; }
 function saveEntry(){ bridgeCall("saveDailyBalance", JSON.stringify({ id:document.getElementById("entryId").value, datum:document.getElementById("entryDate").value, broker:document.getElementById("entryBroker").value, ending_balance:document.getElementById("entryValue").value, comment_text:document.getElementById("entryComment").value })); }
 function loadEntry(date, broker, cell){ if(!cell) return; document.getElementById("entryId").value=cell.id||""; document.getElementById("entryDate").value=date; document.getElementById("entryBroker").value=broker; document.getElementById("entryValue").value=cell.value??""; document.getElementById("entryComment").value=cell.comment||""; }
-function renderPivotSetup(){ const rows=DATA.pivot?.rows||[]; document.getElementById("pivotSpacer").style.height=`${rows.length*rowH}px`; renderPivotVisible(); renderPivotSummary(); }
+function renderPivotSetup(){
+  const width=Math.max(400,((DATA.pivot?.brokers||[]).length+2)*100);
+  document.documentElement.style.setProperty("--pivot-width",`${width}px`);
+  const rows=DATA.pivot?.rows||[]; document.getElementById("pivotSpacer").style.height=`${rows.length*rowH}px`; renderPivotVisible(); renderPivotSummary(); }
 function renderPivotVisible(){
   const wrap=document.getElementById("pivotWrap"), table=document.getElementById("pivotTable"), rows=DATA?.pivot?.rows||[], brokers=DATA?.pivot?.brokers||[];
   document.getElementById("pivotHead").innerHTML="<table><thead><tr><th>datum</th>"+brokers.map(b=>`<th>${escapeHtml(b)}</th>`).join("")+"<th>totaal</th></tr></thead></table>";
+  document.getElementById("pivotHead").scrollLeft=wrap.scrollLeft;
   const start=Math.max(0, Math.floor(wrap.scrollTop/rowH)-buffer), count=Math.ceil(wrap.clientHeight/rowH)+buffer*2, end=Math.min(rows.length,start+count);
   table.style.transform=`translateY(${start*rowH}px)`;
   let html="<tbody>";
-  for(let i=start;i<end;i++){ const r=rows[i]; html+=`<tr><td>${escapeHtml(r.date_nl)}</td>`; brokers.forEach(b=>{ const c=r.brokers?.[b]; html+=`<td class="broker-cell ${c?"":"empty"}" onclick="loadPivotCell(${i},'${b}')">${c?fmt(c.value,2):""}</td>`; }); html+=`<td>${fmt(r.total,2)}</td></tr>`; }
+  for(let i=start;i<end;i++){ const r=rows[i]; html+=`<tr><td>${escapeHtml(r.date_nl)}</td>`; brokers.forEach((b,bi)=>{ const c=r.brokers?.[b]; html+=`<td class="broker-cell ${c?"":"empty"}" onclick="loadPivotCell(${i},${bi})">${c?fmt(c.value,2):""}</td>`; }); html+=`<td>${fmt(r.total,2)}</td></tr>`; }
   table.innerHTML=html+"</tbody>";
 }
-function loadPivotCell(rowIndex, broker){ const r=DATA?.pivot?.rows?.[rowIndex]; if(!r) return; loadEntry(r.date, broker, r.brokers?.[broker]); }
+function loadPivotCell(rowIndex, brokerIndex){ const broker=DATA.pivot.brokers[brokerIndex]; const r=DATA?.pivot?.rows?.[rowIndex]; if(!r) return; loadEntry(r.date, broker, r.brokers?.[broker]); }
 function renderPivotSummary(){
   const target=document.getElementById("pivotSummary");
   if(!target) return;

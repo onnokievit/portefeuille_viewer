@@ -99,9 +99,14 @@ def _load_daily_balances_df() -> pl.DataFrame:
     )
 
 
-def build_cash_management_chart_payload() -> dict:
+def build_cash_management_chart_payload(selected_brokers: list[str] | None = None) -> dict:
     cash_df = _load_cash_entries_df()
     balance_df = _load_daily_balances_df()
+
+    if selected_brokers is not None:
+        selected_brokers = list(dict.fromkeys(str(b).strip().lower() for b in selected_brokers))
+        cash_df = cash_df.filter(pl.col("broker").is_in(selected_brokers))
+        balance_df = balance_df.filter(pl.col("broker").is_in(selected_brokers))
 
     broker_frames = []
     if not cash_df.is_empty():

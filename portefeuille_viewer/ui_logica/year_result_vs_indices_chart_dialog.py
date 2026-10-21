@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from portefeuille_viewer.config import get_settings
+from portefeuille_viewer.data.repository import load_brokers
 from portefeuille_viewer.services.year_result_vs_indices_service import (
     build_year_result_vs_indices_payload,
 )
@@ -34,12 +35,6 @@ except Exception:
     QWebEngineView = None
 
 
-PORTFOLIO_OPTIONS = [
-    ("total", "Totaal"),
-    ("degiro", "Degiro"),
-    ("lynx", "Lynx"),
-    ("interactive", "Interactive"),
-]
 CHART_ID = "year_result_vs_indices"
 
 
@@ -496,7 +491,7 @@ class YearResultVsIndicesChartDialog(QDialog):
         try:
             self._portfolio_list.clear()
             current_row = -1
-            for value, label in PORTFOLIO_OPTIONS:
+            for value, label in [("total", "Totaal")] + [(b, b) for b in load_brokers()]:
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, value)
                 self._portfolio_list.addItem(item)

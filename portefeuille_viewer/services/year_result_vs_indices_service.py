@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import threading
 from collections import defaultdict
 from datetime import date, datetime
@@ -251,7 +252,7 @@ def _build_portfolio_series(payload: dict, selected_portfolio: list[str]) -> lis
                 "points": _portfolio_average_percent_series(total_raw, "profit", "capital"),
             }
         )
-    for broker in ("degiro", "lynx", "interactive"):
+    for broker in payload.get("brokers", []):
         if broker not in selected:
             continue
         raw = []
@@ -270,7 +271,7 @@ def _build_portfolio_series(payload: dict, selected_portfolio: list[str]) -> lis
             {
                 "id": f"portfolio:{broker}",
                 "label": f"% pj {broker}",
-                "color": PORTFOLIO_COLORS[broker],
+                "color": PORTFOLIO_COLORS.get(broker, INDEX_COLORS[int(hashlib.sha256(broker.encode()).hexdigest()[:8], 16) % len(INDEX_COLORS)]),
                 "width": 1.5,
                 "points": _portfolio_average_percent_series(raw, "profit", "capital"),
             }
@@ -364,6 +365,7 @@ def build_year_result_vs_indices_payload(
     selected_portfolio: list[str] | None = None,
     start_date: str | None = None,
     force_reload: bool = False,
+    portfolio_payload: dict | None = None,
 ) -> dict:
     if force_reload:
         clear_year_result_vs_indices_cache()
@@ -375,7 +377,8 @@ def build_year_result_vs_indices_payload(
     selected_indices = [value for value in selected_indices if value in set(index_options)]
     selected_portfolio = selected_portfolio or ["total"]
 
-    portfolio_payload = _load_portfolio_payload()
+    if portfolio_payload is None:
+        portfolio_payload = _load_portfolio_payload()
     series = _build_portfolio_series(portfolio_payload, selected_portfolio)
     series.extend(_load_index_series(selected_indices))
     start_date = str(start_date or "").strip()

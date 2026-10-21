@@ -1271,16 +1271,22 @@ def fetch_records_page( ################## dit is de oude versie van fetch_recor
             return pd.read_sql(sql, conn, params=[*params, seek_value, seek_value, int(seek_id)])
 
 
+def load_brokers():
+    """Shared broker source for Orders and Cash Management."""
+    values = get_settings().get_brokers()
+    if not values:
+        with get_connection() as conn:
+            values = [row[0] for row in conn.cursor().execute(
+                "SELECT DISTINCT broker FROM transacties_bron_data_org"
+            ).fetchall()]
+    return list(dict.fromkeys(str(v).strip().lower() for v in values if v and str(v).strip()))
+
+
 def load_reference_lists():
     """Haal lijsten voor comboboxen op."""
     try:
-        brokers = get_settings().get_brokers()
+        brokers = load_brokers()
         with get_connection() as conn:
-            if not brokers:
-                brokers = pd.read_sql(
-                    "SELECT DISTINCT broker FROM transacties_bron_data_org",
-                    conn,
-                )["broker"].dropna().astype(str).tolist()
             rollups = pd.read_sql("SELECT DISTINCT asset_rollup FROM asset_rollup_data", conn)["asset_rollup"].dropna().astype(str).tolist()
             sprinters = pd.read_sql("SELECT DISTINCT asset_detail FROM sprinters_referentie_data", conn)["asset_detail"].dropna().astype(str).tolist()
     except Exception:

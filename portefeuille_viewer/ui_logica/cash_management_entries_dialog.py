@@ -27,7 +27,7 @@ from portefeuille_viewer.data.cash_management_repository import (
 from portefeuille_viewer.data import repository as data_repository
 
 
-BROKERS = ["degiro", "interactive", "lynx"]
+from portefeuille_viewer.data.repository import load_brokers
 ENTRY_TYPES = ["deposit", "withdrawal", "fx_conversion_in", "fx_conversion_out"]
 
 
@@ -122,7 +122,7 @@ class CashManagementEntriesDialog(QDialog):
         left_form.addRow("Datum", self.input_datum)
 
         self.input_broker = QComboBox(self)
-        self.input_broker.addItems(BROKERS)
+        self.input_broker.addItems(load_brokers())
         left_form.addRow("Broker", self.input_broker)
 
         self.input_type = QComboBox(self)
@@ -177,6 +177,11 @@ class CashManagementEntriesDialog(QDialog):
     def reload(self) -> None:
         if self._load_worker is not None and self._load_worker.isRunning():
             return
+        previous = self.input_broker.currentText()
+        self.input_broker.clear()
+        self.input_broker.addItems(load_brokers())
+        if previous in [self.input_broker.itemText(i) for i in range(self.input_broker.count())]:
+            self.input_broker.setCurrentText(previous)
         self.lbl_database.setText(f"Database: {data_repository.db_path}")
         self._set_busy(True, "Laden...")
         self._load_worker = _CashEntriesLoadWorker(self)
@@ -264,6 +269,9 @@ class CashManagementEntriesDialog(QDialog):
 
     def _set_combo_value(self, combo: QComboBox, value: str) -> None:
         idx = combo.findText(value, Qt.MatchFixedString)
+        if idx < 0 and value:
+            combo.addItem(value)
+            idx = combo.findText(value, Qt.MatchFixedString)
         if idx >= 0:
             combo.setCurrentIndex(idx)
 

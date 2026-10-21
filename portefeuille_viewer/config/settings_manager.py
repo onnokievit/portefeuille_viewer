@@ -3,6 +3,7 @@
 Centraal beheer voor applicatie settings via een gedeelde en lokale ini.
 """
 import configparser
+import hashlib
 import json
 from pathlib import Path
 from typing import Dict, Optional
@@ -28,6 +29,7 @@ DEFAULT_STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuill
 DEFAULT_OPTION_CHAIN_PARQUET_DIR = r"C:\Users\onno\OneDrive\Beleggen\asset_data_parquet"
 
 LOCAL_ONLY_KEYS = {
+    "cash_broker_selection": None,
     "interactive_brokers": None,
     "ui": {
         "theme",
@@ -151,6 +153,12 @@ class SettingsManager:
     
     def save(self):
         """Sla huidige config gesplitst op naar shared en local."""
+        disk = configparser.ConfigParser()
+        disk.read([SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH], encoding="utf-8")
+        if disk.has_option("brokers", "list"):
+            if not self.config.has_section("brokers"):
+                self.config.add_section("brokers")
+            self.config.set("brokers", "list", disk.get("brokers", "list"))
         shared_cfg, local_cfg = self._split_config(self.config)
         self._write_config(shared_cfg, SHARED_CONFIG_PATH)
         self._write_config(local_cfg, LOCAL_CONFIG_PATH)
@@ -986,9 +994,29 @@ class SettingsManager:
         self.save()
 
     # === Brokers ===
+    def get_cash_selected_brokers(self, database: str):
+        key = hashlib.sha256(str(database).lower().encode()).hexdigest()
+        raw = self.config.get("cash_broker_selection", key, fallback=None)
+        if raw is None:
+            return None
+        try:
+            value = json.loads(raw)
+            return value if isinstance(value, list) else None
+        except (ValueError, TypeError):
+            return None
+
+    def set_cash_selected_brokers(self, database: str, brokers: list[str]):
+        if not self.config.has_section("cash_broker_selection"):
+            self.config.add_section("cash_broker_selection")
+        key = hashlib.sha256(str(database).lower().encode()).hexdigest()
+        self.config.set("cash_broker_selection", key, json.dumps(brokers))
+        self.save()
+
     def get_brokers(self):
         """Haal brokerlijst op uit settings.ini (comma-separated)."""
-        raw = self.config.get('brokers', 'list', fallback='')
+        disk = configparser.ConfigParser()
+        disk.read([SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH], encoding="utf-8")
+        raw = disk.get('brokers', 'list', fallback=self.config.get('brokers', 'list', fallback=''))
         return [b.strip() for b in raw.split(',') if b.strip()]
 
     # === Comment colors ===
