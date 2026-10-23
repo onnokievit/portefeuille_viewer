@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from portefeuille_viewer.ui.main_window_ui import Ui_MainWindow
 from portefeuille_viewer.ui_logica.repository_tester_tab_logica import RepositoryTesterTab
 from portefeuille_viewer.ui_logica.settings_tab_logica import SettingsTab
+from portefeuille_viewer.ui_logica.subscriptions_tab import SubscriptionsTab
 from portefeuille_viewer.ui_logica.optie_eind_tab_logica import OptieEindTab
 from portefeuille_viewer.ui_logica.aandelen_web_pilot_tab import AandelenWebPilotTab
 from portefeuille_viewer.ui_logica.opties_open_web_pilot_tab import OptiesOpenWebPilotTab
@@ -43,6 +44,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._restoring_tab_order = False
         
         self._register_tabs()
+        self.single_asset_analyse_tab.asset_selector.currentTextChanged.connect(self._update_price_focus)
         if hasattr(self, "settings_tab") and hasattr(self.settings_tab, "set_price_feed"):
             self.settings_tab.set_price_feed(self.price_feed)
         self._apply_saved_tab_order()
@@ -106,6 +108,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.optie_eind_tab = OptieEindTab()
         self.settings_tab = SettingsTab()
         self.repository_tester_tab = RepositoryTesterTab()
+        self.subscriptions_tab = SubscriptionsTab(self.price_feed)
 
         self._tab_specs = [
             ("orders", "Orders", self.orders_tab),
@@ -124,6 +127,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ("sprinters_open", "Sprinters Open", self.sprinters_open_tab),
             ("optie_eind", "Optie Eind", self.optie_eind_tab),
             ("settings", "Settings", self.settings_tab),
+            ("subscriptions", "Koersabonnementen", self.subscriptions_tab),
             ("repository_tester", "Repository Tester", self.repository_tester_tab),
         ]
         for tab_id, title, widget in self._tab_specs:
@@ -168,7 +172,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return
         self._persist_tab_order()
 
+    def _update_price_focus(self, *_args):
+        selected = self.tabWidget.currentWidget() is self.single_asset_analyse_tab
+        self.price_feed.focus_asset(self.single_asset_analyse_tab.asset_selector.currentText() if selected else "")
+
     def _on_tab_changed(self, index):
+        self.subscriptions_tab.set_active(self.tabWidget.widget(index) is self.subscriptions_tab)
+        self._update_price_focus()
         if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "set_active"):
             self.single_asset_analyse_tab.set_active(index == self.tabWidget.indexOf(self.single_asset_analyse_tab))
         if hasattr(self, "aandelen_tab") and hasattr(self.aandelen_tab, "set_active"):

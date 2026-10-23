@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.services.subscription_manager import SubscriptionManager
 
 
 _PRICE_FEED_PERF_LOG = str(os.getenv("PRICE_FEED_PERF_LOG", "1")).strip() == "1"
@@ -72,6 +73,94 @@ class PriceStore:
 # ------------------------------------------------------------
 # IB API laag (ibapi wrapper)
 # ------------------------------------------------------------
+def _subscription_logger():
+    import logging
+    from logging.handlers import RotatingFileHandler
+    from pathlib import Path
+    logger = logging.getLogger(f"portefeuille.subscriptions.{os.getpid()}")
+    if not logger.handlers:
+        try:
+            folder = Path(__file__).resolve().parents[2] / "logs"
+            folder.mkdir(exist_ok=True)
+            handler = RotatingFileHandler(folder / f"ibkr_subscriptions_{os.getpid()}.log",
+                                          maxBytes=2_000_000, backupCount=2, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        except OSError:
+            handler = logging.NullHandler()
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    return logger
+
+
+class _SubscriptionTransport:
+    def __init__(self, feed):
+        self.feed = feed
+
+    def next_id(self):
+        return self.feed.next_tid()
+
+    def contract(self, spec, fallback=False):
+        feed = self.feed
+        meta = spec["meta"]
+        if spec["kind"] == "option":
+            c = feed._Contract()
+            c.secType = "FOP" if fallback else "OPT"
+            c.conId = meta["conid"]
+            c.exchange = meta["exchange"]
+            c.currency = meta["currency"]
+            return c
+        return feed._build_contract(meta["sym"], meta["cur"], meta["asset_type"],
+                                    meta.get("exch"), meta.get("pex"), meta.get("cid"),
+                                    use_conid=fallback)
+
+    def start(self, req_id, spec, fallback):
+        feed = self.feed
+        contract = self.contract(spec, fallback)
+        if not feed._can_request_market_data():
+            raise RuntimeError("TWS niet gereed")
+        with feed._lock:
+            if spec["kind"] == "option":
+                feed._option_tid_meta[req_id] = dict(spec["meta"])
+            else:
+                feed._tid_by_key[req_id] = (spec["symbol"], spec["currency"])
+                feed._sub_meta[req_id] = dict(spec["meta"])
+                # New stream must not inherit an earlier session's Last/bid/ask.
+                # PriceStore retains the visible fallback with its old timestamp.
+                feed._prices.pop((spec["symbol"], spec["currency"]), None)
+        self.event(f"request={req_id} instrument={spec['symbol']} contract={spec['contractid']}")
+        feed._app.reqMktData(req_id, contract, "", False, False, [])
+
+    def cancel(self, req_id):
+        feed = self.feed
+        with feed._lock:
+            feed._tid_by_key.pop(req_id, None)
+            feed._sub_meta.pop(req_id, None)
+            feed._option_tid_meta.pop(req_id, None)
+        if feed._app is not None:
+            feed._app.cancelMktData(req_id)
+        self.event(f"cancel request={req_id}")
+
+    def details(self, req_id, spec, fallback):
+        feed = self.feed
+        key = spec["key"]
+        feed._cd_handlers[req_id] = lambda detail: feed.subscriptions.details(key, req_id, detail)
+        feed._cd_end_handlers[req_id] = lambda: feed.subscriptions.details_end(key, req_id)
+        contract = self.contract(spec, fallback)
+        # Metadata resolution should prefer a known exact contract.
+        if spec["kind"] != "option" and spec["meta"].get("cid"):
+            contract.conId = int(spec["meta"]["cid"])
+        feed._app.reqContractDetails(req_id, contract)
+
+    def event(self, message):
+        self.feed.log.emit(f"[subscriptions] {message}")
+        self.feed._subscription_logger.info(message)
+
+    def forget_details(self, req_id):
+        self.feed._cd_handlers.pop(req_id, None)
+        self.feed._cd_end_handlers.pop(req_id, None)
+
+
 class PriceFeedIB(QObject):
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
     optionTickUpdated = Signal(dict)  # option tick payload for one series_id
@@ -103,6 +192,7 @@ class PriceFeedIB(QObject):
         # Connection state + reconnect guard
         self._is_ready = False
         self._status = "disconnected"
+        self._upstream_connected = True
         self._last_disconnect_reason = ""
         self._reconnect_lock = threading.Lock()
         self._reconnect_inflight = False
@@ -116,6 +206,14 @@ class PriceFeedIB(QObject):
         self._last_tick_at: float | None = None
         self._missed_heartbeats = 0
         self._reconnect_attempt_count = 0
+        from portefeuille_viewer.config import get_settings
+        config = get_settings().get_market_data_settings()
+        self._subscription_logger = _subscription_logger()
+        self.subscriptions = SubscriptionManager(_SubscriptionTransport(self), **config)
+        self._subscription_stop = threading.Event()
+        self._subscription_worker = threading.Thread(target=self._subscription_loop, daemon=True,
+                                                     name="ibkr-subscriptions")
+        self._subscription_worker.start()
         self._watchdog_stop = threading.Event()
         self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
         self._watchdog_thread.start()
@@ -137,6 +235,7 @@ class PriceFeedIB(QObject):
         return self.host, int(self.port), int(self.client_id)
 
     def connection_info(self) -> dict:
+        managed = self.subscriptions.counts()
         with self._lock:
             return {
                 "status": self._status,
@@ -150,13 +249,17 @@ class PriceFeedIB(QObject):
                 "last_tick_at": self._last_tick_at,
                 "missed_heartbeats": int(self._missed_heartbeats),
                 "reconnect_attempt_count": int(self._reconnect_attempt_count),
-                "desired_subscriptions": len(self._desired_subscriptions),
-                "active_subscriptions": len(self._active_subscriptions),
-                "desired_option_subscriptions": len(self._desired_option_subscriptions),
-                "active_option_subscriptions": len(self._active_option_subscriptions),
+                "desired_subscriptions": managed["desired_subscriptions"],
+                "active_subscriptions": managed["active_subscriptions"],
+                "desired_option_subscriptions": managed["desired_option_subscriptions"],
+                "active_option_subscriptions": managed["active_option_subscriptions"],
             }
 
     def _publish_status_snapshot(self) -> None:
+        now = time.monotonic()
+        if now - getattr(self, "_status_published_at", 0) < 1:
+            return
+        self._status_published_at = now
         with contextlib.suppress(Exception):
             SNAPSHOT_STORE.set_live_price_status(self.connection_info())
 
@@ -169,7 +272,7 @@ class PriceFeedIB(QObject):
         with self._lock:
             self._last_heartbeat_response_at = time.time()
             self._missed_heartbeats = 0
-        if self._status == "stale":
+        if self._status == "stale" and self._upstream_connected:
             self._set_status("connected")
         else:
             self._publish_status_snapshot()
@@ -227,6 +330,8 @@ class PriceFeedIB(QObject):
                 EClient.__init__(self, self)
 
             def nextValidId(self, orderId: int):
+                if feed._app is not self:
+                    return
                 with feed._lock:
                     feed._is_ready = True
                     feed._missed_heartbeats = 0
@@ -236,14 +341,18 @@ class PriceFeedIB(QObject):
                     feed._tid_by_key.clear()
                     feed._sub_meta.clear()
                     feed._option_tid_meta.clear()
-                feed._set_status("connected")
+                feed._upstream_connected = True
                 # Prefer delayed feed so indices without realtime entitlement still stream.
                 with contextlib.suppress(Exception):
                     self.reqMarketDataType(3)
+                feed.subscriptions.reset(True)
+                feed._set_status("connected")
                 feed._resubscribe_all_desired()
                 feed.ready.emit()
 
             def error(self, reqId, *args):
+                if feed._app is not self:
+                    return
                 # IB 10.25: (errorCode, errorString, advancedOrderRejectJson?)
                 # IB 10.37: (errorTime, errorCode, errorString, advancedOrderRejectJson?)
                 errorTime = None
@@ -251,7 +360,10 @@ class PriceFeedIB(QObject):
                 if len(args) == 2:
                     errorCode, errorString = args
                 elif len(args) == 3:
-                    errorCode, errorString, advancedOrderRejectJson = args
+                    if isinstance(args[1], int):
+                        errorTime, errorCode, errorString = args
+                    else:
+                        errorCode, errorString, advancedOrderRejectJson = args
                 elif len(args) >= 4:
                     errorTime, errorCode, errorString, advancedOrderRejectJson = args[:4]
                 else:
@@ -274,18 +386,36 @@ class PriceFeedIB(QObject):
                     else:
                         feed.log.emit(f"IB ERROR {errorCode}: {errorString}")
 
-                # Fallback: retry STK/IND once with conId when sec-def lookup fails.
                 try:
-                    err_code_i = int(errorCode)
-                except Exception:
-                    err_code_i = None
-                if err_code_i == 200:
-                    if reqId in feed._option_tid_meta:
-                        feed._retry_option_as_fop(reqId)
-                        return
-                    feed._retry_with_conid_if_needed(reqId)
+                    code = int(errorCode)
+                except (TypeError, ValueError):
+                    return
+                if code == 1100:
+                    feed._upstream_connected = False
+                    feed.subscriptions.pause(True)
+                    feed._set_status("stale")
+                elif code == 1101:
+                    feed._upstream_connected = True
+                    feed._clear_subscription_maps()
+                    feed.subscriptions.reset(True)
+                    feed._set_status("connected")
+                elif code == 1102:
+                    feed._upstream_connected = True
+                    feed.subscriptions.pause(False)
+                    feed._set_status("connected")
+                feed._subscription_logger.info("IB error request=%s code=%s %s", reqId, code, errorString)
+                feed.subscriptions.error(reqId, code, str(errorString))
+
+            def marketDataType(self, reqId, marketDataType):
+                feed.subscriptions.market_type(reqId, marketDataType)
 
             def tickPrice(self, reqId, tickType, price, attrib):
+                if feed._app is not self:
+                    return
+                field = {1: "bid", 2: "ask", 4: "last", 9: "close",
+                         66: "delayed_bid", 67: "delayed_ask", 68: "delayed_last", 75: "delayed_close"}.get(int(tickType))
+                if not field or not feed.subscriptions.tick(reqId, field, float(price), delayed=int(tickType) >= 66):
+                    return
                 with feed._lock:
                     option_meta = feed._option_tid_meta.get(reqId)
                 if option_meta:
@@ -312,7 +442,7 @@ class PriceFeedIB(QObject):
                                 "ts": time.time(),
                             }
                             feed._mark_tick_seen()
-                            feed.optionTickUpdated.emit(payload)
+                            feed._emit_option_payload(option_meta, payload)
                     return
 
                 with feed._lock:
@@ -329,6 +459,7 @@ class PriceFeedIB(QObject):
                         entry["last"] = px
                         entry["ts"] = time.time()
                     feed._mark_tick_seen()
+                    feed.subscriptions.processed(reqId, px, field)
                     feed.priceUpdated.emit(sym, cur, px)
                     return
 
@@ -343,15 +474,16 @@ class PriceFeedIB(QObject):
                             entry["ts"] = time.time()
                     if not has_last:
                         feed._mark_tick_seen()
+                        feed.subscriptions.processed(reqId, px, field)
                         feed.priceUpdated.emit(sym, cur, px)
                     return
 
-                if tickType in (1, 2):  # bid/ask
+                if tickType in (1, 2, 66, 67):  # bid/ask, also delayed
                     if px <= 0:
                         return
                     with feed._lock:
                         entry = feed._prices.setdefault((sym, cur), {})
-                        if tickType == 1:
+                        if tickType in (1, 66):
                             entry["bid"] = px
                         else:
                             entry["ask"] = px
@@ -359,9 +491,14 @@ class PriceFeedIB(QObject):
                         bid = entry.get("bid")
                         ask = entry.get("ask")
                         last = entry.get("last")
-                    if last is None and bid is not None and ask is not None:
+                    # Shares retain Last (or explicitly tracked close fallback).
+                    # FX has no normal trade Last and may use bid/ask midpoint.
+                    with feed._lock:
+                        asset_type = str(feed._sub_meta.get(reqId, {}).get("asset_type", ""))
+                    if asset_type in {"cash", "fx", "forex"} and bid is not None and ask is not None:
                         mid = (bid + ask) / 2.0
                         feed._mark_tick_seen()
+                        feed.subscriptions.processed(reqId, mid, "mid")
                         feed.priceUpdated.emit(sym, cur, mid)
 
             def tickOptionComputation(  # noqa: N802
@@ -396,10 +533,13 @@ class PriceFeedIB(QObject):
                     "underlying_price": None if undPrice is None else float(undPrice),
                     "ts": time.time(),
                 }
-                feed._mark_tick_seen()
-                feed.optionTickUpdated.emit(payload)
+                if feed.subscriptions.tick(reqId, "greeks", None):
+                    feed._mark_tick_seen()
+                    feed._emit_option_payload(option_meta, payload)
 
             def currentTime(self, time_):
+                if feed._app is not self:
+                    return
                 feed._handle_heartbeat_ok(time_)
 
             # Dispatcher for contractDetails
@@ -427,6 +567,8 @@ class PriceFeedIB(QObject):
                     end()
 
             def connectionClosed(self):
+                if feed._app is not self:
+                    return
                 feed._handle_connection_lost("connectionClosed")
 
         self._Contract = Contract
@@ -448,6 +590,7 @@ class PriceFeedIB(QObject):
         return True
 
     def _disconnect_current_app(self) -> None:
+        self.subscriptions.reset(False)
         app = None
         thread = None
         with self._lock:
@@ -475,6 +618,7 @@ class PriceFeedIB(QObject):
     def _handle_connection_lost(self, reason: str) -> None:
         if self._shutdown_requested:
             return
+        self.subscriptions.reset(False)
         self._last_disconnect_reason = str(reason or "unknown")
         self.connectionLost.emit(self._last_disconnect_reason)
         self.log.emit(f"[ibkr] connection lost reason={self._last_disconnect_reason}")
@@ -542,19 +686,29 @@ class PriceFeedIB(QObject):
         self._schedule_reconnect(reason=reason, delay=delay)
 
     def _resubscribe_all_desired(self) -> None:
+        # The worker rebuilds subscriptions gradually within the shared budget.
+        self.log.emit("[ibkr] subscription manager ready; paced subscription recovery")
+
+    def _clear_subscription_maps(self):
         with self._lock:
-            desired = list(self._desired_subscriptions.items())
-            desired_options = list(self._desired_option_subscriptions)
-        stocks = 0
-        options = 0
-        for label, meta in desired:
-            if self._request_subscription(label, meta):
-                stocks += 1
-        for label in desired_options:
-            if self._request_option_subscription(label):
-                options += 1
-        if stocks or options:
-            self.log.emit(f"[ibkr] resubscribe stocks={stocks} options={options}")
+            self._active_subscriptions.clear()
+            self._active_option_subscriptions.clear()
+            self._tid_by_key.clear()
+            self._sub_meta.clear()
+            self._option_tid_meta.clear()
+
+    def _subscription_loop(self):
+        while not self._subscription_stop.wait(0.1):
+            try:
+                self.subscriptions.step()
+            except Exception as exc:
+                self.log.emit(f"[ibkr] subscription manager: {exc}")
+                self._subscription_logger.exception("manager step failed")
+                self._subscription_stop.wait(1)
+
+    def _emit_option_payload(self, meta, payload):
+        for sid in meta.get("series_ids", [meta["series_id"]]):
+            self.optionTickUpdated.emit({**payload, "series_id": sid})
 
     def next_tid(self):
         with self._lock:
@@ -690,72 +844,6 @@ class PriceFeedIB(QObject):
             c.conId = cid
         return c
 
-    def _retry_with_conid_if_needed(self, req_id: int) -> None:
-        if not self._can_request_market_data():
-            return
-        with self._lock:
-            meta = dict(self._sub_meta.get(req_id) or {})
-        if not meta:
-            return
-        if bool(meta.get("retried_with_conid")):
-            return
-        try:
-            cid = int(meta.get("cid") or 0)
-        except Exception:
-            cid = 0
-        if cid <= 0:
-            return
-        asset_type = str(meta.get("asset_type") or "").strip().lower()
-        if asset_type in {"future", "fut"}:
-            return
-        sym = str(meta.get("sym") or "")
-        cur = str(meta.get("cur") or "")
-        exch = meta.get("exch")
-        pex = meta.get("pex")
-        contract = self._build_contract(sym, cur, asset_type, exch, pex, cid, use_conid=True)
-        with self._lock:
-            new_tid = self._tid_next
-            self._tid_next += 1
-            self._tid_by_key[new_tid] = (sym, cur)
-            meta["retried_with_conid"] = True
-            self._sub_meta[new_tid] = meta
-        self.log.emit(f"Retry with conId for {sym} ({cur}) after sec-def error.")
-        self._app.reqMktData(new_tid, contract, "", False, False, [])
-
-    def _retry_option_as_fop(self, req_id: int) -> None:
-        if not self._can_request_market_data():
-            return
-        with self._lock:
-            meta = dict(self._option_tid_meta.get(req_id) or {})
-        if not meta:
-            return
-        if bool(meta.get("retried_fop")):
-            return
-        try:
-            conid = int(meta.get("conid") or 0)
-            series_id = int(meta.get("series_id") or 0)
-        except Exception:
-            return
-        if conid <= 0 or series_id <= 0:
-            return
-
-        contract = self._Contract()
-        contract.secType = "FOP"
-        contract.conId = conid
-        contract.exchange = str(meta.get("exchange") or "SMART")
-        currency = str(meta.get("currency") or "")
-        if currency:
-            contract.currency = currency
-
-        with self._lock:
-            new_tid = self._tid_next
-            self._tid_next += 1
-            meta["retried_fop"] = True
-            self._option_tid_meta[new_tid] = meta
-            self._option_tid_meta.pop(req_id, None)
-        self.log.emit(f"Retry option as FOP for series_id={series_id} conId={conid}")
-        self._app.reqMktData(new_tid, contract, "", False, False, [])
-
     def _normalize_subscription_row(self, row) -> tuple[Tuple | None, dict | None]:
         sym = cur = None
         asset_type = "aandeel"
@@ -789,143 +877,45 @@ class PriceFeedIB(QObject):
         label = (meta["sym"], meta["cur"], meta["asset_type"], meta["exch"], meta["pex"], str(cid or ""))
         return label, meta
 
-    def _request_subscription(self, label: Tuple, meta: dict) -> bool:
-        if not self._can_request_market_data():
-            return False
-        with self._lock:
-            if label in self._active_subscriptions:
-                return False
-            tid = self._tid_next
-            self._tid_next += 1
-            request_meta = dict(meta)
-            request_meta["retried_with_conid"] = False
-            self._tid_by_key[tid] = (request_meta["sym"], request_meta["cur"])
-            self._sub_meta[tid] = request_meta
-            self._active_subscriptions.add(label)
-        contract = self._build_contract(
-            request_meta["sym"],
-            request_meta["cur"],
-            request_meta["asset_type"],
-            request_meta.get("exch"),
-            request_meta.get("pex"),
-            request_meta.get("cid"),
-            use_conid=False,
-        )
-        try:
-            self._app.reqMktData(tid, contract, "", False, False, [])
-            time.sleep(0.01)
-            return True
-        except Exception as exc:
-            with self._lock:
-                self._active_subscriptions.discard(label)
-                self._tid_by_key.pop(tid, None)
-                self._sub_meta.pop(tid, None)
-            self.log.emit(f"[ibkr] reqMktData failed for {request_meta['sym']} ({request_meta['cur']}): {exc}")
-            return False
-
     @Slot(list)
     def ensure_subscriptions(self, rows: List[Tuple]):
-        """Vraag marktdata aan voor subscriptions.
-
-        Ondersteunt:
-        - legacy: (sym, cur, prim_exch)
-        - nieuw:   (sym, cur, asset_type, exchange, prim_exch[, contractid])
-        """
-        normalized: list[tuple[Tuple, dict]] = []
+        specs = []
         for row in rows:
             label, meta = self._normalize_subscription_row(row)
-            if label is None or meta is None:
+            if not label:
                 continue
-            normalized.append((label, meta))
-        with self._lock:
-            for label, meta in normalized:
-                self._desired_subscriptions[label] = dict(meta)
-        for label, meta in normalized:
-            self._request_subscription(label, meta)
-
-    def _request_option_subscription(self, label: tuple[int, int, str, str]) -> bool:
-        if not self._can_request_market_data():
-            return False
-        series_id_i, conid_i, exchange_code, ib_currency = label
-        with self._lock:
-            if label in self._active_option_subscriptions:
-                return False
-            tid = self._tid_next
-            self._tid_next += 1
-            self._active_option_subscriptions.add(label)
-
-        contract = self._Contract()
-        contract.secType = "OPT"
-        contract.conId = conid_i
-        contract.exchange = exchange_code or "SMART"
-        if ib_currency:
-            contract.currency = ib_currency
-
-        with self._lock:
-            self._option_tid_meta[tid] = {
-                "series_id": series_id_i,
-                "conid": conid_i,
-                "exchange": contract.exchange,
-                "currency": contract.currency if hasattr(contract, "currency") else "",
-                "retried_fop": False,
-            }
-        try:
-            self._app.reqMktData(tid, contract, "", False, False, [])
-            time.sleep(0.01)
-            return True
-        except Exception as exc:
-            with self._lock:
-                self._active_option_subscriptions.discard(label)
-                self._option_tid_meta.pop(tid, None)
-            self.log.emit(f"[ibkr] option reqMktData failed series_id={series_id_i} conId={conid_i}: {exc}")
-            return False
+            cid = str(meta.get("cid") or "").strip()
+            key = ("asset", "conid", cid) if cid and cid != "0" else ("asset",) + label
+            specs.append({"key": key, "kind": "asset", "label": label,
+                          "symbol": meta["sym"], "currency": meta["cur"],
+                          "asset_type": meta["asset_type"], "exchange": meta["exch"] or meta["pex"],
+                          "contractid": cid, "meta": meta})
+        self.subscriptions.set_source("assets", specs)
 
     @Slot(list)
     def ensure_option_subscriptions(self, rows: List[Tuple]):
-        """Start option market-data subscriptions.
-
-        rows format: (series_id, conid, exchange_code, ib_currency)
-        """
-        desired_labels: set[tuple[int, int, str, str]] = set()
+        specs = {}
         for row in rows:
-            if not isinstance(row, (list, tuple)) or len(row) < 2:
-                continue
             try:
-                series_id_i = int(row[0])
-                conid_i = int(row[1])
-            except Exception:
+                sid, cid = int(row[0]), int(row[1])
+                exchange = str(row[2] if len(row) > 2 else "SMART").upper() or "SMART"
+                currency = str(row[3] if len(row) > 3 else "").upper()
+                display_name = str(row[4] or "").strip() if len(row) > 4 else ""
+            except (ValueError, TypeError, IndexError):
                 continue
-            if conid_i <= 0:
+            if cid <= 0:
                 continue
-            exchange_code = str((row[2] if len(row) > 2 else "SMART") or "SMART").upper()
-            ib_currency = str((row[3] if len(row) > 3 else "") or "").upper()
-            label = (series_id_i, conid_i, exchange_code, ib_currency)
-            desired_labels.add(label)
-
-        stale_tids: list[int] = []
-        with self._lock:
-            self._desired_option_subscriptions = set(desired_labels)
-            for tid, meta in list(self._option_tid_meta.items()):
-                try:
-                    label = (
-                        int(meta.get("series_id")),
-                        int(meta.get("conid")),
-                        str(meta.get("exchange") or "SMART").upper(),
-                        str(meta.get("currency") or "").upper(),
-                    )
-                except Exception:
-                    continue
-                if label not in desired_labels:
-                    stale_tids.append(tid)
-                    self._option_tid_meta.pop(tid, None)
-                    self._active_option_subscriptions.discard(label)
-        for tid in stale_tids:
-            with contextlib.suppress(Exception):
-                if self._app:
-                    self._app.cancelMktData(tid)
-
-        for label in desired_labels:
-            self._request_option_subscription(label)
+            key = ("option", cid)
+            if key in specs:
+                specs[key]["meta"]["series_ids"].append(sid)
+                continue
+            specs[key] = {"key": key, "kind": "option", "label": (sid, cid, exchange, currency),
+                          "display_name": display_name,
+                          "symbol": f"Optie {sid}", "currency": currency, "asset_type": "optie",
+                          "exchange": exchange, "contractid": cid,
+                          "meta": {"series_id": sid, "series_ids": [sid], "conid": cid,
+                                   "exchange": exchange, "currency": currency}}
+        self.subscriptions.set_source("options", list(specs.values()))
 
     def snapshot_prices(self) -> Dict[Tuple[str,str], Dict[str,float]]:
         with self._lock:
@@ -933,7 +923,10 @@ class PriceFeedIB(QObject):
 
     def shutdown(self):
         self._shutdown_requested = True
+        self._subscription_stop.set()
         self._watchdog_stop.set()
+        if self._subscription_worker is not threading.current_thread():
+            self._subscription_worker.join(timeout=2)
         self._set_status("disconnected")
         with contextlib.suppress(Exception):
             self._disconnect_current_app()
@@ -964,6 +957,7 @@ class PriceFeedService(QObject):
         super().__init__(parent)
         initial_prices = ASSET_LAST_PRICE_STORE.ensure_loaded()
         self.store = PriceStore(initial_prices)
+        self._asset_processed_at = {}
         self._feed = PriceFeedIB(host, port, client_id)
         self._feed.priceUpdated.connect(self._on_price)
         self._feed.optionTickUpdated.connect(self._on_option_tick)
@@ -1015,23 +1009,29 @@ class PriceFeedService(QObject):
 
     @staticmethod
     def _pick_option_price_from_entry(entry: dict) -> tuple[Optional[float], Optional[str]]:
-        bid = entry.get("bid")
-        ask = entry.get("ask")
-        try:
-            bid_f = float(bid) if bid is not None else None
-            ask_f = float(ask) if ask is not None else None
-        except Exception:
-            bid_f = ask_f = None
-        if bid_f is not None and ask_f is not None and bid_f > 0 and ask_f > 0:
-            return (bid_f + ask_f) / 2.0, "mid"
-        for key in ("last", "delayed_last", "model_price", "close", "delayed_close"):
+        times = entry.get("field_times", {})
+        now = time.time()
+        def positive(key):
             try:
-                v = entry.get(key)
-                vf = float(v) if v is not None else None
-            except Exception:
-                vf = None
-            if vf is not None and vf > 0:
-                return vf, key
+                value = float(entry.get(key))
+                return value if value > 0 else None
+            except (ValueError, TypeError):
+                return None
+        pairs = []
+        for prefix in ("", "delayed_"):
+            bid, ask = positive(prefix + "bid"), positive(prefix + "ask")
+            received = min(times.get(prefix + "bid", 0), times.get(prefix + "ask", 0))
+            if bid is not None and ask is not None and ask >= bid and now - received <= 180:
+                pairs.append((received, (bid + ask) / 2, prefix + "mid"))
+        if pairs:
+            _received, value, source = max(pairs)
+            return value, source
+        for family in (("last", "delayed_last"), ("model_price",), ("close", "delayed_close")):
+            candidates = [(times.get(key, 0), positive(key), key) for key in family
+                          if times.get(key) and positive(key) is not None]
+            if candidates:
+                _received, value, source = max(candidates)
+                return value, source
         return None, None
 
     @staticmethod
@@ -1417,6 +1417,7 @@ class PriceFeedService(QObject):
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float):
         self.store.set(sym, cur, px)
+        self._asset_processed_at[(sym, cur)] = time.time()
         ASSET_LAST_PRICE_STORE.update_price(sym, cur, px)
         self.priceUpdated.emit(sym, cur, px)
 
@@ -1439,14 +1440,23 @@ class PriceFeedService(QObject):
                     value = payload.get("value")
                     if field:
                         entry[str(field)] = value
+                        entry.setdefault("field_times", {})[str(field)] = payload.get("ts", time.time())
                     for gk in ("iv", "delta", "gamma", "theta", "model_price", "underlying_price"):
                         if payload.get(gk) is not None:
                             entry[gk] = payload.get(gk)
+                            if gk == "model_price":
+                                entry.setdefault("field_times", {})[gk] = payload.get("ts", time.time())
                     last_px, src = self._pick_option_price_from_entry(entry)
                     if last_px is not None:
                         entry["last_px"] = last_px
                         entry["px_source"] = src
-                    entry["last_update"] = datetime.now()
+                    if last_px is not None:
+                        source_fields = (("bid", "ask") if src == "mid" else
+                                         ("delayed_bid", "delayed_ask") if src == "delayed_mid" else (str(src),))
+                        price_time = min((entry.get("field_times", {}).get(k, 0) for k in source_fields), default=0)
+                        if price_time:
+                            entry["last_update"] = datetime.fromtimestamp(price_time)
+                        self._feed.subscriptions.processed(payload.get("req_id"), last_px, src)
                     self._option_prices[sid] = entry
                     self._dirty_option_series_ids.add(sid)
         self.optionTickUpdated.emit(payload)
@@ -1497,8 +1507,32 @@ class PriceFeedService(QObject):
     def reconnect(self, host: str | None = None, port: int | None = None, client_id: int | None = None):
         self._feed.reconnect(host=host, port=port, client_id=client_id, reason="manual")
 
+    def subscription_snapshot(self):
+        result = self._feed.subscriptions.snapshot()
+        for row in result["rows"]:
+            row["processed_at"] = self._asset_processed_at.get((row["symbol"], row["currency"]))
+        return result
+
+    def configure_subscriptions(self, **values):
+        self._feed.subscriptions.configure(**values)
+
+    def focus_asset(self, asset):
+        asset = str(asset or "").strip().upper()
+        self._focused_asset = asset
+        frame = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+        pairs = set()
+        if asset and frame is not None and not frame.is_empty():
+            for row in frame.to_dicts():
+                if str(row.get("asset_rollup", "")).strip().upper() == asset:
+                    pairs.add((str(row.get("ib_symbol", "")).upper(), str(row.get("ib_currency", "")).upper()))
+        snapshot = self.subscription_snapshot()
+        keys = [r["key"] for r in snapshot["rows"] if r["kind"] == "asset" and
+                (r["symbol"].upper(), r["currency"].upper()) in pairs]
+        self._feed.subscriptions.set_focus(keys)
+
     def ensure_subscriptions(self, rows: List[tuple]):
         self._feed.ensure_subscriptions(rows)
+        self.focus_asset(getattr(self, "_focused_asset", ""))
 
     def ensure_option_subscriptions(self, rows: List[tuple]):
         self._feed.ensure_option_subscriptions(rows)

@@ -843,7 +843,12 @@ class OptionTimevalueService(QObject):
             rows = self._extract_open_series()
             rows = self._upsert_master_and_resolve(rows)
             subs = [
-                (int(r.series_id), int(r.conid), r.exchange_code, r.ib_currency)
+                (int(r.series_id), int(r.conid), r.exchange_code, r.ib_currency,
+                 repository.build_uniek_id({
+                     "broker": r.broker, "asset_rollup": r.asset_rollup, "asset_type": "optie",
+                     "optie_exp_date": r.expiry, "optie_strike": r.strike,
+                     "optie_call_put": r.optie_call_put,
+                 }))
                 for r in rows
                 if r.series_id and r.conid and int(r.conid) > 0
             ]

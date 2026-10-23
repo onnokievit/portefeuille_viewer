@@ -148,6 +148,7 @@ class PortfolioEngine(QObject):
         symbols_to_subscribe = self.get_symbols_to_subscribe()
         
         if not symbols_to_subscribe:
+            self.pricefeed.ensure_subscriptions([])
             print("PortfolioEngine: No symbols to subscribe to")
             return
         
@@ -157,6 +158,7 @@ class PortfolioEngine(QObject):
             asset_map = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
 
             if asset_map is None or asset_map.is_empty():
+                self.pricefeed.ensure_subscriptions([])
                 print("PortfolioEngine: asset_rollup_data snapshot empty, nothing to subscribe")
                 return
 
@@ -201,8 +203,8 @@ class PortfolioEngine(QObject):
                 subs.append((str(sym).strip(), str(cur).strip(), asset_type, exchange, prim_exchange, contractid))
 
             print(f"PortfolioEngine: Starting subscriptions for {len(subs)} symbol-currency pairs (filtered by INCL_EXCL if present)...")
+            self.pricefeed.ensure_subscriptions(subs)
             if subs:
-                self.pricefeed.ensure_subscriptions(subs)
                 print("PortfolioEngine: Subscriptions started successfully")
             else:
                 print("PortfolioEngine: No valid subscriptions after filtering (no ib_symbol/ib_currency pairs)")

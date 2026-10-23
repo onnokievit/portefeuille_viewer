@@ -29,6 +29,7 @@ DEFAULT_STOCKDATA_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuill
 DEFAULT_OPTION_CHAIN_PARQUET_DIR = r"C:\Users\onno\OneDrive\Beleggen\asset_data_parquet"
 
 LOCAL_ONLY_KEYS = {
+    "market_data": None,
     "cash_broker_selection": None,
     "interactive_brokers": None,
     "ui": {
@@ -74,6 +75,42 @@ LOCAL_ONLY_KEYS = {
 
 
 class SettingsManager:
+    def get_market_data_settings(self):
+        defaults = {"capacity": 100, "batch_size": 10, "rotation_seconds": 30,
+                    "stale_seconds": 180}
+        result = {}
+        for key, fallback in defaults.items():
+            try:
+                value = self.config.getint("market_data", key, fallback=fallback)
+                result[key] = max(1, value)
+            except (ValueError, configparser.Error):
+                result[key] = fallback
+        return result
+
+    def set_market_data_settings(self, values):
+        """Update only this local section; do not rewrite shared settings."""
+        import os
+        import tempfile
+        local = configparser.ConfigParser()
+        local.read(LOCAL_CONFIG_PATH, encoding="utf-8")
+        if not local.has_section("market_data"):
+            local.add_section("market_data")
+        if not self.config.has_section("market_data"):
+            self.config.add_section("market_data")
+        for key in self.get_market_data_settings():
+            value = str(max(1, int(values[key])))
+            local.set("market_data", key, value)
+            self.config.set("market_data", key, value)
+        LOCAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(dir=LOCAL_CONFIG_DIR, suffix=".ini.tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                local.write(handle)
+            os.replace(name, LOCAL_CONFIG_PATH)
+        finally:
+            if os.path.exists(name):
+                os.unlink(name)
+
     # === EURUSD Setting ===
     def get_eurusd(self) -> float:
         return self.config.getfloat('app', 'eurusd', fallback=1.0)
