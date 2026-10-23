@@ -62,6 +62,7 @@ class AandelenWebPilotTab(QWidget):
         super().__init__(parent)
         self._js_ready = False
         self._is_active = False
+        self._price_feed = None
         self._pending_js_calls: list[tuple[str, object]] = []
         self._needs_snapshot = False
         self._needs_patch = False
@@ -86,6 +87,7 @@ class AandelenWebPilotTab(QWidget):
             self.channel.registerObject("aandelenBridge", self.bridge)
             self.web.page().setWebChannel(self.channel)
         self.web.loadFinished.connect(self._on_web_loaded)
+        self.web.loadStarted.connect(self._on_web_loading)
         self.web.setHtml(self._html_template())
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
 
@@ -102,8 +104,21 @@ class AandelenWebPilotTab(QWidget):
         payload = json.dumps({"id": frame_id, "value": value_text})
         self.web.page().runJavaScript(f"window.applyDelta({payload});")
 
+    def set_price_feed(self, price_feed):
+        self._price_feed = price_feed
+        self._sync_delivery_view()
+
+    def _sync_delivery_view(self):
+        if self._price_feed is not None:
+            self._price_feed.quote_delivery.set_view(self._is_active, self._js_ready)
+
+    def _on_web_loading(self):
+        self._js_ready = False
+        self._sync_delivery_view()
+
     def _on_web_loaded(self, ok: bool):
         self._js_ready = bool(ok)
+        self._sync_delivery_view()
         if not self._js_ready:
             return
         for func_name, payload in self._pending_js_calls:
@@ -137,6 +152,7 @@ class AandelenWebPilotTab(QWidget):
 
     def set_active(self, active: bool):
         self._is_active = bool(active)
+        self._sync_delivery_view()
         if AANDELEN_WEB_DEBUG:
             print(f"[aandelen-web-debug] set_active active={self._is_active} js_ready={self._js_ready} current_needs_snapshot={self._needs_snapshot} current_needs_patch={self._needs_patch} current_needs_meta={self._needs_meta}")
         if not self._is_active:
@@ -440,6 +456,9 @@ class AandelenWebPilotTab(QWidget):
 
     def _run_js(self, func_name: str, payload: object):
         js_payload = json.dumps(payload, ensure_ascii=False, default=self._json_default)
+        if func_name in {"renderSnapshot", "applyPatch"} and self._price_feed is not None:
+            self._run_quote_delivery_js(func_name, payload, js_payload)
+            return
         if AANDELEN_WEB_DEBUG and func_name in {"renderSnapshot", "applyPatch", "renderMeta"}:
             script = f"""
 (() => {{
@@ -469,6 +488,67 @@ class AandelenWebPilotTab(QWidget):
             self.web.page().runJavaScript(script, 0, _on_result)
             return
         self.web.page().runJavaScript(f"window.{func_name}({js_payload});")
+
+    def _quote_delivery_cells(self, func_name, payload):
+        """Use the actual price payload, not the latest feed value, as evidence."""
+        mapping = {}
+        frame = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+        if frame is not None and not frame.is_empty():
+            for row in frame.to_dicts():
+                if str(row.get("type", "aandeel")).lower() not in {"aandeel", "stock", "stk"}:
+                    continue
+                asset = str(row.get("asset_rollup", "")).strip().upper()
+                symbol, currency = row.get("ib_symbol"), row.get("ib_currency")
+                if asset and symbol and currency:
+                    mapping.setdefault(asset, set()).add((str(symbol), str(currency)))
+        if func_name == "renderSnapshot":
+            rows = payload.get("rows", [])
+        else:
+            rows = [{"asset_rollup": change.get("row_id"), "koers": change.get("value")}
+                    for change in payload.get("changes", []) if change.get("field") == "koers"]
+        cells = []
+        for row in rows:
+            asset = str(row.get("asset_rollup") or "")
+            price = row.get("koers")
+            if not isinstance(price, (int, float, Decimal)):
+                continue
+            pairs = mapping.get(asset.strip().upper(), set())
+            # Don't guess which listing/currency an aggregated price belongs to.
+            if len(pairs) != 1:
+                continue
+            symbol, currency = next(iter(pairs))
+            cells.append({"asset": asset, "symbol": symbol, "currency": currency, "value": float(price)})
+        return cells
+
+    def _run_quote_delivery_js(self, func_name, payload, js_payload):
+        trace = self._price_feed.quote_delivery
+        cells = self._quote_delivery_cells(func_name, payload)
+        scenario = bool(getattr(SNAPSHOT_STORE, "runtime_test_orders_enabled", False) or
+                        getattr(SNAPSHOT_STORE, "runtime_beta_shift_enabled", False) or
+                        getattr(SNAPSHOT_STORE, "runtime_price_shift_pct", 0))
+        token = trace.submit(cells, scenario=scenario)
+        assets = json.dumps(list(dict.fromkeys(cell["asset"] for cell in cells)))
+        script = f"""
+(() => {{
+  try {{
+    window.{func_name}({js_payload});
+    return JSON.stringify({{ok: true, rows: window.quoteDeliveryProbe({assets})}});
+  }} catch (e) {{
+    return JSON.stringify({{ok: false, error: String(e), rows: []}});
+  }}
+}})()
+"""
+        def acknowledged(raw):
+            try:
+                result = json.loads(raw) if isinstance(raw, str) else raw
+                if not isinstance(result, dict):
+                    raise ValueError("Geen antwoord van webpagina")
+            except (ValueError, TypeError) as exc:
+                result = {"ok": False, "error": str(exc)}
+            trace.acknowledge(token, result)
+            if AANDELEN_WEB_DEBUG:
+                print(f"[aandelen-web-debug] delivery token={token} result={result}")
+        self.web.page().runJavaScript(script, 0, acknowledged)
 
     def _debug_probe_js(self, label: str) -> None:
         if not AANDELEN_WEB_DEBUG or not hasattr(self, "web") or not self._js_ready:
@@ -1272,6 +1352,18 @@ class AandelenWebPilotTab(QWidget):
           footWrap.style.paddingRight = `${sw}px`;
         }
       }
+
+      window.quoteDeliveryProbe = function(assets) {
+        return assets.map((asset) => {
+          const row = state.rows.get(String(asset));
+          const cell = document.getElementById("c_" + rowId(asset) + "_koers");
+          if (!row) return {asset: asset, state: "missing"};
+          if (!cell) return {asset: asset, state: "filtered"};
+          const text = cell.textContent;
+          return {asset: asset, state: "present", value: row.koers, text: text,
+                  dom_matches: text === fmtCell(row, "koers", row.koers)};
+        });
+      };
 
       function contains(hay, needle) {
         if (!needle) return true;

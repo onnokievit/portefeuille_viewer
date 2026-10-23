@@ -104,6 +104,14 @@ class SubscriptionManager:
         self.last_rotation = self.clock()
         self.next_action = 0
         self.block_until = 0
+        self.quote_version = 0
+        self.rejections_total = 0
+        self.limit_rejections_total = 0
+
+    def reset_rejection_counters(self):
+        with self.lock:
+            self.rejections_total = 0
+            self.limit_rejections_total = 0
 
     def configure(self, capacity, batch_size, rotation_seconds, stale_seconds):
         with self.lock:
@@ -196,8 +204,12 @@ class SubscriptionManager:
         with self.lock:
             record = self.records.get(self.by_request.get(req_id))
             if record:
+                self.quote_version += 1
                 record.fields["display"] = {"value": price, "source": source,
-                    "received_at": self.clock(), "data_type": record.data_type}
+                    "received_at": self.clock(), "data_type": record.data_type,
+                    "version": self.quote_version}
+                return dict(record.fields["display"])
+            return None
 
     def details(self, key, req_id, details):
         with self.lock:
@@ -232,6 +244,8 @@ class SubscriptionManager:
             record.error = f"{code}: {message}"
             self.transport.event(f"error request={req_id} instrument={record.spec['symbol']} {record.error}")
             if code == 101:
+                self.rejections_total += 1
+                self.limit_rejections_total += 1
                 occupied = sum(r.req_id is not None for r in self.records.values())
                 self.effective_capacity = max(1, min(self.effective_capacity - 1, occupied - 1))
                 self._release(record, "rejected")
@@ -253,6 +267,7 @@ class SubscriptionManager:
             # the stream and display the warning instead of retrying forever.
 
     def _reject(self, record, now):
+        self.rejections_total += 1
         record.failures += 1
         self._release(record, "rejected")
         record.retry_at = now + min(900, 30 * 2 ** min(record.failures, 5))
@@ -372,6 +387,9 @@ class SubscriptionManager:
                         self.rotation_seconds * (1 + rank // min(self.batch_size, self.effective_capacity)))
                 rows.append(row)
             return {"capacity": self.capacity, "effective_capacity": self.effective_capacity,
+                    "rejected_now": sum(r.status == "rejected" for r in self.records.values()),
+                    "rejections_total": self.rejections_total,
+                    "limit_rejections_total": self.limit_rejections_total,
                     "batch_size": self.batch_size, "rotation_seconds": self.rotation_seconds,
                     "stale_seconds": self.stale_seconds, "connected": self.connected,
                     "occupied": sum(r.req_id is not None for r in self.records.values()),

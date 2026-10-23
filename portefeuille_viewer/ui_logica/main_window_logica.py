@@ -94,6 +94,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.orders_tab = OrdersTabWidget()
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.aandelen_tab = AandelenWebPilotTab()
+        self.aandelen_tab.set_price_feed(self.price_feed)
         self.opties_open_tab = OptiesOpenWebPilotTab()
         self.optie_tijdswaarde_tab = OptieTijdswaardeWebPilotTab()
         self.asset_indicator_tab = AssetIndicatorWebTab()

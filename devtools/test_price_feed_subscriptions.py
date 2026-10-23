@@ -69,6 +69,8 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(row["fields"]["display"]["source"], "last")
         self.assertEqual(row["fields"]["last"]["value"], 90.)
         self.assertIsNotNone(row["processed_at"])
+        self.assertEqual(row["delivery"]["processed_value"], 90.)
+        self.assertIsNone(row["delivery"]["rendered_at"])
 
     def test_1101_rebuilds_but_1102_does_not_duplicate_streams(self):
         old = self.asset()
@@ -215,6 +217,19 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(self.feed.subscriptions.rotation_seconds, 15)
         tab.set_active(False)
         self.assertFalse(tab.timer.isActive())
+        tab.close()
+
+    def test_rejection_counter_visible_without_scrolling_or_matching_filter(self):
+        req_id = self.asset()
+        self.feed._app.error(req_id, 101, "limit")
+        tab = SubscriptionsTab(self.service, settings=Mock())
+        tab.search.setText("does-not-match-any-row")
+        self.assertEqual(tab.table.rowCount(), 0)
+        self.assertIn("Nu geweigerd: 1", tab.rejection_summary.text())
+        self.assertIn("Daarvan limiet (101): 1", tab.rejection_summary.text())
+        tab.reset_rejections_button.click()
+        self.assertIn("Weigeringen sinds reset: 0", tab.rejection_summary.text())
+        self.assertIn("Nu geweigerd: 1", tab.rejection_summary.text())
         tab.close()
 
 

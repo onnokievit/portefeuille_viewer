@@ -100,6 +100,36 @@ class ManagerTests(unittest.TestCase):
         self.assertIn(key, self.transport.history[3:])
         self.assertLessEqual(len(self.transport.live), 2)
 
+    def test_rejection_counters_survive_recovery_and_configure(self):
+        self.manager.set_source("assets", [spec(1)])
+        self.advance(1)
+        req_id = next(iter(self.manager.by_request))
+        self.manager.error(req_id, 101, "limit")
+        self.assertEqual(self.manager.snapshot()["rejected_now"], 1)
+        self.advance(35)
+        self.manager.configure(3, 1, 30, 180)
+        snapshot = self.manager.snapshot()
+        self.assertEqual(snapshot["rejected_now"], 0)
+        self.assertEqual(snapshot["rejections_total"], 1)
+        self.assertEqual(snapshot["limit_rejections_total"], 1)
+        # Ignore late duplicate errors for an already released request.
+        self.manager.error(req_id, 101, "duplicate late callback")
+        self.assertEqual(self.manager.snapshot()["limit_rejections_total"], 1)
+
+    def test_counter_reset_does_not_change_subscriptions_or_errors(self):
+        self.manager.set_source("assets", [spec(1)])
+        self.advance(1)
+        req_id = next(iter(self.manager.by_request))
+        self.manager.error(req_id, 354, "No permissions")
+        before = self.manager.snapshot()
+        self.assertEqual(before["rejections_total"], 1)
+        self.assertEqual(before["limit_rejections_total"], 0)
+        self.manager.reset_rejection_counters()
+        after = self.manager.snapshot()
+        self.assertEqual(after["rejections_total"], 0)
+        self.assertEqual(after["rows"], before["rows"])
+        self.assertEqual(after["rejected_now"], 1)
+
     def test_source_replacement_cancels_old_instruments(self):
         self.manager.set_source("assets", [spec(i) for i in range(3)])
         self.advance(1)

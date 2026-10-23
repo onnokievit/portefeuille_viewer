@@ -62,9 +62,35 @@ Met 250 instrumenten en 100 plaatsen geeft de standaardroulatie circa vijf minut
 aansluiting en 7,5 minuut wachten, vóór correcties voor prioriteit, fouten en
 handelsuren. 'Volgende beurt' is een schatting, geen actualiteitsgarantie.
 
-De kolom `Verwerkt in app` bevestigt verwerking door PriceFeedService; het is geen
-bewijs dat een specifieke webtabel al opnieuw gerenderd is. Voor opties staat de
-gekozen prijs/bron in het register, maar nog geen afzonderlijke GUI-renderbevestiging.
+### Diagnose van de aandelenroute
+
+Een geselecteerde IB-prijs krijgt een versienummer en ontvangsttijd mee in het
+Qt-signaal. `Verwerkt in app` wordt pas geregistreerd na verwerking in PriceFeedService.
+Het bestaande publieke prijssignaal en alle berekeningen blijven hetzelfde.
+
+Het aandelenoverzicht registreert vervolgens de werkelijke `koers`-waarde uit
+de verzonden full snapshot of koerspatch. De webpagina retourneert een bevestiging
+met de waarde uit haar rijmodel én de tekst uit de echte koerscel. Alleen als
+die tekst bij de rijwaarde hoort en die waarde overeenkomt met de verzonden koers,
+wordt `Webcel bevestigd` bijgewerkt. Verzenden alleen bevestigt geen weergave.
+
+Het abonnementenoverzicht toont naast elkaar de interne verwerking, verzendtijd,
+verzonden koers, webbevestiging, koers in de webcel en diagnose van de koersroute.
+Oude callbacks bevestigen geen nieuwere verzending. DB-wissels en pagina-reloads
+maken openstaande bevestigingen ongeldig. De callbackwachtrij is begrensd.
+
+Een inactieve aandelen-tab wacht bewust op activering. Filters, ontbrekende rijen,
+JavaScript-fouten en een onjuist bijgewerkte koerscel worden onderscheiden. De
+laatste fout blijft zichtbaar wanneer naar de abonnementen-tab wordt gewisseld.
+Scenario-/koerscorrecties worden apart benoemd zodat ze niet met een vastgelopen
+marktkoers worden verward. Bij gelijkblijvende koers is geen fictieve nieuwe
+render nodig om vast te stellen dat de huidige webcel nog de juiste waarde bevat.
+
+Deze bevestiging bewijst de DOM-inhoud, niet het fysieke tekenen op een monitor.
+Ze vergelijkt de werkelijke verzonden en weergegeven prijs; ze is geen nieuwe
+prijsberekening. De assetmap koppelt aandelen aan hun IB-symbool/valuta. Bij meer
+dan één listing voor dezelfde asset wordt niet gegokt welke koers hoort bij de rij.
+Opties hebben nog geen afzonderlijke GUI-renderbevestiging.
 
 ## Offline validatie
 
@@ -73,6 +99,8 @@ Vanuit de projectroot:
 ```
 python -m unittest discover -s devtools -p test_subscription_manager.py -v
 python -m unittest discover -s devtools -p test_price_feed_subscriptions.py -v
+python -m unittest discover -s devtools -p test_quote_delivery_trace.py -v
+python -m unittest discover -s devtools -p test_aandelen_quote_delivery_web.py -v
 ```
 
 Tests gebruiken een gesimuleerde klok en gemockte IBKR-/Access-grenzen, inclusief
@@ -80,3 +108,17 @@ Tests gebruiken een gesimuleerde klok en gemockte IBKR-/Access-grenzen, inclusie
 zomertijd, een aandelen-Last van 100 naar 90, opties, lokale instellingen en Qt-UI.
 Live validatie in TWS blijft nodig voor de werkelijk beschikbare accountlijnen,
 contractspecifieke handelsuren en langlopende quote-ontvangst.
+
+## Capaciteitsproef met weigeringstellers
+
+Boven de tabel staan `Nu geweigerd` (huidige instrumentstatus), `Weigeringen sinds
+reset` (aantal afgewezen aanvragen) en `Daarvan limiet (101)` (alleen capaciteitsfouten).
+De cumulatieve tellers blijven behouden na herstel, opnieuw verbinden en Toepassen.
+`Reset weigeringstellers` wist uitsluitend die twee tellers, geen abonnementen,
+rijmeldingen of effectief budget. Herstarten begint eveneens met nul.
+
+Voor een nieuwe proef: reset de tellers, verhoog het maximum en pas toe. Bij
+capaciteitsfouten loopt de 101-teller op en verlaagt de bestaande manager het
+effectieve budget. De teller telt pogingen, niet unieke instrumenten, en geeft
+niet rechtstreeks de grootte van de overschrijding aan. Zoekfilters op de tabel
+veranderen de tellers niet.

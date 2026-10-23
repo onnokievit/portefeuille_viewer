@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.services.subscription_manager import SubscriptionManager
+from portefeuille_viewer.services.quote_delivery_trace import QuoteDeliveryTrace
 
 
 _PRICE_FEED_PERF_LOG = str(os.getenv("PRICE_FEED_PERF_LOG", "1")).strip() == "1"
@@ -163,6 +164,7 @@ class _SubscriptionTransport:
 
 class PriceFeedIB(QObject):
     priceUpdated = Signal(str, str, float)  # ib_symbol, currency, price
+    quoteReceived = Signal(str, str, float, dict)  # selected price + receipt provenance
     optionTickUpdated = Signal(dict)  # option tick payload for one series_id
     log = Signal(str)
     ready = Signal()
@@ -459,8 +461,7 @@ class PriceFeedIB(QObject):
                         entry["last"] = px
                         entry["ts"] = time.time()
                     feed._mark_tick_seen()
-                    feed.subscriptions.processed(reqId, px, field)
-                    feed.priceUpdated.emit(sym, cur, px)
+                    feed._publish_asset_price(reqId, sym, cur, px, field)
                     return
 
                 if tickType in (9, 75):  # close + delayed close as fallback
@@ -474,8 +475,7 @@ class PriceFeedIB(QObject):
                             entry["ts"] = time.time()
                     if not has_last:
                         feed._mark_tick_seen()
-                        feed.subscriptions.processed(reqId, px, field)
-                        feed.priceUpdated.emit(sym, cur, px)
+                        feed._publish_asset_price(reqId, sym, cur, px, field)
                     return
 
                 if tickType in (1, 2, 66, 67):  # bid/ask, also delayed
@@ -498,8 +498,7 @@ class PriceFeedIB(QObject):
                     if asset_type in {"cash", "fx", "forex"} and bid is not None and ask is not None:
                         mid = (bid + ask) / 2.0
                         feed._mark_tick_seen()
-                        feed.subscriptions.processed(reqId, mid, "mid")
-                        feed.priceUpdated.emit(sym, cur, mid)
+                        feed._publish_asset_price(reqId, sym, cur, mid, "mid")
 
             def tickOptionComputation(  # noqa: N802
                 self,
@@ -709,6 +708,12 @@ class PriceFeedIB(QObject):
     def _emit_option_payload(self, meta, payload):
         for sid in meta.get("series_ids", [meta["series_id"]]):
             self.optionTickUpdated.emit({**payload, "series_id": sid})
+
+    def _publish_asset_price(self, req_id, symbol, currency, price, source):
+        receipt = self.subscriptions.processed(req_id, price, source)
+        if receipt is not None:
+            self.quoteReceived.emit(symbol, currency, price, receipt)
+            self.priceUpdated.emit(symbol, currency, price)
 
     def next_tid(self):
         with self._lock:
@@ -958,8 +963,9 @@ class PriceFeedService(QObject):
         initial_prices = ASSET_LAST_PRICE_STORE.ensure_loaded()
         self.store = PriceStore(initial_prices)
         self._asset_processed_at = {}
+        self.quote_delivery = QuoteDeliveryTrace()
         self._feed = PriceFeedIB(host, port, client_id)
-        self._feed.priceUpdated.connect(self._on_price)
+        self._feed.quoteReceived.connect(self._on_quote_received)
         self._feed.optionTickUpdated.connect(self._on_option_tick)
         self._feed.statusChanged.connect(self.statusChanged.emit)
         self._feed.connectionLost.connect(self.connectionLost.emit)
@@ -1413,12 +1419,20 @@ class PriceFeedService(QObject):
 
     def reload_asset_last_prices_from_store(self):
         self.store.replace_all(ASSET_LAST_PRICE_STORE.get_snapshot())
+        self.quote_delivery.reset()
+        self._asset_processed_at.clear()
+
+    @Slot(str, str, float, dict)
+    def _on_quote_received(self, sym, cur, px, receipt):
+        self._on_price(sym, cur, px, receipt)
 
     @Slot(str, str, float)
-    def _on_price(self, sym: str, cur: str, px: float):
+    def _on_price(self, sym: str, cur: str, px: float, receipt=None):
         self.store.set(sym, cur, px)
-        self._asset_processed_at[(sym, cur)] = time.time()
         ASSET_LAST_PRICE_STORE.update_price(sym, cur, px)
+        self._asset_processed_at[(sym, cur)] = time.time()
+        if receipt is not None:
+            self.quote_delivery.processed(sym, cur, px, receipt)
         self.priceUpdated.emit(sym, cur, px)
 
     @Slot(dict)
@@ -1511,10 +1525,16 @@ class PriceFeedService(QObject):
         result = self._feed.subscriptions.snapshot()
         for row in result["rows"]:
             row["processed_at"] = self._asset_processed_at.get((row["symbol"], row["currency"]))
+            if row["kind"] == "asset" and row["asset_type"] in {"aandeel", "stock", "stk"}:
+                row["delivery"] = self.quote_delivery.snapshot(
+                    row["symbol"], row["currency"], row["fields"].get("display"))
         return result
 
     def configure_subscriptions(self, **values):
         self._feed.subscriptions.configure(**values)
+
+    def reset_subscription_rejection_counters(self):
+        self._feed.subscriptions.reset_rejection_counters()
 
     def focus_asset(self, asset):
         asset = str(asset or "").strip().upper()

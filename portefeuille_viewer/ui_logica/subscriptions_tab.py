@@ -21,7 +21,9 @@ class SubscriptionsTab(QWidget):
     HEADERS = ["Instrument", "Type", "Valuta", "Beurs", "Contract-ID", "Request-ID",
                "Status", "Data", "Handelssessie", "Laatste ontvangst", "Last", "Last ontvangen",
                "Bid", "Bid ontvangen", "Ask", "Ask ontvangen", "Gekozen koers", "Prijsbron",
-               "Verwerkt in app", "Volgende beurt (schatting)", "Laatste melding"]
+               "Verwerkt in app", "Naar Aandelen verzonden", "Koers verzonden",
+               "Webcel bevestigd", "Koers in webcel", "Koersroute",
+               "Volgende beurt (schatting)", "Laatste melding"]
 
     def __init__(self, price_feed, parent=None, settings=None):
         super().__init__(parent)
@@ -53,7 +55,20 @@ class SubscriptionsTab(QWidget):
         controls.addStretch()
         layout.addLayout(controls)
         self.summary = QLabel()
+        self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        rejection_bar = QHBoxLayout()
+        self.rejection_summary = QLabel()
+        self.rejection_summary.setWordWrap(True)
+        self.rejection_summary.setToolTip(
+            "Weigeringen tellen aanvragen, niet unieke instrumenten. Herstelpogingen kunnen opnieuw worden geweigerd. "
+            "De tellers blijven staan na herstel of Toepassen; reset ze vóór een nieuwe capaciteitsproef. "
+            "Limiet (101) betekent te veel gelijktijdige koersabonnementen; andere weigeringen kunnen andere oorzaken hebben.")
+        rejection_bar.addWidget(self.rejection_summary, 1)
+        self.reset_rejections_button = QPushButton("Reset weigeringstellers")
+        self.reset_rejections_button.clicked.connect(self._reset_rejections)
+        rejection_bar.addWidget(self.reset_rejections_button)
+        layout.addLayout(rejection_bar)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Zoek instrument, contract, status of foutmelding…")
         self.search.textChanged.connect(self.refresh)
@@ -71,7 +86,9 @@ class SubscriptionsTab(QWidget):
             "Live/delayed is onafhankelijk van koersouderdom. Ontvangsttijd is de tijd in deze app, "
             "niet het tijdstip van de transactie. 'Geen recente data' bewijst geen storing. "
             "Onbekende handelsuren worden niet als gesloten behandeld. "
-            "De aandelenkoers blijft Last, met slotkoers als fallback; bied/laat vervangen Last niet.")
+            "De aandelenkoers blijft Last, met slotkoers als fallback; bied/laat vervangen Last niet. "
+            "Webcel bevestigd betekent dat de aandelenpagina de inhoud van de tabelcel heeft gecontroleerd. "
+            "Een inactief tabblad of uitgefilterde rij is geen koersstoring.")
         footnote.setWordWrap(True)
         layout.addWidget(footnote)
         self.timer = QTimer(self)
@@ -102,6 +119,10 @@ class SubscriptionsTab(QWidget):
         self.feed.configure_subscriptions(**values)
         self.refresh()
 
+    def _reset_rejections(self):
+        self.feed.reset_subscription_rejection_counters()
+        self.refresh()
+
     @staticmethod
     def _field(fields, name):
         candidates = [fields[key] for key in (name, "delayed_" + name) if key in fields]
@@ -116,6 +137,13 @@ class SubscriptionsTab(QWidget):
             f"{len(snapshot['rows'])} gewenst | {snapshot['occupied']} plaatsen bezet | "
             f"{snapshot['receiving']} hebben data ontvangen in deze beurt | "
             f"effectief budget {snapshot['effective_capacity']} / ingesteld {snapshot['capacity']}")
+        limit = snapshot.get("limit_rejections_total", 0)
+        total = snapshot.get("rejections_total", 0)
+        self.rejection_summary.setText(
+            f"Nu geweigerd: {snapshot.get('rejected_now', 0)} | "
+            f"Weigeringen sinds reset: {total} | Daarvan limiet (101): {limit}")
+        color = "#b00020" if limit else "#9a5a00" if total else "#1f6f3f"
+        self.rejection_summary.setStyleSheet(f"color: {color}; font-weight: 600;")
         query = self.search.text().casefold()
         rendered = []
         for row in snapshot["rows"]:
@@ -125,6 +153,9 @@ class SubscriptionsTab(QWidget):
             ask, ask_at = self._field(fields, "ask")
             display = fields.get("display", {})
             value = display.get("value")
+            delivery = row.get("delivery", {})
+            def price(value):
+                return f"{value:.6g}" if isinstance(value, (int, float)) else "—"
             values = [row.get("display_name") or row.get("description") or row["symbol"], row["asset_type"], row["currency"],
                       row["exchange"], str(row.get("resolved_conid") or row["contractid"] or "—"),
                       str(row["req_id"] or "—"), STATUSES.get(row["status"], row["status"]), row["data_type"],
@@ -132,7 +163,11 @@ class SubscriptionsTab(QWidget):
                       stamp(row["last_tick"]), last, last_at, bid, bid_at, ask, ask_at,
                       f"{value:.6g}" if isinstance(value, (float, int)) else "—",
                       display.get("source", "—"), stamp(row.get("processed_at")),
-                      stamp(row.get("next_turn")), row["error"]]
+                      stamp(delivery.get("sent_at")), price(delivery.get("sent_value")),
+                      stamp(delivery.get("rendered_at")), price(delivery.get("rendered_value")),
+                      delivery.get("status", "—"),
+                      stamp(row.get("next_turn")), " | ".join(
+                          message for message in (row["error"], delivery.get("error", "")) if message)]
             if not query or query in " ".join(values).casefold():
                 rendered.append(values)
         self.table.setSortingEnabled(False)
