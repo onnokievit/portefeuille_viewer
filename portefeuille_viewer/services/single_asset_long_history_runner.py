@@ -5,7 +5,22 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, Signal
 
-from portefeuille_viewer.data import repository
+from portefeuille_viewer.services.history_indicator_runner import get_history_indicator_runner
+
+
+def _refresh_after_pipeline(owner, payload, success_message):
+    owner._refresh_pending = True
+    def finished():
+        owner._refresh_pending = False
+        owner.output.emit(success_message)
+        owner.finished.emit(payload)
+    def failed(message):
+        owner._refresh_pending = False
+        owner.output.emit("Historie staat in DB, maar app-verversing faalde: " + message)
+        owner.failed.emit(message)
+    get_history_indicator_runner().request(
+        reload_history=True, rebuild_indicators=True, reason='single_asset_history_finished',
+        on_published=finished, on_failed=failed)
 
 
 class SingleAssetLongHistoryRunner(QObject):
@@ -29,10 +44,10 @@ class SingleAssetLongHistoryRunner(QObject):
 
     @property
     def is_running(self) -> bool:
-        return self._process is not None
+        return self._process is not None or getattr(self, '_refresh_pending', False)
 
     def start(self, asset_rollup: str) -> None:
-        if self._process is not None:
+        if self.is_running:
             return
         from portefeuille_viewer.services.shared_tasks import claim_task
         if not claim_task(self):
@@ -75,21 +90,13 @@ class SingleAssetLongHistoryRunner(QObject):
     def _start_next_step(self) -> None:
         self._step_index += 1
         if self._step_index >= len(self._steps):
-            try:
-                repository.load_historical_ohlcv_snapshot()
-            except Exception as exc:
-                message = f"Historie staat in DB, maar herladen van app-snapshots faalde: {type(exc).__name__}: {exc}"
-                self.output.emit(f"\n{message}\n")
-                self.failed.emit(message)
-                return
             payload = {
                 "status": "ok",
                 "asset_rollup": self._asset_rollup,
                 "steps": len(self._steps),
                 "output": "\n".join(self._all_output),
             }
-            self.output.emit("\nAlle stappen succesvol afgerond.\n")
-            self.finished.emit(payload)
+            _refresh_after_pipeline(self, payload, "\nAlle stappen succesvol afgerond.\n")
             return
 
         label, script_path, args = self._steps[self._step_index]
@@ -184,10 +191,10 @@ class SingleAssetLongVolatilityRunner(QObject):
 
     @property
     def is_running(self) -> bool:
-        return self._process is not None
+        return self._process is not None or getattr(self, '_refresh_pending', False)
 
     def start(self, asset_rollup: str, *, duration: str = "10 Y") -> None:
-        if self._process is not None:
+        if self.is_running:
             return
         from portefeuille_viewer.services.shared_tasks import claim_task
         if not claim_task(self):
@@ -290,21 +297,13 @@ class SingleAssetLongVolatilityRunner(QObject):
             self.output.emit(f"\n{message}\n")
             self.failed.emit(message)
             return
-        try:
-            repository.load_historical_ohlcv_snapshot()
-        except Exception as exc:
-            message = f"IV/HV staat in DB, maar herladen van app-snapshots faalde: {type(exc).__name__}: {exc}"
-            self.output.emit(f"\n{message}\n")
-            self.failed.emit(message)
-            return
         payload = {
             "status": "ok",
             "asset_rollup": self._asset_rollup,
             "steps": 1,
             "output": "\n".join(self._all_output),
         }
-        self.output.emit("\nLange IV/HV succesvol afgerond.\n")
-        self.finished.emit(payload)
+        _refresh_after_pipeline(self, payload, "\nLange IV/HV succesvol afgerond.\n")
 
     def _on_process_error(self, process_error) -> None:
         self._process = None

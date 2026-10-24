@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 
-from common import DEFAULT_DB_PATH, get_connection
+from common import get_connection
 
 
 TABLE_DEFINITIONS = {
@@ -327,7 +327,7 @@ def create_tables(db_path: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Maak state engine tabellen aan in Access.")
-    parser.add_argument("--db", default=DEFAULT_DB_PATH, help="Pad naar Access database")
+    parser.add_argument("--db", required=True, help="Pad naar Access database")
     args = parser.parse_args()
     create_tables(args.db)
 

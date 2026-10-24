@@ -1,7 +1,6 @@
 import sys
 import os
 import json
-import threading
 import builtins
 import contextlib
 import argparse
@@ -34,7 +33,7 @@ from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
 from portefeuille_viewer.services.asset_volatility_history_update_runner import AssetVolatilityHistoryUpdateRunner
 from portefeuille_viewer.services.app_task_scheduler import AppTaskScheduler
-from portefeuille_viewer.services.asset_indicator_service import rebuild_asset_indicator_snapshots
+from portefeuille_viewer.services.history_indicator_runner import get_history_indicator_runner
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_sector_overlay import refresh_sector_scenario_overlay_snapshots
@@ -287,12 +286,6 @@ _PROJECTION_REFRESH_CONFIGS: dict[str, ProjectionRefreshConfig] = {
     for cfg in (_CFG_OPTIES, _CFG_TIJDSWAARDE, _CFG_SPRINTERS)
 }
 
-_AANDELEN_PROJECTION_ASYNC_ENABLED = False
-_AANDELEN_PROJECTION_REQ_LOCK = threading.Lock()
-_AANDELEN_PROJECTION_PENDING_LOCK = threading.Lock()
-_AANDELEN_PROJECTION_INFLIGHT = False
-_AANDELEN_PROJECTION_QUEUED_REQ: dict | None = None
-_AANDELEN_PROJECTION_PENDING_RESULT: dict | None = None
 _AANDELEN_TV_STARTUP_SEEDED = False
 _AANDELEN_TV_LAST_OVERLAY_TS = 0.0
 _AANDELEN_TV_SEED_TS = 0.0
@@ -703,79 +696,23 @@ def _publish_aandelen_projection_result(result: dict):
         _log(f"[projection-v2] aandelen refresh failed: {exc}")
 
 
-def _run_aandelen_projection_compute(request: dict):
-    global _AANDELEN_PROJECTION_PENDING_RESULT, _AANDELEN_PROJECTION_INFLIGHT, _AANDELEN_PROJECTION_QUEUED_REQ
-    if aandelen_projection_v2 is None:
-        return
-    enqueue_ts = float(request.get("enqueue_ts", time.perf_counter()))
-    queue_wait_ms = round((time.perf_counter() - enqueue_ts) * 1000.0, 3)
-    try:
-        t0 = time.perf_counter()
-        aandelen_projection_v2.recompute(request.get("changed_keys") or set())
-        t1 = time.perf_counter()
-        result = {
-            "reason": request.get("reason", "unknown"),
-            "changed_keys_count": len(request.get("changed_keys") or set()),
-            "enqueue_ts": enqueue_ts,
-            "queue_wait_ms": queue_wait_ms,
-            "recompute_ms": round((t1 - t0) * 1000.0, 3),
-            "snapshot_df": aandelen_projection_v2.snapshot(),
-            "patch_list": aandelen_projection_v2.last_patch() or [],
-            "meta": aandelen_projection_v2.meta(),
-            "inflight": True,
-        }
-        with _AANDELEN_PROJECTION_PENDING_LOCK:
-            _AANDELEN_PROJECTION_PENDING_RESULT = result
-        signals.queued_emit_projectionPublishTick("aandelen_v2")
-    except Exception as exc:
-        _log(f"[projection-v2] aandelen compute failed: {exc}")
-    finally:
-        with _AANDELEN_PROJECTION_REQ_LOCK:
-            next_req = _AANDELEN_PROJECTION_QUEUED_REQ
-            _AANDELEN_PROJECTION_QUEUED_REQ = None
-            if next_req is None:
-                _AANDELEN_PROJECTION_INFLIGHT = False
-            else:
-                th = threading.Thread(target=_run_aandelen_projection_compute, args=(next_req,), daemon=True)
-                th.start()
-
-
-def _drain_aandelen_projection_pending():
-    global _AANDELEN_PROJECTION_PENDING_RESULT
-    if aandelen_projection_v2 is None:
-        return
-    with _AANDELEN_PROJECTION_PENDING_LOCK:
-        result = _AANDELEN_PROJECTION_PENDING_RESULT
-        _AANDELEN_PROJECTION_PENDING_RESULT = None
-    if result is None:
-        return
-    _publish_aandelen_projection_result(result)
-
-
-def refresh_aandelen_projection(reason: str, changed_keys: set[str] | None = None, force_sync: bool = False):
+def refresh_aandelen_projection(reason: str, changed_keys: set[str] | None = None, on_published=None):
     if _PROJECTION_WORKER is not None:
-        _runtime_recompute_selected({'aandelen_v2'}, reason, changed_keys)
+        _runtime_recompute_selected({'aandelen_v2'}, reason, changed_keys, on_published=on_published)
         return
-    global _AANDELEN_PROJECTION_INFLIGHT, _AANDELEN_PROJECTION_QUEUED_REQ
     if aandelen_projection_v2 is None:
         return
-    req = {
-        "reason": str(reason),
-        "changed_keys": set(changed_keys or set()),
-        "enqueue_ts": time.perf_counter(),
-    }
-    if force_sync or not _AANDELEN_PROJECTION_ASYNC_ENABLED:
-        _run_aandelen_projection_compute(req)
-        _drain_aandelen_projection_pending()
-        return
-
-    with _AANDELEN_PROJECTION_REQ_LOCK:
-        if _AANDELEN_PROJECTION_INFLIGHT:
-            _AANDELEN_PROJECTION_QUEUED_REQ = req
-            return
-        _AANDELEN_PROJECTION_INFLIGHT = True
-        th = threading.Thread(target=_run_aandelen_projection_compute, args=(req,), daemon=True)
-        th.start()
+    t0 = time.perf_counter()
+    aandelen_projection_v2.recompute(set(changed_keys or set()))
+    _publish_aandelen_projection_result({
+        'snapshot_df': aandelen_projection_v2.snapshot(),
+        'patch_list': aandelen_projection_v2.last_patch() or [],
+        'meta': aandelen_projection_v2.meta(), 'reason': reason,
+        'recompute_ms': (time.perf_counter() - t0) * 1000,
+        'changed_keys_count': len(changed_keys or set()), 'enqueue_ts': t0,
+    })
+    if on_published is not None:
+        on_published()
 
 
 def refresh_opties_open_projection(reason: str):
@@ -800,12 +737,12 @@ def refresh_sprinters_open_projection(reason: str):
 
 
 def _publish_runtime_projection_results(results, reason: str):
+    failures = [res for res in results or [] if not getattr(res, 'success', False)]
+    if failures:
+        raise RuntimeError('; '.join(
+            f"{getattr(res, 'projection_name', 'unknown')}: {getattr(res, 'error', 'unknown error')}"
+            for res in failures))
     for res in results or []:
-        if not getattr(res, "success", False):
-            _log(
-                f"[engine-core] projection failed: {getattr(res, 'projection_name', 'unknown')} ({getattr(res, 'error', 'n/a')})"
-            )
-            continue
         pname = str(getattr(res, "projection_name", ""))
         recompute_ms = round(float(getattr(res, "duration_ms", 0.0)), 3)
         changed_keys = int(getattr(res, "changed_keys", 0))
@@ -847,12 +784,16 @@ def _runtime_recompute_all(reason: str):
     _PROJECTION_WORKER.submit('runtime', {'all': True, 'names': set(), 'keys': set(), 'reason': reason})
 
 
-def _runtime_recompute_selected(projection_names, reason, changed_keys=None):
+def _runtime_recompute_selected(projection_names, reason, changed_keys=None, on_published=None):
     if _PROJECTION_WORKER is None:
-        return _runtime_recompute_selected_sync(projection_names, reason, changed_keys)
+        _runtime_recompute_selected_sync(projection_names, reason, changed_keys)
+        if on_published is not None:
+            on_published()
+        return
     _PROJECTION_COVERAGE.mark(projection_names, SNAPSHOT_STORE)
     _PROJECTION_WORKER.submit('runtime', {'all': False, 'names': set(projection_names),
-        'keys': set(changed_keys or []), 'reason': reason})
+        'keys': set(changed_keys or []), 'reason': reason,
+        'callbacks': [on_published] if on_published is not None else []})
 
 
 def _runtime_recompute_all_sync(reason: str):
@@ -938,6 +879,17 @@ def _queue_exclusive_live_recompute(snapshot_key: str, projection_names: set[str
     start_bounded_timer(timer)
 
 
+def _finish_timevalue_seed():
+    global _AANDELEN_TV_STARTUP_SEEDED, _AANDELEN_TV_SEED_TS, _AANDELEN_TV_LAST_OVERLAY_TS
+    seeded_df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
+    if (seeded_df is not None and not seeded_df.is_empty()
+            and "optie_tijdswaarde_signed_eur" in seeded_df.columns):
+        _AANDELEN_TV_STARTUP_SEEDED = True
+        _AANDELEN_TV_SEED_TS = time.time()
+        _AANDELEN_TV_LAST_OVERLAY_TS = _AANDELEN_TV_SEED_TS
+        _log("[projection-v2] startup timevalue seed applied")
+
+
 def _on_snapshot_updated_engine_core(snapshot_key: str):
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
@@ -964,19 +916,8 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
             refresh_aandelen_projection(
                 "startup_timevalue_seed",
                 changed_keys={"__TIMEVALUE_OVERLAY__"},
-                force_sync=True,
+                on_published=_finish_timevalue_seed,
             )
-            seeded_df = getattr(SNAPSHOT_STORE, "snapshot_aandelen_projection_v2", None)
-            if (
-                seeded_df is not None
-                and hasattr(seeded_df, "is_empty")
-                and not seeded_df.is_empty()
-                and "optie_tijdswaarde_signed_eur" in getattr(seeded_df, "columns", [])
-            ):
-                _AANDELEN_TV_STARTUP_SEEDED = True
-                _AANDELEN_TV_SEED_TS = now_ts
-                _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
-                _log("[projection-v2] startup timevalue seed applied")
         elif tv_ready and _AANDELEN_TV_STARTUP_SEEDED:
             if not _AANDELEN_TV_OVERLAY_LOCKED and _aandelen_tv_totals_in_sync():
                 _AANDELEN_TV_OVERLAY_LOCKED = True
@@ -994,7 +935,7 @@ def _on_snapshot_updated_engine_core(snapshot_key: str):
                 refresh_aandelen_projection(
                     "timevalue_overlay_tick",
                     changed_keys={"__TIMEVALUE_OVERLAY__"},
-                    force_sync=True,
+
                 )
                 _AANDELEN_TV_LAST_OVERLAY_TS = now_ts
     if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
@@ -1224,7 +1165,6 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
 
 
 def main():
-    global _AANDELEN_PROJECTION_ASYNC_ENABLED
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
     global _AANDELEN_TV_SEED_TS
@@ -1238,10 +1178,14 @@ def main():
     app = cast(QApplication | None, existing_app)
     if app is None:
         app = QApplication(sys.argv)
-    _AANDELEN_PROJECTION_ASYNC_ENABLED = False
-    signals.projectionPublishTick.connect(
-        lambda key: _drain_aandelen_projection_pending() if key == "aandelen_v2" else None
-    )
+    from portefeuille_viewer.services.ui_diagnostics import start_ui_diagnostics
+    try:
+        ui_diagnostics = start_ui_diagnostics(app, globals())
+        app.ui_diagnostics = ui_diagnostics
+        if ui_diagnostics is not None:
+            _log('[ui-diagnostics] meting actief:', ui_diagnostics.path)
+    except Exception as exc:
+        _log('[ui-diagnostics] kon meting niet starten:', type(exc).__name__)
     font = QFont()
     font.setPointSize(9)
     demi_bold = getattr(getattr(QFont, "Weight", None), "DemiBold", None)
@@ -1271,6 +1215,8 @@ def main():
     _PROJECTION_WORKER.failed.connect(lambda error: _log('[projection-worker] ' + error))
     _PROJECTION_WORKER.failed.connect(lambda error: _PROJECTION_COVERAGE.clear())
     app.aboutToQuit.connect(_PROJECTION_WORKER.shutdown)
+    history_indicator_runner = get_history_indicator_runner()
+    history_indicator_runner.failed.connect(lambda error: _log('[history-indicator] ' + error))
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
@@ -1295,8 +1241,8 @@ def main():
     signals.priceUpdateFinished.connect(state_engine_runner.handle_price_update_finished)
     signals.priceUpdateFinished.connect(
         lambda payload: (
-            repository.load_historical_ohlcv_snapshot(),
-            repository.load_asset_driver_beta_snapshot()
+            history_indicator_runner.request(reload_history=True, reload_beta=True,
+                rebuild_indicators=False, reason='price_update_finished')
         ) if (payload or {}).get("status") in {"ok", "skipped"} else None
     )
 
@@ -1309,8 +1255,8 @@ def main():
             f"db_ms={payload.get('duration_ms')}"
         )
         if status in {"ok", "partial"}:
-            repository.load_historical_ohlcv_snapshot()
-            rebuild_asset_indicator_snapshots()
+            history_indicator_runner.request(reload_history=True,
+                rebuild_indicators=True, reason='volatility_history_finished')
 
     asset_volatility_history_update_runner.started.connect(
         lambda payload: _log(f"[asset-vol-history] started: {payload}")
@@ -1411,7 +1357,7 @@ def main():
             refresh_aandelen_projection(
                 "state_engine_asset_result_v2",
                 changed_keys=changed_keys,
-                force_sync=True,
+
             )
 
     def _on_snapshot_updated_for_opties_projection(snapshot_key: str):
@@ -1476,7 +1422,7 @@ def main():
                     refresh_aandelen_projection(
                         "asset_metadata_changed",
                         {"REPOSITORY_SNAPSHOT_ASSET_ROLLUP_DATA"},
-                        force_sync=True,
+
                     )
                     refresh_opties_open_projection("asset_metadata_changed")
                     refresh_optie_tijdswaarde_projection("asset_metadata_changed")
@@ -1556,7 +1502,7 @@ def main():
             selected = set()
         aandelen_projection_v2.set_selected_brokers(selected or None)
         _log(f"[projection-v2] broker_filter_change selected={sorted(selected) if selected else ['ALL']}")
-        refresh_aandelen_projection("broker_filter_change", force_sync=True)
+        refresh_aandelen_projection("broker_filter_change")
     signals.aandelenProjectionFilterChanged.connect(_on_aandelen_projection_filter_changed)
     signals.stateRebuildFinished.connect(
         lambda payload: _log(f"[state-engine] rebuild finished: {payload}")
@@ -1592,6 +1538,8 @@ def main():
     setattr(w, "option_timevalue_service", option_timevalue_service)
     setattr(w, "asset_volatility_history_update_runner", asset_volatility_history_update_runner)
     w.show()
+    if getattr(app, 'ui_diagnostics', None) is not None:
+        app.ui_diagnostics.mark_event('window_shown')
     # Start price-update pas nadat UI volledig staat en event-loop idle is.
     QTimer.singleShot(5000, historical_price_update_runner.request_startup_update)
     QTimer.singleShot(

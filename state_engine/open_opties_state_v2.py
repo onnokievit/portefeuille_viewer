@@ -8,7 +8,6 @@ from time import perf_counter
 import polars as pl
 
 from common import (
-    DEFAULT_DB_PATH,
     PRICE_HISTORY_SOURCE,
     get_stockdata_connection,
     get_connection,
@@ -57,7 +56,7 @@ class PhaseTimer:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_open_opties_opgerold_v2")
-    parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--db", required=True)
     parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")

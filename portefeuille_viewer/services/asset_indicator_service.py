@@ -1,17 +1,9 @@
-"""Asset indicator snapshot builder.
-
-V1 is intentionally manual and snapshot-only:
-- read asset universe from asset_rollup_data snapshot;
-- read historical OHLCV from the existing OHLCV snapshot;
-- calculate Direction/Volume based rule output;
-- publish live/summary/meta snapshots.
-
-No timers, startup wiring, UI integration or database writes live here yet.
-"""
+"""Shared historical asset advice with a separate, in-memory profile overlay."""
 
 from __future__ import annotations
 
 import json
+import hashlib
 import traceback
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -61,11 +53,13 @@ class AssetIndicatorRunResult:
     assets_insufficient_data: int
     duration_ms: float
     error: str = ""
+    historical_df: pl.DataFrame | None = None
+    generation_key: str = ""
 
 
-def rebuild_asset_indicator_snapshots() -> AssetIndicatorRunResult:
+def rebuild_asset_indicator_snapshots(*, persist_history: bool = True) -> AssetIndicatorRunResult:
     """Build and publish asset indicator snapshots once."""
-    return AssetIndicatorService().rebuild()
+    return AssetIndicatorService().rebuild(persist_history=persist_history)
 
 
 class AssetIndicatorService:
@@ -98,6 +92,8 @@ class AssetIndicatorService:
             )
 
             if publish_snapshots:
+                SNAPSHOT_STORE.safe_write('snapshot_asset_indicator_basis', self.historical_df)
+                SNAPSHOT_STORE.safe_write('snapshot_asset_indicator_generation', self.generation_key)
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, live_df)
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, summary_df)
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
@@ -108,7 +104,8 @@ class AssetIndicatorService:
                     duration_ms=duration_ms,
                     status="ok",
                     error="",
-                    live_df=live_df,
+                    live_df=self.historical_df,
+                    generation_key=self.generation_key,
                 )
 
             return AssetIndicatorRunResult(
@@ -118,6 +115,8 @@ class AssetIndicatorService:
                 assets_scored=self._count_scored(live_df),
                 assets_insufficient_data=self._count_insufficient(live_df),
                 duration_ms=duration_ms,
+                historical_df=self.historical_df,
+                generation_key=self.generation_key,
             )
         except Exception as exc:
             duration_ms = (perf_counter() - t0) * 1000.0
@@ -131,6 +130,8 @@ class AssetIndicatorService:
                 live_df=empty_asset_indicator_live_frame(),
             )
             if publish_snapshots:
+                SNAPSHOT_STORE.safe_write('snapshot_asset_indicator_basis', None)
+                SNAPSHOT_STORE.safe_write('snapshot_asset_indicator_generation', None)
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_LIVE, empty_asset_indicator_live_frame())
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_SUMMARY, empty_asset_indicator_summary_frame())
                 SNAPSHOT_STORE.safe_write(SNAPSHOT_ASSET_INDICATOR_META, meta_df)
@@ -154,30 +155,75 @@ class AssetIndicatorService:
         include_live_theta: bool = True,
     ) -> pl.DataFrame:
         assets_df = _normalize_assets_df(getattr(SNAPSHOT_STORE, "repository_snapshot_asset_rollup_data", None))
+        self.historical_df = empty_asset_indicator_live_frame()
+        self.generation_key = ""
         if assets_df.is_empty():
             return empty_asset_indicator_live_frame()
 
         history_df = _normalize_history_df(getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv", None))
         if cutoff_date is not None and not history_df.is_empty() and "datum" in history_df.columns:
             history_df = history_df.filter(pl.col("datum") <= cutoff_date)
-        history_by_asset = _history_by_asset(history_df)
-        theta_by_asset = (
-            _theta_by_asset(getattr(SNAPSHOT_STORE, "snapshot_optie_timevalue_live", None))
-            if include_live_theta
-            else {}
-        )
+        from portefeuille_viewer.config import get_stockdata_db_path
+        from portefeuille_viewer.services.shared_asset_history import SharedAssetHistory
+        asset_ids = assets_df['asset_rollup'].to_list()
+        columns = [name for name in (
+            'asset_rollup', 'datum', 'open_price', 'high_price', 'low_price',
+            'close_price', 'volume_value', 'historical_volatility',
+            'implied_volatility', 'ibkr_hv_last', 'ibkr_iv_last') if name in history_df.columns]
+        history_df = history_df.select(columns).filter(pl.col('asset_rollup').is_in(asset_ids))
+        def build_historical():
+            grouped = _history_by_asset(history_df)
+            rows = {}
+            for asset in assets_df.to_dicts():
+                identity = asset['asset_rollup']
+                historical = _calculate_asset_history(grouped.get(identity, []))
+                row = self._build_asset_row(asset, [], None, {}, historical=historical)
+                row['profile_option_status'] = 'historische basis'
+                rows[identity] = json.loads(json.dumps(row, default=_json_default))
+            return rows
+        from portefeuille_viewer.services.shared_asset_history import rules_fingerprint
+        # Roles and asset metadata affect advice too; a change must invalidate it.
+        rules = rules_fingerprint() + hashlib.sha256(
+            assets_df.sort('asset_rollup').write_json().encode()).hexdigest()
+        cache = SharedAssetHistory(get_stockdata_db_path())
+        shared_rows = cache.get(history_df, asset_ids, build_historical, rules=rules)
+        rows = [dict(row, as_of=as_of, input_cutoff_date=_date_value(row['input_cutoff_date']))
+                for row in shared_rows.values()]
+        self.historical_df = _cast_live_schema(pl.DataFrame(rows))
+        self.generation_key = cache.generation_key
+        return (self.apply_profile_overlay(self.historical_df)
+                if include_live_theta else self.historical_df)
 
-        rows: list[dict] = []
-        for asset in assets_df.to_dicts():
-            asset_rollup = str(asset.get("asset_rollup") or "").strip().upper()
-            if not asset_rollup:
-                continue
-            hist_rows = history_by_asset.get(asset_rollup, [])
-            theta_metrics = theta_by_asset.get(asset_rollup, {})
-            rows.append(self._build_asset_row(asset, hist_rows, as_of, theta_metrics))
-
-        if not rows:
+    def apply_profile_overlay(self, basis: pl.DataFrame) -> pl.DataFrame:
+        """Rebuild only changed profile rows, always starting from the shared basis."""
+        if basis is None or basis.is_empty():
             return empty_asset_indicator_live_frame()
+        option_df = getattr(SNAPSHOT_STORE, 'snapshot_optie_timevalue_live', None)
+        metrics, statuses = _profile_option_inputs(option_df)
+        previous = getattr(SNAPSHOT_STORE, 'snapshot_asset_indicator_live', None)
+        old = {row['asset_rollup']: row for row in previous.to_dicts()} if previous is not None else {}
+        rows = []
+        for row in basis.to_dicts():
+            identity = row['asset_rollup']
+            status = statuses.get(identity, 'geen open opties' if statuses.get('__positions_ready__')
+                                  else 'optieposities laden')
+            own = metrics.get(identity, {})
+            signature = hashlib.sha256(json.dumps(dict(basis=row, metrics=own, status=status),
+                sort_keys=True, default=_json_default).encode()).hexdigest()
+            if old.get(identity, {}).get('profile_option_signature') == signature:
+                rows.append(old[identity])
+                continue
+            if own and row['data_quality'] != 'insufficient':
+                historical = dict(sufficient=True, input_cutoff_date=(row['input_cutoff_date'].isoformat()
+                    if row['input_cutoff_date'] else None), **{key: row[key] for key in (
+                    'direction_score', 'long_term_direction_score', 'short_term_direction_score',
+                    'range_position_pct', 'trend_phase', 'volume_score')})
+                historical['volatility_metrics'] = {key: row[key] for key in (
+                    'ibkr_hv_proxy_pct', 'ibkr_iv_proxy_pct', 'realized_volatility_score',
+                    'realized_volatility_20d_pct', 'realized_volatility_60d_pct', 'atr_pct', 'choppiness_score')}
+                row = self._build_asset_row(row, [], row['as_of'], own, historical=historical)
+            row.update(profile_option_status=status, profile_option_signature=signature)
+            rows.append(row)
         return _cast_live_schema(pl.DataFrame(rows))
 
     def _build_asset_row(
@@ -186,7 +232,10 @@ class AssetIndicatorService:
         history_rows: list[dict],
         as_of: datetime,
         theta_metrics: dict,
+        *,
+        historical: dict | None = None,
     ) -> dict:
+        historical = historical if historical is not None else _calculate_asset_history(history_rows)
         asset_rollup = str(asset.get("asset_rollup") or "").strip().upper()
         base = {
             "asset_rollup": asset_rollup,
@@ -197,7 +246,7 @@ class AssetIndicatorService:
                 _pick_text(asset, ("indicator_rol", "indicator_role", "indicatorl_rol"), fallback="")
             ),
             "as_of": as_of,
-            "input_cutoff_date": _latest_history_date(history_rows),
+            "input_cutoff_date": date.fromisoformat(historical["input_cutoff_date"]) if historical["input_cutoff_date"] else None,
             "direction_score": None,
             "long_term_direction_score": None,
             "short_term_direction_score": None,
@@ -234,23 +283,16 @@ class AssetIndicatorService:
             "data_quality": "insufficient",
         }
 
-        if len(history_rows) < MIN_HISTORY_ROWS:
+        if not historical['sufficient']:
             return base
 
-        features = _calculate_history_features(history_rows)
-        direction_input = features["direction_input"]
-        long_term_direction_score = calculate_long_term_direction_score(direction_input)
-        short_term_direction_score = calculate_short_term_direction_score(direction_input)
-        range_position_pct = calculate_range_position_pct(direction_input)
-        trend_phase = classify_trend_phase(
-            long_term_direction_score=long_term_direction_score,
-            short_term_direction_score=short_term_direction_score,
-            range_position_pct=range_position_pct,
-            data_quality="ok",
-        )
-        direction_score = calculate_direction_score(direction_input)
-        volume_score = calculate_volume_score(features["volume_input"])
-        volatility_metrics = features["volatility_metrics"]
+        direction_score = historical['direction_score']
+        long_term_direction_score = historical['long_term_direction_score']
+        short_term_direction_score = historical['short_term_direction_score']
+        range_position_pct = historical['range_position_pct']
+        trend_phase = historical['trend_phase']
+        volume_score = historical['volume_score']
+        volatility_metrics = historical['volatility_metrics']
         theta_score = _score_theta(theta_metrics)
         ibkr_hv_proxy_pct = _normalize_volatility_pct(
             _first_number(
@@ -534,6 +576,59 @@ def _history_by_asset(df: pl.DataFrame) -> dict[str, list[dict]]:
     return grouped
 
 
+def _profile_option_inputs(df):
+    """Do not interpret missing prices/Greeks as a zero theta observation."""
+    positions = getattr(SNAPSHOT_STORE, 'aggregator_snapshot_load_open_opties_from_tx_live', None)
+    if positions is None:
+        positions = getattr(SNAPSHOT_STORE, 'repository_snapshot_load_open_opties', None)
+    expected = {}
+    expected_contracts = None
+    position_columns = {'broker', 'asset_rollup', 'optie_exp_date', 'optie_call_put',
+                        'optie_strike', 'SomVantransactie_aantal'}
+    def contract_key(row, position=False):
+        return (str(row.get('broker') or '').strip().lower(),
+                str(row.get('asset_rollup' if position else 'asset') or '').strip().upper(),
+                _date_value(row.get('optie_exp_date' if position else 'exp')),
+                str(row.get('optie_call_put' if position else 'c_p') or '').strip().lower(),
+                _float_value(row.get('optie_strike' if position else 'strike')),
+                _float_value(row.get('SomVantransactie_aantal' if position else 'qty_open')))
+    if positions is not None and 'asset_rollup' in positions.columns:
+        if position_columns.issubset(positions.columns):
+            expected_contracts = set()
+        for row in positions.to_dicts():
+            if row.get('SomVantransactie_aantal') == 0:
+                continue
+            identity = str(row.get('asset_rollup') or '').strip().upper()
+            expected[identity] = expected.get(identity, 0) + 1
+            if expected_contracts is not None:
+                expected_contracts.add(contract_key(row, position=True))
+    statuses = {'__positions_ready__': positions is not None}
+    complete = []
+    observed = {}
+    valid_counts = {}
+    if df is not None and 'asset' in df.columns:
+        for row in df.to_dicts():
+            identity = str(row.get('asset') or '').strip().upper()
+            if positions is not None and identity not in expected:
+                continue  # A previous timevalue publication can outlive a closed position.
+            if expected_contracts is not None and contract_key(row) not in expected_contracts:
+                continue  # Also reject a previous series or previous position size.
+            if row.get('qty_open') == 0:
+                continue
+            observed[identity] = observed.get(identity, 0) + 1
+            # A position alone is not sufficient: require time value, IV and theta.
+            if all(_float_value(row.get(key)) is not None for key in ('time_total', 'iv', 'theta')):
+                complete.append(row)
+                valid_counts[identity] = valid_counts.get(identity, 0) + 1
+    for identity in expected.keys() | observed.keys():
+        count = valid_counts.get(identity, 0)
+        total = max(expected.get(identity, 0), observed.get(identity, 0))
+        statuses[identity] = ('optiegegevens ontbreken' if count == 0 else
+            'optiegegevens gedeeltelijk' if count < total else
+            'optiegegevens beschikbaar; actualiteit onbekend')
+    return _theta_by_asset(pl.DataFrame(complete) if complete else None), statuses
+
+
 def _theta_by_asset(df: pl.DataFrame | None) -> dict[str, dict]:
     if df is None or df.is_empty() or "asset" not in df.columns:
         return {}
@@ -711,6 +806,28 @@ def _calculate_history_features(history_rows: list[dict]) -> dict:
         ),
         "volatility_metrics": volatility_metrics,
     }
+
+
+def _calculate_asset_history(history_rows: list[dict]) -> dict:
+    cutoff = _latest_history_date(history_rows)
+    result = {'input_cutoff_date': cutoff.isoformat() if cutoff else None,
+              'sufficient': len(history_rows) >= MIN_HISTORY_ROWS}
+    if not result['sufficient']:
+        return result
+    features = _calculate_history_features(history_rows)
+    direction = features['direction_input']
+    long_term = calculate_long_term_direction_score(direction)
+    short_term = calculate_short_term_direction_score(direction)
+    position = calculate_range_position_pct(direction)
+    result.update(
+        direction_score=calculate_direction_score(direction),
+        long_term_direction_score=long_term, short_term_direction_score=short_term,
+        range_position_pct=position,
+        trend_phase=classify_trend_phase(long_term_direction_score=long_term,
+            short_term_direction_score=short_term, range_position_pct=position, data_quality='ok'),
+        volume_score=calculate_volume_score(features['volume_input']),
+        volatility_metrics=features['volatility_metrics'])
+    return result
 
 
 def _calculate_volatility_metrics(history_rows: list[dict]) -> dict:
@@ -895,15 +1012,31 @@ def _persist_signal_history(
     status: str,
     error: str,
     live_df: pl.DataFrame,
-) -> None:
+    raise_errors: bool = False,
+    generation_key: str = "",
+) -> str:
     if live_df is None or live_df.is_empty():
         return
     try:
         from portefeuille_viewer.data import repository
 
+        if generation_key and (
+                'profile_option_status' not in live_df.columns
+                or live_df['profile_option_status'].to_list() != ['historische basis'] * live_df.height
+                or live_df['theta_score'].null_count() != live_df.height):
+            raise ValueError('Gedeelde indicatoropslag accepteert uitsluitend de historische basis')
+
         with repository.get_stockdata_connection() as conn:
+            # The read deciding whether to write belongs to the SAME writer lock.
+            conn.begin_write()
             cur = conn.cursor()
             _ensure_signal_history_tables(cur)
+            version = 'asset-history-v2:' + generation_key if generation_key else SERVICE_VERSION
+            if generation_key:
+                latest = cur.execute("SELECT TOP 1 service_version FROM asset_indicator_service_runs "
+                    "WHERE status='ok' ORDER BY id DESC").fetchone()
+                if latest and latest[0] == version:
+                    return 'already_saved'
             ended_at = datetime.now()
             cur.execute(
                 """
@@ -922,7 +1055,7 @@ def _persist_signal_history(
                     int(live_df.height),
                     AssetIndicatorService._count_scored(live_df),
                     AssetIndicatorService._count_insufficient(live_df),
-                    SERVICE_VERSION,
+                    version,
                     str(error or "")[:4000],
                 ),
             )
@@ -930,7 +1063,10 @@ def _persist_signal_history(
             if rows:
                 _upsert_signal_history_rows(cur, rows)
             conn.commit()
+            return 'saved'
     except Exception as exc:
+        if raise_errors:
+            raise
         print(f"[asset-indicator] signal history persistence skipped: {exc}")
 
 

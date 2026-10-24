@@ -4,12 +4,12 @@ import argparse
 
 import polars as pl
 
-from common import DEFAULT_DB_PATH, get_connection
+from common import get_connection
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Toon een v2 reeks voor een uniek_id.")
-    parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--db", required=True)
     parser.add_argument("--uniek-id", required=True)
     args = parser.parse_args()
 

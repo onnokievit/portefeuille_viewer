@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QSettings, QTimer, Slot
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.services.asset_indicator_service import rebuild_asset_indicator_snapshots
+from portefeuille_viewer.services.history_indicator_runner import get_history_indicator_runner
 from portefeuille_viewer.signals import signals
 
 try:
@@ -51,6 +51,7 @@ class AssetIndicatorWebTab(QWidget):
         self._js_ready = False
         self._is_active = False
         self._needs_render = False
+        self._initial_run_requested = False
         self._render_timer = QTimer(self)
         self._render_timer.setSingleShot(True)
         self._render_timer.setInterval(300)
@@ -61,10 +62,18 @@ class AssetIndicatorWebTab(QWidget):
         self.btn_run = QPushButton("Run indicator", self)
         self.btn_refresh = QPushButton("Refresh view", self)
         self.status_label = QLabel("Nog niet gedraaid.", self)
+        self.storage_label = QLabel("", self)
+        self._last_run_id = None
         toolbar.addWidget(self.btn_run)
         toolbar.addWidget(self.btn_refresh)
         toolbar.addWidget(self.status_label, 1)
+        toolbar.addWidget(self.storage_label)
         layout.addLayout(toolbar)
+        self._runner = get_history_indicator_runner()
+        self._runner.started.connect(self._on_run_started)
+        self._runner.finished.connect(self._on_run_finished)
+        self._runner.failed.connect(self._on_run_failed)
+        self._runner.storage_status.connect(self._on_storage_status)
 
         if QWebEngineView is None:
             layout.addWidget(QLabel("QtWebEngine niet beschikbaar in deze runtime."))
@@ -86,18 +95,37 @@ class AssetIndicatorWebTab(QWidget):
 
     def set_active(self, active: bool):
         self._is_active = bool(active)
-        if self._is_active and self._js_ready:
+        if self._is_active:
             live_df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
-            if live_df is None:
+            if live_df is None and not self._initial_run_requested:
                 self.run_indicator()
-            else:
+            elif self._js_ready:
                 self._publish_snapshot()
         elif not self._is_active:
             self._render_timer.stop()
 
     def run_indicator(self):
-        self.status_label.setText("Indicator draait...")
-        result = rebuild_asset_indicator_snapshots()
+        self._initial_run_requested = True
+        self.btn_run.setEnabled(False)
+        self.status_label.setText("Indicator ingepland...")
+        self._runner.request(reason='indicator_tab')
+
+    def _on_run_started(self, request):
+        if 'indicators' not in request['names']:
+            return
+        self._initial_run_requested = True
+        self.status_label.setText("Indicator laden...")
+        self.btn_run.setEnabled(False)
+
+    def _on_run_finished(self, payload):
+        result = payload.get('indicator_result')
+        if result is None:
+            if 'option_overlay' in payload.get('operations', []):
+                self.status_label.setText('Profielaanvulling bijgewerkt.')
+            return
+        self._last_run_id = getattr(result, 'run_id', None)
+        self.storage_label.setText("")
+        self.btn_run.setEnabled(True)
         if result.status == "ok":
             self.status_label.setText(
                 f"OK | total {result.assets_total} | scored {result.assets_scored} | "
@@ -105,12 +133,24 @@ class AssetIndicatorWebTab(QWidget):
             )
         else:
             self.status_label.setText(f"Fout: {result.error}")
-        self._publish_snapshot()
+        self._schedule_render()
+
+    def _on_run_failed(self, message):
+        self._initial_run_requested = False
+        self.btn_run.setEnabled(True)
+        self.status_label.setText(f"Fout: {message}")
+
+    def _on_storage_status(self, payload):
+        if payload['run_id'] != self._last_run_id:
+            return
+        messages = {'queued': 'Opslag ingepland', 'saving': 'Opslaan...', 'saved': 'Opgeslagen',
+                    'already_saved': 'Historische basis al opgeslagen'}
+        self.storage_label.setText(messages.get(payload['status'], 'Niet opgeslagen: ' + payload.get('error', '')))
 
     def _on_web_loaded(self, ok: bool):
         self._js_ready = bool(ok)
         if self._js_ready:
-            self._publish_snapshot()
+            self.set_active(self._is_active)
 
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key in {
@@ -120,7 +160,7 @@ class AssetIndicatorWebTab(QWidget):
         }:
             self._schedule_render()
         elif snapshot_key == "snapshot_optie_timevalue_live":
-            self.status_label.setText("Timevalue bijgewerkt. Run indicator om theta mee te nemen.")
+            self.status_label.setText("Optiegegevens bijgewerkt; profielaanvulling wordt ververst.")
 
     def _schedule_render(self):
         if not self._is_active or not self._js_ready:
@@ -290,6 +330,7 @@ class AssetIndicatorWebTab(QWidget):
       {key:"iv_vs_realized_volatility_score", label:"IV/RV",      num:true},
       {key:"theta_opportunity_proxy_score",   label:"Asset theta proxy",  num:true},
       {key:"theta_score",                     label:"Optie theta",        num:true},
+      {key:"profile_option_status",           label:"Eigen optiegegevens", render:r=>esc(r.profile_option_status)},
       {key:"volume_score",                    label:"Volume",     num:true},
       {key:"asset_fase",                      label:"Asset fase", render:r=>`<span class="pill">${esc(r.asset_fase)}</span>`},
       {key:"primary_action",                  label:"Action",     render:r=>`<span class="pill">${esc(r.primary_action)}</span>`},

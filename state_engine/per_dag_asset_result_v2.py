@@ -10,7 +10,6 @@ import polars as pl
 import pyodbc
 
 from common import (
-    DEFAULT_DB_PATH,
     get_connection,
     get_stockdata_connection,
     normalize_numeric_columns,
@@ -104,7 +103,7 @@ class PhaseTimer:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_asset_result_v2 vanuit v2 state tabellen")
-    parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--db", required=True)
     parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")

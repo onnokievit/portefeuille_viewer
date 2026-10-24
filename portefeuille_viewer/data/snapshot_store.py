@@ -174,6 +174,8 @@ class SnapshotStore:
             "snapshot_optie_timevalue_summary": None,
             "snapshot_optie_timevalue_meta": None,
             "snapshot_asset_indicator_live": None,
+            "snapshot_asset_indicator_basis": None,
+            "snapshot_asset_indicator_generation": None,
             "snapshot_asset_indicator_summary": None,
             "snapshot_asset_indicator_meta": None,
             "test_repository_load_input_test_dataframe": None,
@@ -378,20 +380,24 @@ class SnapshotStore:
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
 
+    def capture_inputs(self):
+        """Capture on the GUI thread, where mutable scenario/cache writers run."""
+        inputs = {}
+        for key, value in self.__dict__.copy().items():
+            if key.startswith('_'):
+                continue
+            if isinstance(value, (dict, list, set)):
+                with self._live_prices_lock:
+                    value = copy.deepcopy(value)
+            inputs[key] = value
+        return inputs
+
     @contextlib.contextmanager
-    def capture_writes(self, *, freeze_inputs=False, skip_unchanged=False):
+    def capture_writes(self, *, freeze_inputs=False, skip_unchanged=False, inputs=None):
         """Stage repository loads in a worker without exposing partial snapshots."""
         values = {}
-        if freeze_inputs:
-            inputs = {}
-            for key, value in self.__dict__.copy().items():
-                if key.startswith('_'):
-                    continue
-                if isinstance(value, (dict, list, set)):
-                    with self._live_prices_lock:
-                        value = copy.deepcopy(value)
-                inputs[key] = value
-            self._captured_writes.inputs = inputs
+        if freeze_inputs or inputs is not None:
+            self._captured_writes.inputs = self.capture_inputs() if inputs is None else inputs
         self._captured_writes.skip_unchanged = skip_unchanged
         self._captured_writes.values = values
         try:

@@ -4,7 +4,7 @@ import argparse
 
 import polars as pl
 
-from common import DEFAULT_DB_PATH, get_connection, normalize_numeric_columns, normalize_uniek_id_for_compare, parse_iso_date
+from common import get_connection, normalize_numeric_columns, normalize_uniek_id_for_compare, parse_iso_date
 
 
 COMPARE_PRECISION = {
@@ -37,7 +37,7 @@ def load_table(conn, table: str, from_date, to_date, asset_rollup: str | None) -
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Vergelijk open opties v1 en v2 met normalisatie van legacy uniek_id.")
-    parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--db", required=True)
     parser.add_argument("--asset-rollup")
     parser.add_argument("--from-date", required=True)
     parser.add_argument("--to-date")

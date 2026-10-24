@@ -58,10 +58,6 @@ class Signals(QObject):
     # Emitted when aandelen projection backend filter changes. Payload: dict
     aandelenProjectionFilterChanged = Signal(dict)
 
-    # Emitted when a background projection result is ready to publish on main thread.
-    # Payload: projection/view key (str)
-    projectionPublishTick = Signal(str)
-
     # Emitted when test-order scenario definitions change (create/rename/delete).
     testOrderScenariosChanged = Signal()
 
@@ -84,7 +80,6 @@ class Signals(QObject):
     _priceUpdateFailedRequested = Signal(str)
     _priceUpdateOutputRequested = Signal(dict)
     _aandelenProjectionFilterChangedRequested = Signal(dict)
-    _projectionPublishTickRequested = Signal(str)
     _testOrderScenariosChangedRequested = Signal()
     _testOrdersEnabledChangedRequested = Signal(bool)
     _assetSubscriptionsRefreshRequestedRequested = Signal(dict)
@@ -107,7 +102,6 @@ class Signals(QObject):
             self._emit_aandelenProjectionFilterChanged,
             Qt.QueuedConnection,
         )
-        self._projectionPublishTickRequested.connect(self._emit_projectionPublishTick, Qt.QueuedConnection)
         self._testOrderScenariosChangedRequested.connect(
             self._emit_testOrderScenariosChanged,
             Qt.QueuedConnection,
@@ -177,10 +171,6 @@ class Signals(QObject):
     def _emit_aandelenProjectionFilterChanged(self, payload: dict):
         self.aandelenProjectionFilterChanged.emit(payload)
 
-    @Slot(str)
-    def _emit_projectionPublishTick(self, view_key: str):
-        self.projectionPublishTick.emit(view_key)
-
     @Slot()
     def _emit_testOrderScenariosChanged(self):
         self.testOrderScenariosChanged.emit()
@@ -231,9 +221,6 @@ class Signals(QObject):
 
     def queued_emit_aandelenProjectionFilterChanged(self, payload: dict):
         self._aandelenProjectionFilterChangedRequested.emit(payload)
-
-    def queued_emit_projectionPublishTick(self, view_key: str):
-        self._projectionPublishTickRequested.emit(view_key)
 
     def queued_emit_testOrderScenariosChanged(self):
         self._testOrderScenariosChangedRequested.emit()

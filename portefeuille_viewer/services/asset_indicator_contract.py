@@ -105,6 +105,8 @@ ASSET_INDICATOR_LIVE_SCHEMA: Final[dict[str, pl.DataType]] = {
     "iv_vs_realized_volatility_score": pl.Float64,
     "theta_opportunity_proxy_score": pl.Float64,
     "theta_score": pl.Float64,
+    "profile_option_status": pl.Utf8,
+    "profile_option_signature": pl.Utf8,
     "volume_score": pl.Float64,
     "vulnerability_score": pl.Float64,
     "liquidity_score": pl.Float64,

@@ -32,3 +32,11 @@ De afzonderlijke, handmatig gestarte migratie is op de echte STOCKDATA uitgevoer
 - Praktijkmeting met live koersen en meerdere profielen; resultaten en belasting volgen.
 - Verdere legacyverwijdering en het uitschakelen van alternatieve engine-core-routes vallen buiten deze gerichte optimalisatie.
 - Fallback-delta valt buiten deze wijziging.
+
+## Correcties snapshotinvoer en async-afhandeling
+
+- De projection-worker maakt de kopie van veranderlijke cache- en scenario-invoer op zijn Qt-eigenaarthread voordat de rekenthread start. De worker gebruikt vervolgens uitsluitend die vastgelegde snapshotinvoer. Nieuwe verzoeken worden pas bij hun eigen start vastgelegd, zodat een vervolgverzoek actuele invoer krijgt. De live-prijslock blijft de gelijktijdige prijsbijwerking beschermen. De deepcopy vindt niet meer plaats terwijl de UI haar dictionaries kan muteren. Het kopieerwerk zelf is nog een meetpunt voor de geplande UI-belastinganalyse.
+- `force_sync` is verwijderd. De startupseed van de optionele tijdswaarde-overlay gebruikt `on_published`: pas na publicatie op de Qt-thread wordt het resultaat gecontroleerd en de seed bevestigd. Bij het samenvoegen van verzoeken blijven alle callbacks behouden. Een mislukte projectierun meldt een fout en bevestigt geen oud resultaat als nieuwe seed.
+- De oude aandelen-specifieke async-queue, locks, rekenthreads, drain-handler en `projectionPublishTick`-signalen zijn verwijderd. De initiële aandelenberekening blijft synchroon vóór de worker wordt gestart; daarna is er één workerpad.
+- Alle zeven state-engine-CLI's vereisen `--db`. De hardcoded Onno-fallback is ook uit `common.get_connection` verwijderd. De app-runner gaf het pad al expliciet mee.
+- Controles: volledige suite van 126 tests geslaagd, plus een aanvullende regressietest voor een mislukte projectie. De achttien tests voor scheduling, verversbeleid en input/publicatie zijn na de laatste wijziging opnieuw geslaagd. Offline start en projectiepariteit voor Onno, Muriel en Quinten geslaagd met de optionele tijdswaarde-overlay aan. Compilecontrole geslaagd. Productiedatabases niet gewijzigd.

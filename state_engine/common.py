@@ -9,10 +9,7 @@ import polars as pl
 import pyodbc
 
 
-DEFAULT_DB_PATH = r"C:\Users\onno\OneDrive\Beleggen\2025 - portefeuille database 02.03 - ONNO.accdb"
-
-
-def get_connection(db_path: str = DEFAULT_DB_PATH) -> pyodbc.Connection:
+def get_connection(db_path: str) -> pyodbc.Connection:
     conn_str = r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=" + db_path
     return pyodbc.connect(conn_str)
 
