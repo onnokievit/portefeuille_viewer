@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import inspect
 import os
 import time
@@ -90,6 +91,21 @@ class SnapshotStore:
     state_engine_runner: Any | None
     _last_update_ts: dict[str, float]
     _live_prices_lock: threading.Lock
+
+    def __getattribute__(self, name):
+        if not name.startswith('_'):
+            try:
+                local = object.__getattribute__(self, '_captured_writes')
+                frozen = getattr(local, 'inputs', None)
+                if frozen is not None:
+                    staged = getattr(local, 'values', {})
+                    if name in staged:
+                        return staged[name]
+                    if name in frozen:
+                        return frozen[name]
+            except AttributeError:
+                pass
+        return object.__getattribute__(self, name)
 
     def __init__(self):
         self._live_prices_lock = threading.Lock()
@@ -363,14 +379,27 @@ class SnapshotStore:
         return " \n ".join(parts) if parts else "(geen data geladen)"
 
     @contextlib.contextmanager
-    def capture_writes(self):
+    def capture_writes(self, *, freeze_inputs=False, skip_unchanged=False):
         """Stage repository loads in a worker without exposing partial snapshots."""
         values = {}
+        if freeze_inputs:
+            inputs = {}
+            for key, value in self.__dict__.copy().items():
+                if key.startswith('_'):
+                    continue
+                if isinstance(value, (dict, list, set)):
+                    with self._live_prices_lock:
+                        value = copy.deepcopy(value)
+                inputs[key] = value
+            self._captured_writes.inputs = inputs
+        self._captured_writes.skip_unchanged = skip_unchanged
         self._captured_writes.values = values
         try:
             yield values
         finally:
             del self._captured_writes.values
+            self._captured_writes.__dict__.pop('inputs', None)
+            self._captured_writes.__dict__.pop('skip_unchanged', None)
 
     def publish_batch(self, values):
         # Called on the Qt thread: all frames exist before any observer runs.
@@ -380,6 +409,13 @@ class SnapshotStore:
         from portefeuille_viewer.signals import signals
         for key in values:
             signals.queued_emit_snapshotUpdated(key)
+
+    def safe_write_if_changed(self, attr_name, value):
+        previous = getattr(self, attr_name, None)
+        if isinstance(value, pl.DataFrame) and isinstance(previous, pl.DataFrame) and previous.equals(value):
+            return False
+        self.safe_write(attr_name, value)
+        return True
 
     def safe_write(self, attr_name: str, value):
         """Schrijf een snapshot-attribuut op een veilige manier.
@@ -392,6 +428,10 @@ class SnapshotStore:
         """
         staged = getattr(self._captured_writes, "values", None)
         if staged is not None:
+            previous = getattr(self, attr_name, None)
+            if (getattr(self._captured_writes, 'skip_unchanged', False) and
+                isinstance(value, pl.DataFrame) and isinstance(previous, pl.DataFrame) and previous.equals(value)):
+                return
             staged[attr_name] = value
             return
         t0 = time.perf_counter()

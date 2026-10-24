@@ -127,6 +127,8 @@ class OptionTimevalueService(QObject):
         self._resolve_wait_sec = max(
             0.1, float(os.getenv("OPTION_TIMEVALUE_RESOLVE_WAIT_SEC", "1.0"))
         )
+        self._publish_dirty = True
+        self._last_publish_date = None
         self._log_enabled = _clean(os.getenv("OPTION_TIMEVALUE_LOG", "0")) == "1"
         self._rebuild_timer = QTimer(self)
         self._rebuild_timer.setSingleShot(True)
@@ -176,7 +178,8 @@ class OptionTimevalueService(QObject):
             if self._rebuild_inflight:
                 self._rebuild_queued = True
                 return
-        self._rebuild_timer.start()
+        from .projection_worker import start_bounded_timer
+        start_bounded_timer(self._rebuild_timer)
 
     def shutdown(self):
         if self._rebuild_timer.isActive():
@@ -256,7 +259,9 @@ class OptionTimevalueService(QObject):
             self.schedule_rebuild()
             return
         if snapshot_key in self._snapshot_publish_keys:
-            self._publish_timer.start()
+            self._publish_dirty = True
+            from .projection_worker import start_bounded_timer
+            start_bounded_timer(self._publish_timer)
 
     def _clear_unresolved(self, reason: str):
         if self._unresolved_series:
@@ -299,6 +304,7 @@ class OptionTimevalueService(QObject):
         field = _clean(payload.get("field"))
         with self._lock:
             d = self._ticks.setdefault(sid, {})
+            previous = dict(d)
             if field:
                 val = _to_float(payload.get("value"))
                 if val is not None:
@@ -307,7 +313,10 @@ class OptionTimevalueService(QObject):
                 gv = _to_float(payload.get(gk))
                 if gv is not None:
                     d[gk] = gv
-        self._publish_timer.start()
+        if d != previous:
+            self._publish_dirty = True
+            from .projection_worker import start_bounded_timer
+            start_bounded_timer(self._publish_timer)
 
     def _connect_stockdb(self):
         return repository.get_stockdata_connection()
@@ -917,14 +926,19 @@ class OptionTimevalueService(QObject):
             queued = self._rebuild_queued
             self._rebuild_queued = False
         if queued:
-            self._rebuild_timer.start()
+            from .projection_worker import start_bounded_timer
+            start_bounded_timer(self._rebuild_timer)
 
     def _publish_snapshot(self, trigger: str = "direct"):
+        if trigger == 'full_publish_timer' and not self._publish_dirty and self._last_publish_date == date.today():
+            return
+        self._publish_dirty = False
+        self._last_publish_date = date.today()
         t0 = time.perf_counter()
         rows = self._rows or []
         if not rows:
-            SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_live", pl.DataFrame())
-            SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_summary", pl.DataFrame())
+            SNAPSHOT_STORE.safe_write_if_changed("snapshot_optie_timevalue_live", pl.DataFrame())
+            SNAPSHOT_STORE.safe_write_if_changed("snapshot_optie_timevalue_summary", pl.DataFrame())
             SNAPSHOT_STORE.safe_write(
                 "snapshot_optie_timevalue_meta",
                 pl.DataFrame(
@@ -1078,8 +1092,8 @@ class OptionTimevalueService(QObject):
             schema={"ccy": pl.Utf8, "time_value_abs": pl.Float64},
             infer_schema_length=None,
         )
-        SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_live", live_df)
-        SNAPSHOT_STORE.safe_write("snapshot_optie_timevalue_summary", summary_df)
+        SNAPSHOT_STORE.safe_write_if_changed("snapshot_optie_timevalue_live", live_df)
+        SNAPSHOT_STORE.safe_write_if_changed("snapshot_optie_timevalue_summary", summary_df)
         SNAPSHOT_STORE.safe_write(
             "snapshot_optie_timevalue_meta",
             pl.DataFrame(

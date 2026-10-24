@@ -27,6 +27,8 @@ from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
 from portefeuille_viewer.config import get_settings, get_stockdata_db_path
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.services.shared_quote_client import SharedPriceFeedService as PriceFeedService
+from portefeuille_viewer.services.projection_worker import start_bounded_timer
+from portefeuille_viewer.services.refresh_policy import SnapshotCoverage, LIVE_SOURCES, shared_refresh_plan
 from portefeuille_viewer.services.historical_price_update_runner import HistoricalPriceUpdateRunner
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
@@ -43,7 +45,6 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
 from portefeuille_viewer.data.live_aggregator_sprinters import LiveAggregatorSprinters
-from portefeuille_viewer.data.live_aggregator_asset_prices import start_live_price_updater
 from portefeuille_viewer.data.test_order_repository import flush_dirty_test_orders_to_db, load_test_orders_cache_from_db
 from portefeuille_viewer.projections import (
     AandelenProjectionV2,
@@ -752,6 +753,9 @@ def _drain_aandelen_projection_pending():
 
 
 def refresh_aandelen_projection(reason: str, changed_keys: set[str] | None = None, force_sync: bool = False):
+    if _PROJECTION_WORKER is not None:
+        _runtime_recompute_selected({'aandelen_v2'}, reason, changed_keys)
+        return
     global _AANDELEN_PROJECTION_INFLIGHT, _AANDELEN_PROJECTION_QUEUED_REQ
     if aandelen_projection_v2 is None:
         return
@@ -775,14 +779,23 @@ def refresh_aandelen_projection(reason: str, changed_keys: set[str] | None = Non
 
 
 def refresh_opties_open_projection(reason: str):
+    if _PROJECTION_WORKER is not None:
+        _runtime_recompute_selected({'opties_open_v2'}, reason)
+        return
     _refresh_projection_sync(_CFG_OPTIES, reason)
 
 
 def refresh_optie_tijdswaarde_projection(reason: str):
+    if _PROJECTION_WORKER is not None:
+        _runtime_recompute_selected({'optie_tijdswaarde_v2'}, reason)
+        return
     _refresh_projection_sync(_CFG_TIJDSWAARDE, reason)
 
 
 def refresh_sprinters_open_projection(reason: str):
+    if _PROJECTION_WORKER is not None:
+        _runtime_recompute_selected({'sprinters_open_v2'}, reason)
+        return
     _refresh_projection_sync(_CFG_SPRINTERS, reason)
 
 
@@ -816,20 +829,44 @@ def _publish_runtime_projection_results(results, reason: str):
             _publish_projection_from_runtime(cfg, recompute_ms, reason)
 
 
+_PROJECTION_WORKER = None
+_PROJECTION_COVERAGE = SnapshotCoverage()
+
+
+def _perform_projection_work(request):
+    if request['all']:
+        _runtime_recompute_all_sync(request['reason'])
+    else:
+        _runtime_recompute_selected_sync(request['names'], request['reason'], request['keys'])
+
+
 def _runtime_recompute_all(reason: str):
+    if _PROJECTION_WORKER is None:
+        return _runtime_recompute_all_sync(reason)
+    _PROJECTION_COVERAGE.mark(LIVE_SOURCES, SNAPSHOT_STORE)
+    _PROJECTION_WORKER.submit('runtime', {'all': True, 'names': set(), 'keys': set(), 'reason': reason})
+
+
+def _runtime_recompute_selected(projection_names, reason, changed_keys=None):
+    if _PROJECTION_WORKER is None:
+        return _runtime_recompute_selected_sync(projection_names, reason, changed_keys)
+    _PROJECTION_COVERAGE.mark(projection_names, SNAPSHOT_STORE)
+    _PROJECTION_WORKER.submit('runtime', {'all': False, 'names': set(projection_names),
+        'keys': set(changed_keys or []), 'reason': reason})
+
+
+def _runtime_recompute_all_sync(reason: str):
     if not ENABLE_ENGINE_CORE_RUNTIME:
         return
     results = engine_core_runtime.projection_bus.run(set(), topic=None)
     _publish_runtime_projection_results(results, reason=reason)
 
 
-def _runtime_recompute_selected(
+def _runtime_recompute_selected_sync(
     projection_names: set[str],
     reason: str,
     changed_keys: set[str] | None = None,
 ):
-    if not ENABLE_ENGINE_CORE_RUNTIME:
-        return
     selected = {str(name).strip() for name in (projection_names or set()) if str(name).strip()}
     if not selected:
         return
@@ -881,6 +918,7 @@ def _runtime_recompute_selected(
 
 def _run_exclusive_live_recompute(snapshot_key: str):
     pending = _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.pop(snapshot_key, set())
+    pending = {name for name in pending if _PROJECTION_COVERAGE.needs_refresh(name, SNAPSHOT_STORE)}
     if not pending:
         return
     _runtime_recompute_selected(pending, reason=f"snapshot:{snapshot_key}:debounced")
@@ -888,6 +926,7 @@ def _run_exclusive_live_recompute(snapshot_key: str):
 
 def _queue_exclusive_live_recompute(snapshot_key: str, projection_names: set[str]):
     selected = {str(name).strip() for name in (projection_names or set()) if str(name).strip()}
+    selected = {name for name in selected if _PROJECTION_COVERAGE.needs_refresh(name, SNAPSHOT_STORE)}
     if not selected:
         return
     timer = _EXCLUSIVE_LIVE_RECOMPUTE_TIMERS.get(snapshot_key)
@@ -896,7 +935,7 @@ def _queue_exclusive_live_recompute(snapshot_key: str, projection_names: set[str
         return
     pending = _EXCLUSIVE_LIVE_RECOMPUTE_PENDING.setdefault(snapshot_key, set())
     pending.update(selected)
-    timer.start()
+    start_bounded_timer(timer)
 
 
 def _on_snapshot_updated_engine_core(snapshot_key: str):
@@ -1199,7 +1238,7 @@ def main():
     app = cast(QApplication | None, existing_app)
     if app is None:
         app = QApplication(sys.argv)
-    _AANDELEN_PROJECTION_ASYNC_ENABLED = True
+    _AANDELEN_PROJECTION_ASYNC_ENABLED = False
     signals.projectionPublishTick.connect(
         lambda key: _drain_aandelen_projection_pending() if key == "aandelen_v2" else None
     )
@@ -1226,6 +1265,12 @@ def main():
         if ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
             _log("[engine-core] exclusive mode enabled via ENGINE_CORE_RUNTIME_EXCLUSIVE_V1=1")
     refresh_everything()
+    global _PROJECTION_WORKER
+    from portefeuille_viewer.services.projection_worker import ProjectionWorker
+    _PROJECTION_WORKER = ProjectionWorker(_perform_projection_work, app)
+    _PROJECTION_WORKER.failed.connect(lambda error: _log('[projection-worker] ' + error))
+    _PROJECTION_WORKER.failed.connect(lambda error: _PROJECTION_COVERAGE.clear())
+    app.aboutToQuit.connect(_PROJECTION_WORKER.shutdown)
     state_engine_runner = StateEngineRunner(fallback_refresh=refresh_everything)
     SNAPSHOT_STORE.state_engine_runner = state_engine_runner
     historical_price_update_runner = HistoricalPriceUpdateRunner()
@@ -1312,16 +1357,24 @@ def main():
     snapshot_counter_timer.setInterval(60_000)
     orders_refresh_timer: QTimer | None = None
     def _run_debounced_refresh():
-        refresh_transaction_derived_snapshots(dict(pending_refresh_payload))
+        payload = dict(pending_refresh_payload)
+        # Orders already refreshed their transaction inputs via ordersCommitted.
+        # The state-engine completion only changes derived daily results.
+        if not ENABLE_ORDERS_COMMIT_FULL_REFRESH:
+            refresh_transaction_derived_snapshots(payload)
+        _refresh_asset_result_snapshots(payload)
 
     def _run_opties_projection_refresh():
-        refresh_opties_open_projection("live_opties_snapshot")
+        if _PROJECTION_COVERAGE.needs_refresh('opties_open_v2', SNAPSHOT_STORE):
+            refresh_opties_open_projection("live_opties_snapshot")
 
     def _run_optie_tijdswaarde_projection_refresh():
-        refresh_optie_tijdswaarde_projection("live_optie_tijdswaarde_snapshot")
+        if _PROJECTION_COVERAGE.needs_refresh('optie_tijdswaarde_v2', SNAPSHOT_STORE):
+            refresh_optie_tijdswaarde_projection("live_optie_tijdswaarde_snapshot")
 
     def _run_sprinters_projection_refresh():
-        refresh_sprinters_open_projection("live_sprinters_snapshot")
+        if _PROJECTION_COVERAGE.needs_refresh('sprinters_open_v2', SNAPSHOT_STORE):
+            refresh_sprinters_open_projection("live_sprinters_snapshot")
 
     def _schedule_snapshot_refresh(payload):
         if (payload or {}).get("status") != "ok":
@@ -1334,8 +1387,8 @@ def main():
             return
         pending_refresh_payload.clear()
         pending_refresh_payload.update(payload or {})
-        # Restart timer so bursts collapse into one refresh.
-        refresh_timer.start()
+        # Bundle bursts without postponing the first event's deadline.
+        start_bounded_timer(refresh_timer)
 
     def _refresh_asset_result_snapshots(payload: dict | None):
         if (payload or {}).get("status") != "ok":
@@ -1364,17 +1417,17 @@ def main():
     def _on_snapshot_updated_for_opties_projection(snapshot_key: str):
         if snapshot_key != "aggregator_snapshot_load_open_opties_from_tx_live":
             return
-        opties_projection_refresh_timer.start()
+        start_bounded_timer(opties_projection_refresh_timer)
 
     def _on_snapshot_updated_for_optie_tijdswaarde_projection(snapshot_key: str):
         if snapshot_key != "snapshot_optie_timevalue_live":
             return
-        optie_tijdswaarde_projection_refresh_timer.start()
+        start_bounded_timer(optie_tijdswaarde_projection_refresh_timer)
 
     def _on_snapshot_updated_for_sprinters_projection(snapshot_key: str):
         if snapshot_key != "aggregator_snapshot_open_sprinters_live":
             return
-        sprinters_projection_refresh_timer.start()
+        start_bounded_timer(sprinters_projection_refresh_timer)
 
     def _on_snapshot_updated_counter(snapshot_key: str):
         snapshot_counter[str(snapshot_key or "")] += 1
@@ -1440,6 +1493,7 @@ def main():
             _log(f"[subscriptions] refresh failed after {reason}: {type(exc).__name__}: {exc}")
 
     def _on_database_changed_refresh(db_name: str):
+        _PROJECTION_COVERAGE.clear()
         _reset_aandelen_tv_overlay_regime(f"database_changed:{db_name}")
         refresh_timer.stop()
         opties_projection_refresh_timer.stop()
@@ -1485,7 +1539,6 @@ def main():
     else:
         _log("[orders-refresh] disabled (no full refresh on ordersCommitted)")
     signals.stateRebuildFinished.connect(_schedule_snapshot_refresh)
-    signals.stateRebuildFinished.connect(_refresh_asset_result_snapshots)
     signals.snapshotUpdated.connect(_on_snapshot_updated_counter)
     if not ENABLE_ENGINE_CORE_RUNTIME_EXCLUSIVE:
         signals.snapshotUpdated.connect(_on_snapshot_updated_for_opties_projection)
@@ -1527,7 +1580,6 @@ def main():
         settings.get_ib_port(),
         settings.get_ib_client_id()
     )
-    stop_event, thread = start_live_price_updater(price_feed)
     portfolio_engine = PortfolioEngine(
         price_feed,
         live_aggregator_aandelen=live_aggregator_aandelen,
@@ -1536,7 +1588,7 @@ def main():
     )
     option_timevalue_service = OptionTimevalueService(price_feed, get_stockdata_db_path())
     signals.databaseChanged.connect(_on_database_changed_refresh)
-    w = MainWindow(portfolio_engine, price_feed, live_price_updater_stop_event=stop_event)
+    w = MainWindow(portfolio_engine, price_feed)
     setattr(w, "option_timevalue_service", option_timevalue_service)
     setattr(w, "asset_volatility_history_update_runner", asset_volatility_history_update_runner)
     w.show()
@@ -1568,18 +1620,27 @@ def main():
     shared_data_watcher = SharedDataWatcher(w)
     def _shared_refresh(domains):
         try:
+            plan = shared_refresh_plan(domains)
             from portefeuille_viewer.services.year_result_vs_indices_service import clear_year_result_vs_indices_cache
             clear_year_result_vs_indices_cache()
-            if "asset_rollup_data" in domains:
+            if plan['metadata']:
                 repository.load_reference_lists()
-            repository.build_repository_active_asset_rollup_data()
-            _refresh_phase_live_aggregators(force_publish=True)
-            _refresh_phase_portfolio_values()
-            _refresh_phase_projections("shared_stockdata_changed")
+                repository.build_repository_active_asset_rollup_data()
+            for name, aggregator in (('aandelen', live_aggregator_aandelen),
+                                     ('opties', live_aggregator_opties),
+                                     ('sprinters', live_aggregator_sprinters)):
+                if name in plan['aggregators']:
+                    aggregator.process_live_update(force_publish=True)
+            if plan['portfolio']:
+                _refresh_phase_portfolio_values()
+            if plan['projections']:
+                _refresh_phase_projections("shared_stockdata_changed")
             _refresh_active_scenario_overlays()
-            portfolio_engine.start_subscriptions()
-            option_timevalue_service.schedule_rebuild({"reason": "shared_stockdata_changed"})
-            if "historical_data_correct" in domains:
+            if plan['subscriptions']:
+                portfolio_engine.start_subscriptions()
+            if plan['option_rebuild']:
+                option_timevalue_service.schedule_rebuild({"reason": "shared_stockdata_changed"})
+            if plan['catchup']:
                 state_engine_runner.request_daily_full_catchup_for_active_db()
             _log("[shared-data] refreshed: " + ", ".join(sorted(domains)))
             w.statusBar().showMessage("Gedeelde STOCKDATA-gegevens ververst", 5000)

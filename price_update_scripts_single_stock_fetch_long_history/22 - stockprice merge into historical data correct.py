@@ -7,6 +7,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+from portefeuille_viewer.data.historical_integrity import assert_unambiguous_source
 from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
 
 MAIN_TABLE = "historical_data_correct"
@@ -51,7 +52,7 @@ def merge_delete_append(cur):
         )
     """
     cols = ",".join(f"[{c}]" for c in COLUMNS)
-    insert_q = f"INSERT INTO {MAIN_TABLE} ({cols}) SELECT {cols} FROM {TEMP_TABLE}"
+    insert_q = f"INSERT INTO {MAIN_TABLE} ({cols}) SELECT DISTINCT {cols} FROM {TEMP_TABLE}"
 
     cur.execute(delete_q)
     try:
@@ -85,7 +86,7 @@ def merge_update_insert(cur):
 
     insert_q = f"""
         INSERT INTO {MAIN_TABLE} ({cols})
-        SELECT {cols}
+        SELECT DISTINCT {cols}
         FROM {TEMP_TABLE} AS temp
         WHERE NOT EXISTS (
             SELECT 1
@@ -113,6 +114,8 @@ def main():
     t0 = time.time()
     with get_stockdata_connection() as conn:
         conn.autocommit = False  # één grote transactie
+        conn.begin_write()
+        assert_unambiguous_source(conn, TEMP_TABLE, COLUMNS)
         cur = conn.cursor()
 
         if CREATE_INDEXES_FIRST_TIME:

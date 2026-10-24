@@ -1,6 +1,6 @@
 import os
 import time
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, QTimer
 import polars as pl
 from portefeuille_viewer.data.live_aggregator_aandelen import LiveAggregatorAandelen
 from portefeuille_viewer.data.live_aggregator_opties import LiveAggregatorOpties
@@ -25,8 +25,6 @@ class PortfolioEngine(QObject):
     - Direct data opslag
     """
     
-    # Signal emitted when any portfolio data is updated
-    dataUpdated = Signal()
     
     def __init__(
         self,
@@ -58,33 +56,6 @@ class PortfolioEngine(QObject):
         if self.pricefeed:
             self.pricefeed.priceUpdated.connect(self._on_live_price)
         
-            # Nieuw: timer en flag voor dataUpdated batching
-            self._pending_data_update = False
-            self._data_update_timer = QTimer()
-            self._data_update_timer.setInterval(10000)
-            self._data_update_timer.setSingleShot(True)
-            self._data_update_timer.timeout.connect(self._emit_data_updated)
-
-            # Connect aggregator signals to single slot voor batching
-            self.live_aggregator_aandelen.aandelenUpdated.connect(self._on_aggregator_updated)
-            if self.live_aggregator_opties:
-                self.live_aggregator_opties.optiesUpdated.connect(self._on_aggregator_updated)
-            if self.live_aggregator_sprinters:
-                self.live_aggregator_sprinters.sprintersUpdated.connect(self._on_aggregator_updated)
-    
-    def _on_aggregator_updated(self):
-        self._pending_data_update = True
-        if not self._data_update_timer.isActive():
-            self._data_update_timer.start()
-
-    def _emit_data_updated(self):
-        if self._pending_data_update:
-            self.dataUpdated.emit()
-            self._pending_data_update = False
-            #from datetime import datetime
-            #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: PortfolioEngine - dataUpdated signal emitted after batching")
-    print("PortfolioEngine: Initialized as orchestrator with LiveAggregatorAandelen and LiveAggregatorOpties")
-    
     def _on_live_price(self, symbol, currency, price):
         """
         Handle incoming live price updates.
