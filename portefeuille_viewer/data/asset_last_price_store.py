@@ -91,7 +91,7 @@ class AssetLastPriceStore:
         with self._lock:
             return dict(self._prices)
 
-    def update_price(self, sym: str, cur: str, price: float | None) -> None:
+    def update_price(self, sym: str, cur: str, price: float | None, *, persist: bool = True) -> None:
         if price in (None, 0.0):
             return
         try:
@@ -106,7 +106,7 @@ class AssetLastPriceStore:
         with self._lock:
             current = self._prices.get(key)
             self._prices[key] = px
-            if current != px:
+            if current != px and persist:
                 self._dirty_keys.add(key)
         SNAPSHOT_STORE.update_live_prices({key: px})
 

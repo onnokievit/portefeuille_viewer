@@ -141,7 +141,8 @@ def load_future_targets(asset_filter: set[str] | None = None) -> list[FutureTarg
 
 def fetch_target(target: FutureTarget, days: int, client_id: int) -> pd.DataFrame:
     app = FutureHistApp()
-    app.connect("127.0.0.1", 7496, clientId=client_id)
+    from portefeuille_viewer.services.ib_connection_guard import connect_ib
+    client_id = connect_ib(app, "127.0.0.1", 7496, client_id)
     t = threading.Thread(target=app.run, daemon=True)
     t.start()
     time.sleep(1.0)

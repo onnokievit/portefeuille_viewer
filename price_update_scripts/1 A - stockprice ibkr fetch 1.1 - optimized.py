@@ -348,7 +348,8 @@ def main():
     # -------- Start IB connection --------
     app = TestApp()
     client_id = random.randint(1, 10000)
-    app.connect("127.0.0.1", 7496, clientId=client_id)
+    from portefeuille_viewer.services.ib_connection_guard import connect_ib
+    client_id = connect_ib(app, "127.0.0.1", 7496, client_id)
     print(f"Using client ID: {client_id}")
     print("serverVersion:%s connectionTime:%s" % (app.serverVersion(), app.twsConnectionTime()))
 

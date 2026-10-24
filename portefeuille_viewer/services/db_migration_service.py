@@ -20,7 +20,10 @@ class MigrationResult:
 
 class DbMigrationService:
     """
-    Minimal multi-user DB migration bootstrap.
+    Legacy migration bootstrap, uitsluitend voor handmatig onderhoud.
+
+    Wordt niet door de normale appstart aangeroepen. Gebruik het afzonderlijke
+    devtools/migrate_user_database.py voor een expliciet gekozen database.
 
     Rules:
     - Additive only.

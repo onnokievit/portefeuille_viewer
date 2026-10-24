@@ -7,6 +7,8 @@ from pathlib import Path
 
 import polars as pl
 
+from portefeuille_viewer.config.process_lock import ProcessLock, canonical_path
+
 
 def chain_path(parquet_dir: Path, asset_rollup: str) -> Path:
     safe = "".join(ch if ch.isalnum() or ch in {"_", "-", "."} else "_" for ch in asset_rollup.strip().upper())
@@ -14,6 +16,11 @@ def chain_path(parquet_dir: Path, asset_rollup: str) -> Path:
 
 
 def merge_and_write_chain(parquet_dir: Path, asset_rollup: str, new_rows: list[dict]) -> tuple[Path, int, int, int]:
+    with ProcessLock('parquet:' + canonical_path(chain_path(parquet_dir, asset_rollup))):
+        return _merge_and_write_chain(parquet_dir, asset_rollup, new_rows)
+
+
+def _merge_and_write_chain(parquet_dir, asset_rollup, new_rows):
     parquet_dir.mkdir(parents=True, exist_ok=True)
     path = chain_path(parquet_dir, asset_rollup)
     existing_rows: list[dict] = []
@@ -62,7 +69,8 @@ def merge_and_write_chain(parquet_dir: Path, asset_rollup: str, new_rows: list[d
 def read_chain(path: Path) -> pl.DataFrame:
     if not path.exists():
         return pl.DataFrame()
-    return pl.read_parquet(path)
+    with ProcessLock("parquet:" + canonical_path(path)):
+        return pl.read_parquet(path)
 
 
 def chain_summary(path: Path) -> dict[str, object]:

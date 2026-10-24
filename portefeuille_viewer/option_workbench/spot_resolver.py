@@ -140,7 +140,8 @@ def fetch_ibkr_spot(
     currency = str(asset.get("ib_currency") or "").upper()
     exchange = _spot_exchange(str(asset.get("exchange") or ""), currency)
     try:
-        app.connect(host, int(port), client_id)
+        from portefeuille_viewer.services.ib_connection_guard import connect_ib
+        client_id = connect_ib(app, host, int(port), client_id)
         thread = threading.Thread(target=app.run, daemon=True)
         thread.start()
         if not app.ready.wait(timeout=min(10.0, max(1.0, timeout_sec))):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from uuid import uuid4
 from datetime import datetime
 from pathlib import Path
 
@@ -10,13 +11,13 @@ from .iv_models import SnapshotPaths
 
 
 def snapshot_paths(parquet_dir: str | Path, asset_rollup: str, snapshot_ts: datetime | None = None) -> SnapshotPaths:
-    stamp = (snapshot_ts or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    stamp = (snapshot_ts or datetime.now()).strftime("%Y%m%d_%H%M%S_%f")
     asset = asset_rollup.upper()
     root = Path(parquet_dir) / "option_market_snapshots" / f"asset_rollup={asset}" / f"date={stamp[:8]}"
     latest_dir = Path(parquet_dir) / "option_market_latest"
     return SnapshotPaths(
         root_dir=root,
-        snapshot_path=root / f"IV_{asset}_{stamp}.parquet",
+        snapshot_path=root / f"IV_{asset}_{stamp}_{uuid4().hex[:8]}.parquet",
         latest_path=latest_dir / f"LATEST_{asset}.parquet",
     )
 
@@ -38,6 +39,9 @@ def load_latest(parquet_dir: str | Path, asset_rollup: str) -> pl.DataFrame:
 
 
 def _atomic_write(df: pl.DataFrame, path: Path) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    df.write_parquet(tmp)
-    os.replace(tmp, path)
+    tmp = path.with_name(path.name + "." + uuid4().hex + ".tmp")
+    try:
+        df.write_parquet(tmp)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)

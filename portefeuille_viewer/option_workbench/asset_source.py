@@ -11,7 +11,8 @@ TRUE_TEXT = {"1", "-1", "true", "yes", "ja", "j", "y", "on", "waar"}
 
 
 def connect_access(db_path: str | Path):
-    return pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
+    from portefeuille_viewer.data.shared_database import connect_stockdata
+    return connect_stockdata(db_path)
 
 
 def truthy(value: object) -> bool:

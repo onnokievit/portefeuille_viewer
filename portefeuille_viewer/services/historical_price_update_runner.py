@@ -19,6 +19,8 @@ class HistoricalPriceUpdateRunner(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        from portefeuille_viewer.services.shared_tasks import coordinate_runner
+        coordinate_runner(self, global_price_signals=True)
         self._process: QProcess | None = None
         self._stdout_chunks: list[bytes] = []
         self._stderr_chunks: list[bytes] = []
@@ -33,9 +35,14 @@ class HistoricalPriceUpdateRunner(QObject):
     def request_update(self, *, reason: str = "startup_price_update", force: bool = False) -> None:
         if self._process is not None:
             return
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
 
         script_path = Path(__file__).resolve().parents[2] / "price_update_scripts" / "startup_price_update.py"
         process = QProcess(self)
+        from portefeuille_viewer.services.worker_guard import protect_worker
+        protect_worker(process)
         process.setProgram(sys.executable)
         args = [str(script_path), "--reason", str(reason or "startup_price_update")]
         if force:

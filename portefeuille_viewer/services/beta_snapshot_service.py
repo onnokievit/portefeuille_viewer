@@ -299,8 +299,8 @@ def _ensure_beta_snapshot_table(conn: pyodbc.Connection) -> None:
 def _replace_snapshot_rows(conn: pyodbc.Connection, rows: list[tuple]) -> None:
     cur = conn.cursor()
     cur.execute(f"DELETE FROM {BETA_SNAPSHOT_TABLE}")
-    conn.commit()
     if not rows:
+        conn.commit()
         return
     cur.executemany(
         f"""

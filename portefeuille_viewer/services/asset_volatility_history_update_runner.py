@@ -27,6 +27,8 @@ class AssetVolatilityHistoryUpdateRunner(QObject):
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
+        from portefeuille_viewer.services.shared_tasks import coordinate_runner
+        coordinate_runner(self)
         self.host = host
         self.port = int(port)
         self.client_id = int(client_id)
@@ -44,9 +46,14 @@ class AssetVolatilityHistoryUpdateRunner(QObject):
     def request_update(self, *, reason: str = "asset_volatility_history_update") -> bool:
         if self._process is not None:
             return False
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
 
         script_path = Path(__file__).resolve().parents[2] / "price_update_scripts" / "fetch_asset_volatility_history_to_db.py"
         process = QProcess(self)
+        from portefeuille_viewer.services.worker_guard import protect_worker
+        protect_worker(process)
         process.setProgram(sys.executable)
         process.setArguments(
             [

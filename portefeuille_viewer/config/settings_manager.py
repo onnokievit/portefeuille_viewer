@@ -5,6 +5,8 @@ Centraal beheer voor applicatie settings via een gedeelde en lokale ini.
 import configparser
 import hashlib
 import json
+import threading
+from .profile_storage import ProfileStorage, config_values, read_config
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -88,7 +90,14 @@ class SettingsManager:
         return result
 
     def set_market_data_settings(self, values):
-        """Update only this local section; do not rewrite shared settings."""
+        """Persist the scheduler budget; profile sessions share this section."""
+        if getattr(self, "_profile_storage", None) is not None:
+            if not self.config.has_section("market_data"):
+                self.config.add_section("market_data")
+            for key in self.get_market_data_settings():
+                self.config.set("market_data", key, str(max(1, int(values[key]))))
+            self.save()
+            return
         import os
         import tempfile
         local = configparser.ConfigParser()
@@ -122,18 +131,34 @@ class SettingsManager:
         self.save()
     """Centraal beheer voor alle applicatie settings."""
     
-    def __init__(self):
+    def __init__(self, profile=None, database_name=None, data_root=None, machine_id=None):
+        self.profile_name = profile
+        self.profile_database = database_name
+        self._save_lock = threading.RLock()
+        self._profile_storage = (ProfileStorage(profile, SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH,
+                                                root=data_root, machine_id=machine_id)
+                                 if profile is not None else None)
         self.config = configparser.ConfigParser()
         self._load_config()
+        if profile is not None:
+            self._bound_stockdata_path = self.get_stockdata_db_path()
     
     def _load_config(self):
         """Laad config uit settings_shared.ini en settings_local.ini."""
+        if getattr(self, "_profile_storage", None) is not None:
+            self._reload_from_disk()
+            return
         LOCAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         self._migrate_legacy_configs_if_needed()
         self._reload_from_disk()
         print(f"Config geladen: shared={SHARED_CONFIG_PATH}, local={LOCAL_CONFIG_PATH}")
 
     def _reload_from_disk(self):
+        storage = getattr(self, "_profile_storage", None)
+        if storage is not None:
+            self.config = storage.load()
+            self._saved_values = config_values(self.config)
+            return
         self.config = configparser.ConfigParser()
         if SHARED_CONFIG_PATH.exists():
             self.config.read(SHARED_CONFIG_PATH, encoding='utf-8')
@@ -190,6 +215,14 @@ class SettingsManager:
     
     def save(self):
         """Sla huidige config gesplitst op naar shared en local."""
+        if getattr(self, "_worker_read_only", False):
+            raise RuntimeError("Een achtergrondproces mag geen profielinstellingen opslaan")
+        storage = getattr(self, "_profile_storage", None)
+        if storage is not None:
+            with self._save_lock:
+                storage.save_changes(self.config, self._saved_values)
+                self._saved_values = config_values(self.config)
+            return
         disk = configparser.ConfigParser()
         disk.read([SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH], encoding="utf-8")
         if disk.has_option("brokers", "list"):
@@ -264,6 +297,8 @@ class SettingsManager:
     
     def remove_database(self, name: str):
         """Verwijder database."""
+        if name == getattr(self, "profile_database", None):
+            raise ValueError("Sluit dit profiel voordat je zijn database uit de catalogus verwijdert")
         if self.config.has_section('databases') and self.config.has_option('databases', name):
             self.config.remove_option('databases', name)
             self.save()
@@ -272,6 +307,10 @@ class SettingsManager:
         bg_color: str = None, is_default: bool = None):
         """Update database configuratie."""
         databases = self.get_databases()
+        if name == getattr(self, "profile_database", None) and path is not None:
+            from .process_lock import canonical_path
+            if canonical_path(path) != canonical_path(databases[name]['path']):
+                raise ValueError("Sluit dit profiel voordat je zijn databasepad wijzigt")
         if name not in databases:
             return
         
@@ -958,6 +997,9 @@ class SettingsManager:
         return self.config.get('app', 'last_database', fallback=None)
     
     def set_last_database(self, name: str):
+        bound = getattr(self, "profile_database", None)
+        if bound is not None and name != bound:
+            raise ValueError("Dit venster blijft gekoppeld aan profiel " + bound)
         if not self.config.has_section('app'):
             self.config.add_section('app')
         self.config.set('app', 'last_database', name)
@@ -965,7 +1007,7 @@ class SettingsManager:
 
     # === Stockdata database ===
     def get_stockdata_db_path(self) -> str:
-        return self.config.get('stockdata', 'db_path', fallback=DEFAULT_STOCKDATA_DB_PATH).strip()
+        return getattr(self, '_bound_stockdata_path', None) or self.config.get('stockdata', 'db_path', fallback=DEFAULT_STOCKDATA_DB_PATH).strip()
 
     # === Option chain scanner ===
     def get_option_chain_scanner_settings(self) -> dict:
@@ -1052,7 +1094,11 @@ class SettingsManager:
     def get_brokers(self):
         """Haal brokerlijst op uit settings.ini (comma-separated)."""
         disk = configparser.ConfigParser()
-        disk.read([SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH], encoding="utf-8")
+        storage = getattr(self, "_profile_storage", None)
+        if storage is not None:
+            disk = read_config(storage.paths)
+        else:
+            disk.read([SHARED_CONFIG_PATH, LOCAL_CONFIG_PATH], encoding="utf-8")
         raw = disk.get('brokers', 'list', fallback=self.config.get('brokers', 'list', fallback=''))
         return [b.strip() for b in raw.split(',') if b.strip()]
 
@@ -1159,7 +1205,16 @@ def get_settings() -> SettingsManager:
     """Haal singleton settings manager op."""
     global _settings_manager
     if _settings_manager is None:
-        _settings_manager = SettingsManager()
+        import os
+        inherited = os.environ.get("PV_CONFIG_FILES")
+        if inherited:
+            _settings_manager = SettingsManager.__new__(SettingsManager)
+            _settings_manager.config = read_config(json.loads(inherited))
+            _settings_manager.profile_database = os.environ.get("PV_PROFILE_DATABASE") or None
+            _settings_manager._worker_read_only = True
+            _settings_manager._bound_stockdata_path = os.environ.get("PV_STOCKDATA_DATABASE")
+        else:
+            _settings_manager = SettingsManager()
     return _settings_manager
 
 
@@ -1169,7 +1224,8 @@ def get_databases() -> Dict[str, Dict[str, str]]:
 
 
 def get_default_database() -> Optional[str]:
-    return get_settings().get_default_database()
+    settings = get_settings()
+    return getattr(settings, "profile_database", None) or settings.get_default_database()
 
 
 def get_stockdata_db_path() -> str:

@@ -30,7 +30,13 @@ def get_stockdata_connection(stock_db_path: str) -> pyodbc.Connection:
     """Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback."""
     if not stock_db_path or not str(stock_db_path).strip():
         raise ValueError("Een STOCKDATA-databasepad is verplicht")
-    return get_connection(stock_db_path)
+    from pathlib import Path
+    import sys
+    root = str(Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from portefeuille_viewer.data.shared_database import connect_stockdata
+    return connect_stockdata(stock_db_path)
 
 
 def parse_iso_date(value: str | None) -> date | None:

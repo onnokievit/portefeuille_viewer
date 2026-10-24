@@ -37,6 +37,16 @@ class OptionChainRetrievalJob:
             self._batch.stop()
 
     def run(self) -> list[AssetScanResult]:
+        from portefeuille_viewer.config.local_runtime import maintenance_lease
+        lease = maintenance_lease(self.stock_db_path)
+        if not lease.acquire():
+            raise RuntimeError('Een gedeelde update draait al in een andere appinstantie. Probeer later opnieuw.')
+        try:
+            return self._run_locked()
+        finally:
+            lease.release()
+
+    def _run_locked(self) -> list[AssetScanResult]:
         repo = ChainRunRepository(self.stock_db_path)
         repo.start_run(self.run_id, self.settings, len(self.assets))
         self.log(f"[run] gestart run_id={self.run_id} assets={len(self.assets)}")

@@ -112,11 +112,11 @@ class SubscriptionsTab(QWidget):
             from portefeuille_viewer.config import get_settings
             self.settings = get_settings()
         try:
+            self.feed.configure_subscriptions(**values)
             self.settings.set_market_data_settings(values)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RuntimeError, TimeoutError) as exc:
             self.summary.setText(f"Instellingen niet opgeslagen: {exc}")
             return
-        self.feed.configure_subscriptions(**values)
         self.refresh()
 
     def _reset_rejections(self):
@@ -137,6 +137,13 @@ class SubscriptionsTab(QWidget):
             f"{len(snapshot['rows'])} gewenst | {snapshot['occupied']} plaatsen bezet | "
             f"{snapshot['receiving']} hebben data ontvangen in deze beurt | "
             f"effectief budget {snapshot['effective_capacity']} / ingesteld {snapshot['capacity']}")
+        if snapshot.get("coordinator_pid"):
+            self.summary.setText(self.summary.text() +
+                f" | Gedeeld door {len(snapshot.get('shared_clients', []))} sessies" +
+                f" | Achtergrondtaken gereserveerd: {snapshot.get('reserved_external', 0)}")
+        self.summary.setToolTip(
+            f"Koersdienst PID: {snapshot.get('coordinator_pid', '-')}; sessies: " +
+            ", ".join(str(name) for name in snapshot.get('shared_clients', [])))
         limit = snapshot.get("limit_rejections_total", 0)
         total = snapshot.get("rejections_total", 0)
         self.rejection_summary.setText(

@@ -17,6 +17,8 @@ class SingleAssetLongHistoryRunner(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        from portefeuille_viewer.services.shared_tasks import coordinate_runner
+        coordinate_runner(self)
         self._process: QProcess | None = None
         self._asset_rollup = ""
         self._steps: list[tuple[str, Path, list[str]]] = []
@@ -32,6 +34,9 @@ class SingleAssetLongHistoryRunner(QObject):
     def start(self, asset_rollup: str) -> None:
         if self._process is not None:
             return
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
         asset = str(asset_rollup or "").strip()
         if not asset:
             self.failed.emit("Geen asset_rollup opgegeven.")
@@ -101,6 +106,8 @@ class SingleAssetLongHistoryRunner(QObject):
         self.output.emit(f"\n=== Stap {self._step_index + 1}/{len(self._steps)}: {label} ===\n")
 
         process = QProcess(self)
+        from portefeuille_viewer.services.worker_guard import protect_worker
+        protect_worker(process)
         process.setProgram(sys.executable)
         process.setArguments(["-u", str(script_path), *args])
         process.setWorkingDirectory(str(script_path.parent))
@@ -167,6 +174,8 @@ class SingleAssetLongVolatilityRunner(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        from portefeuille_viewer.services.shared_tasks import coordinate_runner
+        coordinate_runner(self)
         self._process: QProcess | None = None
         self._asset_rollup = ""
         self._stdout_chunks: list[bytes] = []
@@ -180,6 +189,9 @@ class SingleAssetLongVolatilityRunner(QObject):
     def start(self, asset_rollup: str, *, duration: str = "10 Y") -> None:
         if self._process is not None:
             return
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
         asset = str(asset_rollup or "").strip()
         if not asset:
             self.failed.emit("Geen asset_rollup opgegeven.")
@@ -214,6 +226,8 @@ class SingleAssetLongVolatilityRunner(QObject):
         self.output.emit("\n=== Stap 1/1: HV/IV lange historie ophalen via IBKR ===\n")
 
         process = QProcess(self)
+        from portefeuille_viewer.services.worker_guard import protect_worker
+        protect_worker(process)
         process.setProgram(sys.executable)
         process.setArguments(
             [

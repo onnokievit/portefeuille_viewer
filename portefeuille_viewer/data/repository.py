@@ -49,6 +49,11 @@ def reload_db_config():
 def switch_database(name: str):
     """Schakel naar een andere database."""
     global DEFAULT_DB_NAME, db_path, conn_str
+    bound = getattr(get_settings(), "profile_database", None)
+    if bound is not None:
+        if name != bound:
+            raise ValueError(f"Dit venster hoort bij '{bound}'. Open een apart venster met --db {name}.")
+        return
     if name not in DB_MAP:
         raise ValueError(f"Onbekende database: {name}")
     # flush dirty live asset-prijzen naar huidige DB voordat we overschakelen
@@ -880,8 +885,8 @@ def get_connection():
 
 
 def get_stockdata_connection():
-    conn_str_stock = rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={get_stockdata_db_path()};"
-    return pyodbc.connect(conn_str_stock)
+    from portefeuille_viewer.data.shared_database import connect_stockdata
+    return connect_stockdata(get_stockdata_db_path())
 
 
 def _normalize_orders_committed_payload(

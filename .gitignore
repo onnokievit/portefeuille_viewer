@@ -21,3 +21,9 @@ logs/
 development.txt
 
 portefeuille_viewer/config/.user_settings/settings_local.ini
+
+# Profielvoorkeuren en gedeelde instellingen worden gevolgd; deze zijn computergebonden.
+/gebruikersdata/computers/
+/gebruikersdata/runtime/
+/gebruikersdata/**/*.ini.tmp
+*.laccdb

@@ -139,7 +139,8 @@ def collect_option_snapshot(
         f"marketDataType={settings.market_data_type}"
     )
     try:
-        app.connect(settings.tws_host, settings.tws_port, client_id)
+        from portefeuille_viewer.services.ib_connection_guard import connect_ib
+        client_id = connect_ib(app, settings.tws_host, settings.tws_port, client_id, line_budget=int(settings.batch_size))
         thread = threading.Thread(target=app.run, daemon=True)
         thread.start()
         if not app.ready.wait(timeout=20.0):

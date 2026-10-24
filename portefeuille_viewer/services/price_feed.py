@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import os
 import time
 import threading
@@ -577,7 +578,8 @@ class PriceFeedIB(QObject):
             self._app = app
             self._is_ready = False
         try:
-            app.connect(self.host, self.port, clientId=self.client_id)
+            from portefeuille_viewer.services.ib_connection_guard import connect_ib
+            self.client_id = connect_ib(app, self.host, self.port, self.client_id, managed_feed=True)
         except Exception as exc:
             self.log.emit(f"[ibkr] connect failed reason={reason}: {exc}")
             self._set_status("disconnected")
@@ -957,14 +959,15 @@ class PriceFeedService(QObject):
     statusChanged = Signal(str)
     connectionLost = Signal(str)
 
-    def __init__(self, host, port, client_id, parent=None):
+    def __init__(self, host, port, client_id, parent=None, *, feed_factory=None):
         # print("[DEBUG] PriceFeedService aangemaakt:", id(self))
         super().__init__(parent)
         initial_prices = ASSET_LAST_PRICE_STORE.ensure_loaded()
         self.store = PriceStore(initial_prices)
         self._asset_processed_at = {}
         self.quote_delivery = QuoteDeliveryTrace()
-        self._feed = PriceFeedIB(host, port, client_id)
+        self._feed = (feed_factory or PriceFeedIB)(host, port, client_id)
+        self._shared_proxy = bool(getattr(self._feed, "_shared_proxy", False))
         self._feed.quoteReceived.connect(self._on_quote_received)
         self._feed.optionTickUpdated.connect(self._on_option_tick)
         self._feed.statusChanged.connect(self.statusChanged.emit)
@@ -981,6 +984,8 @@ class PriceFeedService(QObject):
         self._option_save_state_lock = threading.Lock()
         self._option_save_inflight = False
         self._option_save_pending = False
+        self._option_save_idle = threading.Event()
+        self._option_save_idle.set()
         self._load_option_last_prices_from_db()
 
         # Timer voor periodiek opslaan
@@ -988,14 +993,16 @@ class PriceFeedService(QObject):
         
         self._save_timer = QTimer(self)
         self._save_timer.timeout.connect(self.save_last_prices_to_db)
-        self._save_timer.start(300_000)  # elke 5 minuten
+        if not self._shared_proxy:
+            self._save_timer.start(300_000)  # elke 5 minuten
         self._option_save_timer = QTimer(self)
         self._option_save_timer.timeout.connect(self.save_option_last_prices_to_db)
         option_save_interval_ms = max(
             60_000,
             int(os.getenv("OPTION_LAST_PRICES_SAVE_INTERVAL_MS", "900000")),
         )
-        self._option_save_timer.start(option_save_interval_ms)  # default elke 15 minuten
+        if not self._shared_proxy:
+            self._option_save_timer.start(option_save_interval_ms)  # default elke 15 minuten
 
     @staticmethod
     def _table_columns(cursor, table_name: str) -> set[str]:
@@ -1080,7 +1087,8 @@ class PriceFeedService(QObject):
         try:
             with self._connect_option_last_prices_db() as conn:
                 cur = conn.cursor()
-                self._ensure_option_last_prices_table(cur)
+                if not getattr(self, "_shared_proxy", False):
+                    self._ensure_option_last_prices_table(cur)
                 try:
                     cur.execute(
                         """
@@ -1140,9 +1148,8 @@ class PriceFeedService(QObject):
             self._active_option_series_ids = active
             self._active_option_series_known = True
             self._option_prices = {
-                sid: row for sid, row in self._option_prices.items() if sid in active
+                sid: row for sid, row in self._option_prices.items() if sid in active or sid in self._dirty_option_series_ids
             }
-            self._dirty_option_series_ids.intersection_update(active)
 
     def _cleanup_expired_option_last_prices_if_due(self) -> None:
         today = date.today()
@@ -1378,16 +1385,17 @@ class PriceFeedService(QObject):
             while True:
                 with self._option_lock:
                     dirty_ids = set(self._dirty_option_series_ids)
-                    if self._active_option_series_known:
-                        dirty_ids.intersection_update(self._active_option_series_ids)
                     rows = [
-                        dict(self._option_prices[sid])
+                        copy.deepcopy(self._option_prices[sid])
                         for sid in dirty_ids
                         if sid in self._option_prices
                     ]
                 self._save_option_last_prices_to_db_sync(rows)
                 with self._option_lock:
-                    self._dirty_option_series_ids.difference_update(dirty_ids)
+                    for saved in rows:
+                        sid = saved['series_id']
+                        if self._option_prices.get(sid, {}).get('_save_revision', 0) == saved.get('_save_revision', 0):
+                            self._dirty_option_series_ids.discard(sid)
                 with self._option_save_state_lock:
                     if self._option_save_pending:
                         self._option_save_pending = False
@@ -1398,8 +1406,12 @@ class PriceFeedService(QObject):
             with self._option_save_state_lock:
                 self._option_save_inflight = False
             print(f"[price-feed] option last-price save failed: {exc}")
+        finally:
+            self._option_save_idle.set()
 
     def save_last_prices_to_db(self):
+        if getattr(self, "_shared_proxy", False):
+            return
         with self._asset_save_state_lock:
             if self._asset_save_inflight:
                 self._asset_save_pending = True
@@ -1409,11 +1421,14 @@ class PriceFeedService(QObject):
         threading.Thread(target=self._run_asset_save_worker, daemon=True).start()
 
     def save_option_last_prices_to_db(self):
+        if getattr(self, "_shared_proxy", False):
+            return
         with self._option_save_state_lock:
             if self._option_save_inflight:
                 self._option_save_pending = True
                 return
             self._option_save_inflight = True
+            self._option_save_idle.clear()
             self._option_save_pending = False
         threading.Thread(target=self._run_option_save_worker, daemon=True).start()
 
@@ -1429,7 +1444,10 @@ class PriceFeedService(QObject):
     @Slot(str, str, float)
     def _on_price(self, sym: str, cur: str, px: float, receipt=None):
         self.store.set(sym, cur, px)
-        ASSET_LAST_PRICE_STORE.update_price(sym, cur, px)
+        if getattr(self, "_shared_proxy", False):
+            ASSET_LAST_PRICE_STORE.update_price(sym, cur, px, persist=False)
+        else:
+            ASSET_LAST_PRICE_STORE.update_price(sym, cur, px)
         self._asset_processed_at[(sym, cur)] = time.time()
         if receipt is not None:
             self.quote_delivery.processed(sym, cur, px, receipt)
@@ -1471,6 +1489,7 @@ class PriceFeedService(QObject):
                         if price_time:
                             entry["last_update"] = datetime.fromtimestamp(price_time)
                         self._feed.subscriptions.processed(payload.get("req_id"), last_px, src)
+                    entry["_save_revision"] = entry.get("_save_revision", 0) + 1
                     self._option_prices[sid] = entry
                     self._dirty_option_series_ids.add(sid)
         self.optionTickUpdated.emit(payload)
@@ -1558,18 +1577,21 @@ class PriceFeedService(QObject):
         self._feed.ensure_option_subscriptions(rows)
 
     def shutdown(self):
+        if getattr(self, "_shared_proxy", False):
+            self._feed.shutdown()
+            return
         with contextlib.suppress(Exception):
             if hasattr(self, "_save_timer") and self._save_timer.isActive():
                 self._save_timer.stop()
             if hasattr(self, "_option_save_timer") and self._option_save_timer.isActive():
                 self._option_save_timer.stop()
             self._save_last_prices_to_db_sync(force=True)
+            if not self._option_save_idle.wait(45):
+                raise TimeoutError("Bestaande optieschrijfopdracht is nog bezig; geen overlappende afsluitflush")
             with self._option_lock:
                 dirty_ids = set(self._dirty_option_series_ids)
-                if self._active_option_series_known:
-                    dirty_ids.intersection_update(self._active_option_series_ids)
                 rows = [
-                    dict(self._option_prices[sid])
+                    copy.deepcopy(self._option_prices[sid])
                     for sid in dirty_ids
                     if sid in self._option_prices
                 ]

@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from portefeuille_viewer.config import get_stockdata_db_path
+from portefeuille_viewer.data.shared_database import connect_stockdata
 from portefeuille_viewer.data.repository import get_stockdata_connection
 
 
@@ -420,7 +421,7 @@ def ensure_temp_table(conn, table_name: str) -> None:
 
 
 def write_to_temp_table(db_path: str, table_name: str, asset_rollup: str, root_symbol: str, df: pd.DataFrame) -> int:
-    conn = get_stockdata_connection() if db_path == get_stockdata_db_path() else pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
+    conn = get_stockdata_connection() if db_path == get_stockdata_db_path() else connect_stockdata(db_path)
     ensure_temp_table(conn, table_name)
     cur = conn.cursor()
     cur.execute(f"DELETE FROM {table_name} WHERE asset_rollup=?", asset_rollup)
@@ -472,7 +473,7 @@ def write_to_temp_table(db_path: str, table_name: str, asset_rollup: str, root_s
 def upsert_to_historical_data_correct(db_path: str, hdc_table: str, asset_rollup: str, symbol: str, df: pd.DataFrame) -> int:
     if df.empty:
         return 0
-    conn = get_stockdata_connection() if db_path == get_stockdata_db_path() else pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
+    conn = get_stockdata_connection() if db_path == get_stockdata_db_path() else connect_stockdata(db_path)
     cur = conn.cursor()
     cur.execute(f"DELETE FROM {hdc_table} WHERE asset_rollup=?", asset_rollup)
     rows = [
@@ -529,7 +530,8 @@ def main() -> int:
     duration = args.duration or f"{max(args.years + 1, 2)} Y"
 
     app = IBSyncApp()
-    app.connect(args.host, args.port, clientId=args.client_id)
+    from portefeuille_viewer.services.ib_connection_guard import connect_ib
+    args.client_id = connect_ib(app, args.host, args.port, args.client_id)
     t = threading.Thread(target=app.run, daemon=True)
     t.start()
     if not app.ready.wait(timeout=8.0):

@@ -943,6 +943,8 @@ class StateEngineRunner(QObject):
         program, arguments = command
         print(f"[state-engine-runner] start class={active_class} mode={active_payload.get('mode')} assets={active_payload.get('affected_assets')} from={active_payload.get('from_date')}")
         process = QProcess(self)
+        from portefeuille_viewer.services.worker_guard import protect_worker
+        protect_worker(process)
         process.setProgram(program)
         process.setArguments(arguments)
         process.finished.connect(self._on_process_finished)

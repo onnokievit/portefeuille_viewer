@@ -204,7 +204,8 @@ class OptionChainScanner:
         thread: threading.Thread | None = None
         try:
             self.log(f"[IB] connect asset={asset.asset_rollup} port={self.settings.tws_port} clientId={client_id}")
-            app.connect(self.settings.tws_host, self.settings.tws_port, client_id)
+            from portefeuille_viewer.services.ib_connection_guard import connect_ib
+            client_id = connect_ib(app, self.settings.tws_host, self.settings.tws_port, client_id)
             thread = threading.Thread(target=app.run, daemon=True)
             thread.start()
             if not app.ready.wait(timeout=self.settings.timeout_sec):

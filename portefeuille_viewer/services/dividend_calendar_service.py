@@ -114,7 +114,8 @@ class DividendCalendarService:
         fetched_at = datetime.now()
 
         app = DividendIbApp()
-        app.connect(host, port, clientId=client_id)
+        from portefeuille_viewer.services.ib_connection_guard import connect_ib
+        client_id = connect_ib(app, host, port, client_id)
         thread = threading.Thread(target=app.run, daemon=True)
         thread.start()
         if not app.connected_event.wait(timeout=8.0):

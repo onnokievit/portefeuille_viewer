@@ -321,7 +321,8 @@ class SubscriptionManager:
             if self.pending_cancels:
                 return
             if len(active) > self.effective_capacity:
-                self._release(min(active, key=lambda r: r.requested_at))
+                for record in sorted(active, key=lambda r: r.requested_at)[:len(active)-self.effective_capacity]:
+                    self._release(record)
                 return
             # Temporary focus preempts one slot, but cannot create a permanent
             # user-defined core. Normal rotation remains fair for all others.

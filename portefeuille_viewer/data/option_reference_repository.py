@@ -7,6 +7,8 @@ from typing import Any
 from portefeuille_viewer.data import repository as data_repository
 
 
+_original_rows = {}
+
 OPTION_REFERENCE_TABLE = "optie_referentie_data"
 
 
@@ -115,10 +117,26 @@ def list_option_reference_rows() -> list[dict[str, Any]]:
     sql = f"SELECT {select_cols} FROM {OPTION_REFERENCE_TABLE} ORDER BY {order_sql}"
     with _get_connection_with_retry() as conn:
         rows = conn.cursor().execute(sql).fetchall()
-    return [
+    result = [
         {col.name: row[idx] for idx, col in enumerate(columns)}
         for row in rows
     ]
+    pk = next((c for c in columns if c.is_primary_key), columns[0])
+    _original_rows.clear()
+    _original_rows.update({int(row[pk.name]): dict(row) for row in result})
+    return result
+
+
+def _check_original(conn, pk, row_id):
+    conn.begin_write()
+    expected = _original_rows.get(int(row_id))
+    if expected is None:
+        raise RuntimeError("Herlaad de tabel voordat u een bestaande rij wijzigt")
+    cur = conn.cursor().execute(f"SELECT * FROM {OPTION_REFERENCE_TABLE} WHERE {_bracket(pk.name)}=?", int(row_id))
+    row = cur.fetchone()
+    actual = {d[0]: row[i] for i, d in enumerate(cur.description)} if row is not None else None
+    if actual != expected:
+        raise RuntimeError("Deze rij is inmiddels gewijzigd of verwijderd door een andere instantie. Herlaad de tabel en beoordeel uw wijziging opnieuw.")
 
 
 def _coerce_value(value: Any, column: OptionReferenceColumn) -> Any:
@@ -166,6 +184,7 @@ def upsert_option_reference_row(payload: dict[str, Any]) -> int:
             refresh_option_reference_snapshot()
             return new_id
 
+        _check_original(conn, pk, row_id)
         assignments = ", ".join(f"{_bracket(col.name)}=?" for col in writable)
         cur.execute(
             f"UPDATE {OPTION_REFERENCE_TABLE} SET {assignments} WHERE {_bracket(pk.name)}=?",
@@ -180,6 +199,7 @@ def delete_option_reference_row(row_id: int) -> None:
     columns = list_option_reference_columns()
     pk = next((col for col in columns if col.is_primary_key), columns[0])
     with _get_connection_with_retry() as conn:
+        _check_original(conn, pk, row_id)
         conn.cursor().execute(
             f"DELETE FROM {OPTION_REFERENCE_TABLE} WHERE {_bracket(pk.name)}=?",
             int(row_id),

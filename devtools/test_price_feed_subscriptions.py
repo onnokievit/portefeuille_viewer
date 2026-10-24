@@ -24,7 +24,7 @@ class FeedTests(unittest.TestCase):
     def setUp(self):
         settings = SimpleNamespace(get_market_data_settings=lambda: {
             "capacity": 3, "batch_size": 1, "rotation_seconds": 30, "stale_seconds": 180})
-        self.patches = [patch("portefeuille_viewer.config.get_settings", return_value=settings),
+        self.patches = [patch("portefeuille_viewer.services.ib_connection_guard.LineReservation"), patch("portefeuille_viewer.config.get_settings", return_value=settings),
                         patch.object(module, "_subscription_logger", return_value=logging.getLogger("test")),
                         patch.object(module.threading.Thread, "start"),
                         patch.object(module.threading.Thread, "join"),
@@ -71,6 +71,33 @@ class FeedTests(unittest.TestCase):
         self.assertIsNotNone(row["processed_at"])
         self.assertEqual(row["delivery"]["processed_value"], 90.)
         self.assertIsNone(row["delivery"]["rendered_at"])
+
+    def test_removed_option_keeps_unsaved_quote_until_persisted(self):
+        self.service.set_active_option_series_ids([1])
+        self.service._on_option_tick({'series_id':1,'field':'last','value':10.,'ts':self.clock()})
+        self.service.set_active_option_series_ids([])
+        with patch.object(self.service,'_save_option_last_prices_to_db_sync') as save:
+            self.service._run_option_save_worker()
+        self.assertEqual(save.call_args.args[0][0]['last_px'],10.)
+        self.assertNotIn(1,self.service._dirty_option_series_ids)
+
+    def test_tick_during_option_save_is_kept_dirty(self):
+        self.service.set_active_option_series_ids([1])
+        self.service._on_option_tick({'series_id':1,'field':'last','value':10.,'ts':self.clock()})
+        def save(rows):
+            self.service._on_option_tick({'series_id':1,'field':'last','value':11.,'ts':self.clock()+1})
+        with patch.object(self.service,'_save_option_last_prices_to_db_sync',side_effect=save):
+            self.service._run_option_save_worker()
+        self.assertIn(1,self.service._dirty_option_series_ids)
+        self.assertEqual(self.service.get_option_last(1)['last_px'],11.)
+
+    def test_proxy_shutdown_does_not_flush_its_cached_quotes(self):
+        self.service._shared_proxy=True
+        with patch.object(self.service,'_save_last_prices_to_db_sync') as assets, patch.object(self.service,'_save_option_last_prices_to_db_sync') as options, patch.object(self.feed,'shutdown') as shutdown:
+            self.service.shutdown()
+        assets.assert_not_called()
+        options.assert_not_called()
+        shutdown.assert_called_once()
 
     def test_1101_rebuilds_but_1102_does_not_duplicate_streams(self):
         old = self.asset()

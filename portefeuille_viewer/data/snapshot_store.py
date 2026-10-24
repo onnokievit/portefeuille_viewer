@@ -93,6 +93,7 @@ class SnapshotStore:
 
     def __init__(self):
         self._live_prices_lock = threading.Lock()
+        self._captured_writes = threading.local()
         self._apply_defaults(bucket_reason="startup")
 
     @staticmethod
@@ -361,6 +362,25 @@ class SnapshotStore:
 
         return " \n ".join(parts) if parts else "(geen data geladen)"
 
+    @contextlib.contextmanager
+    def capture_writes(self):
+        """Stage repository loads in a worker without exposing partial snapshots."""
+        values = {}
+        self._captured_writes.values = values
+        try:
+            yield values
+        finally:
+            del self._captured_writes.values
+
+    def publish_batch(self, values):
+        # Called on the Qt thread: all frames exist before any observer runs.
+        for key, value in values.items():
+            setattr(self, key, value)
+            self._last_update_ts[key] = time.time()
+        from portefeuille_viewer.signals import signals
+        for key in values:
+            signals.queued_emit_snapshotUpdated(key)
+
     def safe_write(self, attr_name: str, value):
         """Schrijf een snapshot-attribuut op een veilige manier.
 
@@ -370,6 +390,10 @@ class SnapshotStore:
 
         We importeren `signals` lokaal om circulaire import-problemen bij module-load te vermijden.
         """
+        staged = getattr(self._captured_writes, "values", None)
+        if staged is not None:
+            staged[attr_name] = value
+            return
         t0 = time.perf_counter()
         setattr(self, attr_name, value)
         # record timestamp

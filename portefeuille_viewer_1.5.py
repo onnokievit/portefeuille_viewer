@@ -1,4 +1,4 @@
-import sys  
+import sys
 import os
 import json
 import threading
@@ -10,6 +10,11 @@ from typing import Any, Literal, Protocol, cast
 from collections import Counter
 from collections import deque
 from pathlib import Path
+# Profielkeuze en proces-lock moeten gereed zijn voordat imports snapshots/DB's laden.
+if __name__ == "__main__":
+    from portefeuille_viewer.config.profile_session import start_profile_session
+    _PROFILE_SESSION = start_profile_session(sys.argv)
+
 import polars as pl
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
@@ -21,13 +26,12 @@ from portefeuille_viewer.signals import signals
 from portefeuille_viewer.ui_logica.main_window_logica import MainWindow
 from portefeuille_viewer.config import get_settings, get_stockdata_db_path
 from portefeuille_viewer.data import repository
-from portefeuille_viewer.services.price_feed import PriceFeedService
+from portefeuille_viewer.services.shared_quote_client import SharedPriceFeedService as PriceFeedService
 from portefeuille_viewer.services.historical_price_update_runner import HistoricalPriceUpdateRunner
 from portefeuille_viewer.services.state_engine_runner import StateEngineRunner
 from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService
 from portefeuille_viewer.services.asset_volatility_history_update_runner import AssetVolatilityHistoryUpdateRunner
 from portefeuille_viewer.services.app_task_scheduler import AppTaskScheduler
-from portefeuille_viewer.services.db_migration_service import DbMigrationService
 from portefeuille_viewer.services.asset_indicator_service import rebuild_asset_indicator_snapshots
 from portefeuille_viewer.services.scenario_aandelen_overlay import refresh_aandelen_scenario_overlay_snapshot
 from portefeuille_viewer.services.scenario_portfolio_value_overlay import refresh_portfolio_value_scenario_overlay_snapshot
@@ -99,6 +103,7 @@ def _parse_startup_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--db",
         "--database",
+        "--profile",
         dest="database_alias",
         default="",
         help="Start direct met database alias/naam uit Settings > Databases.",
@@ -125,12 +130,19 @@ def _resolve_database_alias(alias: str) -> str:
 
 
 def _apply_startup_database_selection(alias: str) -> None:
+    bound = getattr(get_settings(), "profile_database", None)
+    if bound is not None:
+        SNAPSHOT_STORE.active_database_name = bound
+        _log(f"[startup-db] vast profiel: {bound}")
+        return
     if not str(alias or "").strip():
         return
     db_name = _resolve_database_alias(alias)
     repository.switch_database(db_name)
     get_settings().set_last_database(db_name)
     _log(f"[startup-db] actieve database via --db: {db_name}")
+
+SNAPSHOT_STORE.active_database_name = repository.DEFAULT_DB_NAME
 
 # Persistent aggregators for the whole app
 live_aggregator_aandelen = LiveAggregatorAandelen()
@@ -145,11 +157,11 @@ optie_tijdswaarde_projection_v2 = (
     OptieTijdswaardeProjectionV2() if ENABLE_OPTIE_TIJDSWAARDE_PROJECTION_V2 else None
 )
 _AANDELEN_PROJECTION_METRICS = deque(maxlen=200)
-_AANDELEN_PROJECTION_METRICS_LOG = Path("logs") / "aandelen_projection_v2_metrics.jsonl"    
+_AANDELEN_PROJECTION_METRICS_LOG = Path(os.environ.get("PV_INSTANCE_RUNTIME", "logs")) / "aandelen_projection_v2_metrics.jsonl"
 _OPTIES_OPEN_PROJECTION_METRICS = deque(maxlen=200)
-_OPTIES_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "opties_open_projection_v2_metrics.jsonl"
+_OPTIES_OPEN_PROJECTION_METRICS_LOG = Path(os.environ.get("PV_INSTANCE_RUNTIME", "logs")) / "opties_open_projection_v2_metrics.jsonl"
 _OPTIE_TIJDSWAARDE_PROJECTION_METRICS = deque(maxlen=200)
-_OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG = Path("logs") / "optie_tijdswaarde_projection_v2_metrics.jsonl"
+_OPTIE_TIJDSWAARDE_PROJECTION_METRICS_LOG = Path(os.environ.get("PV_INSTANCE_RUNTIME", "logs")) / "optie_tijdswaarde_projection_v2_metrics.jsonl"
 ENABLE_SPRINTERS_OPEN_PROJECTION_V2 = os.getenv("USE_SPRINTERS_OPEN_PROJECTION_V2", "1").strip() == "1"
 sprinters_open_projection_v2 = (
     SprintersOpenProjectionV2() if ENABLE_SPRINTERS_OPEN_PROJECTION_V2 else None
@@ -211,7 +223,7 @@ for _projection in (
     if _projection is not None:
         engine_core_runtime.register_projection(_projection)
 _SPRINTERS_OPEN_PROJECTION_METRICS = deque(maxlen=200)
-_SPRINTERS_OPEN_PROJECTION_METRICS_LOG = Path("logs") / "sprinters_open_projection_v2_metrics.jsonl"
+_SPRINTERS_OPEN_PROJECTION_METRICS_LOG = Path(os.environ.get("PV_INSTANCE_RUNTIME", "logs")) / "sprinters_open_projection_v2_metrics.jsonl"
 
 
 class SupportsProjectionRefresh(Protocol):
@@ -1172,27 +1184,14 @@ def refresh_transaction_derived_snapshots(payload: dict | None = None):
         )
 
 
-def run_startup_db_migrations():
-    svc = DbMigrationService()
-    results = svc.migrate_all_user_dbs()
-    ok = sum(1 for r in results if r.success)
-    fail = len(results) - ok
-    _log(f"[db-migrate] completed: ok={ok}, failed={fail}")
-    for r in results:
-        if r.success:
-            _log(
-                f"[db-migrate] {r.database_name}: v{r.old_version} -> v{r.new_version}"
-            )
-        else:
-            _log(f"[db-migrate] {r.database_name}: FAILED ({r.error})")
-    
-
-
 def main():
     global _AANDELEN_PROJECTION_ASYNC_ENABLED
     global _AANDELEN_TV_STARTUP_SEEDED
     global _AANDELEN_TV_LAST_OVERLAY_TS
     global _AANDELEN_TV_SEED_TS
+    from portefeuille_viewer.config.profile_session import get_profile_session
+    if get_profile_session() is None:
+        raise RuntimeError("Start de app via portefeuille_viewer_1.5.py zodat eerst het profiel wordt vergrendeld")
     import faulthandler
     faulthandler.enable()
     startup_args = _parse_startup_args(sys.argv)
@@ -1210,7 +1209,6 @@ def main():
     if demi_bold is not None:
         font.setWeight(demi_bold)
     app.setFont(font)
-    run_startup_db_migrations()
     try:
         _apply_startup_database_selection(startup_args.database_alias)
     except Exception as exc:
@@ -1238,7 +1236,7 @@ def main():
     app_task_scheduler = AppTaskScheduler(app)
     app_task_scheduler.register_default_tasks()
     option_timevalue_service: OptionTimevalueService | None = None
-    
+
     # Koppel signalen aan orchestrator:
     # 1) request -> alleen state-engine starten
     # 2) finished(ok) -> daarna afgeleide snapshots verversen
@@ -1548,6 +1546,51 @@ def main():
         max(1000, int(os.getenv("ASSET_VOL_HISTORY_UPDATE_DELAY_MS", "300000"))),
         asset_volatility_history_update_runner.request_startup_update,
     )
+    # Every user needs their own derived-state catchup, even when another user
+    # owns (or has already completed) the shared price update.
+    startup_state_timer = QTimer(w)
+    startup_state_timer.setInterval(5000)
+    def _catch_up_after_shared_update():
+        from portefeuille_viewer.config.local_runtime import maintenance_lease
+        probe = maintenance_lease(get_stockdata_db_path())
+        if not probe.acquire():
+            return
+        probe.release()
+        try:
+            state_engine_runner.request_daily_full_catchup_for_active_db()
+            startup_state_timer.stop()
+        except Exception as exc:
+            _log(f"[state-engine] catchup will retry: {exc}")
+    startup_state_timer.timeout.connect(_catch_up_after_shared_update)
+    startup_state_timer.start()
+    app.aboutToQuit.connect(startup_state_timer.stop)
+    from portefeuille_viewer.services.shared_data_watcher import SharedDataWatcher
+    shared_data_watcher = SharedDataWatcher(w)
+    def _shared_refresh(domains):
+        try:
+            from portefeuille_viewer.services.year_result_vs_indices_service import clear_year_result_vs_indices_cache
+            clear_year_result_vs_indices_cache()
+            if "asset_rollup_data" in domains:
+                repository.load_reference_lists()
+            repository.build_repository_active_asset_rollup_data()
+            _refresh_phase_live_aggregators(force_publish=True)
+            _refresh_phase_portfolio_values()
+            _refresh_phase_projections("shared_stockdata_changed")
+            _refresh_active_scenario_overlays()
+            portfolio_engine.start_subscriptions()
+            option_timevalue_service.schedule_rebuild({"reason": "shared_stockdata_changed"})
+            if "historical_data_correct" in domains:
+                state_engine_runner.request_daily_full_catchup_for_active_db()
+            _log("[shared-data] refreshed: " + ", ".join(sorted(domains)))
+            w.statusBar().showMessage("Gedeelde STOCKDATA-gegevens ververst", 5000)
+        except Exception as exc:
+            shared_data_watcher.invalidate()
+            _log(f"[shared-data] derived refresh will retry: {exc}")
+            w.statusBar().showMessage(f"Gedeelde gegevens nog niet volledig ververst: {exc}", 10000)
+    shared_data_watcher.refreshed.connect(_shared_refresh)
+    shared_data_watcher.failed.connect(lambda message: w.statusBar().showMessage("Gedeelde gegevens verversen: " + message, 10000))
+    app.aboutToQuit.connect(shared_data_watcher.stop)
+    w.shared_data_watcher = shared_data_watcher
     app_task_scheduler.start()
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()

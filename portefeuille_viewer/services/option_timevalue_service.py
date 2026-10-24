@@ -439,6 +439,7 @@ class OptionTimevalueService(QObject):
         try:
             now = datetime.now()
             with self._connect_stockdb() as conn:
+                conn.begin_write()
                 cur = conn.cursor()
                 self._ensure_option_series_master_columns(cur)
                 rec = cur.execute(
@@ -576,12 +577,13 @@ class OptionTimevalueService(QObject):
             return []
         now = datetime.now()
         with self._connect_stockdb() as conn:
+            conn.begin_write()
             cur = conn.cursor()
             self._ensure_option_series_master_columns(cur)
             for r in rows:
                 ex = cur.execute(
                     """
-                    SELECT TOP 1 series_id, conid, local_symbol, multiplier, underlying_symbol, exchange_code, trading_class, resolver_locked
+                    SELECT TOP 1 series_id, conid, local_symbol, multiplier, underlying_symbol, exchange_code, trading_class, resolver_locked, active
                     FROM option_series_master
                     WHERE asset_rollup=?
                       AND optie_call_put=?
@@ -627,6 +629,11 @@ class OptionTimevalueService(QObject):
                     merged_exchange = r.exchange_code or _clean(ex[5]) or None
                     merged_trading_class = r.trading_class or _clean(ex[6]) or None
                     merged_multiplier = r.multiplier if r.multiplier is not None else (_to_float(ex[3]) or 100.0)
+                    if (merged_underlying == (_clean(ex[4]) or None) and
+                        merged_exchange == (_clean(ex[5]) or None) and
+                        merged_trading_class == (_clean(ex[6]) or None) and
+                        merged_multiplier == _to_float(ex[3]) and bool(ex[8])):
+                        continue  # Do not publish a revision for a timestamp-only rebuild.
                     cur.execute(
                         """
                         UPDATE option_series_master
@@ -675,37 +682,39 @@ class OptionTimevalueService(QObject):
                 r.resolver_locked = bool(rec[6]) if rec[6] is not None else False
                 db_rows.append(r)
 
-            resolve_candidates: list[OpenSeriesRow] = []
-            for r in db_rows:
-                if r.conid and int(r.conid) > 0:
-                    continue
-                if r.resolver_locked:
-                    # Manual lock means resolver should not mutate this row.
-                    continue
-                key = self._series_key(r)
-                if not r.ref_mapping_found:
+        resolve_candidates: list[OpenSeriesRow] = []
+        for r in db_rows:
+            if r.conid and int(r.conid) > 0:
+                continue
+            if r.resolver_locked:
+                # Manual lock means resolver should not mutate this row.
+                continue
+            key = self._series_key(r)
+            if not r.ref_mapping_found:
+                self._set_unresolved(
+                    r,
+                    "missing_reference_mapping",
+                    f"Voeg optie_referentie_data mapping toe voor asset={r.asset_rollup}, opt_week={r.ref_week}",
+                )
+                continue
+            # Stop met opnieuw proberen totdat relevante referentie/universe snapshot wijzigt.
+            if key in self._unresolved_series:
+                continue
+            resolve_candidates.append(r)
+        if resolve_candidates:
+            failed = self._resolve_contracts(resolve_candidates)
+            for r in resolve_candidates:
+                reason = failed.get(self._series_key(r))
+                if reason:
                     self._set_unresolved(
                         r,
-                        "missing_reference_mapping",
-                        f"Voeg optie_referentie_data mapping toe voor asset={r.asset_rollup}, opt_week={r.ref_week}",
+                        reason,
+                        "Controleer optie_referentie_data (trading class/exchange) of IB contractdetails",
                     )
-                    continue
-                # Stop met opnieuw proberen totdat relevante referentie/universe snapshot wijzigt.
-                if key in self._unresolved_series:
-                    continue
-                resolve_candidates.append(r)
-            if resolve_candidates:
-                failed = self._resolve_contracts(resolve_candidates)
-                for r in resolve_candidates:
-                    reason = failed.get(self._series_key(r))
-                    if reason:
-                        self._set_unresolved(
-                            r,
-                            reason,
-                            "Controleer optie_referentie_data (trading class/exchange) of IB contractdetails",
-                        )
-                conn.commit()
 
+        # No DB connection or writer lease is held during IBKR callbacks.
+        with self._connect_stockdb() as conn:
+            cur = conn.cursor()
             # Reload after resolve
             final_rows = []
             for r in db_rows:
@@ -738,66 +747,67 @@ class OptionTimevalueService(QObject):
                 failed[self._series_key(r)] = "no_contract_details"
             return failed
         ib = self.price_feed._feed
-        with self._connect_stockdb() as conn:
-            cur = conn.cursor()
-            now = datetime.now()
-            for r in rows:
+        now = datetime.now()
+        for r in rows:
+            details_holder = []
+            done = threading.Event()
+
+            for sec_type, use_tc, exch in [
+                ("OPT", True, r.exchange_code),
+                ("OPT", False, r.exchange_code),
+                ("OPT", True, "SMART"),
+                ("OPT", False, "SMART"),
+                ("FOP", True, r.exchange_code),
+                ("FOP", False, r.exchange_code),
+                ("FOP", True, "SMART"),
+                ("FOP", False, "SMART"),
+            ]:
+                c = Contract()
+                c.secType = sec_type
+                c.symbol = r.underlying_symbol
+                c.currency = r.ib_currency
+                c.exchange = exch or "SMART"
+                c.lastTradeDateOrContractMonth = r.expiry.strftime("%Y%m%d")
+                c.strike = float(r.strike)
+                c.right = "C" if r.optie_call_put == "call" else "P"
+                if use_tc and r.trading_class:
+                    c.tradingClass = r.trading_class
+                # Each attempt owns its callbacks; a late answer must not resolve
+                # the following attempt or the following option series.
                 details_holder = []
                 done = threading.Event()
+                def on_detail(cd, holder=details_holder):
+                    holder.append(cd)
+                def on_end(event=done):
+                    event.set()
+                with contextlib.suppress(Exception):
+                    ib.request_contract_details(c, on_detail, on_end)
+                done.wait(timeout=self._resolve_wait_sec)
+                if details_holder:
+                    break
 
-                def on_detail(cd):
-                    details_holder.append(cd)
-
-                def on_end():
-                    done.set()
-
-                for sec_type, use_tc, exch in [
-                    ("OPT", True, r.exchange_code),
-                    ("OPT", False, r.exchange_code),
-                    ("OPT", True, "SMART"),
-                    ("OPT", False, "SMART"),
-                    ("FOP", True, r.exchange_code),
-                    ("FOP", False, r.exchange_code),
-                    ("FOP", True, "SMART"),
-                    ("FOP", False, "SMART"),
-                ]:
-                    c = Contract()
-                    c.secType = sec_type
-                    c.symbol = r.underlying_symbol
-                    c.currency = r.ib_currency
-                    c.exchange = exch or "SMART"
-                    c.lastTradeDateOrContractMonth = r.expiry.strftime("%Y%m%d")
-                    c.strike = float(r.strike)
-                    c.right = "C" if r.optie_call_put == "call" else "P"
-                    if use_tc and r.trading_class:
-                        c.tradingClass = r.trading_class
-                    details_holder.clear()
-                    done.clear()
-                    with contextlib.suppress(Exception):
-                        ib.request_contract_details(c, on_detail, on_end)
-                    done.wait(timeout=self._resolve_wait_sec)
-                    if details_holder:
-                        break
-
-                if not details_holder:
-                    failed[self._series_key(r)] = "timeout" if not done.is_set() else "no_contract_details"
-                    continue
-                det = details_holder[0]
-                con = det.contract
-                conid = int(getattr(con, "conId", 0) or 0)
-                if conid <= 0:
-                    failed[self._series_key(r)] = "no_contract_details"
-                    continue
-                local_symbol = _clean(getattr(con, "localSymbol", ""))
-                tc = _clean(getattr(con, "tradingClass", ""))
-                exch = _clean(getattr(con, "exchange", ""))
-                mult = _to_float(getattr(con, "multiplier", None))
+            if not details_holder:
+                failed[self._series_key(r)] = "timeout" if not done.is_set() else "no_contract_details"
+                continue
+            det = details_holder[0]
+            con = det.contract
+            conid = int(getattr(con, "conId", 0) or 0)
+            if conid <= 0:
+                failed[self._series_key(r)] = "no_contract_details"
+                continue
+            local_symbol = _clean(getattr(con, "localSymbol", ""))
+            tc = _clean(getattr(con, "tradingClass", ""))
+            exch = _clean(getattr(con, "exchange", ""))
+            mult = _to_float(getattr(con, "multiplier", None))
+            with self._connect_stockdb() as conn:
+                cur = conn.cursor()
                 cur.execute(
                     """
                     UPDATE option_series_master
                     SET conid=?, local_symbol=?, trading_class=?, exchange_code=?,
                         multiplier=?, last_verified_ts=?, updated_at=?
-                    WHERE series_id=?
+                    WHERE series_id=? AND (resolver_locked=False OR resolver_locked IS NULL)
+                        AND (conid IS NULL OR conid=0)
                     """,
                     (
                         conid,
@@ -810,9 +820,7 @@ class OptionTimevalueService(QObject):
                         int(r.series_id),
                     ),
                 )
-            conn.commit()
         return failed
-
     def _load_underlying_close_map(self) -> dict[str, float]:
         h = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv_latest", None)
         if h is None or h.is_empty():

@@ -22,6 +22,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from portefeuille_viewer.config import get_stockdata_db_path  # noqa: E402
+from portefeuille_viewer.data.shared_database import connect_stockdata  # noqa: E402
 from portefeuille_viewer.data.repository import get_stockdata_connection  # noqa: E402
 
 STOCKDATA_DB_PATH = get_stockdata_db_path()
@@ -176,7 +177,8 @@ def main() -> int:
     )
 
     app = HistVolSeriesApp(log_enabled=bool(args.log))
-    app.connect(args.host, int(args.port), clientId=int(args.client_id))
+    from portefeuille_viewer.services.ib_connection_guard import connect_ib
+    args.client_id = connect_ib(app, args.host, int(args.port), int(args.client_id))
     thread = threading.Thread(target=app.run, daemon=True)
     thread.start()
     if not app.ready.wait(timeout=8):
@@ -590,7 +592,7 @@ def resolve_exchange(sec_type: str, exchange: str, prim_exchange: str) -> str:
 def connect_access(db_path: str):
     if db_path == get_stockdata_db_path():
         return get_stockdata_connection()
-    return pyodbc.connect(rf"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={db_path}")
+    return connect_stockdata(db_path)
 
 
 def log_progress(message: str) -> None:

@@ -79,11 +79,16 @@ class AppTaskScheduler(QObject):
             return
 
         self._running.add(task.task_name)
-        run_id = start_update_run(
-            task_name=task.task_name,
-            run_reason=task.run_reason,
-            source="app_task_scheduler",
-        )
+        try:
+            run_id = start_update_run(
+                task_name=task.task_name,
+                run_reason=task.run_reason,
+                source="app_task_scheduler",
+            )
+        except Exception as exc:
+            self._running.discard(task.task_name)
+            print(f"[app-task-scheduler] start log failed for {task.task_name}: {exc}")
+            return
         thread = threading.Thread(
             target=self._run_task_thread,
             args=(task, run_id),
@@ -93,7 +98,19 @@ class AppTaskScheduler(QObject):
         thread.start()
 
     def _run_task_thread(self, task: ScheduledTask, run_id: int | None) -> None:
+        from portefeuille_viewer.config.local_runtime import maintenance_lease
+        from portefeuille_viewer.config import get_stockdata_db_path
+        lease = maintenance_lease(get_stockdata_db_path())
+        if not lease.acquire():
+            try:
+                finish_update_run(run_id, status="skipped", message="Andere instantie voert een gedeelde update uit")
+            finally:
+                self._running.discard(task.task_name)
+            return
         try:
+            if has_successful_run_today(task.task_name):
+                finish_update_run(run_id, status="skipped", message="Vandaag al bijgewerkt door andere instantie")
+                return
             print(f"[app-task-scheduler] start {task.task_name}")
             result = task.runner()
             if task.task_name == "dividend_calendar_refresh":
@@ -130,4 +147,5 @@ class AppTaskScheduler(QObject):
             )
             print(f"[app-task-scheduler] failed {task.task_name}: {exc}")
         finally:
+            lease.release()
             self._running.discard(task.task_name)

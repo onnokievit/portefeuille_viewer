@@ -143,7 +143,8 @@ def fetch_target(
     use_conid: bool = False,
 ) -> pd.DataFrame:
     app = IndexHistApp()
-    app.connect("127.0.0.1", 7496, clientId=client_id)
+    from portefeuille_viewer.services.ib_connection_guard import connect_ib
+    client_id = connect_ib(app, "127.0.0.1", 7496, client_id)
     t = threading.Thread(target=app.run, daemon=True)
     t.start()
     time.sleep(1.0)

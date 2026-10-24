@@ -223,6 +223,10 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         import portefeuille_viewer.data.repository as repo
         self.comboDatabase.addItems(list(repo.DB_MAP.keys()))
         self.comboDatabase.setCurrentText(repo.DEFAULT_DB_NAME)
+        from portefeuille_viewer.config import get_settings
+        if getattr(get_settings(), "profile_database", None) is not None:
+            self.comboDatabase.setEnabled(False)
+            self.comboDatabase.setToolTip("Dit venster heeft een vast profiel. Start een ander profiel met --db <naam>.")
         self.comboDatabase.currentTextChanged.connect(self.apply_database_by_name)
         self._apply_db_color(repo.DEFAULT_DB_NAME)
         
