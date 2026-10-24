@@ -9,7 +9,14 @@ from uuid import uuid4
 import polars as pl
 import pyodbc
 
-from common import DEFAULT_DB_PATH, get_connection, normalize_numeric_columns, parse_iso_date
+from common import (
+    DEFAULT_DB_PATH,
+    PRICE_HISTORY_SOURCE,
+    get_connection,
+    get_stockdata_connection,
+    normalize_numeric_columns,
+    parse_iso_date,
+)
 
 
 PRECISION_MAP = {
@@ -70,6 +77,7 @@ class PhaseTimer:
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_aandelen_state_v2")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")
     parser.add_argument("--from-date", help="YYYY-MM-DD for incremental rebuild")
@@ -192,9 +200,9 @@ def load_stock_splits(conn, scope: RebuildScope) -> pl.DataFrame:
 
 
 def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
-    sql_range = """
+    sql_range = f"""
         SELECT asset_rollup, datum, close
-        FROM hist_data_per_asset_symbol
+        FROM {PRICE_HISTORY_SOURCE} AS price_history
         WHERE datum >= ? AND datum <= ?
     """
     params_range: list = [scope.from_date - timedelta(days=10), scope.to_date]
@@ -204,12 +212,12 @@ def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
         params_range.extend(scope.assets)
     sql_range += " ORDER BY asset_rollup, datum"
 
-    sql_anchor = """
+    sql_anchor = f"""
         SELECT p.asset_rollup, p.datum, p.close
-        FROM hist_data_per_asset_symbol AS p
+        FROM {PRICE_HISTORY_SOURCE} AS p
         INNER JOIN (
             SELECT asset_rollup, MAX(datum) AS max_datum
-            FROM hist_data_per_asset_symbol
+            FROM {PRICE_HISTORY_SOURCE} AS price_history
             WHERE datum < ? AND datum <= ?
     """
     params_anchor: list = [scope.from_date - timedelta(days=10), scope.to_date]
@@ -795,7 +803,7 @@ def main() -> None:
     )
     overall_start = perf_counter()
     timer = PhaseTimer()
-    with get_connection(args.db) as conn:
+    with get_connection(args.db) as conn, get_stockdata_connection(args.stock_db) as stock_conn:
         # Defensief: ruim achtergebleven temp stage tables van eerdere fails/locks op.
         drop_stale_temp_stage_tables(conn)
         scope = resolve_scope(args, conn)
@@ -811,9 +819,9 @@ def main() -> None:
             print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
             return
 
-        df_actions = load_stock_splits(conn, scope)
+        df_actions = load_stock_splits(stock_conn, scope)
         timer.mark(f"load_stock_splits ({df_actions.height} rows)")
-        df_prices = load_price_history(conn, scope)
+        df_prices = load_price_history(stock_conn, scope)
         timer.mark(f"load_price_history ({df_prices.height} rows)")
         df_prices = apply_split_price_correction(df_prices, df_actions)
         timer.mark("apply_split_price_correction")

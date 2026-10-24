@@ -11,7 +11,7 @@ class AssetLastPriceStore:
     Centrale coordinator voor asset_last_prices.
 
     De Access tabel wordt gebruikt als persistence/fallback cache:
-    - lezen: een keer per actieve database, bij start of database-wissel
+    - lezen: een keer per STOCKDATA-database, bij start of STOCKDATA-wissel
     - schrijven: alleen dirty live-prijzen, minimaal eens per 5 minuten en bij shutdown
     """
 
@@ -31,14 +31,14 @@ class AssetLastPriceStore:
     def _current_db_key() -> str:
         from portefeuille_viewer.data import repository
 
-        return str(getattr(repository, "db_path", "") or "")
+        return str(repository.get_stockdata_db_path())
 
     @staticmethod
     def _read_from_db() -> dict[tuple[str, str], float]:
         from portefeuille_viewer.data import repository
 
         out: dict[tuple[str, str], float] = {}
-        with repository.get_connection() as conn:
+        with repository.get_stockdata_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT ib_symbol, ib_currency, price FROM asset_last_prices")
             for row in cursor.fetchall():
@@ -55,7 +55,7 @@ class AssetLastPriceStore:
         from portefeuille_viewer.data import repository
 
         now = datetime.now()
-        with repository.get_connection() as conn:
+        with repository.get_stockdata_connection() as conn:
             cursor = conn.cursor()
             for (sym, cur), price in rows.items():
                 cursor.execute(

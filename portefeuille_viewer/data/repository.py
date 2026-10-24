@@ -108,7 +108,7 @@ def load_asset_rollup_data() -> pl.DataFrame:
     """
     sql = "SELECT * FROM asset_rollup_data"
     # sql = "SELECT Id,asset_rollup, value_grow, sector, type, regio, ib_symbol, ib_currency, exchange, prim_exchange, INCL_EXCL FROM asset_rollup_data"
-    with get_connection() as conn:
+    with get_stockdata_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.safe_write("repository_snapshot_asset_rollup_data", df)
     return compact_float64(df)
@@ -117,7 +117,7 @@ def load_historical_ohlcv_snapshot() -> pl.DataFrame:
     """
     Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
     """
-    with get_connection() as conn:
+    with get_stockdata_connection() as conn:
         table_cols = {str(row.column_name).lower() for row in conn.cursor().columns(table="historical_data_correct")}
         optional_selects = []
         if "historical_volatility" in table_cols:
@@ -439,7 +439,7 @@ def load_sprinter_referentie_data() -> pl.DataFrame:
     Laadt de sprinter referentie tabel  uit de database.
     """
     sql = "SELECT * FROM sprinters_referentie_data"
-    with get_connection() as conn:
+    with get_stockdata_connection() as conn:
         df = pl.read_database(sql, conn)
     SNAPSHOT_STORE.safe_write("repository_snapshot_sprinter_referentie_data", df)
     # return compact_float64(df)
@@ -1286,7 +1286,7 @@ def load_reference_lists():
     """Haal lijsten voor comboboxen op."""
     try:
         brokers = load_brokers()
-        with get_connection() as conn:
+        with get_stockdata_connection() as conn:
             rollups = pd.read_sql("SELECT DISTINCT asset_rollup FROM asset_rollup_data", conn)["asset_rollup"].dropna().astype(str).tolist()
             sprinters = pd.read_sql("SELECT DISTINCT asset_detail FROM sprinters_referentie_data", conn)["asset_detail"].dropna().astype(str).tolist()
     except Exception:

@@ -9,7 +9,14 @@ from uuid import uuid4
 import polars as pl
 import pyodbc
 
-from common import DEFAULT_DB_PATH, get_connection, normalize_numeric_columns, parse_iso_date
+from common import (
+    DEFAULT_DB_PATH,
+    PRICE_HISTORY_SOURCE,
+    get_connection,
+    get_stockdata_connection,
+    normalize_numeric_columns,
+    parse_iso_date,
+)
 
 
 PRECISION_MAP = {
@@ -55,6 +62,7 @@ class PhaseTimer:
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_open_sprinters_opgerold_v2")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")
     parser.add_argument("--from-date", help="YYYY-MM-DD for incremental rebuild")
@@ -189,9 +197,9 @@ def load_asset_quote_unit(conn) -> pl.DataFrame:
 
 
 def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
-    sql = """
+    sql = f"""
         SELECT asset_rollup, datum, close
-        FROM hist_data_per_asset_symbol
+        FROM {PRICE_HISTORY_SOURCE} AS price_history
         WHERE datum >= ? AND datum <= ?
     """
     params: list = [scope.from_date - timedelta(days=10), scope.to_date]
@@ -564,7 +572,7 @@ def main() -> None:
     )
     overall_start = perf_counter()
     timer = PhaseTimer()
-    with get_connection(args.db) as conn:
+    with get_connection(args.db) as conn, get_stockdata_connection(args.stock_db) as stock_conn:
         drop_stale_temp_stage_tables(conn)
         scope = resolve_scope(args, conn)
         print(f"Scope mode={scope.mode} assets={scope.assets or 'ALL'} from={scope.from_date} to={scope.to_date}")
@@ -579,11 +587,11 @@ def main() -> None:
             print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
             return
 
-        df_ref = load_sprinter_reference(conn)
+        df_ref = load_sprinter_reference(stock_conn)
         timer.mark(f"load_sprinter_reference ({df_ref.height} rows)")
-        df_quote_unit = load_asset_quote_unit(conn)
+        df_quote_unit = load_asset_quote_unit(stock_conn)
         timer.mark(f"load_asset_quote_unit ({df_quote_unit.height} rows)")
-        df_prices = load_price_history(conn, scope)
+        df_prices = load_price_history(stock_conn, scope)
         timer.mark(f"load_price_history ({df_prices.height} rows)")
         df_state_intervals = build_state_intervals(df_tx, scope)
         timer.mark(f"build_state_intervals ({df_state_intervals.height} rows)")

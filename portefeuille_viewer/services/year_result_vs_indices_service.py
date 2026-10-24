@@ -9,7 +9,7 @@ from datetime import date, datetime
 import polars as pl
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
-from portefeuille_viewer.data.repository import get_connection
+from portefeuille_viewer.data.repository import get_stockdata_connection
 from portefeuille_viewer.services.cash_management_result_chart_service import (
     build_cash_management_result_chart_payload,
 )
@@ -84,7 +84,7 @@ def list_index_asset_rollups() -> list[str]:
                 return options
         except Exception:
             pass
-    with get_connection() as conn:
+    with get_stockdata_connection() as conn:
         cur = conn.cursor()
         try:
             rows = cur.execute(
@@ -295,7 +295,7 @@ def _load_index_series(selected_indices: list[str]) -> list[dict]:
 
     if missing:
         placeholders = ", ".join("?" for _ in missing)
-        with get_connection() as conn:
+        with get_stockdata_connection() as conn:
             cur = conn.cursor()
             try:
                 rows = cur.execute(

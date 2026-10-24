@@ -9,6 +9,8 @@ import polars as pl
 
 from common import (
     DEFAULT_DB_PATH,
+    PRICE_HISTORY_SOURCE,
+    get_stockdata_connection,
     get_connection,
     normalize_numeric_columns,
     parse_iso_date,
@@ -56,6 +58,7 @@ class PhaseTimer:
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_open_opties_opgerold_v2")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")
     parser.add_argument("--from-date", help="YYYY-MM-DD for incremental rebuild")
@@ -140,9 +143,9 @@ def load_option_transactions(conn, scope: RebuildScope) -> pl.DataFrame:
 
 
 def load_price_history(conn, scope: RebuildScope) -> pl.DataFrame:
-    sql = """
+    sql = f"""
         SELECT asset_rollup, datum, close
-        FROM hist_data_per_asset_symbol
+        FROM {PRICE_HISTORY_SOURCE} AS price_history
         WHERE datum >= ? AND datum <= ?
     """
     params: list = [scope.from_date - timedelta(days=10), scope.to_date]
@@ -629,7 +632,7 @@ def main() -> None:
     run_options = RunOptions(insert_mode=args.insert_mode)
     overall_start = perf_counter()
     timer = PhaseTimer()
-    with get_connection(args.db) as conn:
+    with get_connection(args.db) as conn, get_stockdata_connection(args.stock_db) as stock_conn:
         scope = resolve_scope(args, conn)
         print(f"Scope mode={scope.mode} assets={scope.assets or 'ALL'} from={scope.from_date} to={scope.to_date}")
         timer.mark("resolve_scope")
@@ -650,11 +653,11 @@ def main() -> None:
                 timer.mark("maybe_validate_v1")
             print(f"[timing] total: {perf_counter() - overall_start:.3f}s")
             return
-        df_prices = load_price_history(conn, scope)
+        df_prices = load_price_history(stock_conn, scope)
         timer.mark(f"load_price_history ({df_prices.height} rows)")
-        df_splits = load_stock_splits(conn, scope)
+        df_splits = load_stock_splits(stock_conn, scope)
         timer.mark(f"load_stock_splits ({df_splits.height} rows)")
-        df_overrides = load_option_price_factor_overrides(conn)
+        df_overrides = load_option_price_factor_overrides(stock_conn)
         timer.mark(f"load_option_price_factor_overrides ({df_overrides.height} rows)")
         df_daily = attach_raw_prices(df_daily, df_prices)
         timer.mark("attach_raw_prices")

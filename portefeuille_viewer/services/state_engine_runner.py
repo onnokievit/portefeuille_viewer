@@ -979,6 +979,8 @@ class StateEngineRunner(QObject):
             str(script_path),
             "--db",
             str(db_path),
+            "--stock-db",
+            str(repository.get_stockdata_db_path()),
             "--mode",
             str(mode),
         ]
@@ -1005,6 +1007,8 @@ class StateEngineRunner(QObject):
             str(script_path),
             "--db",
             str(db_path),
+            "--stock-db",
+            str(repository.get_stockdata_db_path()),
             "--mode",
             str(mode),
         ]
@@ -1031,6 +1035,8 @@ class StateEngineRunner(QObject):
             str(script_path),
             "--db",
             str(db_path),
+            "--stock-db",
+            str(repository.get_stockdata_db_path()),
             "--mode",
             str(mode),
         ]
@@ -1057,6 +1063,8 @@ class StateEngineRunner(QObject):
             str(script_path),
             "--db",
             str(db_path),
+            "--stock-db",
+            str(repository.get_stockdata_db_path()),
             "--mode",
             str(mode),
         ]

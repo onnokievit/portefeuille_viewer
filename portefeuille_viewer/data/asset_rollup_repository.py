@@ -41,7 +41,7 @@ def _get_connection_with_retry(retries: int = 4, delay_s: float = 0.25):
     last_exc = None
     for attempt in range(max(1, retries)):
         try:
-            return data_repository.get_connection()
+            return data_repository.get_stockdata_connection()
         except Exception as exc:
             last_exc = exc
             if attempt < retries - 1:

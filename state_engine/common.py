@@ -17,6 +17,22 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> pyodbc.Connection:
     return pyodbc.connect(conn_str)
 
 
+# Exacte bronselectie van de voormalige Access-query hist_data_per_asset_symbol.
+# Bewaar de symbol-join (zonder extra filters of deduplicatie) voor gelijke resultaten.
+PRICE_HISTORY_SOURCE = """(
+    SELECT h.symbol, h.datum, h.[close], a.asset_rollup, h.multiplier_close_price
+    FROM asset_rollup_data AS a
+    INNER JOIN historical_data_correct AS h ON a.ib_symbol = h.symbol
+)"""
+
+
+def get_stockdata_connection(stock_db_path: str) -> pyodbc.Connection:
+    """Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback."""
+    if not stock_db_path or not str(stock_db_path).strip():
+        raise ValueError("Een STOCKDATA-databasepad is verplicht")
+    return get_connection(stock_db_path)
+
+
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
         return None

@@ -9,7 +9,13 @@ from uuid import uuid4
 import polars as pl
 import pyodbc
 
-from common import DEFAULT_DB_PATH, get_connection, normalize_numeric_columns, parse_iso_date
+from common import (
+    DEFAULT_DB_PATH,
+    get_connection,
+    get_stockdata_connection,
+    normalize_numeric_columns,
+    parse_iso_date,
+)
 
 
 TEMP_STAGE_TABLE_PREFIX = "TempAssetResultV2Stage"
@@ -99,6 +105,7 @@ class PhaseTimer:
 def parse_args():
     parser = argparse.ArgumentParser(description="Bouw per_dag_asset_result_v2 vanuit v2 state tabellen")
     parser.add_argument("--db", default=DEFAULT_DB_PATH)
+    parser.add_argument("--stock-db", required=True, help="Pad naar de gedeelde STOCKDATA-database")
     parser.add_argument("--mode", choices=["full", "asset_incremental", "asset_split_rebuild"], default="full")
     parser.add_argument("--asset-rollups", help="Comma separated asset_rollup(s) for asset scoped rebuilds")
     parser.add_argument("--from-date", help="YYYY-MM-DD for incremental rebuild")
@@ -169,12 +176,12 @@ def clamp_to_available_price_date(conn, requested_to_date: date, assets: list[st
     return clamped
 
 
-def resolve_scope(args, conn) -> RebuildScope:
+def resolve_scope(args, conn, stock_conn) -> RebuildScope:
     requested_to_date = parse_iso_date(args.to_date) or date.today()
     assets = _normalize_assets(args.asset_rollups)
     # Voor asset_incremental willen we ook dagen zonder nieuwe price-bars kunnen materialiseren
     # (bijv. delisted assets met carry-forward resultaat).
-    safe_to_date = requested_to_date if args.mode == "asset_incremental" else clamp_to_available_price_date(conn, requested_to_date, assets)
+    safe_to_date = requested_to_date if args.mode == "asset_incremental" else clamp_to_available_price_date(stock_conn, requested_to_date, assets)
     if args.mode == "asset_incremental":
         from_date = parse_iso_date(args.from_date)
         if not from_date:
@@ -320,7 +327,7 @@ def _build_series_split_rules(
     return rules
 
 
-def load_aantal_component(conn, scope: RebuildScope) -> pl.DataFrame:
+def load_aantal_component(conn, stock_conn, scope: RebuildScope) -> pl.DataFrame:
     empty = pl.DataFrame(
         schema={
             "datum": pl.Date,
@@ -332,7 +339,7 @@ def load_aantal_component(conn, scope: RebuildScope) -> pl.DataFrame:
             "totaal_aantal_bezit_v2": pl.Float64,
         }
     )
-    splits = load_stock_splits(conn, scope)
+    splits = load_stock_splits(stock_conn, scope)
     split_map: dict[str, list[dict]] = {}
     if not splits.is_empty():
         for row in splits.to_dicts():
@@ -1316,10 +1323,10 @@ def main() -> None:
     )
     overall_start = perf_counter()
     timer = PhaseTimer()
-    with get_connection(args.db) as conn:
+    with get_connection(args.db) as conn, get_stockdata_connection(args.stock_db) as stock_conn:
         drop_stale_temp_stage_tables(conn)
         ensure_asset_result_v2_schema(conn)
-        scope = resolve_scope(args, conn)
+        scope = resolve_scope(args, conn, stock_conn)
         print(f"Scope mode={scope.mode} assets={scope.assets or 'ALL'} from={scope.from_date} to={scope.to_date}")
         timer.mark("resolve_scope")
 
@@ -1331,7 +1338,7 @@ def main() -> None:
         timer.mark(f"load_sprinters_component ({df_s.height} rows)")
         df_d = load_dividend_component(conn, scope)
         timer.mark(f"load_dividend_component ({df_d.height} rows)")
-        df_q = load_aantal_component(conn, scope)
+        df_q = load_aantal_component(conn, stock_conn, scope)
         timer.mark(f"load_aantal_component ({df_q.height} rows)")
 
         df_final = build_final(df_a, df_o, df_s, df_d, df_q)
