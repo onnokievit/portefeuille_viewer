@@ -1,0 +1,2 @@
+# Tested provider adapter; private period metadata is isolated in the Yahoo adapter.
+yfinance==1.7.0

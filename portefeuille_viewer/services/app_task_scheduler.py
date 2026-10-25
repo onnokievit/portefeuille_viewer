@@ -22,6 +22,8 @@ class ScheduledTask:
     startup_delay_ms: int
     check_interval_ms: int
     runner: Callable[[], object]
+    daily: bool = True
+    shared_maintenance: bool = True
 
 
 class AppTaskScheduler(QObject):
@@ -33,6 +35,11 @@ class AppTaskScheduler(QObject):
         self._started = False
 
     def register_default_tasks(self) -> None:
+        from portefeuille_viewer.services.financial_data_service import FinancialDataService
+        self.register_task(ScheduledTask(
+            task_name='financial_data_refresh', run_reason='scheduled_financial_data_collection',
+            startup_delay_ms=90_000, check_interval_ms=5*60_000,
+            runner=lambda: FinancialDataService().refresh(), daily=False, shared_maintenance=False))
         self.register_task(
             ScheduledTask(
                 task_name="dividend_calendar_refresh",
@@ -71,7 +78,7 @@ class AppTaskScheduler(QObject):
         if task.task_name in self._running:
             return
         try:
-            if has_successful_run_today(task.task_name):
+            if task.daily and has_successful_run_today(task.task_name):
                 print(f"[app-task-scheduler] skip {task.task_name}: already ok today")
                 return
         except Exception as exc:
@@ -84,7 +91,7 @@ class AppTaskScheduler(QObject):
                 task_name=task.task_name,
                 run_reason=task.run_reason,
                 source="app_task_scheduler",
-            )
+            ) if task.daily else None
         except Exception as exc:
             self._running.discard(task.task_name)
             print(f"[app-task-scheduler] start log failed for {task.task_name}: {exc}")
@@ -98,9 +105,11 @@ class AppTaskScheduler(QObject):
         thread.start()
 
     def _run_task_thread(self, task: ScheduledTask, run_id: int | None) -> None:
-        from portefeuille_viewer.config.local_runtime import maintenance_lease
+        from portefeuille_viewer.config.local_runtime import maintenance_lease, FileLease
         from portefeuille_viewer.config import get_stockdata_db_path
-        lease = maintenance_lease(get_stockdata_db_path())
+        from portefeuille_viewer.config.process_lock import canonical_path
+        lease = (maintenance_lease(get_stockdata_db_path()) if task.shared_maintenance else
+                 FileLease('scheduled-task:' + canonical_path(get_stockdata_db_path()) + ':' + task.task_name))
         if not lease.acquire():
             try:
                 finish_update_run(run_id, status="skipped", message="Andere instantie voert een gedeelde update uit")
@@ -108,7 +117,10 @@ class AppTaskScheduler(QObject):
                 self._running.discard(task.task_name)
             return
         try:
-            if has_successful_run_today(task.task_name):
+            if run_id is None:
+                run_id = start_update_run(task_name=task.task_name, run_reason=task.run_reason,
+                                          source='app_task_scheduler')
+            if task.daily and has_successful_run_today(task.task_name):
                 finish_update_run(run_id, status="skipped", message="Vandaag al bijgewerkt door andere instantie")
                 return
             print(f"[app-task-scheduler] start {task.task_name}")
@@ -123,7 +135,7 @@ class AppTaskScheduler(QObject):
             message = str(getattr(result, "message", "ok") or "ok")
             finish_update_run(
                 run_id,
-                status="ok",
+                status=getattr(result, 'status', 'partial' if rows_error else 'ok'),
                 message=message,
                 rows_processed=rows_processed,
                 rows_ok=rows_ok,

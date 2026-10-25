@@ -1,10 +1,12 @@
 """Atomic STOCKDATA units of work, cross-process writers and committed revisions."""
 from datetime import datetime
 import re
+import threading
 
 import pyodbc
 
 from portefeuille_viewer.config.process_lock import ProcessLock, canonical_path
+from .stockdata_worker import current_worker, stockdata_job
 
 VERSION_TABLE = 'pv_shared_versions'
 
@@ -25,13 +27,26 @@ class SharedCursor:
         object.__setattr__(self, '_cursor', cursor)
 
     def __getattr__(self, name):
-        return getattr(self._cursor, name)
+        self.connection._check_thread()
+        value = getattr(self._cursor, name)
+        if callable(value):
+            def call(*args, **kwargs):
+                self.connection._check_thread()
+                return value(*args, **kwargs)
+            return call
+        return value
 
     def __setattr__(self, name, value):
+        self.connection._check_thread()
         setattr(self._cursor, name, value)
 
     def __iter__(self):
-        return iter(self._cursor)
+        while True:
+            self.connection._check_thread()
+            row = self._cursor.fetchone()
+            if row is None:
+                return
+            yield row
 
     def execute(self, sql, *args, parameters=None):
         if parameters is not None:
@@ -46,6 +61,7 @@ class SharedCursor:
         return self
 
     def _execute(self, method, sql, args):
+        self.connection._check_thread()
         table = changed_table(sql)
         if table:
             self.connection.begin_write()
@@ -59,32 +75,57 @@ class SharedConnection:
 
     Explicit commit retains its DB-API meaning, including immediate visibility
     to follow-up snapshot reads. Replacement operations must commit once after
-    their delete AND insert. Every connection closes physically on context exit.
+    their delete AND insert. Worker jobs return the physical connection to their
+    owning worker; other callers still close it physically on context exit.
     """
     def __init__(self, path):
         self.path = canonical_path(path)
-        self._raw = pyodbc.connect(rf'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={self.path};')
+        self._owner_thread = threading.get_ident()
+        self._worker = current_worker(self.path)
+        self._raw = (self._worker.borrow() if self._worker else
+            pyodbc.connect(rf'DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={self.path};'))
+        self._cursors = []
         self._writer = ProcessLock('stock-writer:' + self.path)
         self._dirty = set()
         self._context = False
         self._closed = False
 
     def __getattr__(self, name):
-        return getattr(self._raw, name)
+        self._check_thread()
+        value = getattr(self._raw, name)
+        if callable(value):
+            def call(*args, **kwargs):
+                self._check_thread()
+                return value(*args, **kwargs)
+            return call
+        return value
+
+    def _check_thread(self):
+        if threading.get_ident() != self._owner_thread:
+            raise RuntimeError('Databaseverbinding gebruikt vanuit een andere thread')
+        if self._closed:
+            raise RuntimeError('Databaseverbinding is gesloten')
 
     def cursor(self):
-        return SharedCursor(self, self._raw.cursor())
+        return SharedCursor(self, self._new_raw_cursor())
+
+    def _new_raw_cursor(self):
+        self._check_thread()
+        cur = self._raw.cursor()
+        self._cursors.append(cur)
+        return cur
 
     def execute(self, sql, *args, **kwargs):
         return self.cursor().execute(sql, *args, **kwargs)
 
     def begin_write(self):
+        self._check_thread()
         if not self._writer.owned:
             self._raw.commit()  # release earlier read locks before waiting for another writer
             if not self._writer.acquire(15000):
                 raise TimeoutError('STOCKDATA wordt bijgewerkt door een andere instantie; probeer opnieuw')
             try:
-                cur = self._raw.cursor()
+                cur = self._new_raw_cursor()
                 if not any(r.table_name.lower() == VERSION_TABLE for r in cur.tables(table=VERSION_TABLE)):
                     cur.execute(f'CREATE TABLE {VERSION_TABLE} (domain TEXT(100) PRIMARY KEY, revision LONG, updated_at DATETIME)')
                     self._raw.commit()  # schema bootstrap is separate from the following data transaction
@@ -93,10 +134,11 @@ class SharedConnection:
                 raise
 
     def _commit(self):
+        self._check_thread()
         changed = bool(self._dirty)
         try:
             if self._dirty:
-                cur = self._raw.cursor()
+                cur = self._new_raw_cursor()
                 for domain in sorted(self._dirty | {'all'}):
                     cur.execute(f'UPDATE {VERSION_TABLE} SET revision=revision+1, updated_at=? WHERE domain=?', datetime.now(), domain)
                     if cur.rowcount == 0:
@@ -118,6 +160,7 @@ class SharedConnection:
         self._commit()
 
     def rollback(self):
+        self._check_thread()
         try:
             self._raw.rollback()
             self._dirty.clear()
@@ -126,13 +169,30 @@ class SharedConnection:
 
     def close(self):
         if not self._closed:
+            self._check_thread()
+            broken = False
             try:
                 self.rollback()
+            except BaseException:
+                broken = True
+                raise
             finally:
-                self._raw.close()
-                self._closed = True
+                try:
+                    for cur in self._cursors:
+                        try:
+                            cur.close()
+                        except pyodbc.Error:
+                            pass  # explicit caller close, or a broken connection
+                    self._cursors.clear()
+                    if self._worker:
+                        self._worker.release(broken=broken)
+                    else:
+                        self._raw.close()
+                finally:
+                    self._closed = True
 
     def __enter__(self):
+        self._check_thread()
         self._context = True
         return self
 
@@ -151,6 +211,7 @@ def connect_stockdata(path):
     return SharedConnection(path)
 
 
+@stockdata_job
 def read_versions(path):
     with connect_stockdata(path) as conn:
         cur = conn.cursor()

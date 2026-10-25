@@ -220,6 +220,9 @@ def serve(manifest, factory=None):
     singleton=FileLease('quote-server:'+str(Path(manifest).resolve()))
     if not singleton.acquire():return
     app=QCoreApplication.instance() or QCoreApplication([])
+    from portefeuille_viewer.data.stockdata_worker import enable_stockdata_workers, shutdown_stockdata_workers
+    if factory is None:
+        enable_stockdata_workers()
     feed=(factory or PriceFeedService)(info['host'],info['port'],info['client_id'])
     hub=QuoteHub(feed)
     listener=Listener(info['pipe'],family='AF_PIPE',authkey=bytes.fromhex(info['auth']))
@@ -244,7 +247,14 @@ def serve(manifest, factory=None):
     timer.timeout.connect(lambda:app.quit() if hub.expire() else None);timer.start()
     try:app.exec()
     finally:
-        hub._stop=True;listener.close();feed.shutdown();singleton.release()
+        hub._stop=True
+        try:
+            listener.close()
+            feed.shutdown()
+        finally:
+            if factory is None:
+                shutdown_stockdata_workers()
+            singleton.release()
 
 
 if __name__=='__main__':

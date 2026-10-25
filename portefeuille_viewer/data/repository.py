@@ -9,6 +9,7 @@ from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.config import get_databases, get_default_database, get_settings, get_stockdata_db_path
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.domain.engine import compact_float64
+from portefeuille_viewer.data.stockdata_worker import current_stockdata_job
 
 
 # from portefeuille_viewer.data import live_aggregator_asset_rollup_data
@@ -1287,16 +1288,49 @@ def load_brokers():
     return list(dict.fromkeys(str(v).strip().lower() for v in values if v and str(v).strip()))
 
 
-def load_reference_lists():
-    """Haal lijsten voor comboboxen op."""
+def _reference_snapshot_values(snapshot_key, column):
+    frame = getattr(SNAPSHOT_STORE, snapshot_key, None)
+    if frame is None or column not in frame.columns:
+        return None
+    if isinstance(frame, pl.DataFrame):
+        values = frame[column].drop_nulls().cast(pl.String).to_list()
+    else:
+        values = frame[column].dropna().astype(str).tolist()
+    return list(dict.fromkeys(values))
+
+
+@current_stockdata_job
+def _load_stock_reference_lists():
+    """Fallback before snapshots exist; the app dispatches this DB-only job."""
+    with get_stockdata_connection() as conn:
+        cur = conn.cursor()
+        rollups = [str(r[0]) for r in cur.execute(
+            'SELECT DISTINCT asset_rollup FROM asset_rollup_data') if r[0] is not None]
+        sprinters = [str(r[0]) for r in cur.execute(
+            'SELECT DISTINCT asset_detail FROM sprinters_referentie_data') if r[0] is not None]
+    return rollups, sprinters
+
+
+def load_reference_lists(*, snapshot_only=False):
+    """Combobox data from memory; snapshot callbacks must never enter Access/COM."""
     try:
-        brokers = load_brokers()
-        with get_stockdata_connection() as conn:
-            rollups = pd.read_sql("SELECT DISTINCT asset_rollup FROM asset_rollup_data", conn)["asset_rollup"].dropna().astype(str).tolist()
-            sprinters = pd.read_sql("SELECT DISTINCT asset_detail FROM sprinters_referentie_data", conn)["asset_detail"].dropna().astype(str).tolist()
+        values = get_settings().get_brokers()
+        if not values:
+            values = _reference_snapshot_values('repository_snapshot_alle_transacties', 'broker')
+        if not values and not snapshot_only:
+            values = load_brokers()
+        brokers = list(dict.fromkeys(str(v).strip().lower() for v in values or [] if v and str(v).strip()))
+        rollups = _reference_snapshot_values('repository_snapshot_asset_rollup_data', 'asset_rollup')
+        sprinters = _reference_snapshot_values('repository_snapshot_sprinter_referentie_data', 'asset_detail')
+        if not snapshot_only and (rollups is None or sprinters is None):
+            db_rollups, db_sprinters = _load_stock_reference_lists()
+            if rollups is None:
+                rollups = db_rollups
+            if sprinters is None:
+                sprinters = db_sprinters
     except Exception:
         brokers, rollups, sprinters = [], [], []
-    return brokers, rollups, sprinters
+    return brokers, rollups or [], sprinters or []
 
 def _sanitize_update_dict(d: dict) -> dict:
     d = dict(d or {})

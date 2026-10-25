@@ -9,7 +9,8 @@ from portefeuille_viewer.services.refresh_policy import SnapshotCoverage, shared
 
 
 def main_callback(name, namespace):
-    tree = ast.parse((Path(__file__).parents[1] / 'portefeuille_viewer_1.5.py').read_text(encoding='utf-8-sig'))
+    root = Path(__file__).parents[1]
+    tree = ast.parse((root / (root.name + '.py')).read_text(encoding='utf-8-sig'))
     node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
     exec(compile(ast.Module(body=[node], type_ignores=[]), '<main callback>', 'exec'), namespace)
     return namespace[name]

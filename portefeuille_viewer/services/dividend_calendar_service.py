@@ -133,6 +133,8 @@ class DividendCalendarService:
                 app.disconnect()
 
         replace_current_and_append_history(rows)
+        from portefeuille_viewer.services.financial_data_service import record_ibkr_dividends
+        record_ibkr_dividends(rows)
         rows_ok = sum(1 for row in rows if row.status == "ok")
         rows_error = sum(1 for row in rows if row.status == "error")
         rows_skipped = sum(1 for row in rows if row.status == "skipped")

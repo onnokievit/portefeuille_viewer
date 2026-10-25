@@ -73,6 +73,19 @@ class UiDiagnosticsTests(unittest.TestCase):
         with patch.dict(os.environ, {'PV_UI_DIAGNOSTICS':'0'}):
             self.assertIsNone(start_ui_diagnostics(self.app, {}))
 
+    def test_resource_sample_does_not_submit_database_jobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = UiDiagnostics(self.app, tmp, 'test', sample_seconds=30)
+            try:
+                with patch('portefeuille_viewer.data.stockdata_worker.worker_for',
+                           side_effect=AssertionError('diagnostics must not open a database')):
+                    sample = monitor.sample_process()
+                self.assertIn('stockdata_workers', sample)
+                if os.name == 'nt':
+                    self.assertGreaterEqual(sample['gdi_objects'], 0)
+            finally:
+                monitor.stop()
+
     def test_cache_probe_records_reuse_without_changing_results(self):
         class Cache:
             value = None

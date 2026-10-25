@@ -94,6 +94,7 @@ def _row_values(row: DividendCalendarRow) -> tuple[Any, ...]:
 
 
 def replace_current_and_append_history(rows: list[DividendCalendarRow]) -> None:
+    """Compatibility name: patch available values; never delete the current row."""
     ensure_dividend_calendar_schema()
     if not rows:
         return
@@ -105,21 +106,49 @@ def replace_current_and_append_history(rows: list[DividendCalendarRow]) -> None:
     """
     placeholders = ", ".join("?" for _ in range(15))
     with _connect() as conn:
+        conn.begin_write()
         cur = conn.cursor()
         for row in rows:
-            cur.execute(
-                "DELETE FROM asset_dividend_calendar_current WHERE asset_rollup=?",
-                row.asset_rollup,
-            )
-            cur.execute(
-                f"INSERT INTO asset_dividend_calendar_current ({columns}) VALUES ({placeholders})",
-                *_row_values(row),
-            )
-            cur.execute(
-                f"INSERT INTO asset_dividend_calendar_history ({columns}) VALUES ({placeholders})",
-                *_row_values(row),
-            )
+            current = cur.execute('SELECT ' + columns + ' FROM asset_dividend_calendar_current WHERE asset_rollup=?',
+                                  row.asset_rollup).fetchone()
+            names = [name.strip() for name in columns.split(',')]
+            before = dict(zip(names, current)) if current else {}
+            merged = merge_dividend_row(before, row)
+            values = tuple(merged[name] for name in names)
+            if current:
+                cur.execute('UPDATE asset_dividend_calendar_current SET '
+                    + ','.join(f'[{name}]=?' for name in names[1:]) + ' WHERE asset_rollup=?',
+                    *(values[1:] + (row.asset_rollup,)))
+            else:
+                cur.execute(f'INSERT INTO asset_dividend_calendar_current ({columns}) VALUES ({placeholders})', *values)
+            substantive = set(names) - {'fetched_at', 'updated_at'}
+            def comparable(value):
+                return value.date() if isinstance(value, datetime) else value
+            if not current or any(comparable(before.get(name)) != comparable(merged[name]) for name in substantive):
+                cur.execute(f'INSERT INTO asset_dividend_calendar_history ({columns}) VALUES ({placeholders})', *values)
         conn.commit()
+
+
+def merge_dividend_row(before, row):
+    names = ('asset_rollup','ib_symbol','ib_currency','next_dividend_date','next_dividend_amount',
+             'trailing_12m_dividend','forward_12m_dividend','next_earnings_date','source_dividend',
+             'source_earnings','status','message','raw_dividend_value','fetched_at','updated_at')
+    incoming = dict(zip(names, _row_values(row)))
+    merged = dict(before)
+    for name, value in incoming.items():
+        if name in {'status','message','fetched_at','updated_at'} or value is not None and value != '':
+            merged[name] = value
+        else:
+            merged.setdefault(name, value)
+    old_date = before.get('next_dividend_date')
+    old_date = old_date.date() if isinstance(old_date, datetime) else old_date
+    # Do not attach a previous dividend amount to a newly announced date.
+    if old_date and row.next_dividend_date and old_date != row.next_dividend_date and row.next_dividend_amount is None:
+        merged['next_dividend_date'] = before['next_dividend_date']
+        merged['next_dividend_amount'] = before.get('next_dividend_amount')
+        merged['message'] = 'Nieuwe dividenddatum ontvangen; wacht op bijpassend bedrag'
+        merged['status'] = 'partial'
+    return merged
 
 
 def load_asset_universe() -> list[dict[str, Any]]:
@@ -133,8 +162,7 @@ def load_asset_universe() -> list[dict[str, Any]]:
             prim_exchange,
             contractid
         FROM asset_rollup_data
-        WHERE IIF(INCL_EXCL IS NULL, 0, INCL_EXCL) <> 0
-          AND IIF(ib_symbol IS NULL, '', ib_symbol) <> ''
+        WHERE IIF(ib_symbol IS NULL, '', ib_symbol) <> ''
         ORDER BY asset_rollup
     """
     with _connect() as conn:

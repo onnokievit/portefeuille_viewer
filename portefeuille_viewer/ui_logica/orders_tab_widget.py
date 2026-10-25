@@ -255,12 +255,12 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
     def _on_snapshot_updated(self, snapshot_key: str):
         if snapshot_key == "repository_snapshot_alle_transacties":
             self._orders_reload_timer.start()
-        elif snapshot_key == "repository_snapshot_asset_rollup_data":
+        elif snapshot_key in {"repository_snapshot_asset_rollup_data", "repository_snapshot_sprinter_referentie_data"}:
             self._reload_reference_lists()
 
     def _reload_reference_lists(self):
         import portefeuille_viewer.data.repository as repo
-        self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists()
+        self.brokers, self.asset_rollups, self.sprinter_details = repo.load_reference_lists(snapshot_only=True)
         self._brokers = self.brokers
         self._asset_rollups = self.asset_rollups
         self._sprinter_details = self.sprinter_details

@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import traceback
+import ctypes
 
 from PySide6.QtCore import QObject, QTimer
 
@@ -44,6 +45,14 @@ class UiDiagnostics(QObject):
             self.process.cpu_percent(None)
         except ImportError:
             self.process = None
+        self._gui_resources = None
+        if os.name == 'nt':
+            kernel = ctypes.WinDLL('kernel32')
+            user = ctypes.WinDLL('user32')
+            kernel.GetCurrentProcess.restype = ctypes.c_void_p
+            user.GetGuiResources.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+            user.GetGuiResources.restype = ctypes.c_uint
+            self._gui_resources = (user.GetGuiResources, kernel.GetCurrentProcess())
         self.mark_event('session_start', profile=profile, pid=os.getpid(),
                    process_metrics_available=self.process is not None,
                    heartbeat_ms=250, sample_seconds=sample_seconds)
@@ -156,6 +165,12 @@ class UiDiagnostics(QObject):
                               threads=self.process.num_threads())
                 if hasattr(self.process, 'num_handles'):
                     result['handles'] = self.process.num_handles()
+                if self._gui_resources:
+                    get_resources, handle = self._gui_resources
+                    result['gdi_objects'] = get_resources(handle, 0)
+                    result['user_objects'] = get_resources(handle, 1)
+                from portefeuille_viewer.data.stockdata_worker import worker_telemetry
+                result['stockdata_workers'] = worker_telemetry()
                 return result
         except Exception as exc:
             return {'available': False, 'reason': type(exc).__name__}

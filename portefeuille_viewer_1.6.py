@@ -1186,6 +1186,9 @@ def main():
             _log('[ui-diagnostics] meting actief:', ui_diagnostics.path)
     except Exception as exc:
         _log('[ui-diagnostics] kon meting niet starten:', type(exc).__name__)
+    from portefeuille_viewer.data.stockdata_worker import enable_stockdata_workers, shutdown_stockdata_workers
+    enable_stockdata_workers()
+    app.aboutToQuit.connect(shutdown_stockdata_workers)
     font = QFont()
     font.setPointSize(9)
     demi_bold = getattr(getattr(QFont, "Weight", None), "DemiBold", None)

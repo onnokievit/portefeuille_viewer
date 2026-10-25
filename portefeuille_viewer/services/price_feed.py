@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from portefeuille_viewer.data.asset_last_price_store import ASSET_LAST_PRICE_STORE
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.data.stockdata_worker import current_stockdata_job
 from portefeuille_viewer.services.subscription_manager import SubscriptionManager
 from portefeuille_viewer.services.quote_delivery_trace import QuoteDeliveryTrace
 
@@ -1194,6 +1195,7 @@ class PriceFeedService(QObject):
                 f"[price-feed] timer=save_last_prices_to_db rows={rows_written} total_ms={(time.perf_counter() - t0) * 1000.0:.1f}"
             )
 
+    @current_stockdata_job
     def _save_option_last_prices_to_db_sync(self, rows: list[dict]):
         t0 = time.perf_counter()
         self._cleanup_expired_option_last_prices_if_due()

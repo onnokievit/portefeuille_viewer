@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
+from portefeuille_viewer.data.stockdata_worker import current_stockdata_job
 
 
 class AssetLastPriceStore:
@@ -34,6 +35,7 @@ class AssetLastPriceStore:
         return str(repository.get_stockdata_db_path())
 
     @staticmethod
+    @current_stockdata_job
     def _read_from_db() -> dict[tuple[str, str], float]:
         from portefeuille_viewer.data import repository
 
@@ -49,6 +51,7 @@ class AssetLastPriceStore:
         return out
 
     @staticmethod
+    @current_stockdata_job
     def _write_to_db(rows: dict[tuple[str, str], float]) -> None:
         if not rows:
             return
