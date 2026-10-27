@@ -1,12 +1,12 @@
 # Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.7  (2026-10-27)
 
 ## Corpus Check
-- 318 files · ~919,661 words
+- 321 files · ~921,592 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5487 nodes · 16390 edges · 274 communities detected
-- Extraction: 57% EXTRACTED · 43% INFERRED · 0% AMBIGUOUS · INFERRED: 7089 edges (avg confidence: 0.75)
+- 5564 nodes · 16721 edges · 274 communities detected
+- Extraction: 56% EXTRACTED · 44% INFERRED · 0% AMBIGUOUS · INFERRED: 7287 edges (avg confidence: 0.75)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -287,181 +287,181 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `SingleAssetAnalyseTab` - 157 edges
-2. `emit()` - 139 edges
+2. `emit()` - 141 edges
 3. `SettingsManager` - 108 edges
 4. `get_settings()` - 108 edges
 5. `SectorAnalysisTab` - 91 edges
 6. `HeaderFilterMenuMixin` - 81 edges
-7. `SubscriptionManager` - 70 edges
+7. `SubscriptionManager` - 71 edges
 8. `ColumnFilterPopup` - 64 edges
 9. `StateEngineRunner` - 61 edges
 10. `OrdersTabWidget` - 59 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `Consistent explicit backup before first Wyse import; requires exclusive file acc` --uses--> `ProcessLock`  [INFERRED]
+  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.7\devtools\backup_stockdata_for_exchange.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\process_lock.py
 - `Explicit offline STOCKDATA audit/migration. Default is read-only; never run by t` --uses--> `ProcessLock`  [INFERRED]
   C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\devtools\harden_stockdata_constraints.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\process_lock.py
 - `Render the real Qt dashboard with synthetic data; never writes to a database.` --uses--> `BrokerSelectionTests`  [INFERRED]
   C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\preview_cash_brokers.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\test_cash_broker_selection.py
-- `Run from project root: python -m unittest discover -s devtools -p test_cash_brok` --uses--> `CashManagementEntriesDialog`  [INFERRED]
-  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\test_cash_broker_selection.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\portefeuille_viewer\ui_logica\cash_management_entries_dialog.py
-- `Reference snapshot events must not enter Access/COM on the GUI thread.` --uses--> `OrdersTabWidget`  [INFERRED]
-  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.6\devtools\test_order_reference_snapshots.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.6\portefeuille_viewer\ui_logica\orders_tab_widget.py
 - `Database routing checks using synthetic data only; never open configured databas` --uses--> `AssetLastPriceStore`  [INFERRED]
   C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\devtools\test_stockdata_routing.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.6\portefeuille_viewer\data\asset_last_price_store.py
+- `FileLease` --uses--> `Attach leases to the connection, releasing after disconnect or process crash.`  [INFERRED]
+  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\local_runtime.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\services\ib_connection_guard.py
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (230): TestApp, fetch_target(), FutureHistApp, fetch_target(), IndexHistApp, _AccountBalancesDeleteWorker, _AccountBalancesLoadWorker, _AccountBalancesSaveWorker (+222 more)
+Nodes (147): _append_result(), ColoredPolarsTableModel, DividendWindow, ColumnFilterPopup, HeaderFilterMenuMixin, Vereist in de host-widget:     - self.tableView: QTableView     - self._table_, Klik op de hele rij (niet alleen het checkboxvakje) toggelt de checkstate., CheckableSortItem (+139 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.01
-Nodes (367): main(), Creates temp_stock_prices_temp in Access if it doesn't exist,     then inserts, save_df_to_access_temp(), ensure_indexes(), main(), merge_delete_append(), merge_update_insert(), null_safe_diff() (+359 more)
+Nodes (228): fetch_target(), FutureHistApp, fetch_target(), IndexHistApp, IBApi, run_loop(), _chain_summary(), _FetchWorker (+220 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.01
-Nodes (187): _profile_option_inputs(), _theta_by_asset(), backup(), Consistent explicit backup before first Wyse import; requires exclusive file acc, _resolve_drivers(), CashManagementChartDialog, CashManagementResultChartDialog, _clear_cash_management_result_chart_dialog_instance() (+179 more)
+Nodes (325): main(), Creates temp_stock_prices_temp in Access if it doesn't exist,     then inserts, save_df_to_access_temp(), ensure_indexes(), main(), merge_delete_append(), merge_update_insert(), null_safe_diff() (+317 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.01
-Nodes (82): _SortableTableItem, _append_result(), CheckableFilterComboController, _normalize_text(), Small reusable controller for an include-list combobox.      All options are che, connect_read_only(), load_transactions(), DividendWindow (+74 more)
+Nodes (116): AssetLastPriceStore, _current_db_key(), Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebrui, Return True when v is a finite, non-sentinel, optionally positive number., _valid(), QTableWidget — Space togglet vinkje op huidige rij, sortering via header., _TransactiesTable, ResolveSpec (+108 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.02
-Nodes (136): ColoredPolarsTableModel, ColumnFilterPopup, HeaderFilterMenuMixin, Vereist in de host-widget:     - self.tableView: QTableView     - self._table_, _scenario_content_safe_df(), LaatstTransactiesDialog, ColoredPolarsTableModel, HighlightingPandasTableModel (+128 more)
+Cohesion: 0.01
+Nodes (104): selectBrokers(), build_cash_management_chart_payload(), _empty_payload(), _load_cash_entries_df(), _load_daily_balances_df(), _sort_brokers(), _build_pivot_rows(), _build_pivot_summary() (+96 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.02
-Nodes (104): AppTaskScheduler, ScheduledTask, AssetIndicatorChangesTab, AssetLastPriceStore, Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebrui, AssetVolatilityHistoryUpdateRunner, from_environment(), _parse_last_json_line() (+96 more)
+Cohesion: 0.01
+Nodes (163): ScheduledTask, _atomic_write_parquet(), chain_path(), chain_summary(), merge_and_write_chain(), read_chain(), DividendCalendarRow, DividendCalendarService (+155 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.02
-Nodes (112): build_universe(), _clean(), compare_with_access_q3(), connect_access(), _friday_number(), load_asset_rollup_data(), load_latest_open_options_v2(), load_optie_referentie_data() (+104 more)
+Nodes (84): AppTaskScheduler, AssetIndicatorChangesTab, AssetVolatilityHistoryUpdateRunner, from_environment(), _parse_last_json_line(), Run the daily HV/IV DB update script in a separate process., request_startup_update(), EngineCoreRuntime (+76 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.02
-Nodes (121): connect_access(), format_nl_3(), intrinsic_value(), load_latest_option_snapshot(), load_latest_underlying_close(), load_open_option_positions(), load_universe_map(), main() (+113 more)
+Nodes (133): empty_asset_indicator_live_frame(), empty_asset_indicator_meta_frame(), empty_asset_indicator_summary_frame(), Contract definitions for the asset indicator/advisor pipeline.  This module inte, ActionDecision, ActionInput, calculate_direction_score(), calculate_long_term_direction_score() (+125 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.02
-Nodes (121): empty_asset_indicator_live_frame(), empty_asset_indicator_meta_frame(), empty_asset_indicator_summary_frame(), Contract definitions for the asset indicator/advisor pipeline.  This module inte, ActionDecision, ActionInput, calculate_direction_score(), calculate_long_term_direction_score() (+113 more)
+Nodes (159): error(), historicalDataEnd(), _infer_sec_type(), _is_index_symbol(), kick_off_more(), nextValidId(), Submit one historical-data request for all_data row idx., Maintain up to MAX_IN_FLIGHT concurrent historical requests. (+151 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.02
-Nodes (100): AandelenProjectionV2, _all_brokers(), _apply_timevalue_overlay(), _expected_no_price_assets(), _has_technical_keys(), _normalize_changed_assets(), _price_diag(), Versioned projection for Aandelen view.      - Produces full snapshot DataFram (+92 more)
+Nodes (45): CheckableFilterComboController, _normalize_text(), Small reusable controller for an include-list combobox.      All options are che, HeaderFilterMenuMixin, PolarsTableModel, PortfolioBrokerFilterController, normalize_broker(), PortfolioBrokerFilterState (+37 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.02
-Nodes (50): _AssetRollupDeleteWorker, AssetRollupEditorTab, _AssetRollupLoadWorker, _AssetRollupSaveWorker, AssetRollupColumn, _bracket(), _check_original(), _coerce_value() (+42 more)
+Cohesion: 0.03
+Nodes (160): hydrate_snapshots(), coalesce_cols(), compact_float64(), compute_equity_flows(), print_snapshot_columns(), print_snapshot_head(), Druk de eerste `n` records van een snapshot af., Druk de kolommen van een snapshot af in tabelvorm. (+152 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.03
-Nodes (151): hydrate_snapshots(), compact_float64(), Zet alle Float64 kolommen om naar Float32 om geheugen te besparen., hydrate_snapshots(), _append_metrics_log_to(), _append_projection_metrics(), _apply_env_defaults_from_settings(), _apply_startup_database_selection() (+143 more)
+Cohesion: 0.02
+Nodes (49): HighlightingPandasTableModel, _fmt(), LaatstTransactiesDialog, HighlightingPandasTableModel, MultiColFilterProxy, PandasTableModel, PolarsTableModel, Qt-model dat data rechtstreeks uit een Polars DataFrame toont.     Te gebruiken (+41 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.03
-Nodes (87): _clean(), connect_access(), _fallback_option_exchange(), _load_option_reference(), load_scan_assets(), table_columns(), truthy(), chain_path() (+79 more)
+Nodes (103): _clean(), connect_access(), _fallback_option_exchange(), _load_option_reference(), load_scan_assets(), table_columns(), truthy(), chain_path() (+95 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.03
-Nodes (39): _AandelenWebBridge, AandelenWebPilotTab, _BetaScenarioWebBridge, BetaScenarioWebDialog, clearBrokers(), clearIndexShifts(), createBetaShiftScenario(), deleteActiveBetaShiftScenario() (+31 more)
+Cohesion: 0.02
+Nodes (46): _AssetRollupDeleteWorker, AssetRollupEditorTab, _AssetRollupLoadWorker, _AssetRollupSaveWorker, _LongHistoryOutputDialog, _SortableTableItem, _to_float(), AssetRollupColumn (+38 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.05
-Nodes (32): AssetResultViewer, main(), _range_with_aligned_zero(), resolve_db_path(), to_timestamp(), AssetRecord, build_contract(), build_yfinance_candidates() (+24 more)
+Cohesion: 0.04
+Nodes (66): build_universe(), _clean(), compare_with_access_q3(), connect_access(), _friday_number(), load_asset_rollup_data(), load_latest_open_options_v2(), load_optie_referentie_data() (+58 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.06
-Nodes (33): _to_float(), _OptionReferenceDeleteWorker, OptionReferenceEditorTab, _OptionReferenceLoadWorker, _OptionReferenceSaveWorker, _SortableTableItem, _to_float(), _bracket() (+25 more)
+Cohesion: 0.04
+Nodes (42): _AandelenWebBridge, AandelenWebPilotTab, _BetaScenarioWebBridge, BetaScenarioWebDialog, clearBrokers(), clearIndexShifts(), createBetaShiftScenario(), deleteActiveBetaShiftScenario() (+34 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.05
-Nodes (4): PriceUpdateDialog, _fmt_ts(), SettingsTab, Ui_SettingsTab
+Cohesion: 0.04
+Nodes (39): _date_label(), MonthEndCompareDialog, MonthEndCompareModel, MonthEndCompareSortProxy, _to_float(), _coerce_to_date(), _iter_daily_dates(), _iter_friday_dates() (+31 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.06
-Nodes (30): _date_label(), MonthEndCompareDialog, MonthEndCompareModel, MonthEndCompareSortProxy, _to_float(), _coerce_to_date(), _date_label(), _iter_daily_dates() (+22 more)
+Cohesion: 0.03
+Nodes (27): _CashChartWorker, CashManagementChartDialog, _clear_cash_management_chart_dialog_instance(), open_cash_management_chart_dialog(), _CashEntriesDeleteWorker, _CashEntriesLoadWorker, _CashEntriesSaveWorker, CashManagementEntriesDialog (+19 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.06
-Nodes (38): AssetIndicatorChangesPayload, build_asset_indicator_changes(), build_changes(), build_timeline(), _change_reasons(), classify_change(), _comparison_window(), _dt_sort_value() (+30 more)
+Cohesion: 0.04
+Nodes (38): AssetResultViewer, main(), _range_with_aligned_zero(), resolve_db_path(), to_timestamp(), AssetRow, clean(), connect_access() (+30 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.06
-Nodes (25): _chain_summary(), _FetchWorker, PySide6 main window for the Vol Surface POC.  Layout:   ┌─ top bar ─────────────, Captures sys.stdout writes and emits them as a Qt signal (thread-safe)., _StdoutRedirect, VolSurfWindow, _connect(), load_assets() (+17 more)
+Cohesion: 0.05
+Nodes (48): AandelenProjectionV2, _all_brokers(), _apply_timevalue_overlay(), _expected_no_price_assets(), _has_technical_keys(), _normalize_changed_assets(), _price_diag(), Versioned projection for Aandelen view.      - Produces full snapshot DataFram (+40 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.08
-Nodes (26): _append_today_if_needed(), _coerce_to_date(), _iter_daily_dates(), _iter_friday_dates(), _iter_month_end_dates(), _iter_quarter_end_dates(), _iter_third_friday_dates(), _iter_year_end_dates() (+18 more)
+Cohesion: 0.05
+Nodes (17): VolSurfWindow, active_database(), connect_read_only(), load_transactions(), latest_parquet_path(), load_latest_parquet(), FieldListWidget, main() (+9 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.08
-Nodes (8): HighlightingPandasTableModel, OrdersTableModel, OrdersTabWidget, is_pairable(), parse_float_field(), Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'., Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort, Ui_OrdersTabUI
+Cohesion: 0.07
+Nodes (26): _append_today_if_needed(), _coerce_to_date(), _iter_daily_dates(), _iter_friday_dates(), _iter_month_end_dates(), _iter_quarter_end_dates(), _iter_third_friday_dates(), _iter_year_end_dates() (+18 more)
 
 ### Community 22 - "Community 22"
+Cohesion: 0.07
+Nodes (20): OptionReferenceEditorTab, _OptionReferenceSaveWorker, _SortableTableItem, _to_float(), _apply_order_delta(), _base_row_template(), build_portfolio_value_scenario_overlay_df(), _empty_df_like_base() (+12 more)
+
+### Community 23 - "Community 23"
 Cohesion: 0.06
 Nodes (20): Standalone state engine tools for manual historical rebuilds., OptionChainTableModel, Option Chain Table Model Polars-based table model voor option chain display, Get all data for a specific row, Table model voor option chain data (Polars DataFrame), Update table met nieuwe DataFrame, OptionChainService, Option Chain Service Handles IBKR reqContractDetails for option chain retrieval (+12 more)
 
-### Community 23 - "Community 23"
-Cohesion: 0.08
-Nodes (26): AssetRow, clean(), connect_access(), duration_to_days(), filter_duration(), load_assets(), load_volatility_history(), FigureCanvas (+18 more)
-
 ### Community 24 - "Community 24"
-Cohesion: 0.09
-Nodes (10): commentEditing(), exportSnapshot(), openCommentColorMenu(), openResolverDialog(), openTimevalueChartWeb(), _OptiesOpenWebBridge, OptiesOpenWebPilotTab, saveComment() (+2 more)
+Cohesion: 0.14
+Nodes (34): _clean(), connect_access(), load_assets(), load_latest_spot(), table_columns(), truthy(), _as_date(), _asset_last_price_candidates() (+26 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.14
-Nodes (33): _clean(), connect_access(), load_assets(), load_latest_spot(), table_columns(), truthy(), _as_date(), _asset_last_price_candidates() (+25 more)
+Cohesion: 0.1
+Nodes (6): _AccountBalancesDeleteWorker, _AccountBalancesLoadWorker, _AccountBalancesSaveWorker, AccountDailyBalancesDialog, _clear_account_daily_balances_dialog_instance(), open_account_daily_balances_dialog()
 
 ### Community 26 - "Community 26"
-Cohesion: 0.15
-Nodes (31): discover_earnings_calendar_columns(), dolt_query(), fetch_dolt_earnings(), format_raw_excerpt(), log(), main(), parse_args(), resolve_target_assets() (+23 more)
+Cohesion: 0.16
+Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.09
-Nodes (26): error(), historicalDataEnd(), _infer_sec_type(), _is_index_symbol(), kick_off_more(), nextValidId(), Submit one historical-data request for all_data row idx., Maintain up to MAX_IN_FLIGHT concurrent historical requests. (+18 more)
+Cohesion: 0.16
+Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.16
-Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
+Nodes (12): build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main(), _norm_dec_for_id() (+4 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.16
-Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
+Nodes (11): Applier, build_uniek_id_like_repository(), _clean(), Finder, main(), _norm_dec_for_id(), normalize_side(), ReviewWindow (+3 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.15
-Nodes (11): AssignApplier, AssignFinder, AssignPair, build_uniek_id_like_repository(), _clean(), _date_for_id(), main(), _norm_dec_for_id() (+3 more)
-
-### Community 31 - "Community 31"
 Cohesion: 0.16
 Nodes (11): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), DoorrolApplier, DoorrolFinder, main(), normalize_side() (+3 more)
 
-### Community 32 - "Community 32"
+### Community 31 - "Community 31"
 Cohesion: 0.16
-Nodes (11): Applier, build_uniek_id_like_repository(), _clean(), Finder, main(), _norm_dec_for_id(), normalize_side(), ReviewWindow (+3 more)
+Nodes (2): _normalize_date(), StateEngineTasksDialog
+
+### Community 32 - "Community 32"
+Cohesion: 0.17
+Nodes (10): AssignFinder, AssignPair, build_uniek_id_like_repository(), _clean(), _date_for_id(), main(), _norm_dec_for_id(), ReviewWindow (+2 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.13
-Nodes (4): _clear_year_result_vs_indices_dialog_instance(), open_year_result_vs_indices_chart_dialog(), YearResultVsIndicesChartDialog, _YearResultVsIndicesWorker
+Cohesion: 0.18
+Nodes (9): _days_in_month(), main(), _nice_step(), PriceDistributionViewer, PriceRow, resolve_db_path(), _safe_date(), _safe_float() (+1 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.16
-Nodes (8): _clean(), ExpireApplier, ExpireCandidate, ExpireFinder, main(), ReviewWindow, _to_date(), to_float()
+Cohesion: 0.29
+Nodes (6): clear_live_prices(), initialize_live_prices(), Update de centrale live_prices store.     new_prices: dict met als key asset_id, Reset de centrale live_prices store., Vul SNAPSHOT_STORE.live_prices altijd eerst met de laatste bekende prijzen uit d, update_live_prices()
 
 ### Community 35 - "Community 35"
-Cohesion: 0.23
-Nodes (5): DbMigrationService, MigrationResult, Minimal multi-user DB migration bootstrap.      Rules:     - Additive only., main(), Voer de bestaande migratie handmatig uit voor één expliciet gekozen database.  G
-
-### Community 36 - "Community 36"
 Cohesion: 0.5
 Nodes (3): CellPatchPayload, SnapshotInitPayload, ViewPatchPayload
 
-### Community 37 - "Community 37"
+### Community 36 - "Community 36"
 Cohesion: 1.0
 Nodes (1): Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant
+
+### Community 37 - "Community 37"
+Cohesion: 1.0
+Nodes (0):
 
 ### Community 38 - "Community 38"
 Cohesion: 1.0
@@ -481,11 +481,11 @@ Nodes (0):
 
 ### Community 42 - "Community 42"
 Cohesion: 1.0
-Nodes (0):
+Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
 
 ### Community 43 - "Community 43"
 Cohesion: 1.0
-Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
+Nodes (0):
 
 ### Community 44 - "Community 44"
 Cohesion: 1.0
@@ -545,7 +545,7 @@ Nodes (0):
 
 ### Community 58 - "Community 58"
 Cohesion: 1.0
-Nodes (0):
+Nodes (1): Build live option time-value snapshot from open options + option_series_master.
 
 ### Community 59 - "Community 59"
 Cohesion: 1.0
@@ -1408,51 +1408,53 @@ Cohesion: 1.0
 Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time
 
 ## Knowledge Gaps
-- **422 isolated node(s):** `Standalone web report for asset indicator history changes.  Run:     python devt`, `Static call-site inventory; no imports of app modules and no database access.`, `Compare resource growth on a NEW synthetic Access DB, never a user database.  py`, `Standalone E2E helper to fetch executions from the last N days.     Returns a li`, `Isolate Qt/WebEngine/Access first-chance exceptions, without production data.  R` (+417 more)
+- **423 isolated node(s):** `Standalone web report for asset indicator history changes.  Run:     python devt`, `Static call-site inventory; no imports of app modules and no database access.`, `Compare resource growth on a NEW synthetic Access DB, never a user database.  py`, `Standalone E2E helper to fetch executions from the last N days.     Returns a li`, `Isolate Qt/WebEngine/Access first-chance exceptions, without production data.  R` (+418 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 37`** (2 nodes): `Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant`, `ai_option_advisor.py`
+- **Thin community `Community 36`** (2 nodes): `Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant`, `ai_option_advisor.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 38`** (1 nodes): `optie_scanner.py`
+- **Thin community `Community 37`** (1 nodes): `optie_scanner.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 39`** (1 nodes): `option_workbench.py`
+- **Thin community `Community 38`** (1 nodes): `option_workbench.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 40`** (1 nodes): `test_functions_to_be_copied_to_other_files.py`
+- **Thin community `Community 39`** (1 nodes): `test_functions_to_be_copied_to_other_files.py`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 40`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 41`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 42`** (1 nodes): `__init__.py`
+- **Thin community `Community 42`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 43`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
+- **Thin community `Community 43`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 44`** (1 nodes): `__init__.py`
+- **Thin community `Community 44`** (1 nodes): `asset_source.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 45`** (1 nodes): `asset_source.py`
+- **Thin community `Community 45`** (1 nodes): `chain_retriever_window.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 46`** (1 nodes): `chain_retriever_window.py`
+- **Thin community `Community 46`** (1 nodes): `chain_run_repository.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 47`** (1 nodes): `chain_run_repository.py`
+- **Thin community `Community 47`** (1 nodes): `chain_scanner.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 48`** (1 nodes): `chain_scanner.py`
+- **Thin community `Community 48`** (1 nodes): `chain_store.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 49`** (1 nodes): `chain_store.py`
+- **Thin community `Community 49`** (1 nodes): `date_utils.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 50`** (1 nodes): `date_utils.py`
+- **Thin community `Community 50`** (1 nodes): `main.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 51`** (1 nodes): `main.py`
+- **Thin community `Community 51`** (1 nodes): `models.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 52`** (1 nodes): `models.py`
+- **Thin community `Community 52`** (1 nodes): `orchestrator.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 53`** (1 nodes): `orchestrator.py`
+- **Thin community `Community 53`** (1 nodes): `parquet_viewer.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 54`** (1 nodes): `parquet_viewer.py`
+- **Thin community `Community 54`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 55`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 56`** (1 nodes): `__init__.py`
+- **Thin community `Community 56`** (1 nodes): `fetch_hv_iv_ibkr_single_stock.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 57`** (1 nodes): `fetch_hv_iv_ibkr_single_stock.py`
+- **Thin community `Community 57`** (1 nodes): `iv_surface_app.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 58`** (1 nodes): `iv_surface_app.py`
+- **Thin community `Community 58`** (1 nodes): `Build live option time-value snapshot from open options + option_series_master.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 59`** (1 nodes): `Merge nonmissing fields; changed facts and fetch checkpoint commit together.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1888,16 +1890,16 @@ Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `emit()` connect `Community 10` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 33`, `Community 8`, `Community 9`, `Community 11`, `Community 12`, `Community 15`, `Community 16`, `Community 19`, `Community 21`, `Community 22`, `Community 23`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Why does `SubscriptionManager` connect `Community 6` to `Community 0`, `Community 5`, `Community 7`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Community 2` to `Community 0`, `Community 1`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 17`, `Community 20`, `Community 21`, `Community 24`, `Community 33`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `emit()` connect `Community 13` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 17`, `Community 18`, `Community 22`, `Community 23`, `Community 25`?**
+  _High betweenness centrality (0.049) - this node is a cross-community bridge._
+- **Why does `SingleAssetAnalyseTab` connect `Community 0` to `Community 9`, `Community 5`, `Community 6`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+- **Why does `get_settings()` connect `Community 4` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 6`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 15`, `Community 16`, `Community 18`, `Community 19`, `Community 21`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `MainWindow` and `_TabBarNoFocusRectStyle`) actually correct?**
   _`SingleAssetAnalyseTab` has 7 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 136 inferred relationships involving `emit()` (e.g. with `.tick()` and `.run()`) actually correct?**
-  _`emit()` has 136 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 138 inferred relationships involving `emit()` (e.g. with `.check_busy_rejection_and_retry()` and `.tick()`) actually correct?**
+  _`emit()` has 138 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 3 inferred relationships involving `SettingsManager` (e.g. with `.manager()` and `prepare_profile_session()`) actually correct?**
   _`SettingsManager` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 98 inferred relationships involving `get_settings()` (e.g. with `_apply_env_defaults_from_settings()` and `_resolve_database_alias()`) actually correct?**

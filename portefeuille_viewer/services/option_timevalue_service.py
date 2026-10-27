@@ -18,6 +18,9 @@ from ibapi.contract import Contract
 from portefeuille_viewer.data import repository
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.signals import signals
+from portefeuille_viewer.services.option_contract_resolver import (
+    OPTION_PRODUCTS, ResolveSpec, reference_map, references_for, resolve, valid_candidate,
+)
 
 
 _OPTION_TIMEVALUE_PERF_LOG = str(os.getenv("OPTION_TIMEVALUE_PERF_LOG", "1")).strip() == "1"
@@ -149,6 +152,8 @@ class OptionTimevalueService(QObject):
 
         with contextlib.suppress(Exception):
             self.price_feed.optionTickUpdated.connect(self._on_option_tick)
+        with contextlib.suppress(Exception):
+            self.price_feed.statusChanged.connect(self._on_feed_status)
         signals.ordersCommitted.connect(self.schedule_rebuild)
         signals.snapshotUpdated.connect(self._on_snapshot_updated)
 
@@ -157,6 +162,11 @@ class OptionTimevalueService(QObject):
     def _log(self, msg: str):
         if self._log_enabled:
             print(msg)
+
+    def _on_feed_status(self, status):
+        if status == 'connected':
+            self._clear_unresolved('ibkr_connected')
+            self.schedule_rebuild()
 
     def _on_rebuild_timer_fired(self):
         if _OPTION_TIMEVALUE_PERF_LOG:
@@ -354,78 +364,28 @@ class OptionTimevalueService(QObject):
             pass
         return asset_rollup
 
+    def _option_resolve_spec(self, asset, exp, cp, strike, ccy):
+        symbol = self._asset_symbol_from_snapshot(asset)
+        asset_type = ''
+        frame = SNAPSHOT_STORE.repository_snapshot_asset_rollup_data
+        if frame is not None and not frame.is_empty() and 'type' in frame.columns:
+            found = frame.filter(pl.col('asset_rollup').cast(pl.Utf8).str.to_uppercase() == asset.upper()).to_dicts()
+            if found:asset_type = _clean(found[0].get('type'))
+        refs = references_for(self._build_opt_ref_map(), asset, _option_week(exp))
+        return ResolveSpec(asset, symbol, ccy, exp, float(strike), 'C' if cp == 'call' else 'P',
+                           asset_type=asset_type, references=refs)
+
     def get_manual_resolve_candidates(self, unresolved_item: dict[str, Any]) -> list[dict[str, Any]]:
-        if not hasattr(self.price_feed, "_feed") or self.price_feed._feed is None:
-            return []
-        try:
-            asset = _clean(unresolved_item.get("asset")).upper()
-            cp = _clean(unresolved_item.get("c_p")).lower()
-            ccy = _clean(unresolved_item.get("ccy")).upper()
-            strike = float(unresolved_item.get("strike"))
-            exp = date.fromisoformat(_clean(unresolved_item.get("exp")))
-            right = "C" if cp == "call" else "P"
-        except Exception:
-            return []
-        symbol = self._asset_symbol_from_snapshot(asset) or asset
-        details_holder = []
-        done = threading.Event()
-        ib = self.price_feed._feed
-
-        def on_detail(cd):
-            details_holder.append(cd)
-
-        def on_end():
-            done.set()
-
-        for sec_type, exch in [
-            ("OPT", "SMART"),
-            ("OPT", "FTA"),
-            ("FOP", "SMART"),
-            ("FOP", "FTA"),
-        ]:
-            c = Contract()
-            c.secType = sec_type
-            c.symbol = symbol
-            c.currency = ccy
-            c.exchange = exch
-            c.lastTradeDateOrContractMonth = exp.strftime("%Y%m%d")
-            c.strike = float(strike)
-            c.right = right
-            details_holder.clear()
-            done.clear()
-            with contextlib.suppress(Exception):
-                ib.request_contract_details(c, on_detail, on_end)
-            done.wait(timeout=max(self._resolve_wait_sec, 1.2))
-            if details_holder:
-                break
-
-        out: list[dict[str, Any]] = []
-        seen: set[int] = set()
-        for det in details_holder:
-            con = getattr(det, "contract", None)
-            if con is None:
-                continue
-            try:
-                conid = int(getattr(con, "conId", 0) or 0)
-            except Exception:
-                conid = 0
-            if conid <= 0 or conid in seen:
-                continue
-            seen.add(conid)
-            out.append(
-                {
-                    "conid": conid,
-                    "local_symbol": _clean(getattr(con, "localSymbol", "")),
-                    "trading_class": _clean(getattr(con, "tradingClass", "")),
-                    "exchange_code": _clean(getattr(con, "exchange", "")) or "SMART",
-                    "multiplier": _to_float(getattr(con, "multiplier", None)) or 100.0,
-                    "underlying_symbol": _clean(getattr(con, "symbol", "")) or symbol,
-                    "sec_type": _clean(getattr(con, "secType", "")),
-                    "last_trade_date": _clean(getattr(con, "lastTradeDateOrContractMonth", "")),
-                    "currency": _clean(getattr(con, "currency", "")) or ccy,
-                }
-            )
-        return out
+        if not getattr(self.price_feed, '_feed', None):
+            raise RuntimeError('IBKR-koersservice is niet beschikbaar')
+        asset = _clean(unresolved_item.get('asset')).upper()
+        cp = _clean(unresolved_item.get('c_p')).lower()
+        if cp not in ('call', 'put'):raise ValueError('Ongeldige optierichting')
+        spec = self._option_resolve_spec(asset, date.fromisoformat(unresolved_item['exp']), cp,
+            float(unresolved_item['strike']), _clean(unresolved_item['ccy']).upper())
+        result = resolve(self.price_feed._feed, spec, timeout=max(self._resolve_wait_sec, 3.0))
+        if not result.candidates:raise RuntimeError(result.message)
+        return result.candidates
 
     def apply_manual_resolution(self, unresolved_item: dict[str, Any], candidate: dict[str, Any], lock_row: bool = True) -> tuple[bool, str]:
         try:
@@ -437,6 +397,9 @@ class OptionTimevalueService(QObject):
             conid = int(candidate.get("conid") or 0)
             if conid <= 0:
                 return False, "Geen geldige conid geselecteerd."
+            spec = self._option_resolve_spec(asset, exp, cp, strike, ccy)
+            if not valid_candidate(spec, candidate):
+                return False, "Contract past niet exact bij deze optie; niet opgeslagen."
             local_symbol = _clean(candidate.get("local_symbol"))
             trading_class = _clean(candidate.get("trading_class")).upper()
             exchange_code = _clean(candidate.get("exchange_code")).upper() or "SMART"
@@ -540,10 +503,11 @@ class OptionTimevalueService(QObject):
                 continue
             asset_rollup = _clean(r.get("asset_rollup"))
             week = _option_week(expiry)
-            exact = ref_map.get((asset_rollup, week))
-            fallback = ref_map.get((asset_rollup, 0))
-            ref = exact or fallback or {}
-            ref_found = bool(exact or fallback)
+            refs = references_for(ref_map, asset_rollup, week)
+            ref = refs[0] if refs else {}
+            ref_found = bool(refs) or asset_rollup.upper() in OPTION_PRODUCTS
+            classes = {_clean(item.get('opt_tradingclass')).upper() for item in refs}
+            trading_class = next(iter(classes)) if len(classes) == 1 else ''
             mult = _to_float(ref.get("opt_multiplier"))
             out.append(
                 OpenSeriesRow(
@@ -556,7 +520,7 @@ class OptionTimevalueService(QObject):
                     expiry=expiry,
                     qty_open=float(r.get("qty_open")),
                     exchange_code=_clean(ref.get("opt_exchange")).upper() or "SMART",
-                    trading_class=_clean(ref.get("opt_tradingclass")).upper(),
+                    trading_class=trading_class.strip(),
                     multiplier=float(mult) if mult is not None else 100.0,
                     ref_mapping_found=ref_found,
                     ref_week=int(week),
@@ -564,22 +528,10 @@ class OptionTimevalueService(QObject):
             )
         return out
 
-    def _build_opt_ref_map(self) -> dict[tuple[str, int], dict]:
+    def _build_opt_ref_map(self) -> dict[tuple[str, int], list[dict]]:
         ref = SNAPSHOT_STORE.repository_snapshot_optie_referentie_data
-        if ref is None or ref.is_empty():
-            return {}
-        cols = set(ref.columns)
-        if not {"asset_rollup", "opt_week"}.issubset(cols):
-            return {}
-        out = {}
-        for r in ref.to_dicts():
-            asset = _clean(r.get("asset_rollup"))
-            try:
-                week = int(r.get("opt_week"))
-            except Exception:
-                week = 0
-            out[(asset, week)] = r
-        return out
+        if ref is None or ref.is_empty():return {}
+        return reference_map(ref.to_dicts())
 
     def _upsert_master_and_resolve(self, rows: list[OpenSeriesRow]) -> list[OpenSeriesRow]:
         if not rows:
@@ -614,7 +566,7 @@ class OptionTimevalueService(QObject):
                         """,
                         (
                             r.asset_rollup,
-                            r.underlying_symbol or None,
+                            OPTION_PRODUCTS.get(r.asset_rollup.upper(), {}).get('symbol', r.underlying_symbol) or None,
                             r.strike,
                             r.expiry,
                             r.exchange_code or None,
@@ -631,10 +583,13 @@ class OptionTimevalueService(QObject):
                     )
                 else:
                     is_locked = bool(ex[7]) if ex[7] is not None else False
-                    if is_locked:
-                        # Respect manual lock: do not overwrite mapping fields.
+                    if is_locked or (ex[1] is not None and int(ex[1]) > 0):
+                        # Preserve verified contract metadata, including its actual
+                        # trading class. Pricing still uses the asset's own symbol.
+                        if not bool(ex[8]):
+                            cur.execute('UPDATE option_series_master SET active=True WHERE series_id=?',int(ex[0]))
                         continue
-                    merged_underlying = r.underlying_symbol or _clean(ex[4]) or None
+                    merged_underlying = OPTION_PRODUCTS.get(r.asset_rollup.upper(), {}).get('symbol', r.underlying_symbol) or _clean(ex[4]) or None
                     merged_exchange = r.exchange_code or _clean(ex[5]) or None
                     merged_trading_class = r.trading_class or _clean(ex[6]) or None
                     merged_multiplier = r.multiplier if r.multiplier is not None else (_to_float(ex[3]) or 100.0)
@@ -718,7 +673,7 @@ class OptionTimevalueService(QObject):
                     self._set_unresolved(
                         r,
                         reason,
-                        "Controleer optie_referentie_data (trading class/exchange) of IB contractdetails",
+                        self._resolve_messages.get(self._series_key(r), "Controleer optie_referentie_data of IBKR-contractdetails"),
                     )
 
         # No DB connection or writer lease is held during IBKR callbacks.
@@ -748,88 +703,36 @@ class OptionTimevalueService(QObject):
         return final_rows
 
     def _resolve_contracts(self, rows: list[OpenSeriesRow]) -> dict[tuple[str, str, float, str, str], str]:
-        failed: dict[tuple[str, str, float, str, str], str] = {}
-        if not rows:
-            return failed
-        if not hasattr(self.price_feed, "_feed") or self.price_feed._feed is None:
-            for r in rows:
-                failed[self._series_key(r)] = "no_contract_details"
-            return failed
-        ib = self.price_feed._feed
-        now = datetime.now()
-        for r in rows:
-            details_holder = []
-            done = threading.Event()
-
-            for sec_type, use_tc, exch in [
-                ("OPT", True, r.exchange_code),
-                ("OPT", False, r.exchange_code),
-                ("OPT", True, "SMART"),
-                ("OPT", False, "SMART"),
-                ("FOP", True, r.exchange_code),
-                ("FOP", False, r.exchange_code),
-                ("FOP", True, "SMART"),
-                ("FOP", False, "SMART"),
-            ]:
-                c = Contract()
-                c.secType = sec_type
-                c.symbol = r.underlying_symbol
-                c.currency = r.ib_currency
-                c.exchange = exch or "SMART"
-                c.lastTradeDateOrContractMonth = r.expiry.strftime("%Y%m%d")
-                c.strike = float(r.strike)
-                c.right = "C" if r.optie_call_put == "call" else "P"
-                if use_tc and r.trading_class:
-                    c.tradingClass = r.trading_class
-                # Each attempt owns its callbacks; a late answer must not resolve
-                # the following attempt or the following option series.
-                details_holder = []
-                done = threading.Event()
-                def on_detail(cd, holder=details_holder):
-                    holder.append(cd)
-                def on_end(event=done):
-                    event.set()
-                with contextlib.suppress(Exception):
-                    ib.request_contract_details(c, on_detail, on_end)
-                done.wait(timeout=self._resolve_wait_sec)
-                if details_holder:
-                    break
-
-            if not details_holder:
-                failed[self._series_key(r)] = "timeout" if not done.is_set() else "no_contract_details"
+        failed = {}
+        self._resolve_messages = {}
+        for row in rows:
+            key = self._series_key(row)
+            if not getattr(self.price_feed, '_feed', None):
+                failed[key] = 'not_connected'
                 continue
-            det = details_holder[0]
-            con = det.contract
-            conid = int(getattr(con, "conId", 0) or 0)
-            if conid <= 0:
-                failed[self._series_key(r)] = "no_contract_details"
+            spec = self._option_resolve_spec(row.asset_rollup,row.expiry,row.optie_call_put,row.strike,row.ib_currency)
+            spec.symbol = row.underlying_symbol
+            spec.exchange = row.exchange_code
+            spec.trading_class = row.trading_class
+            spec.multiplier = row.multiplier
+            result = resolve(self.price_feed._feed,spec,timeout=max(self._resolve_wait_sec,3.0))
+            self._resolve_messages[key] = result.message
+            if result.reason != 'resolved' or len(result.candidates) != 1:
+                failed[key] = result.reason
                 continue
-            local_symbol = _clean(getattr(con, "localSymbol", ""))
-            tc = _clean(getattr(con, "tradingClass", ""))
-            exch = _clean(getattr(con, "exchange", ""))
-            mult = _to_float(getattr(con, "multiplier", None))
+            candidate = result.candidates[0]
+            now = datetime.now()
             with self._connect_stockdb() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    """
-                    UPDATE option_series_master
+                conn.execute("""UPDATE option_series_master
                     SET conid=?, local_symbol=?, trading_class=?, exchange_code=?,
-                        multiplier=?, last_verified_ts=?, updated_at=?
+                        multiplier=?, underlying_symbol=?, last_verified_ts=?, updated_at=?
                     WHERE series_id=? AND (resolver_locked=False OR resolver_locked IS NULL)
-                        AND (conid IS NULL OR conid=0)
-                    """,
-                    (
-                        conid,
-                        local_symbol or None,
-                        tc or None,
-                        exch or None,
-                        mult,
-                        now,
-                        now,
-                        int(r.series_id),
-                    ),
-                )
+                        AND (conid IS NULL OR conid=0)""",
+                    (candidate['conid'],candidate['local_symbol'],candidate['trading_class'],
+                     candidate['exchange_code'],candidate['multiplier'],candidate['underlying_symbol'],
+                     now,now,int(row.series_id)))
         return failed
+
     def _load_underlying_close_map(self) -> dict[str, float]:
         h = getattr(SNAPSHOT_STORE, "repository_snapshot_historical_ohlcv_latest", None)
         if h is None or h.is_empty():

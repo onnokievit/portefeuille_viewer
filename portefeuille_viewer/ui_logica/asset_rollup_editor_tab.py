@@ -608,7 +608,8 @@ class AssetRollupEditorTab(QWidget):
         runner.failed.connect(self._on_long_history_failed)
         self._history_runner = runner
         self._set_history_busy(True, f"Lange historie bezig voor {asset_rollup}...")
-        runner.start(asset_rollup)
+        if not runner.start(asset_rollup):
+            self._on_long_history_not_started(runner)
 
     def _run_long_iv_hv_for_selection(self) -> None:
         if self._history_is_running():
@@ -638,7 +639,20 @@ class AssetRollupEditorTab(QWidget):
         self._history_runner = runner
         duration = str(self.combo_long_iv_hv_duration.currentData() or "10 Y")
         self._set_history_busy(True, f"Lang IV/HV bezig voor {asset_rollup} ({duration})...")
-        runner.start(asset_rollup, duration=duration)
+        if not runner.start(asset_rollup, duration=duration):
+            self._on_long_history_not_started(runner)
+
+    def _on_long_history_not_started(self, runner) -> None:
+        # Invalid inputs/process errors already use failed; do not overwrite
+        # that error or affect a different runner installed by a signal handler.
+        if self._history_runner is not runner:
+            return
+        message = getattr(runner, '_pv_task_rejection', '') or 'Historieaanvraag is niet gestart.'
+        self._history_runner = None
+        self._set_history_busy(False, message)
+        if self._history_dialog is not None:
+            self._history_dialog.set_status(message)
+        runner.deleteLater()
 
     def _on_long_history_started(self, payload: dict) -> None:
         asset = payload.get("asset_rollup", "")

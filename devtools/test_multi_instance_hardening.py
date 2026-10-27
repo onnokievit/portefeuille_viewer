@@ -192,20 +192,25 @@ class HubTests(unittest.TestCase):
         from datetime import date
         from portefeuille_viewer.services.option_timevalue_service import OptionTimevalueService, OpenSeriesRow
         previous=[]
-        def request(contract, detail, end):
+        def request(contract, detail, end, on_error=None):
             if not previous:
                 previous.append(detail);end();return
             previous[0](SimpleNamespace(contract=SimpleNamespace(conId=777)))
-            detail(SimpleNamespace(contract=SimpleNamespace(conId=888)))
+            detail(SimpleNamespace(contract=SimpleNamespace(conId=888,symbol='TEST',currency='USD',
+                secType='OPT',exchange='SMART',tradingClass='TEST',multiplier='100',
+                lastTradeDateOrContractMonth='20270115',strike=100.,right='C',localSymbol='TEST option')))
             end()
         connection=MagicMock()
         connection.__enter__.return_value=connection
         service=SimpleNamespace(price_feed=SimpleNamespace(_feed=SimpleNamespace(request_contract_details=request)),
             _resolve_wait_sec=.01, _series_key=lambda row:row.series_id,
             _connect_stockdb=lambda:connection)
+        from portefeuille_viewer.services.option_contract_resolver import ResolveSpec
+        service._option_resolve_spec=lambda *a:ResolveSpec('TEST','TEST','USD',date(2027,1,15),100.,'C',asset_type='aandeel',
+            references=[dict(opt_exchange='SMART',opt_tradingclass='TEST',opt_multiplier=100)])
         row=OpenSeriesRow('broker','TEST','TEST','USD','call',100.,date(2027,1,15),1.,'SMART','TEST',100.,series_id=1)
         self.assertEqual(OptionTimevalueService._resolve_contracts(service,[row]),{})
-        self.assertEqual(connection.cursor.return_value.execute.call_args.args[1][0],888)
+        self.assertEqual(connection.execute.call_args.args[1][0],888)
 
 
 class AccessConcurrencyTests(unittest.TestCase):

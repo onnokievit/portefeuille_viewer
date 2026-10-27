@@ -202,7 +202,8 @@ class QuoteHub:
                 token=request['token']
                 self.feed._feed.request_contract_details(request['contract'],
                     lambda detail:self.event('detail',(token,detail),key),
-                    lambda:self.event('detail_end',(token,),key))
+                    lambda:self.event('detail_end',(token,),key),
+                    on_error=lambda code,message:self.event('detail_error',(token,code,message),key))
                 return token
             if op=='secdef':
                 token=request['token']

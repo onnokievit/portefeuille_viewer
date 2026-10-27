@@ -11,16 +11,23 @@ from portefeuille_viewer.services.history_indicator_runner import get_history_in
 def _refresh_after_pipeline(owner, payload, success_message):
     owner._refresh_pending = True
     def finished():
+        if not owner._refresh_pending:
+            return
         owner._refresh_pending = False
         owner.output.emit(success_message)
         owner.finished.emit(payload)
     def failed(message):
+        if not owner._refresh_pending:
+            return
         owner._refresh_pending = False
         owner.output.emit("Historie staat in DB, maar app-verversing faalde: " + message)
         owner.failed.emit(message)
-    get_history_indicator_runner().request(
-        reload_history=True, rebuild_indicators=True, reason='single_asset_history_finished',
-        on_published=finished, on_failed=failed)
+    try:
+        get_history_indicator_runner().request(
+            reload_history=True, rebuild_indicators=True, reason='single_asset_history_finished',
+            on_published=finished, on_failed=failed)
+    except Exception as exc:
+        failed(str(exc))
 
 
 class SingleAssetLongHistoryRunner(QObject):
@@ -46,16 +53,13 @@ class SingleAssetLongHistoryRunner(QObject):
     def is_running(self) -> bool:
         return self._process is not None or getattr(self, '_refresh_pending', False)
 
-    def start(self, asset_rollup: str) -> None:
+    def start(self, asset_rollup: str) -> bool:
         if self.is_running:
-            return
-        from portefeuille_viewer.services.shared_tasks import claim_task
-        if not claim_task(self):
             return False
         asset = str(asset_rollup or "").strip()
         if not asset:
             self.failed.emit("Geen asset_rollup opgegeven.")
-            return
+            return False
 
         script_dir = Path(__file__).resolve().parents[2] / "price_update_scripts_single_stock_fetch_long_history"
         self._asset_rollup = asset
@@ -79,15 +83,26 @@ class SingleAssetLongHistoryRunner(QObject):
         missing = [str(path) for _label, path, _args in self._steps if not path.exists()]
         if missing:
             self.failed.emit("Script niet gevonden: " + ", ".join(missing))
-            return
+            return False
+
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
 
         self._step_index = -1
         self._all_output = []
         self.started.emit({"asset_rollup": asset, "steps": len(self._steps)})
         self.output.emit(f"Start lange historie voor {asset}\n")
         self._start_next_step()
+        return self.is_running
 
     def _start_next_step(self) -> None:
+        try:
+            self._start_next_step_impl()
+        except Exception as exc:
+            self._on_process_error(str(exc))
+
+    def _start_next_step_impl(self) -> None:
         self._step_index += 1
         if self._step_index >= len(self._steps):
             payload = {
@@ -193,16 +208,13 @@ class SingleAssetLongVolatilityRunner(QObject):
     def is_running(self) -> bool:
         return self._process is not None or getattr(self, '_refresh_pending', False)
 
-    def start(self, asset_rollup: str, *, duration: str = "10 Y") -> None:
+    def start(self, asset_rollup: str, *, duration: str = "10 Y") -> bool:
         if self.is_running:
-            return
-        from portefeuille_viewer.services.shared_tasks import claim_task
-        if not claim_task(self):
             return False
         asset = str(asset_rollup or "").strip()
         if not asset:
             self.failed.emit("Geen asset_rollup opgegeven.")
-            return
+            return False
         duration = str(duration or "10 Y").strip().upper()
         if duration not in {"1 Y", "2 Y", "5 Y", "10 Y", "20 Y"}:
             duration = "10 Y"
@@ -214,7 +226,11 @@ class SingleAssetLongVolatilityRunner(QObject):
         )
         if not script_path.exists():
             self.failed.emit(f"Script niet gevonden: {script_path}")
-            return
+            return False
+
+        from portefeuille_viewer.services.shared_tasks import claim_task
+        if not claim_task(self):
+            return False
 
         self._asset_rollup = asset
         self._all_output = []
@@ -232,6 +248,14 @@ class SingleAssetLongVolatilityRunner(QObject):
         self.output.emit(f"Start lange IV/HV voor {asset} duration={duration}\n")
         self.output.emit("\n=== Stap 1/1: HV/IV lange historie ophalen via IBKR ===\n")
 
+        try:
+            self._start_process(script_path, asset, duration)
+        except Exception as exc:
+            self._on_process_error(str(exc))
+            return False
+        return True
+
+    def _start_process(self, script_path, asset, duration):
         process = QProcess(self)
         from portefeuille_viewer.services.worker_guard import protect_worker
         protect_worker(process)

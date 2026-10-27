@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+import threading
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -18,6 +19,8 @@ from PySide6.QtWidgets import (
 
 
 class OptionManualResolverDialog(QDialog):
+    _candidates_ready = Signal(object, str)
+
     def __init__(self, option_timevalue_service, unresolved_items: list[dict[str, Any]], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Handmatige Optie Resolve")
@@ -66,6 +69,7 @@ class OptionManualResolverDialog(QDialog):
         self.btn_load_candidates.clicked.connect(self._load_candidates_for_selected)
         self.btn_apply.clicked.connect(self._apply_selected_candidate)
         self.lst_unresolved.currentRowChanged.connect(self._on_unresolved_row_changed)
+        self._candidates_ready.connect(self._finish_candidates)
 
         self._fill_unresolved()
         if self.lst_unresolved.count() > 0:
@@ -106,13 +110,29 @@ class OptionManualResolverDialog(QDialog):
             QMessageBox.information(self, "Resolver", "Selecteer eerst een unresolved serie.")
             return
         self.btn_load_candidates.setEnabled(False)
-        try:
-            self._candidates = self._svc.get_manual_resolve_candidates(unresolved)
-        except Exception as exc:
-            self._candidates = []
-            QMessageBox.warning(self, "Resolver", f"Kandidaten laden mislukt: {exc}")
-        finally:
-            self.btn_load_candidates.setEnabled(True)
+        self.btn_apply.setEnabled(False)
+        self.lst_unresolved.setEnabled(False)
+        self.lbl_selected.setText('IBKR-contracten zoeken…')
+        def load():
+            try:
+                candidates = self._svc.get_manual_resolve_candidates(unresolved)
+                error = ''
+            except Exception as exc:
+                candidates, error = [], str(exc)
+            try:
+                self._candidates_ready.emit(candidates, error)
+            except RuntimeError:
+                pass  # Dialog was destroyed while the bounded lookup finished.
+        threading.Thread(target=load, name='manual-option-resolver', daemon=True).start()
+
+    def _finish_candidates(self, candidates, error):
+        self._candidates = candidates
+        self.btn_load_candidates.setEnabled(True)
+        self.btn_apply.setEnabled(bool(candidates))
+        self.lst_unresolved.setEnabled(True)
+        self.lbl_selected.setText(error or f'{len(candidates)} passende kandidaat-contracten gevonden')
+        if error and self.isVisible():
+            QMessageBox.warning(self, 'Resolver', error)
         self._render_candidates()
 
     def _render_candidates(self):

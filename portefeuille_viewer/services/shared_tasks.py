@@ -11,11 +11,14 @@ def release_task(owner, *args):
 
 
 def claim_task(owner):
+    owner._pv_task_rejection = ''
     if getattr(owner, '_pv_task_lease', None) is not None:
         return True
     lease = maintenance_lease(get_stockdata_db_path())
     if not lease.acquire():
-        message = 'Gedeelde update draait al in een andere appinstantie; deze aanvraag wordt overgeslagen.'
+        message = ('Er draait al een gedeelde historie- of achtergrond-update; deze aanvraag is niet gestart. '
+                   'Probeer het opnieuw zodra die update klaar is.')
+        owner._pv_task_rejection = message
         print('[shared-task] ' + message)
         for name in ('output', 'progress'):
             signal = getattr(owner, name, None)

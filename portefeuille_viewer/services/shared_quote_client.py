@@ -81,13 +81,17 @@ class RemotePriceFeedIB(QObject):
             pair,price,receipt=payload
             self.quoteReceived.emit(pair[0],pair[1],price,receipt)
         elif kind=='option':self.optionTickUpdated.emit(payload)
-        elif kind in ('detail','detail_end','secdef'):
+        elif kind in ('detail','detail_end','detail_error','secdef'):
             token=payload[0]
             with self.lock:callbacks=self.callbacks.get(token)
             if callbacks:
-                detail,end,_expires=callbacks
+                detail,end,_expires=callbacks[:3]
                 try:
-                    if kind=='detail_end':
+                    if kind=='detail_error':
+                        with self.lock:self.callbacks.pop(token,None)
+                        if len(callbacks)>3 and callbacks[3]:callbacks[3](payload[1],payload[2])
+                        end()
+                    elif kind=='detail_end':
                         with self.lock:self.callbacks.pop(token,None)
                         end()
                     elif kind=='secdef':detail(*payload[1])
@@ -144,9 +148,9 @@ class RemotePriceFeedIB(QObject):
         self.enqueue({'op':'reconnect','client_id':client_id})
     def ensure_subscriptions(self,rows):self.set_rows('assets',rows)
     def ensure_option_subscriptions(self,rows):self.set_rows('options',rows)
-    def request_contract_details(self,contract,on_detail,on_end):
+    def request_contract_details(self,contract,on_detail,on_end,on_error=None):
         token=uuid4().hex
-        with self.lock:self.callbacks[token]=(on_detail,on_end,time.monotonic()+60)
+        with self.lock:self.callbacks[token]=(on_detail,on_end,time.monotonic()+60,on_error)
         self.enqueue({'op':'details','contract':contract,'token':token})
         return token
     def request_secdef_opt_params(self,symbol,exchange,sec_type,conid,on_param,on_end):

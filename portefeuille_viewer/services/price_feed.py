@@ -191,6 +191,7 @@ class PriceFeedIB(QObject):
         # Dispatcher dicts
         self._cd_handlers = {}  # reqId -> on_detail
         self._cd_end_handlers = {}  # reqId -> on_end
+        self._cd_error_handlers = {}  # reqId -> on_error
         self._sd_handlers = {}  # reqId -> on_param
         self._sd_end_handlers = {}  # reqId -> on_end
         # Connection state + reconnect guard
@@ -409,6 +410,13 @@ class PriceFeedIB(QObject):
                     feed._set_status("connected")
                 feed._subscription_logger.info("IB error request=%s code=%s %s", reqId, code, errorString)
                 feed.subscriptions.error(reqId, code, str(errorString))
+                if code in (200,321,322,323,502,504):
+                    handler = feed._cd_error_handlers.pop(reqId, None)
+                    if handler:
+                        feed._cd_handlers.pop(reqId, None)
+                        end = feed._cd_end_handlers.pop(reqId, None)
+                        handler(code, str(errorString))
+                        if end:end()
 
             def marketDataType(self, reqId, marketDataType):
                 feed.subscriptions.market_type(reqId, marketDataType)
@@ -552,6 +560,7 @@ class PriceFeedIB(QObject):
             def contractDetailsEnd(self, reqId):
                 end = feed._cd_end_handlers.pop(reqId, None)
                 feed._cd_handlers.pop(reqId, None)
+                feed._cd_error_handlers.pop(reqId, None)
                 if end:
                     end()
 
@@ -608,6 +617,7 @@ class PriceFeedIB(QObject):
             self._option_tid_meta.clear()
             self._cd_handlers.clear()
             self._cd_end_handlers.clear()
+            self._cd_error_handlers.clear()
             self._sd_handlers.clear()
             self._sd_end_handlers.clear()
         with contextlib.suppress(Exception):
@@ -633,6 +643,7 @@ class PriceFeedIB(QObject):
             self._option_tid_meta.clear()
             self._cd_handlers.clear()
             self._cd_end_handlers.clear()
+            self._cd_error_handlers.clear()
             self._sd_handlers.clear()
             self._sd_end_handlers.clear()
         self._schedule_reconnect(reason=self._last_disconnect_reason, delay=2.0)
@@ -725,11 +736,15 @@ class PriceFeedIB(QObject):
             return tid
 
     # API: request contract details (async, per reqId handler)
-    def request_contract_details(self, contract, on_detail, on_end):
+    def request_contract_details(self, contract, on_detail, on_end, on_error=None):
         tid = self.next_tid()
         self._cd_handlers[tid] = on_detail
         self._cd_end_handlers[tid] = on_end
-        self._app.reqContractDetails(tid, contract)
+        if on_error is not None:self._cd_error_handlers[tid] = on_error
+        try:self._app.reqContractDetails(tid, contract)
+        except Exception:
+            self._cd_handlers.pop(tid,None);self._cd_end_handlers.pop(tid,None);self._cd_error_handlers.pop(tid,None)
+            raise
         return tid
 
     # API: request secdef opt params (async, per reqId handler)
