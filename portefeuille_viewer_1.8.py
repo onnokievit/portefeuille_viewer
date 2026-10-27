@@ -1541,6 +1541,8 @@ def main():
     setattr(w, "option_timevalue_service", option_timevalue_service)
     setattr(w, "asset_volatility_history_update_runner", asset_volatility_history_update_runner)
     w.show()
+    # Existing shared background path: independent of which tab is first opened.
+    QTimer.singleShot(0, history_indicator_runner.request_startup)
     if getattr(app, 'ui_diagnostics', None) is not None:
         app.ui_diagnostics.mark_event('window_shown')
     # Start price-update pas nadat UI volledig staat en event-loop idle is.

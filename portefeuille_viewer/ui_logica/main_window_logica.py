@@ -20,6 +20,7 @@ from portefeuille_viewer.ui_logica.option_reference_editor_tab import OptionRefe
 from portefeuille_viewer.ui_logica.cash_management_web_tab import CashManagementWebTab
 
 from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import SingleAssetAnalyseTab
+from portefeuille_viewer.ui_logica.asset_dashboard_tab import AssetDashboardTab
 from portefeuille_viewer.ui_logica.sector_analysis_tab_logica import SectorAnalysisTab
 from portefeuille_viewer.ui_logica.orders_tab_widget import OrdersTabWidget
 from portefeuille_viewer.ui_logica.maand_eind_chart_dialog import close_month_end_chart_dialog
@@ -36,7 +37,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         profile = getattr(get_settings(), "profile_database", None)
-        self.setWindowTitle("Portefeuille Viewer 1.7" + (f" — {profile}" if profile is not None else ""))
+        self.setWindowTitle("Portefeuille Viewer 1.8" + (f" — {profile}" if profile is not None else ""))
         self.installEventFilter(self)
         self.price_feed = price_feed
         self.portfolio_engine = portfolio_engine
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self._register_tabs()
         self.single_asset_analyse_tab.asset_selector.currentTextChanged.connect(self._update_price_focus)
+        self.asset_dashboard_tab.assetChanged.connect(self._update_price_focus)
         if hasattr(self, "settings_tab") and hasattr(self.settings_tab, "set_price_feed"):
             self.settings_tab.set_price_feed(self.price_feed)
         self._apply_saved_tab_order()
@@ -95,6 +97,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _register_tabs(self):
         self.orders_tab = OrdersTabWidget()
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
+        self.asset_dashboard_tab = AssetDashboardTab()
         self.aandelen_tab = AandelenWebPilotTab()
         self.aandelen_tab.set_price_feed(self.price_feed)
         self.opties_open_tab = OptiesOpenWebPilotTab()
@@ -116,6 +119,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._tab_specs = [
             ("orders", "Orders", self.orders_tab),
             ("single_asset_analyse", "Single Asset Analyse", self.single_asset_analyse_tab),
+            ("asset_dashboard", "Asset Dashboard", self.asset_dashboard_tab),
             ("aandelen", "Aandelen", self.aandelen_tab),
             ("opties_open_live", "Open Opties (Live)", self.opties_open_tab),
             ("optie_tijdswaarde", "Optie Tijdswaarde", self.optie_tijdswaarde_tab),
@@ -176,10 +180,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._persist_tab_order()
 
     def _update_price_focus(self, *_args):
+        if self.tabWidget.currentWidget() is self.asset_dashboard_tab:
+            self.price_feed.focus_asset(self.asset_dashboard_tab.selected_asset)
+            return
         selected = self.tabWidget.currentWidget() is self.single_asset_analyse_tab
         self.price_feed.focus_asset(self.single_asset_analyse_tab.asset_selector.currentText() if selected else "")
 
     def _on_tab_changed(self, index):
+        self.asset_dashboard_tab.set_active(self.tabWidget.widget(index) is self.asset_dashboard_tab)
         self.subscriptions_tab.set_active(self.tabWidget.widget(index) is self.subscriptions_tab)
         self._update_price_focus()
         if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "set_active"):

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="nl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asset Dashboard</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1321;--panel:#142032;--border:#293b52;--text:#e8eef7;--muted:#9aafca;--green:#74dfbb;--red:#f394a3}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px system-ui,sans-serif}main{max-width:2400px;margin:auto;padding:18px 22px}header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.eyebrow{text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:#82b8f6}h1{font-size:23px;margin:3px 0}h2{font-size:14px;margin:0}small,.muted{font-size:12px;color:var(--muted)}select,input,button{background:#1b2c43;border:1px solid #3c526e;color:var(--text);padding:8px;border-radius:5px}input{width:150px}button{cursor:pointer}.spacer{flex:1}.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin-bottom:10px}.metric,.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}.metric b{display:block;font-size:23px;margin-top:5px;font-variant-numeric:tabular-nums}.positive{color:var(--green)}.negative{color:var(--red)}.strip{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.tag{display:inline-block;background:#253f57;color:#b3d7fa;padding:4px 8px;border-radius:4px;font-size:11px}.grid{display:grid;grid-template-columns:1.05fr 1fr;gap:10px}.panel{min-width:0}.section-head{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}th{font-weight:500;color:var(--muted)}th:first-child,td:first-child{text-align:left}tbody tr:hover{background:#1a2c42}.empty{padding:20px;color:var(--muted);text-align:center}.pending{min-height:160px;display:flex;align-items:center;justify-content:center;text-align:center;border:1px dashed #344b66;border-radius:5px;padding:20px;color:var(--muted)}.pending strong{color:#bbcee5;font-size:14px;display:block;margin-bottom:8px}.full{grid-column:1/-1}details>summary{cursor:pointer;padding:7px 0}details[open]>summary{margin-bottom:8px}#positions .group{margin-top:16px}#positions .group:first-child{margin-top:0}.reasons{color:#b9c8db;line-height:1.6;margin-top:10px}.warning{font-size:11px;color:#e6bf7d}.foot{margin-top:14px;color:var(--muted);font-size:11px}#status{font-size:11px;color:var(--muted)}@media(min-width:1900px){body{font-size:14px}.metric b{font-size:27px}.pending{min-height:230px}td,th{padding:10px 12px}}@media(max-width:1100px){main{padding:12px}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.metric b{font-size:21px}.panel{padding:12px}}@media(max-width:740px){.grid{grid-template-columns:1fr}.full{grid-column:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}input{width:120px}}
+.toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px}.toolbar label{font-size:11px;color:var(--muted)}.toolbar input[type=number]{width:70px;padding:5px}.toolbar input[type=date]{width:130px;padding:5px}.toolbar button{padding:5px 9px}.chart-box{position:relative;height:230px;margin:10px 0}.chart-box.result{height:310px}.chart-box.quantity{height:105px}canvas{width:100%;height:100%;display:block;touch-action:none}.tooltip{position:absolute;display:none;pointer-events:none;background:#0a1424ee;border:1px solid #486280;border-radius:4px;padding:7px;font-size:11px;white-space:pre;z-index:2}.legend{display:flex;gap:15px;font-size:11px;margin-bottom:8px}#payoff-table th,#payoff-table td{padding:4px 7px;font-size:11px}#payoff-table td:first-child,#payoff-table th:first-child{position:sticky;left:0;background:#142032}#payoff-table .total{background:#244259;font-weight:bold}#payoff-table .current{background:#2b4259}@media(min-width:1900px){.chart-box{height:280px}.chart-box.result{height:365px}}@media(max-width:1100px){.chart-box{height:200px}.chart-box.result{height:265px}}
+.payoff-plot{display:flex;flex-direction:column}.payoff-plot .chart-box{flex:none;height:300px;min-height:245px}.positions-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.positions-grid .option-group{grid-column:1/-1}.positions-grid .group{margin-top:0!important;min-width:0}.positions-grid .scroll{max-height:340px}.positions-grid th{position:sticky;top:0;background:#142032;z-index:1}.positions-grid h2{margin-bottom:7px}@media(max-width:740px){.positions-grid{grid-template-columns:1fr}.positions-grid .option-group{grid-column:auto}}
+#indicator{gap:10px;align-items:flex-start;padding:8px 12px}.indicator-left{flex:0 1 auto;min-width:0}.indicator-labels{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.indicator-asset{min-width:62px}.indicator-pill{display:inline-block;border:1px solid #52647c;border-radius:999px;padding:1px 6px;line-height:16px;font-size:11px}.indicator-pill.subtle{color:#a9b9cf;background:#172437}.indicator-pill.fase{font-weight:650;background:#eff6ff;border-color:#93c5fd;color:#1e3a8a}.indicator-pill.action{font-weight:650}.indicator-pill.long_houden,.indicator-pill.schrijf_puts,.indicator-pill.covered_calls_ver_otm,.indicator-pill.theta_harvest{background:#dcfce7;border-color:#86efac;color:#14532d}.indicator-pill.reduce_via_covered_call{background:#fef3c7;border-color:#facc15;color:#713f12}.indicator-pill.risico_verlagen,.indicator-pill.alleen_spreads{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}.indicator-pill.niets_doen{background:#f1f5f9;color:#334155}.indicator-scores{display:flex;gap:12px;flex-wrap:wrap;color:#a9b9cf;font-size:11px;margin-top:4px}.indicator-scores span{white-space:nowrap}.indicator-scores b{color:#e8eef7}.indicator-reasons{flex:1 1 280px;min-width:0;border-left:1px solid #354961;padding-left:10px;line-height:19px;font-size:12px;color:#cad5e5}.indicator-reasons div:last-child{color:#9aafca}@media(max-width:1100px){.indicator-left{flex-basis:100%}.indicator-reasons{border-left:0;border-top:1px solid #354961;padding:6px 0 0}}
+/* Compact layout: use space for data rather than oversized cards. */
+main{padding:9px 14px}header{gap:9px;margin-bottom:7px}h1{font-size:20px;margin:0}.metrics{gap:6px;margin-bottom:6px}.metric{padding:6px 9px}.metric b{font-size:19px;margin-top:1px}.metric small{font-size:11px}.panel{padding:9px 10px}.grid{gap:7px}.section-head{margin-bottom:7px}.toolbar{gap:7px;margin-bottom:6px}.toolbar input,.toolbar button{padding:4px 6px}th,td{padding:4px 7px}.positions-grid{gap:8px}.positions-grid h2{font-size:12px;margin-bottom:4px}.positions-grid .empty{padding:4px 0;text-align:left}.empty{padding:8px}.payoff-plot .chart-box{height:235px;min-height:200px;margin:3px 0 6px}.legend{margin-bottom:0}.chart-box{margin:5px 0}#indicator{min-height:64px;padding:10px 12px;margin-bottom:7px;align-items:center}.indicator-scores{margin-top:6px}.indicator-reasons{line-height:20px}.dividend-labels{display:flex;align-items:center;gap:5px}.dividend-badge{padding:4px 7px;border-radius:3px;background:#24364b;font-size:12px;font-weight:600}.foot{margin-top:7px}
+@media(max-width:740px){main{padding:7px 9px}.metric b{font-size:18px}.dividend-labels{flex-wrap:wrap}.payoff-plot .chart-box{height:220px}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.spacer-status{margin-left:auto}.payoff-plot{position:relative;display:block;padding:0;min-height:220px;overflow:hidden}.payoff-plot .chart-box{position:absolute;inset:0;height:auto;min-height:0;margin:0}.payoff-legend{position:absolute;left:78px;top:12px;z-index:1;display:flex;flex-direction:column;gap:4px;margin:0;padding:5px 8px;background:#142032d9;border-radius:3px;pointer-events:none;font-size:11px}header #asset{min-width:130px}header #asset-status{min-width:90px}
+.header-date{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:11px}.header-date input{width:130px;padding:6px;min-height:32px}
+#holding-positions>.group:only-child{grid-column:1/-1}
+.payoff-layout{display:grid;grid-template-columns:1.05fr 1fr;gap:7px;min-width:0}.payoff-right{display:flex;flex-direction:column;gap:7px;min-width:0}.payoff-right #indicator{margin-bottom:0}.payoff-right>.panel{min-width:0}@media(max-width:740px){.payoff-layout{grid-template-columns:1fr}.payoff-layout>.payoff-plot{min-height:280px}}
+.history-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;min-width:0}.history-layout .chart-box{height:260px;margin:0}.history-layout>.panel{min-width:0}@media(max-width:850px){.history-layout{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<header><select id="asset" aria-label="Selecteer asset"></select><div id="dividend" class="dividend-labels"></div><div id="earnings" class="dividend-labels" aria-label="Volgende earnings"></div><select id="asset-status" aria-label="Assetstatus"><option value="active">active</option><option value="inactive">niet active</option><option value="all">all</option></select><label class="header-date">Van <input id="start" type="date" value="{{START_DATE}}"></label><label class="header-date">Tot <input id="end" type="date" value="{{END_DATE}}"></label><span class="spacer"></span><span class="tag">Alle brokers · werkelijke posities</span></header>
+<div id="metrics" class="metrics"></div>
+
+
+<div class="grid">
+<div class="payoff-layout full"><section class="panel payoff-plot"><div class="chart-box"><canvas id="payoff-chart"></canvas><div class="tooltip"></div></div><div class="legend payoff-legend" aria-label="Legenda payoff in EUR"><span style="color:#74dfbb">━ Totaal</span><span style="color:#a7b6cd">━ Totaal - Open opties</span><span style="color:#f394a3">━ Open opties</span></div></section><div class="payoff-right"><section class="panel strip" id="indicator">Wachten op indicatorgegevens…</section><section class="panel"><div class="toolbar"><label>Stap % <input id="step" type="number" min="0.01" max="50" step="0.5" value="2"></label><label>Verschuiving <input id="shift" type="number" value="0"></label><label>Decimalen <input id="decimals" type="number" min="0" max="6" value="2"></label><small id="payoff-status" class="spacer-status">Berekening laden…</small></div><div id="payoff-table" class="scroll"></div></section></div></div>
+<section class="panel full position-section" id="puts-section" aria-label="Open puts" hidden><div id="put-positions" class="positions-grid"></div></section>
+<section class="panel full position-section" id="calls-section" aria-label="Open calls" hidden><div id="call-positions" class="positions-grid"></div></section>
+<section class="panel full position-section" id="holdings-section" aria-label="Open aandelen en sprinters" hidden><div id="holding-positions" class="positions-grid"></div></section>
+<section class="panel full" id="test-orders-section"><details><summary>Testorders & scenario’s</summary><p class="muted">Worden in een volgende bouwstap aangesloten.</p></details></section>
+<div class="history-layout full">
+<section class="panel" aria-label="Dagkoers"><div class="chart-box"><canvas id="price-chart"></canvas><div class="tooltip"></div></div><small>Candles op basis van opgeslagen OHLC · losse punt bij alleen een slot-/actuele koers</small></section>
+<section class="panel" aria-label="Totaalresultaat"><div class="chart-box"><canvas id="result-chart"></canvas><div class="tooltip"></div></div><small id="history-status" class="sr-only" role="status">Historie laden…</small></section>
+<section class="panel" aria-label="Aantal bezit"><div class="chart-box"><canvas id="quantity-chart"></canvas><div class="tooltip"></div></div></section>
+</div>
+
+<section class="panel"><div class="section-head"><h2>Hoe kijkt de markt naar dit asset?</h2><span class="tag">Gepland</span></div><p class="muted">Koersdoelen, historische band en analistenpublicaties worden uit de ontvangen marktdata aangesloten.</p></section>
+<section class="panel"><div class="section-head"><h2>Earnings · verwachting en resultaat</h2><span class="tag">Gepland</span></div><p class="muted">Rapportagedatum, consensus, actuals en beat/miss krijgen hier hun plek.</p></section>
+</div><div class="foot"><span id="status">Wachten op verbinding met de app…</span> · Eerste versie · Alleen-lezen · Geen extra datacollectie</div>
+</main><!-- DASHBOARD_CHARTS --><script src="qrc:///qtwebchannel/qwebchannel.js"></script><script>
+'use strict';
+let bridge=null,current=null,optionKey=null;
+const el=id=>document.getElementById(id);
+const num=(value,decimals=2)=>value===null||value===undefined||value===''?'—':(Number.isFinite(Number(value))?Number(value).toLocaleString('nl-NL',{maximumFractionDigits:decimals,minimumFractionDigits:decimals}):String(value));
+function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function value(row,keys){for(const k of keys){if(row[k]!==null&&row[k]!==undefined)return row[k];}return null;}
+function table(rows,cols){const wrap=node('div',undefined,'scroll'),t=node('table'),head=node('tr');for(const [label]of cols)head.append(node('th',label));const thead=node('thead');thead.append(head);t.append(thead);const body=node('tbody');for(const r of rows){const tr=node('tr');for(const [,keys,kind]of cols){let v=value(r,keys);if(kind==='number')v=num(v);else if(kind==='percent')v=v==null?'—':num(v)+'%';else if(kind==='date'&&v){const parts=String(v).slice(0,10).split('-');v=parts.length===3?parts.reverse().join('-'):v;}else if(v===null||v==='')v='—';const cell=node('td',String(v));
+const itm=Number(r.itm_otm),cp=String(r.optie_call_put||'').toLowerCase();
+if(r.itm_otm!=null&&Number.isFinite(itm)&&itm!==0&&['broker','asset_rollup','optie_call_put','optie_strike','optie_exp_date','afwijking_pct'].includes(keys[0])){
+ if(cp==='put'||cp==='p'){cell.style.backgroundColor='rgb(255,200,200)';cell.style.color='#111';}
+ else if(cp==='call'||cp==='c'){cell.style.backgroundColor='rgb(200,255,200)';cell.style.color='#111';}
+}
+tr.append(cell);}body.append(tr);}t.append(body);wrap.append(t);return wrap;}
+
+function renderDividend(d){
+ const container=el('dividend');container.replaceChildren();
+ for(const text of ['Dividend',d.date,num(d.amount)+(d.currency?' '+d.currency:'')]){
+   const badge=node('span',text,'dividend-badge');
+   if(d.background){badge.style.backgroundColor=d.background;badge.style.color=d.background==='#FF0000'?'#fff':'#111';}
+   container.append(badge);
+ }
+}
+function renderEarnings(d){
+ const container=el('earnings');container.replaceChildren();
+ for(const text of ['Earnings',d.date]){
+   const badge=node('span',text,'dividend-badge');
+   badge.title=d.source?'Geplande earnings volgens '+d.source:'Geen komende earningsdatum beschikbaar';
+   if(d.background){badge.style.backgroundColor=d.background;badge.style.color=d.background==='#FF0000'?'#fff':'#111';}
+   container.append(badge);
+ }
+}
+function renderIndicator(row,asset){
+ const strip=el('indicator');strip.replaceChildren();
+ if(!Object.keys(row).length){strip.append(node('span',asset?'Geen asset indicator snapshot':'Selecteer een asset','muted'));return;}
+ const left=node('div',undefined,'indicator-left'),labels=node('div',undefined,'indicator-labels');
+ 
+ for(const [field,kind]of [['asset_fase','fase'],['trend_phase','subtle'],['primary_action','action'],['secondary_action','subtle'],['indicator_role','subtle']]){
+   const pill=node('span',row[field]||'-','indicator-pill '+kind);
+   if(kind==='action')pill.classList.add(String(row[field]||'').replace(/[^a-zA-Z0-9_-]/g,'_'));
+   labels.append(pill);
+ }
+ const scores=node('div',undefined,'indicator-scores');
+ for(const [label,field]of [['Dir','direction_score'],['LT','long_term_direction_score'],['ST','short_term_direction_score'],['Range','range_position_pct'],['Asset theta','theta_opportunity_proxy_score'],['Optie theta','theta_score'],['IV/RV','iv_vs_realized_volatility_score'],['Q','data_quality']]){
+   const v=row[field];let formatted=v==null||v===''?'-':String(v);
+   if(field!=='data_quality'&&v!=null&&v!==''&&Number.isFinite(Number(v)))formatted=Number(v).toFixed(1);
+   const item=node('span');item.append(document.createTextNode(label+' '),node('b',formatted));scores.append(item);
+ }
+ left.append(labels,scores);const reason=node('div',undefined,'indicator-reasons');
+ for(const field of ['reason_1','reason_2']){const line=node('div',row[field]||'');line.title=row[field]||'';reason.append(line);}
+ strip.append(left,reason);
+}
+function assetOptions(){const q='';const sel=el('asset');const key=JSON.stringify([q,current.asset,current.assets]);if(key===optionKey)return;optionKey=key;sel.replaceChildren();for(const a of current.assets){if(a===current.asset||a.toLowerCase().includes(q)){const opt=node('option',a);opt.value=a;opt.selected=a===current.asset;sel.append(opt);}}}
+function render(payload){const previous=current?.asset;current=JSON.parse(payload);if(previous!==current.asset)clearAnalytics(current.asset);assetOptions();const r=current.reference,s=current.summary,i=current.indicator;el('asset-status').value=current.asset_status||'all';
+el('metrics').replaceChildren();for(const [label,key,pct] of [['Koers','koers'],['Vorige koers','koers_prev'],['Dagverschil','pct_change',true],['Net change','net_change'],['Pct lineair','portfolio_total_waarde_lineair_pct',true],['Pct delta','portfolio_total_waarde_delta_pct',true]]){let v=s[key];const card=node('div',undefined,'metric');card.append(node('small',label),node('b',num(v)+(pct&&v!==null&&v!==undefined?'%':''),['pct_change','net_change'].includes(key)&&v!=null?(v>0?'positive':v<0?'negative':''):''));el('metrics').append(card);}
+renderIndicator(current.indicator,current.asset);
+renderDividend(current.dividend_display);renderEarnings(current.earnings_display);
+for(const id of ['put-positions','call-positions','holding-positions'])el(id).replaceChildren();
+for(const [key,side,container]of [['options','put','put-positions'],['options','call','call-positions'],['stocks',null,'holding-positions'],['sprinters',null,'holding-positions']]){
+ const rows=current.positions[key].filter(row=>!side||String(row.optie_call_put).toLowerCase()===side||String(row.optie_call_put).toLowerCase()===(side==='call'?'c':'p'));
+ if(!rows.length)continue;
+ const group=node('div',undefined,'group '+(key==='options'?'option-group':''));
+ const cols=current.position_columns[key].map(([label,field,kind])=>[label,[field],kind]);
+ group.append(table(rows,cols));el(container).append(group);
+}
+for(const [section,container]of [['puts-section','put-positions'],['calls-section','call-positions'],['holdings-section','holding-positions']])el(section).hidden=!el(container).childElementCount;
+el('status').textContent='Snapshot ontvangen '+new Date().toLocaleTimeString('nl-NL')+(Object.keys(s).length?'':' · Kerncijfers nog niet beschikbaar');}
+for(const id of ['step','shift','decimals','start','end'])el(id).addEventListener('change',()=>{if(bridge)bridge.configure(JSON.stringify({step_pct:Number(el('step').value),shift:Number(el('shift').value),decimals:Number(el('decimals').value),start:el('start').value,end:el('end').value}));});
+el('asset-status').addEventListener('change',()=>{if(bridge)bridge.selectStatus(el('asset-status').value);});el('asset').addEventListener('change',()=>{if(bridge)bridge.selectAsset(el('asset').value);});
+if(window.qt&&window.QWebChannel){new QWebChannel(qt.webChannelTransport,channel=>{bridge=channel.objects.dashboard;bridge.updated.connect(render);bridge.analyticsUpdated.connect(receiveAnalytics);bridge.ready();});}else{el('status').textContent='Open deze pagina via de Asset Dashboard-tab in Portefeuille Viewer.';}
+</script></body></html>

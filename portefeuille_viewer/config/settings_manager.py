@@ -77,6 +77,31 @@ LOCAL_ONLY_KEYS = {
 
 
 class SettingsManager:
+    def get_asset_dashboard_period(self):
+        from datetime import date
+        values = {}
+        for key, fallback in (("start", self.config.get("app", "single_asset_analyse_start_date", fallback="1900-01-01")),
+                              ("end", date.today().isoformat())):
+            raw = self.config.get("app", "asset_dashboard_" + key + "_date", fallback=fallback)
+            try:
+                values[key] = date.fromisoformat(raw).isoformat()
+            except (ValueError, TypeError):
+                values[key] = "1900-01-01" if key == "start" else date.today().isoformat()
+        if values["end"] < values["start"]:
+            values["end"] = max(values["start"], date.today().isoformat())
+        return values
+
+    def set_asset_dashboard_period(self, start, end):
+        from datetime import date
+        start, end = date.fromisoformat(start), date.fromisoformat(end)
+        if start > end:
+            raise ValueError("Begindatum ligt na einddatum")
+        if not self.config.has_section("app"):
+            self.config.add_section("app")
+        self.config.set("app", "asset_dashboard_start_date", start.isoformat())
+        self.config.set("app", "asset_dashboard_end_date", end.isoformat())
+        self.save()
+
     def get_market_data_settings(self):
         defaults = {"capacity": 100, "batch_size": 10, "rotation_seconds": 30,
                     "stale_seconds": 180}

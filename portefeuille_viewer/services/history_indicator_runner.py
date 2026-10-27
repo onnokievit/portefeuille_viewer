@@ -25,6 +25,7 @@ class HistoryIndicatorRunner(QObject):
         self.writer = IndicatorHistoryWriter(self)
         self.writer.status_changed.connect(self.storage_status.emit)
         self._options_dirty = False
+        self._startup_requested = False
         self._option_timer = QTimer(self)
         self._option_timer.setSingleShot(True)
         self._option_timer.setInterval(1000)
@@ -44,6 +45,14 @@ class HistoryIndicatorRunner(QObject):
         self._options_dirty = False
         self.worker.submit('history_indicators', dict(all=False, names={'option_overlay'},
             keys=set(), reason='profile_options_changed', callbacks=[], error_callbacks=[]))
+
+    def request_startup(self):
+        """Initial tab visit and application startup share one background request."""
+        if self._startup_requested:
+            return False
+        self._startup_requested = True
+        self.request(reload_history=True, rebuild_indicators=True, reason='startup_asset_indicators')
+        return True
 
     def request(self, *, reload_history=False, reload_beta=False,
                 rebuild_indicators=True, reason='manual', on_published=None, on_failed=None):

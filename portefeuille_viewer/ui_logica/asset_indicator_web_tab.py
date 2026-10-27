@@ -98,7 +98,8 @@ class AssetIndicatorWebTab(QWidget):
         if self._is_active:
             live_df = getattr(SNAPSHOT_STORE, "snapshot_asset_indicator_live", None)
             if live_df is None and not self._initial_run_requested:
-                self.run_indicator()
+                self._initial_run_requested = True
+                self._runner.request_startup()
             elif self._js_ready:
                 self._publish_snapshot()
         elif not self._is_active:
