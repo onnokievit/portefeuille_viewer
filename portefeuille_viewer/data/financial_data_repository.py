@@ -47,7 +47,11 @@ def facts_for(path, subject, source=None, history=False):
         if source:
             sql += ' AND source=?'
             params.append(source)
-        return _dicts(conn.execute(sql, *params))
+        records = _dicts(conn.execute(sql, *params))
+        if not history:
+            records = [row for row in records if json.loads(row['payload_json']).get(
+                '__wyse_envelope__', {}).get('operation') != 'delete']
+        return records
 
 
 @stockdata_job

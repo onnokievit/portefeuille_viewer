@@ -29,6 +29,7 @@ class FinancialDataService:
         if path is None:
             from portefeuille_viewer.config import get_stockdata_db_path
             path = get_stockdata_db_path()
+        self._default_providers = providers is None
         if providers is None:
             from portefeuille_viewer.services.yahoo_financial_provider import YahooFinancialProvider
             providers = [YahooFinancialProvider()]
@@ -41,6 +42,12 @@ class FinancialDataService:
 
     def refresh(self):
         result = CollectionResult()
+        if self._default_providers:
+            from portefeuille_viewer.services.market_exchange import remote_collection_enabled
+            if remote_collection_enabled():
+                result.status = 'skipped'
+                result.message = 'Wyse beheert marktdata; API slaat gegevens op in STOCKDATA'
+                return result
         lease = FileLease('financial-collection:' + canonical_path(self.path))
         if not lease.acquire():
             result.status, result.message = 'skipped', 'Andere instantie haalt financiële gegevens op'

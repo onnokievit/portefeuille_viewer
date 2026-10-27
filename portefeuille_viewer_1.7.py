@@ -1603,6 +1603,24 @@ def main():
     shared_data_watcher.failed.connect(lambda message: w.statusBar().showMessage("Gedeelde gegevens verversen: " + message, 10000))
     app.aboutToQuit.connect(shared_data_watcher.stop)
     w.shared_data_watcher = shared_data_watcher
+    from portefeuille_viewer.services.market_exchange import MarketExchangeService
+    from PySide6.QtWidgets import QLabel
+    market_exchange = MarketExchangeService()
+    exchange_label = QLabel('Wyse: starten…', w)
+    exchange_label.setMaximumWidth(440)
+    w.statusBar().addPermanentWidget(exchange_label)
+    exchange_status_timer = QTimer(w)
+    def _show_exchange_status():
+        state = market_exchange.snapshot()
+        exchange_label.setText(state.get('message', 'Wyse: ' + state['status']))
+        exchange_label.setToolTip('Laatste synchronisatie: ' + str(state.get('last_sync') or 'nog niet')
+            + '\nMarktgegevens, historie en synchronisatievoortgang staan in STOCKDATA.')
+    exchange_status_timer.timeout.connect(_show_exchange_status)
+    exchange_status_timer.start(2000)
+    app.aboutToQuit.connect(market_exchange.stop)
+    app.aboutToQuit.connect(exchange_status_timer.stop)
+    w.market_exchange = market_exchange
+    market_exchange.start()
     app_task_scheduler.start()
     if price_feed.is_ready():
         portfolio_engine.start_subscriptions()
