@@ -41,11 +41,19 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class ExchangeHTTP:
-    def __init__(self, url, token, timeout=15):
+    def __init__(self, url, token, timeout=15, *, cloudflare_client_id='', cloudflare_client_secret=''):
         self.url = validate_url(url)
         if len(token) < 32:
             raise ValueError('API-toegangssleutel ontbreekt of is te kort')
+        if bool(cloudflare_client_id) != bool(cloudflare_client_secret):
+            raise ValueError('Cloudflare-toegang vereist zowel client-ID als client-secret')
+        if cloudflare_client_id and urllib.parse.urlsplit(self.url).scheme != 'https':
+            raise ValueError('Cloudflare-toegangssleutels mogen uitsluitend via HTTPS worden verstuurd')
+        if any('\r' in value or '\n' in value for value in (token, cloudflare_client_id, cloudflare_client_secret)):
+            raise ValueError('Ongeldige toegangssleutel: regeleinde gevonden')
         self.token, self.timeout = token, timeout
+        self.cloudflare_headers = ({'CF-Access-Client-Id': cloudflare_client_id,
+            'CF-Access-Client-Secret': cloudflare_client_secret} if cloudflare_client_id else {})
         # No browser cookies, environment proxies or credential forwarding on redirects.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
@@ -54,7 +62,8 @@ class ExchangeHTTP:
         if query:
             url += '?' + urllib.parse.urlencode(query)
         request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + self.token,
-            'Accept': 'application/json', 'User-Agent': 'PortefeuilleViewer/1.7 Exchange/1'})
+            'Accept': 'application/json', 'User-Agent': 'PortefeuilleViewer/1.7 Exchange/1',
+            **self.cloudflare_headers})
         try:
             with self.opener.open(request, timeout=self.timeout) as response:
                 if response.headers.get_content_type() != 'application/json':
@@ -162,7 +171,9 @@ class MarketExchangeService:
                     if not config.get('enabled', False):
                         self.publish(status='disabled', message='Wyse-synchronisatie uitgeschakeld')
                     else:
-                        client = ExchangeHTTP(config['server_url'], config['api_token'])
+                        client = ExchangeHTTP(config['server_url'], config['api_token'],
+                            cloudflare_client_id=config.get('cloudflare_client_id', ''),
+                            cloudflare_client_secret=config.get('cloudflare_client_secret', ''))
                         from portefeuille_viewer.config import get_stockdata_db_path
                         from portefeuille_viewer.config.process_lock import canonical_path
                         from portefeuille_viewer.data.market_exchange_repository import StockdataInbox

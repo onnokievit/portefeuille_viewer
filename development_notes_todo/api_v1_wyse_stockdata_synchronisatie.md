@@ -81,10 +81,33 @@ Geen stille afkapping van bronnamen, identifiers of perioden.
 
 ## Netwerk en herstel
 
-HTTP met Bearer-sleutel is nu intern op `192.168.2.160:18180` ingesteld. Voor
-buitenhuis is HTTPS vereist; TLS wordt gecontroleerd en redirects zijn geweigerd.
-Cloudflare/publicatie is nog niet ingericht. De bestaande browserroutes zijn
-LAN-routes en vallen niet onder de nieuwe API-sleutel.
+De externe verbinding gebruikt nu `https://markt-data.kiteco.nl`, zowel thuis
+als buitenshuis. De aparte tunnelcontainer op de Wyse start automatisch mee.
+Cloudflare Access beveiligt de hele hostnaam; de tunnel valideert bovendien de
+Access-JWT/audience voordat een aanvraag de collector bereikt. Bestaande SSH-
+en Home Assistant-configuratie zijn niet gewijzigd.
+
+De app verstuurt CF-Access-Client-Id en CF-Access-Client-Secret naast de bestaande
+Bearer-API-sleutel. Desktop en laptop hebben ieder een eigen servicetoken met
+een duur van één jaar. Vernieuw deze vóór hun verloop en werk de lokale
+configuraties bij. De app weigert deze credentials via HTTP en weigert redirects.
+De browser gebruikt de bestaande GitHub-login of e-mailcode, beperkt tot
+onno@kievit.me. De API-sleutel blijft aanvullend vereist op `/api/v1`.
+
+De runtime-config krijgt cloudflare_client_id en cloudflare_client_secret erbij.
+Het laptopbestand staat op de desktop in dezelfde runtime-map onder de naam
+`connection.laptop.json`. Breng dit over naar de laptop en vervang daar de oude
+`connection.json` door dit bestand, dus met die laatste bestandsnaam. Werk ook
+de laptopcode bij via Git en herstart de app. De bestanden staan buiten Git.
+Het juiste bestemmingspad op de laptop toont:
+
+```powershell
+python -c "from portefeuille_viewer.config.local_runtime import runtime_root; print(runtime_root()/'market-exchange-v1'/'connection.json')"
+```
+
+De interne route `http://192.168.2.160:18180` blijft beschikbaar zonder
+Cloudflare-headers. Het wijzigen van het serveradres veroorzaakt geen nieuwe
+bootstrap: gegevens en cursor blijven in dezelfde STOCKDATA.
 
 De server levert maximaal 500 wijzigingen per pagina. Een appcyclus verwerkt
 maximaal 20 pagina's; bij achterstand volgt een nieuwe cyclus, anders na een minuut.
@@ -109,7 +132,7 @@ De eerste eenmalige productiesynchronisatie is voorafgegaan door een backup naas
 de echte STOCKDATA met `.before-wyse-stockdata-` in de naam. De backup is gemaakt
 met exclusieve bestandstoegang via `backup_stockdata_for_exchange.py`.
 
-De 11 opslagtests gebruiken geïsoleerde echte Access-databases. Ze controleren
+De 12 synchronisatietests gebruiken geïsoleerde echte Access-databases. Ze controleren
 rollback na een schrijffout, hervatten na een netwerkfout, gelijktijdige profielen,
 bestaande lokale historie, nieuwe datasets, tombstones en het kopiëren van de
 database naar een laptop. Daarnaast slagen 16 bestaande financiële opslagtests
@@ -121,11 +144,18 @@ serverrevisie en inhoudshash is exact gelijk aan de Wyse; nul inhoudshashafwijki
 De bestaande lokale financiële gegevens zijn behouden: totaal 70.911 actuele
 records en 74.974 historieregels na de import. Een volgende synchronisatie
 ontving nul wijzigingen. De oude lokale `.sqlite3`-ontvangstdatabase is na deze
-controle verwijderd; in de betreffende runtime-map blijft alleen connection.json.
+controle verwijderd. De lokale runtime bevat alleen verbindingsinstellingen.
+
+Externe controle: beide servicetokens kunnen via HTTPS het manifest en wijzigingen
+ophalen. Zonder of met een ongeldig Cloudflare-token volgt een loginredirect.
+Geldige Cloudflare-credentials zonder of met een onjuiste API-sleutel geven
+HTTP 401 uit de API. De echte desktopontvangst via HTTPS ontving nul wijzigingen
+en behield cursor 71.929. Browserlogin en de laptop via een mobiele hotspot
+moeten nog door de gebruiker worden getest.
 
 ## Nog te bouwen
 
 Profiel-extract-upload, catalogusuitwisseling, inhoudelijke schemas voor nieuwe
-datasets en publieke HTTPS/Cloudflare-bereikbaarheid. De server-API blijft gelijk.
+datasets. De server-API blijft gelijk.
 Graphify JSON en rapport zijn vernieuwd; de HTML-export van 1.7 overschrijdt de
 bestaande limiet van 5.000 nodes.

@@ -10,7 +10,7 @@ from unittest.mock import patch
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from portefeuille_viewer.services.market_exchange import synchronize, validate_url, NoRedirect
+from portefeuille_viewer.services.market_exchange import synchronize, validate_url, NoRedirect, ExchangeHTTP
 from portefeuille_viewer.data.market_exchange_repository import StockdataInbox
 from portefeuille_viewer.data import market_exchange_repository as exchange_repo
 from portefeuille_viewer.data.shared_database import connect_stockdata
@@ -178,6 +178,30 @@ class InboxTests(unittest.TestCase):
         for bad in ['http://example.com','https://user:pw@example.com','https://example.com/api','file:///tmp/a']:
             with self.assertRaises(ValueError):validate_url(bad)
         with self.assertRaises(ValueError):NoRedirect().redirect_request(None,None,None,None,None,None)
+
+    def test_cloudflare_headers_require_tls_and_complete_credentials(self):
+        with self.assertRaises(ValueError):
+            ExchangeHTTP('http://192.168.2.160:18180','a'*40,
+                cloudflare_client_id='device.access',cloudflare_client_secret='secret')
+        with self.assertRaises(ValueError):
+            ExchangeHTTP('https://markt-data.kiteco.nl','a'*40,cloudflare_client_id='device.access')
+        with self.assertRaises(ValueError) as error:
+            ExchangeHTTP('https://markt-data.kiteco.nl','a'*40,
+                cloudflare_client_id='device.access',cloudflare_client_secret='private-secret\n')
+        self.assertNotIn('private-secret',str(error.exception))
+        client=ExchangeHTTP('https://markt-data.kiteco.nl','a'*40,
+            cloudflare_client_id='device.access',cloudflare_client_secret='secret')
+        from io import BytesIO
+        from email.message import Message
+        from unittest.mock import MagicMock
+        response=MagicMock();headers=Message();headers['Content-Type']='application/json'
+        response.__enter__.return_value=response;response.headers=headers;response.read.return_value=b'{}'
+        with patch.object(client.opener,'open',return_value=response) as opened:
+            client.get('manifest')
+        sent=dict((k.lower(),v) for k,v in opened.call_args.args[0].header_items())
+        self.assertEqual(sent['cf-access-client-id'],'device.access')
+        self.assertEqual(sent['cf-access-client-secret'],'secret')
+        self.assertEqual(sent['authorization'],'Bearer '+'a'*40)
 
 
 if __name__=='__main__':unittest.main()

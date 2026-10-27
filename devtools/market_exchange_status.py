@@ -21,7 +21,9 @@ def main():
     args = parser.parse_args()
     root = runtime_root() / 'market-exchange-v1'
     config = json.loads((root / 'connection.json').read_text(encoding='utf-8-sig'))
-    client = ExchangeHTTP(config['server_url'], config['api_token'])
+    client = ExchangeHTTP(config['server_url'], config['api_token'],
+        cloudflare_client_id=config.get('cloudflare_client_id', ''),
+        cloudflare_client_secret=config.get('cloudflare_client_secret', ''))
     path = args.db or get_stockdata_db_path()
     enable_stockdata_workers()
     try:
