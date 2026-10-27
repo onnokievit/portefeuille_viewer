@@ -446,3 +446,44 @@ omgeving gelezen en het plan opgeslagen.
 
 Productmogelijkheden en authenticatie-eisen opnieuw controleren bij de daadwerkelijke
 bouw; dit plan doet geen belofte over nog niet geteste accountfunctionaliteit.
+
+
+
+### te verzamelen data 
+1. Wat is er overnacht gebeurd?
+- Futures: ES (S&P 500), NQ (Nasdaq), RTY (Russell 2000) en de Europese indices. Ligt de markt hoger of lager dan gisteren en waarom?
+- Rente: 2- en 10-jaars Treasury yields en de curve (2s10s). Rente stuurt de waardering, vooral bij tech en groeiaandelen.
+- Valuta en grondstoffen: DXY, EUR/USD, USD/JPY (de yen-carry trade kan heftige risk-off bewegingen geven), olie en goud.
+- Nieuws: geopolitiek, uitspraken van centrale bankiers, grote bedrijfsnieuwtjes van na de slotbel.
+2. Kalender: wat staat er vandaag en deze week?
+- Macrodata: CPI/PCE, banen (NFP, jobless claims), PMI’s, retail sales. Kijk naar het tijdstip, de consensus en de vorige waarde.
+- Centrale banken: FOMC-besluiten, ECB, en Fed-speeches.
+- Earnings: wie rapporteert er voor de opening en wie na de sluiting. Vergelijk de implied move (via de straddle) met de historische beweging na eerdere cijfers.
+- Expiratiedata: maandelijkse opex (3e vrijdag), VIX-expiratie, quad witching en grote index-rebalancings.
+- Overig: ex-dividenddata (risico op vroege assignment bij short calls in the money), lock-up expiries, splits, en de buyback blackout-periode rond earnings.
+3. Volatiliteit (cruciaal voor opties)
+- VIX-niveau en termijnstructuur: VIX9D, VIX en VIX3M. Contango is normaal. Backwardation betekent stress op korte termijn.
+- VVIX en SKEW: de vraag naar staartbescherming.
+- Implied vs. realized vol: is de premie duur of goedkoop ten opzichte van de werkelijke beweeglijkheid? Dit bepaalt of je opties verkoopt of koopt.
+- IV rank / IV percentile per aandeel op je watchlist.
+- MOVE-index: de volatiliteit in obligaties.
+4. Optiepositionering en flows
+- Dealer gamma (GEX): staat de markt in positieve gamma (dealers dempen bewegingen) of negatieve gamma (dealers versterken ze)? Waar ligt het gamma flip-niveau?
+- Call walls en put walls: strikes met veel open interest, die vaak werken als magneet of weerstand, vooral richting opex.
+- 0DTE-volume: dit beïnvloedt de intraday-dynamiek steeds meer.
+- Put/call ratio’s en ongebruikelijke optieactiviteit: grote blokken en sweeps.
+- Veranderingen in open interest bij je eigen tickers.
+5. Technische niveaus en marktbreedte
+- Het high, low en de slotkoers van gisteren, de overnight range, VWAP en belangrijke steun- en weerstandsniveaus.
+- 20-, 50- en 200-daags gemiddelde op de indices.
+- Breedte: advance/decline en het percentage aandelen boven het 200-daags gemiddelde. Een stijging die door weinig aandelen gedragen wordt, is fragiel.
+- Sectorrotatie: welke sectoren leiden en welke blijven achter (defensief vs. cyclisch).
+- Premarket gappers met nieuws en volume.
+6. Je eigen boek (dit slaan amateurs over)
+- Portfolio-Greeks: totale delta, gamma, vega en theta. Weet je wat er gebeurt bij −3% in de markt plus +5 vol-punten?
+- Posities die deze week expireren en het risico op assignment.
+- Margin en buying power, en hoe die verandert bij een volatiliteitsschok.
+- Concentratie: zit je te veel in één sector of één event?
+- Je stops en exitplan per positie, al bedacht voordat de markt opent.
+7. Sentiment (wekelijks is genoeg)
+- CFTC Commitments of Traders, inschattingen van CTA-positionering, fund flows en de AAII-sentimentenquête.
