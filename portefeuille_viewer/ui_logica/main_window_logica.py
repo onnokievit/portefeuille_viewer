@@ -266,8 +266,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if hasattr(self, "option_timevalue_service"):
             with contextlib.suppress(Exception):
                 self.option_timevalue_service.shutdown()
-        if hasattr(self, 'live_price_updater_stop_event'):
-            self.live_price_updater_stop_event.set()
+        stop_event = getattr(self, 'live_price_updater_stop_event', None)
+        if stop_event is not None:
+            stop_event.set()
 
         # Flush test orders cache naar DB
         with contextlib.suppress(Exception):

@@ -1,7 +1,7 @@
 # Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.7  (2026-10-27)
 
 ## Corpus Check
-- 318 files · ~919,341 words
+- 318 files · ~919,320 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -1898,12 +1898,12 @@ Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
+- **Why does `ProcessLock` connect `Community 4` to `Community 0`, `Community 1`, `Community 3`, `Community 8`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `emit()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 17`, `Community 19`, `Community 21`, `Community 24`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Why does `SingleAssetAnalyseTab` connect `Community 10` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 6`, `Community 11`, `Community 12`, `Community 14`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
-- **Why does `SectorAnalysisTab` connect `Community 6` to `Community 0`, `Community 2`, `Community 10`, `Community 14`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Community 1` to `Community 0`, `Community 2`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 18`, `Community 20`, `Community 22`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `MainWindow` and `_TabBarNoFocusRectStyle`) actually correct?**
   _`SingleAssetAnalyseTab` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 136 inferred relationships involving `emit()` (e.g. with `.tick()` and `.run()`) actually correct?**
