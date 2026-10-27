@@ -1,7 +1,7 @@
 # Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.7  (2026-10-27)
 
 ## Corpus Check
-- 318 files · ~919,091 words
+- 318 files · ~919,341 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -475,23 +475,23 @@ Nodes (1): Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit de
 
 ### Community 40 - "Community 40"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 41 - "Community 41"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 42 - "Community 42"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 43 - "Community 43"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 44 - "Community 44"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 45 - "Community 45"
 Cohesion: 1.0
@@ -499,63 +499,63 @@ Nodes (1): Stage repository loads in a worker without exposing partial snapshots
 
 ### Community 46 - "Community 46"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 47 - "Community 47"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 48 - "Community 48"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 49 - "Community 49"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 50 - "Community 50"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 51 - "Community 51"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 52 - "Community 52"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 53 - "Community 53"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 54 - "Community 54"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 55 - "Community 55"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 56 - "Community 56"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 57 - "Community 57"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 58 - "Community 58"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 59 - "Community 59"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 60 - "Community 60"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 61 - "Community 61"
 Cohesion: 1.0
@@ -1898,13 +1898,13 @@ Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `emit()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 17`, `Community 19`, `Community 21`, `Community 24`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+- **Why does `SingleAssetAnalyseTab` connect `Community 10` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 6`, `Community 11`, `Community 12`, `Community 14`?**
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `SectorAnalysisTab` connect `Community 6` to `Community 0`, `Community 2`, `Community 10`, `Community 14`?**
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Why does `get_settings()` connect `Community 1` to `Community 0`, `Community 2`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 18`, `Community 20`, `Community 22`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._
-- **Why does `PriceFeedIB` connect `Community 5` to `Community 8`, `Community 3`, `Community 12`, `Community 7`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
-- **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `._register_tabs()` and `ColumnFilterPopup`) actually correct?**
+- **Are the 7 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `MainWindow` and `_TabBarNoFocusRectStyle`) actually correct?**
   _`SingleAssetAnalyseTab` has 7 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 136 inferred relationships involving `emit()` (e.g. with `.tick()` and `.run()`) actually correct?**
   _`emit()` has 136 INFERRED edges - model-reasoned connections that need verification._

@@ -36,8 +36,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         profile = getattr(get_settings(), "profile_database", None)
-        if profile is not None:
-            self.setWindowTitle(f"Portefeuille Viewer 1.5 — {profile}")
+        self.setWindowTitle("Portefeuille Viewer 1.7" + (f" — {profile}" if profile is not None else ""))
         self.installEventFilter(self)
         self.price_feed = price_feed
         self.portfolio_engine = portfolio_engine

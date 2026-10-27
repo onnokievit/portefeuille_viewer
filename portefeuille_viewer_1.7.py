@@ -1170,7 +1170,7 @@ def main():
     global _AANDELEN_TV_SEED_TS
     from portefeuille_viewer.config.profile_session import get_profile_session
     if get_profile_session() is None:
-        raise RuntimeError("Start de app via portefeuille_viewer_1.5.py zodat eerst het profiel wordt vergrendeld")
+        raise RuntimeError(f"Start de app via {Path(__file__).name} zodat eerst het profiel wordt vergrendeld")
     import faulthandler
     faulthandler.enable()
     startup_args = _parse_startup_args(sys.argv)
@@ -1614,6 +1614,7 @@ def main():
         state = market_exchange.snapshot()
         exchange_label.setText(state.get('message', 'Wyse: ' + state['status']))
         exchange_label.setToolTip('Laatste synchronisatie: ' + str(state.get('last_sync') or 'nog niet')
+            + '\nSynchronisatievoortgang: ' + str(state.get('cursor', 'nog niet bekend'))
             + '\nMarktgegevens, historie en synchronisatievoortgang staan in STOCKDATA.')
     exchange_status_timer.timeout.connect(_show_exchange_status)
     exchange_status_timer.start(2000)

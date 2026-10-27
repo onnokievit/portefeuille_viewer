@@ -171,8 +171,14 @@ class MarketExchangeService:
                         if lease.acquire():
                             inbox = StockdataInbox(path)
                             result = synchronize(client, inbox, self.stop_event)
+                            if result['status'] == 'catching_up':
+                                message = 'Wyse: synchroniseren — ' + str(result['received']) + ' wijzigingen verwerkt'
+                            elif result['received']:
+                                message = 'Wyse: ' + str(result['received']) + ' nieuwe wijzigingen verwerkt'
+                            else:
+                                message = 'Wyse: STOCKDATA bijgewerkt — geen nieuwe wijzigingen'
                             self.publish(**result, last_sync=inbox.state()['last_sync'],
-                                message='Wyse: ' + str(result['cursor']) + ' wijzigingen in STOCKDATA')
+                                message=message)
                             if result['status'] == 'catching_up':
                                 delay = 1
                         else:
