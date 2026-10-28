@@ -73,7 +73,7 @@
       if(!values.length){c.fillText('Geen gegevens beschikbaar',left,h/2);return;}
       let lo=Math.min(...values),hi=Math.max(...values),ticks,axisStep;
       if(this.kind==='payoff'){
-        const axis=DashboardAxes.payoff(lo,hi);lo=axis.min;hi=axis.max;ticks=axis.ticks;axisStep=axis.step;
+        const axis=DashboardAxes.payoff(lo,hi,bottom-top);lo=axis.min;hi=axis.max;ticks=axis.ticks;axisStep=axis.step;
       }else{
         const axis=DashboardAxes.scale(lo,hi,this.kind);lo=axis.min;hi=axis.max;ticks=axis.ticks;axisStep=axis.step;
       }
@@ -83,9 +83,9 @@
       const x=i=>this.kind==='payoff'?priceX(rows[i].x):left+(rows.length===1?.5:i/(rows.length-1))*(right-left);
       c.textAlign='right';
       for(const v of ticks){
-        const yy=y(v),zero=this.kind!=='payoff'&&v===0;
-        c.lineWidth=this.kind==='payoff'?1:zero?1.25:.5;
-        c.strokeStyle=zero?palette.marker:palette.grid;c.beginPath();c.moveTo(left,yy);c.lineTo(right,yy);c.stroke();
+        const yy=y(v),zero=v===0;
+        c.lineWidth=this.kind==='payoff'?(zero?1:.5):zero?1.25:.5;
+        c.strokeStyle=zero?(this.kind==='payoff'?colour('payoff-zero'):palette.marker):palette.grid;c.beginPath();c.moveTo(left,yy);c.lineTo(right,yy);c.stroke();
         c.fillStyle=palette.axis;c.fillText(DashboardAxes.format(v,axisStep),left-7,yy+3);
       }
       c.lineWidth=1;

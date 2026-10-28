@@ -67,6 +67,9 @@ def calculate_analytics(store, payload, settings, history_cache=None, history_to
     if factor <= 0:
         raise ValueError("Ongeldige valutafactor")
     logic = DashboardAssetLogic(filtered, asset, factor)
+    if settings.get("test_orders_enabled"):
+        logic._augment_with_test_orders(asset)
+        logic.df_gesloten_aandelen = logic.df_aandelen
     start = parse_date(settings.get("start")) or date(1900, 1, 1)
     end = parse_date(settings.get("end")) or date.today()
     cache_key = (asset, getattr(store, "_history_token", history_token), start, end, factor)
@@ -148,7 +151,7 @@ def calculate_analytics(store, payload, settings, history_cache=None, history_to
         payoff = {"steps": steps, "labels": LABELS,
                   "values": [[float(v) / factor for v in row] for row in matrix],
                   "price": price, "price_source": price_source, "current_col": current_col,
-                  "currency": "EUR", "test_orders": False, "decimals": decimals,
+                  "currency": "EUR", "test_orders": bool(settings.get("test_orders_enabled")), "decimals": decimals,
                   "distribution": DashboardDistribution(filtered).calculate(asset, steps)}
     return json_safe({"asset": asset, "payoff": payoff, "history": history,
                       "currency": "EUR", "start": start, "end": end})

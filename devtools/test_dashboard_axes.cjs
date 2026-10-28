@@ -34,3 +34,9 @@ const payoff=legacy.payoff(-10000,30000);
 require('node:assert/strict').equal(payoff.min,-12500);
 require('node:assert/strict').equal(payoff.max,37500);
 require('node:assert/strict').deepEqual(payoff.ticks,[-10000,0,10000,20000,30000]);
+
+const detailed=legacy.payoff(-9000,2000,600);
+require("node:assert/strict").equal(detailed.step,1000);
+require("node:assert/strict").ok(detailed.ticks.includes(-11000));
+require("node:assert/strict").ok(detailed.ticks.includes(2000));
+require("node:assert/strict").ok(legacy.payoff(-9000,2000,240).ticks.length<detailed.ticks.length);

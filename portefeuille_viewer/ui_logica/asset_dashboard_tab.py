@@ -14,6 +14,7 @@ from portefeuille_viewer.services.asset_dashboard_data import SOURCES, build_das
 from portefeuille_viewer.services.asset_dashboard_earnings import load_next_earnings
 from portefeuille_viewer.config.settings_manager import get_stockdata_db_path
 from portefeuille_viewer.services.asset_dashboard_comments import DashboardComments
+from portefeuille_viewer.services.asset_dashboard_test_orders import DashboardTestOrders
 from portefeuille_viewer.services.asset_dashboard_controls import DashboardPayoffControls, DEFAULT_CONTROLS, validate_controls
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.config import get_settings
@@ -73,6 +74,21 @@ class DashboardBridge(QObject):
         self.tab._ready = True
         self.tab._publish(force=True)
         self.tab._request_earnings()
+
+    @Slot(str, result=str)
+    def testOrderAction(self, raw):
+        try:
+            request = json.loads(raw)
+            if request.get('asset') != self.tab.selected_asset:
+                raise ValueError('De geselecteerde asset is gewijzigd')
+            if self.tab._test_orders is None:
+                raise ValueError('Testorders zijn niet aangesloten')
+            self.tab._test_orders.action(request['action'], request.get('value'))
+            self.tab._publish(force=True)
+            return ''
+        except Exception as exc:
+            log.exception('Dashboard testorderactie mislukt')
+            return str(exc)
 
     @Slot(str)
     def selectAsset(self, asset):
@@ -149,6 +165,7 @@ class AssetDashboardTab(QWidget):
         self._history_cache = {}
         self._comment_editor = None
         self._payoff_settings = None
+        self._test_orders = None
         self._comment_close_callback = None
         self._comment_close_timer = QTimer(self)
         self._comment_close_timer.setSingleShot(True)
@@ -174,6 +191,9 @@ class AssetDashboardTab(QWidget):
 
     def set_payoff_target(self, legacy_tab):
         self._payoff_settings = DashboardPayoffControls(legacy_tab)
+        self._test_orders = DashboardTestOrders(legacy_tab, self)
+        signals.testOrderScenariosChanged.connect(self._test_orders.changed)
+        signals.testOrdersEnabledChanged.connect(self._test_orders.changed)
 
     def _comment_result(self, identity, operation, request, result=None, error=""):
         result = result or {}
@@ -284,7 +304,7 @@ class AssetDashboardTab(QWidget):
 
     def _snapshot_updated(self, key):
         # Leading edge batching: repeated ticks do not restart a pending render.
-        if self._active and key in (*SOURCES.values(), *ANALYTIC_SOURCES) and not self._timer.isActive():
+        if self._active and key in (*SOURCES.values(), *ANALYTIC_SOURCES, "repository_snapshot_test_orders_cache", "snapshot_active_scenario_orders") and not self._timer.isActive():
             self._timer.start()
 
     def _publish(self, force=False, asset=None):
@@ -299,6 +319,8 @@ class AssetDashboardTab(QWidget):
             payload["payoff_controls"] = self._payoff_settings.get(payload["asset"]) if self._payoff_settings else dict(DEFAULT_CONTROLS)
             if self._comment_editor is not None:
                 self._comment_editor.remember(payload["option_comments"])
+            if self._test_orders is not None:
+                payload['test_orders'] = self._test_orders.state(payload['asset'])
             encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, default=str)
             if force or encoded != self._last_payload:
                 previous_asset = self.selected_asset
@@ -353,6 +375,12 @@ class AssetDashboardTab(QWidget):
         settings["currency_factor"] = (get_settings().get_eurusd()
                                        if payload["reference"].get("ib_currency") == "USD" else 1.)
         frozen, token = capture_analytics(SNAPSHOT_STORE)
+        settings['test_orders_enabled'] = bool(payload.get('test_orders', {}).get('enabled'))
+        settings['test_order_scenario'] = payload.get('test_orders', {}).get('scenario')
+        if self._test_orders is not None:
+            frozen.dashboard_test_orders = self._test_orders.capture(payload['asset'])
+            settings['test_order_signature'] = (frozen.dashboard_test_orders.write_json()
+                if frozen.dashboard_test_orders is not None else '')
         summary = payload.get("summary", {})
         key = (payload["asset"], token, json.dumps(settings, sort_keys=True),
                summary.get("koers"), summary.get("totaal_inc_fee"))

@@ -41,7 +41,7 @@ class DashboardAssetLogic:
         # from portefeuille_viewer.data.snapshot_store import self.store # sourcery skip
         # self.store.test_repository_load_input_test_dataframe = self.df_open_opties  # sourcery skip # of df_sum als je de gesumde versie wilt zien
         # # ############# DEBUG TEST< tijdelijk dataframe copieeren zodat deze repository viewer kan worden bekeken
-      
+
         return bereken_open_opties_payoff(self.df_open_opties, koers)
 
     def payoff_gesloten_opties(self, koers):
@@ -280,7 +280,7 @@ class DashboardAssetLogic:
 
         df = df.select([
             pl.col("itm").alias("itm"),
-            
+
             "broker",
             "asset_rollup",
             pl.col("optie_call_put").alias("optie_call_put"),
@@ -422,3 +422,99 @@ class DashboardAssetLogic:
             ])
 
         return df
+
+    def _augment_with_test_orders(self, asset_rollup: str):
+        df_test = getattr(self.store, "dashboard_test_orders", None)
+        if df_test is None or df_test.is_empty():
+            return
+        df_test = self._filter_broker_snapshot(df_test)
+        if df_test is None or df_test.is_empty():
+            return
+        if "include" in df_test.columns:
+            df_test = df_test.filter(pl.col("include") == 1)
+
+        # Opties
+        df_test_opties = df_test.filter(pl.col("asset_type") == "optie")
+        if df_test_opties.height > 0:
+            df_opt = (
+                df_test_opties
+                .with_columns([
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                    .then(-pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(pl.col("transactie_aantal").cast(pl.Float64))
+                    .alias("SomVantransactie_aantal"),
+                ])
+
+                .with_columns([
+                    (-1* pl.col("SomVantransactie_aantal") * pl.col("transactie_prijs").cast(pl.Float64) )
+                        .alias("SomVantransactie_euro_totaal"),
+                    pl.lit(0.0).alias("SomVantransactie_fee"),
+                    (pl.col("optie_strike").cast(pl.Float64) * pl.col("SomVantransactie_aantal")).alias("optie_waarde"),
+                    pl.lit(None).alias("uniek_id"),
+                ])
+                .select([
+                    "uniek_id",
+                    "broker",
+                    "asset_rollup",
+                    "asset_type",
+                    "optie_exp_date",
+                    "optie_strike",
+                    "optie_call_put",
+                    "SomVantransactie_fee",
+                    "SomVantransactie_euro_totaal",
+                    "SomVantransactie_aantal",
+                    "optie_waarde",
+                ])
+            )
+            base_opt = self.df_open_opties if self.df_open_opties is not None else pl.DataFrame()
+            self.df_open_opties = pl.concat([base_opt, df_opt], how="diagonal_relaxed")
+
+        # Aandelen
+        # Aandelen – zelfde structuur als df_aandelen, geen koers/waarde_bezit
+        df_test_eq = df_test.filter(pl.col("asset_type") == "aandeel")
+        if df_test_eq.height > 0:
+            df_eq = (
+                df_test_eq
+                .with_columns([
+                    pl.lit("aandeel").alias("asset_type"),
+                    pl.when(pl.col("transactie_type") == "koop")
+                    .then(pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("aantal_koop"),
+                    pl.when(pl.col("transactie_type") == "koop")
+                      .then(-pl.col("transactie_aantal").cast(pl.Float64) * pl.col("transactie_prijs").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("euro_koop"),
+                    pl.lit(0.0).alias("fee_koop"),
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                    .then(-pl.col("transactie_aantal").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("aantal_verkoop"),
+                    pl.when(pl.col("transactie_type") == "verkoop")
+                      .then(pl.col("transactie_aantal").cast(pl.Float64) * pl.col("transactie_prijs").cast(pl.Float64))
+                    .otherwise(0.0)
+                    .alias("euro_verkoop"),
+                    pl.lit(0.0).alias("fee_verkoop"),
+                ])
+                .group_by(["broker", "asset_rollup", "asset_type"])
+                .agg([
+                    pl.sum("aantal_koop"),
+                    pl.sum("euro_koop"),
+                    pl.sum("fee_koop"),
+                    pl.sum("aantal_verkoop"),
+                    pl.sum("euro_verkoop"),
+                    pl.sum("fee_verkoop"),
+                ])
+                .with_columns([
+                    (pl.col("aantal_koop") + pl.col("aantal_verkoop")).alias("aantal_bezit"),
+                    (pl.col("fee_koop") + pl.col("fee_verkoop")).alias("eq_total_fee"),
+                ])
+                .select([
+                    "broker", "asset_rollup", "asset_type",
+                    "aantal_koop", "euro_koop", "fee_koop",
+                    "aantal_verkoop", "euro_verkoop", "fee_verkoop",
+                    "aantal_bezit", "eq_total_fee",
+                ])
+            )
+            base_eq = self.df_aandelen if self.df_aandelen is not None else pl.DataFrame()
+            self.df_aandelen = pl.concat([base_eq, df_eq], how="diagonal_relaxed")

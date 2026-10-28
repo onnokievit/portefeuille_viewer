@@ -42,7 +42,7 @@ class AnalyticsTests(unittest.TestCase):
     def test_private_payoff_and_option_methods_remain_exact_legacy_copies(self):
         root=Path(__file__).resolve().parents[1]/"portefeuille_viewer"
         old=ast.parse((root/"ui_logica/single_asset_analyse_tab_logica.py").read_text(encoding="utf-8"))
-        new=ast.parse((root/"services/asset_dashboard_logic.py").read_text(encoding="utf-8").replace("self.store", "SNAPSHOT_STORE"))
+        new=ast.parse((root/"services/asset_dashboard_logic.py").read_text(encoding="utf-8").replace("self.store", "SNAPSHOT_STORE").replace('getattr(SNAPSHOT_STORE, "dashboard_test_orders", None)', "get_effective_test_orders_for_asset(asset_rollup)"))
         old_cls=next(n for n in old.body if isinstance(n,ast.ClassDef) and n.name=="SingleAssetAnalyseLogic")
         new_cls=next(n for n in new.body if isinstance(n,ast.ClassDef))
         methods={n.name:n for n in old_cls.body if isinstance(n,ast.FunctionDef)}

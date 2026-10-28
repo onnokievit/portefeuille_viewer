@@ -334,3 +334,11 @@ loopt tegen de bestaande grens van 5.000 nodes aan. De verplichte 1.4-update sla
 - Volumegewogen prijsverdeling: balken 24/12 maanden, stippellijnen 6/3 maanden, afzonderlijke procentas met dezelfde dubbele headroom.
 - Berekeningsmethoden ongewijzigd gekopieerd uit de oude UI naar een dashboardservice; uitgevoerd op de bestaande achtergrondworker, zonder databasewrites.
 - Ontbrekende historie geeft geen fictieve verdeling. De oude Single Asset Analyse blijft ongewijzigd.
+
+## Testorders en scenario’s vanuit het dashboard
+- Sectie met bestaande testorders, globale aan/uit-schakelaar, assetfilter en scenarioselectie.
+- Bewerken/toevoegen/verwijderen opent een apart venster met de originele Qt-tabel en originele bediening. De bestaande delegates, commentkleuren, filters, scenarioverwerking, validatie en opslag worden hergebruikt. Widgets worden bij sluiten teruggezet op hun oorspronkelijke plek; oude broncode blijft intact.
+- Scenario builder en scenario manager blijven de bestaande dialogen.
+- Payoff ontvangt effectieve scenario-orders op de UI-thread als Polars clone. De worker gebruikt de overgenomen legacy augmentatie, zonder globale caches of echte posities te wijzigen. Alleen aangevinkte orders tellen mee; historie blijft werkelijke historie.
+- Automatische regressiecontrole op identieke legacy berekeningscode, aan/uit en include, EUR-omrekening, behoud van snapshots en terugplaatsen van de oorspronkelijke widgets (zowel absolute geometrie als layouts).
+- Praktijktest: herstart, vergelijk dezelfde asset/scenario in beide pagina’s; test toevoegen, wijzigen, include, verwijderen, commentkleur, scenarioselectie en afsluiten/herstarten. Geen echte databasegegevens aangepast tijdens ontwikkelingstests.

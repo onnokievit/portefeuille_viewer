@@ -134,6 +134,13 @@ function updateTable(id,rows,columns){
   let state=tableStates.get(id);
   if(!state){
     const wrap=node('div',undefined,'scroll'),table=node('table'),head=node('tr'),thead=node('thead'),body=node('tbody');
+    if(el(id).classList.contains('option-group')){
+      table.classList.add('option-table');
+      const widths=[4,8,5,4,9,6,6,6,6,7,7,7,5,8,13,6],total=widths.reduce((a,b)=>a+b,0);
+      const colgroup=node('colgroup');
+      widths.forEach(width=>{const col=node('col');col.style.width=(width/total*100)+'%';colgroup.append(col);});
+      table.append(colgroup);
+    }
     thead.append(head);table.append(thead,body);wrap.append(table);el(id).append(wrap);
     state={head,body,rows:new Map()};tableStates.set(id,state);
   }
@@ -172,6 +179,7 @@ const positionGroups=[['options','put','put-positions'],['options','call','call-
     group.id='position-group-'+i;el(container).append(group);return{key,side,container,group};
   });
 function updatePositions(payload){
+  updateTestOrders(payload.test_orders);
   for(const {key,side,group}of positionGroups){
     const source=key==='options'?payload.positions[key].map((row,i)=>({...row,_comment:payload.option_comments[i]})):payload.positions[key];
     const rows=source.filter(row=>!side||String(row.optie_call_put).toLowerCase()===side||
@@ -297,3 +305,28 @@ if(window.qt&&window.QWebChannel){new QWebChannel(qt.webChannelTransport,channel
   bridge=channel.objects.dashboard;bridge.updated.connect(render);bridge.analyticsUpdated.connect(receiveAnalytics);bridge.ready();
   bridge.commentResult.connect(commentResult);
 });}else{text(el('status'),'Open deze pagina via de Asset Dashboard-tab in Portefeuille Viewer.');}
+
+function testOrderAction(action,value){
+  if(!bridge)return;
+  bridge.testOrderAction(JSON.stringify({asset:displayedAsset,action,value}),error=>{
+    if(error)text(el('tests-status'),error);
+  });
+}
+let lastTestState='';
+function updateTestOrders(state){
+  if(!state)return;
+  const signature=JSON.stringify(state);if(signature===lastTestState)return;lastTestState=signature;
+  text(el('dashboard-scope'),state.enabled?'Alle brokers · payoff inclusief testorders':'Alle brokers · werkelijke posities');
+  el('tests-enabled').checked=state.enabled;el('tests-asset-only').checked=state.asset_only;
+  const selector=el('tests-scenario');selector.replaceChildren();
+  state.scenarios.forEach(s=>{const option=node('option',s.name);option.value=s.id;selector.append(option);});selector.value=state.scenario;
+  const table=node('table'),head=node('tr'),thead=node('thead'),body=node('tbody');
+  state.columns.forEach(label=>head.append(node('th',label)));thead.append(head);
+  state.rows.forEach(cells=>{const row=node('tr');cells.forEach(cell=>{const td=node('td',cell.text);td.style.backgroundColor=cell.background||'';td.style.color=cell.foreground||'';row.append(td);});row.addEventListener('dblclick',()=>testOrderAction('editor'));body.append(row);});
+  table.append(thead,body);el('tests-table').replaceChildren(table);
+  text(el('tests-status'),state.enabled?'Testorders tellen mee in de payoff · dubbelklik om te bewerken':'Testorders staan uit · werkelijke posities');
+}
+el('tests-enabled').addEventListener('change',()=>testOrderAction('enabled',el('tests-enabled').checked));
+el('tests-asset-only').addEventListener('change',()=>testOrderAction('asset_only',el('tests-asset-only').checked));
+el('tests-scenario').addEventListener('change',()=>testOrderAction('scenario',Number(el('tests-scenario').value)));
+for(const action of ['editor','builder','manager'])el('tests-'+action).addEventListener('click',()=>testOrderAction(action));

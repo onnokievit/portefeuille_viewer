@@ -39,16 +39,18 @@
       maximumFractionDigits:decimals(step),minimumFractionDigits:0,
     });
   }
-  function ticksWithin(min,max){
-    const raw=(max-min)/6, power=10**Math.floor(Math.log10(raw));
+  function ticksWithin(min,max,intervals=6){
+    const raw=(max-min)/intervals, power=10**Math.floor(Math.log10(raw));
     const step=[1,2,5,10].map(n=>n*power).find(n=>n>=raw)||10*power;
     const ticks=[];
     for(let i=Math.ceil(min/step);i<=Math.floor(max/step);i++)ticks.push(clean(i*step));
     return {min,max,step,ticks};
   }
-  function payoff(min,max){
+  function payoff(min,max,height){
     if(min===max)max=min+1;
-    return ticksWithin(min<0?min*1.25:min/1.25,max>0?max*1.25:max/1.25);
+    // About 40 pixels per label, like the denser legacy payoff axis.
+    const intervals=Number.isFinite(height)?Math.max(3,Math.floor(height/40)):6;
+    return ticksWithin(min<0?min*1.25:min/1.25,max>0?max*1.25:max/1.25,intervals);
   }
   const api={scale,format,ticksWithin,payoff};root.DashboardAxes=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
