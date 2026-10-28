@@ -98,6 +98,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.orders_tab = OrdersTabWidget()
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         self.asset_dashboard_tab = AssetDashboardTab()
+        self.asset_dashboard_tab.set_comment_target(self.single_asset_analyse_tab)
+        self.asset_dashboard_tab.set_payoff_target(self.single_asset_analyse_tab)
         self.aandelen_tab = AandelenWebPilotTab()
         self.aandelen_tab.set_price_feed(self.price_feed)
         self.opties_open_tab = OptiesOpenWebPilotTab()
@@ -191,6 +193,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.subscriptions_tab.set_active(self.tabWidget.widget(index) is self.subscriptions_tab)
         self._update_price_focus()
         if hasattr(self, "single_asset_analyse_tab") and hasattr(self.single_asset_analyse_tab, "set_active"):
+            if index == self.tabWidget.indexOf(self.single_asset_analyse_tab):
+                self.single_asset_analyse_tab._apply_step_settings_for_asset(self.single_asset_analyse_tab.asset_selector.currentText())
             self.single_asset_analyse_tab.set_active(index == self.tabWidget.indexOf(self.single_asset_analyse_tab))
         if hasattr(self, "aandelen_tab") and hasattr(self.aandelen_tab, "set_active"):
             self.aandelen_tab.set_active(index == self.tabWidget.indexOf(self.aandelen_tab))
@@ -263,6 +267,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             close_scenario_dialog()
 
     def closeEvent(self, event):
+        dashboard = getattr(self, "asset_dashboard_tab", None)
+        if not getattr(self, "_dashboard_comments_closed", False) and dashboard is not None:
+            def close_after_comments():
+                self._dashboard_comments_closed = True
+                self.close()
+            if dashboard.flush_comments_before_close(close_after_comments):
+                event.ignore()
+                return
         self._close_standalone_dialogs()
         # Stop hier je services, threads, timers, etc.
         if hasattr(self, 'price_feed'):

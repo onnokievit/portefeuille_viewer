@@ -7,6 +7,7 @@ import polars as pl
 
 from portefeuille_viewer.services.asset_dashboard_data import json_safe
 from portefeuille_viewer.services.asset_dashboard_logic import DashboardAssetLogic
+from portefeuille_viewer.services.asset_dashboard_distribution import DashboardDistribution
 
 
 ANALYTIC_SOURCES = (
@@ -123,8 +124,11 @@ def calculate_analytics(store, payload, settings, history_cache=None, history_to
 
     payoff = {}
     if price is not None and price != 0:
-        step_pct = min(50., max(.01, number(settings.get("step_pct")) or 2.))
+        step_pct = number(settings.get("step_pct"))
+        step_pct = min(99.99,max(0.,step_pct if step_pct is not None else 2.))
         width = abs(price) * step_pct / 100
+        if width<=0:
+            width=max(abs(price)*.01,.01)
         shift = number(settings.get("shift")) or 0.
         decimals = max(0, min(6, int(settings.get("decimals", 2))))
         current_col = max(0, min(16, 8 + round(shift / width)))
@@ -144,6 +148,7 @@ def calculate_analytics(store, payload, settings, history_cache=None, history_to
         payoff = {"steps": steps, "labels": LABELS,
                   "values": [[float(v) / factor for v in row] for row in matrix],
                   "price": price, "price_source": price_source, "current_col": current_col,
-                  "currency": "EUR", "test_orders": False}
+                  "currency": "EUR", "test_orders": False, "decimals": decimals,
+                  "distribution": DashboardDistribution(filtered).calculate(asset, steps)}
     return json_safe({"asset": asset, "payoff": payoff, "history": history,
                       "currency": "EUR", "start": start, "end": end})

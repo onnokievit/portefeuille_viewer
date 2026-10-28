@@ -6,12 +6,15 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, QRunnable, QThreadPool, Signal, Slot
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMenu, QColorDialog, QMessageBox
+from PySide6.QtGui import QColor, QCursor
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
 from portefeuille_viewer.services.asset_dashboard_data import SOURCES, build_dashboard_payload, event_date_display
 from portefeuille_viewer.services.asset_dashboard_earnings import load_next_earnings
 from portefeuille_viewer.config.settings_manager import get_stockdata_db_path
+from portefeuille_viewer.services.asset_dashboard_comments import DashboardComments
+from portefeuille_viewer.services.asset_dashboard_controls import DashboardPayoffControls, DEFAULT_CONTROLS, validate_controls
 from portefeuille_viewer.signals import signals
 from portefeuille_viewer.config import get_settings
 from portefeuille_viewer.services.asset_dashboard_analytics import (
@@ -59,6 +62,7 @@ class _EarningsJob(QRunnable):
 class DashboardBridge(QObject):
     updated = Signal(str)
     analyticsUpdated = Signal(str)
+    commentResult = Signal(str)
 
     def __init__(self, tab):
         super().__init__(tab)
@@ -80,25 +84,51 @@ class DashboardBridge(QObject):
             self.tab._asset_status = status
             self.tab._publish(force=True)
 
+    @Slot(str, result=str)
+    def setTheme(self, value):
+        try:
+            get_settings().set_asset_dashboard_theme(value)
+            return ""
+        except Exception as exc:
+            log.warning("Dashboardthema kon niet worden opgeslagen: %s", type(exc).__name__)
+            return "Themakeuze kon niet worden opgeslagen"
+
+    @Slot(str, str, str, result=str)
+    def saveComment(self, identity, comment, request):
+        return self.tab._save_comment(identity, comment, request)
+
     @Slot(str)
+    def chooseCommentColor(self, identity):
+        self.tab._choose_comment_colour(identity)
+
+    @Slot(str)
+    def commentsFlushed(self, error):
+        self.tab._finish_comment_close(error)
+
+    @Slot(str, result=str)
     def configure(self, raw):
         try:
             values = json.loads(raw)
-            step = float(values.get("step_pct", 2))
-            shift = float(values.get("shift", 0))
-            decimals = int(values.get("decimals", 2))
             from datetime import date
             start = date.fromisoformat(values["start"])
             end = date.fromisoformat(values["end"])
-            if not (.01 <= step <= 50 and -1e9 <= shift <= 1e9 and 0 <= decimals <= 6 and start <= end):
-                return
+            if start>end:
+                raise ValueError("Begindatum ligt na einddatum")
+            if values.get("changed") not in {None,"start","end"}:
+                if values.get("asset")!=self.tab.selected_asset or self.tab._payoff_settings is None:
+                    raise ValueError("Wacht tot de geselecteerde asset is geladen")
+                cfg=validate_controls(values)
+                self.tab._payoff_settings.save(self.tab.selected_asset,cfg)
             if (self.tab._controls.get("start"), self.tab._controls.get("end")) != (start.isoformat(), end.isoformat()):
                 get_settings().set_asset_dashboard_period(start.isoformat(), end.isoformat())
-            self.tab._controls = dict(step_pct=step, shift=shift, decimals=decimals,
-                                      start=start.isoformat(), end=end.isoformat())
+            self.tab._controls = dict(start=start.isoformat(),end=end.isoformat())
             self.tab._publish()
-        except (ValueError, TypeError, KeyError):
-            return
+            return ""
+        except (ValueError,TypeError,KeyError) as exc:
+            return str(exc)
+        except Exception as exc:
+            log.exception("Dashboardinstellingen konden niet worden bewaard")
+            return "Instellingen konden niet worden bewaard: " + type(exc).__name__
 
 
 class AssetDashboardTab(QWidget):
@@ -117,6 +147,13 @@ class AssetDashboardTab(QWidget):
         self._pending_analytics = None
         self._job = None
         self._history_cache = {}
+        self._comment_editor = None
+        self._payoff_settings = None
+        self._comment_close_callback = None
+        self._comment_close_timer = QTimer(self)
+        self._comment_close_timer.setSingleShot(True)
+        self._comment_close_timer.setInterval(5000)
+        self._comment_close_timer.timeout.connect(lambda: self._finish_comment_close("Commentaar kon niet tijdig worden bevestigd; probeer opnieuw."))
         self._earnings = {}
         self._earnings_path = None
         self._earnings_job = None
@@ -131,6 +168,80 @@ class AssetDashboardTab(QWidget):
         self._timer.timeout.connect(self._publish)
         signals.snapshotUpdated.connect(self._snapshot_updated)
         signals.databaseChanged.connect(self._reset_earnings)
+
+    def set_comment_target(self, legacy_tab):
+        self._comment_editor = DashboardComments(legacy_tab)
+
+    def set_payoff_target(self, legacy_tab):
+        self._payoff_settings = DashboardPayoffControls(legacy_tab)
+
+    def _comment_result(self, identity, operation, request, result=None, error=""):
+        result = result or {}
+        raw = json.dumps({"id": identity, "operation": operation,
+            "request": request, "error": error, "text": result.get("optie_comment") or "",
+            "background": result.get("optie_comment_color") or "",
+            "foreground": result.get("optie_comment_textcolor") or ""}, default=str)
+        self.bridge.commentResult.emit(raw)
+        return raw
+
+    def _save_comment(self, identity, comment, request):
+        try:
+            if self._comment_editor is None:
+                raise RuntimeError("Commentaaropslag is niet aangesloten")
+            result = self._comment_editor.save_text(identity, comment)
+            response = self._comment_result(identity, "text", request, result)
+            signals.snapshotUpdated.emit("repository_snapshot_open_optie_comments")
+            self._publish(force=True)
+            return response
+        except Exception as exc:
+            return self._comment_result(identity, "text", request, error=str(exc))
+
+    def flush_comments_before_close(self, callback):
+        if not self._ready or self._comment_editor is None:
+            return False
+        if self._comment_close_callback is None:
+            self._comment_close_callback = callback
+            self._comment_close_timer.start()
+            self.web.page().runJavaScript("flushDashboardComments()")
+        return True
+
+    def _finish_comment_close(self, error):
+        callback, self._comment_close_callback = self._comment_close_callback, None
+        self._comment_close_timer.stop()
+        if callback is None:
+            return
+        if error:
+            QMessageBox.warning(self, "Commentaar niet bewaard", error)
+        else:
+            QTimer.singleShot(0, callback)
+
+    def _choose_comment_colour(self, identity):
+        try:
+            if self._comment_editor is None:
+                raise RuntimeError("Commentaaropslag is niet aangesloten")
+            latest = self._comment_editor.latest(identity)
+            menu = QMenu(self)
+            for _priority, label, background, _foreground in get_settings().get_comment_colors():
+                menu.addAction(label).setData(background)
+            menu.addSeparator()
+            custom = menu.addAction("Kies kleur...")
+            chosen = menu.exec(QCursor.pos())
+            if chosen is None:
+                return
+            if chosen == custom:
+                colour = QColorDialog.getColor(QColor(latest.get("optie_comment_color") or "#ffffff"), self, "Kies kleur")
+                if not colour.isValid():
+                    return
+                background = colour.name()
+            else:
+                background = chosen.data() or ""
+            foreground = get_settings().get_comment_color_text_map().get(background, "")
+            result = self._comment_editor.save_colour(identity, background, foreground)
+            self._comment_result(identity, "colour", "", result)
+            signals.snapshotUpdated.emit("repository_snapshot_open_optie_comments")
+            self._publish(force=True)
+        except Exception as exc:
+            self._comment_result(identity, "colour", "", error=str(exc))
 
     def _initialize(self):
         self._initialized = True
@@ -148,9 +259,13 @@ class AssetDashboardTab(QWidget):
         self._layout.addWidget(self.web)
         template = Path(__file__).parents[1] / "ui" / "web" / "asset_dashboard.html"
         chart_script = template.with_name("asset_dashboard_charts.js").read_text(encoding="utf-8")
+        chart_script = template.with_name("asset_dashboard_axes.js").read_text(encoding="utf-8") + "\n" + chart_script
+        view_script = template.with_name("asset_dashboard_view.js").read_text(encoding="utf-8")
         self._controls.update(get_settings().get_asset_dashboard_period())
         page = template.read_text(encoding="utf-8").replace("{{START_DATE}}", self._controls["start"]).replace("{{END_DATE}}", self._controls["end"])
-        self.web.setHtml(page.replace("<!-- DASHBOARD_CHARTS -->", "<script>" + chart_script + "</script>"))
+        page = page.replace("{{DASHBOARD_THEME}}", get_settings().get_asset_dashboard_theme())
+        self.web.setHtml(page.replace("<!-- DASHBOARD_CHARTS -->", "<script>" + chart_script + "</script>").replace(
+            "<!-- DASHBOARD_VIEW -->", "<script>" + view_script + "</script>"))
 
     def set_active(self, active):
         self._active = bool(active)
@@ -181,6 +296,9 @@ class AssetDashboardTab(QWidget):
             earnings = self._earnings.get(payload["asset"], {})
             payload["earnings_display"] = dict(event_date_display(earnings.get("date")),
                                                 source=earnings.get("source", ""))
+            payload["payoff_controls"] = self._payoff_settings.get(payload["asset"]) if self._payoff_settings else dict(DEFAULT_CONTROLS)
+            if self._comment_editor is not None:
+                self._comment_editor.remember(payload["option_comments"])
             encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, default=str)
             if force or encoded != self._last_payload:
                 previous_asset = self.selected_asset
@@ -195,6 +313,8 @@ class AssetDashboardTab(QWidget):
             log.exception("Asset Dashboard snapshot kon niet worden opgebouwd")
 
     def _reset_earnings(self, *_args):
+        if self._comment_editor is not None:
+            self._comment_editor.known_ids.clear()
         self._earnings = {}
         self._earnings_path = None
         self._publish()
@@ -229,6 +349,7 @@ class AssetDashboardTab(QWidget):
             self._analytics_key = None
             return
         settings = dict(self._controls)
+        settings.update(payload.get("payoff_controls", DEFAULT_CONTROLS))
         settings["currency_factor"] = (get_settings().get_eurusd()
                                        if payload["reference"].get("ib_currency") == "USD" else 1.)
         frozen, token = capture_analytics(SNAPSHOT_STORE)

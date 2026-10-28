@@ -62,6 +62,7 @@ LOCAL_ONLY_KEYS = {
         "chart_start_dates_by_chart",
         "year_result_vs_indices_start_date",
         "cash_dashboard_start_date",
+        "asset_dashboard_theme",
         "cash_dashboard_panel_state",
         "cash_dashboard_year_percent_mode",
         "cash_dashboard_chart_height_px",
@@ -77,6 +78,18 @@ LOCAL_ONLY_KEYS = {
 
 
 class SettingsManager:
+    def get_asset_dashboard_theme(self):
+        value = self.config.get("ui", "asset_dashboard_theme", fallback="dark")
+        return value if value in {"dark", "sand"} else "dark"
+
+    def set_asset_dashboard_theme(self, value):
+        if value not in {"dark", "sand"}:
+            raise ValueError("Onbekend dashboardthema")
+        if not self.config.has_section("ui"):
+            self.config.add_section("ui")
+        self.config.set("ui", "asset_dashboard_theme", value)
+        self.save()
+
     def get_asset_dashboard_period(self):
         from datetime import date
         values = {}

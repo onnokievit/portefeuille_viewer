@@ -2,6 +2,129 @@
 
 Datum: 27 oktober 2026.
 
+### Vier payoffinstellingen per asset
+
+Het dashboard gebruikt voor Stap %, Stapvergroting, Verschuiving en Decimalen
+de bestaande `_step_settings_by_asset`-cache van Single Asset Analyse. Die cache
+wordt door de oude pagina geladen uit `single_asset_stepsize_settings` in STOCKDATA.
+`DashboardPayoffControls` vertaalt de bestaande kolomnamen, gebruikt de bestaande
+validatiemethoden en markeert uitsluitend wijzigingen aan de betreffende asset.
+De bestaande `flush_step_settings_to_db` bewaart die cache bij afsluiten; er is
+geen nieuwe tabel of tweede instellingenbestand gemaakt. Bij teruggaan naar de
+oude tab worden haar controls uit dezelfde cache bijgewerkt.
+
+De vier velden hebben vaste zichtbare omhoog/omlaag-knoppen en ondersteunen
+de toetsenbordpijlen. Stap % verhoogt/verlaagt met de ingestelde Stapvergroting;
+Stapvergroting zelf met 0,05, Verschuiving met 0,1 en Decimalen met 1, zoals de oude
+controls. Tijdens een assetwissel zijn ze uitgeschakeld totdat de bijbehorende
+gegevens gereed zijn. Het configure-verzoek bevat de asset-ID, zodat een late
+wijziging nooit op een andere asset wordt toegepast.
+
+Het aantal decimalen geldt ook voor koers/voorgaande koers, strikes/koersen in
+de positietabellen, payoffheaders/-as en de koers-tooltip. De datumperiode blijft
+afzonderlijk als profielinstelling bewaard. Bij afsluiten wordt ook een nog niet
+verlaten instellingenveld eerst afgehandeld.
+
+47 gerichte tests slagen. QtWebEngine bevestigt het laden van twee verschillende
+assetconfiguraties, verhogen met de opgeslagen tick, wijzigen van alleen de
+betreffende asset en herstellen van die wijziging bij terugselecteren. Alle
+controles gebruikten fictieve caches; de echte database is niet aangepast.
+
+### Afgeronde assen en zeven rasterlijnen
+
+De drie tijdgrafieken gebruiken `asset_dashboard_axes.js`: precies zeven ticks
+met zes gelijke, afgeronde intervallen. Stapgroottes schalen met het bereik
+(1 / 1,25 / 2 / 2,5 / 5 maal een macht van tien). De aantallen-as gebruikt alleen
+gehele stapgroottes en bevat altijd nul, ook na inzoomen of bij uitsluitend
+positieve/negatieve aantallen. Voor koers/resultaat bepaalt het zichtbare bereik
+de schaal; labeldecimalen volgen de stapgrootte.
+
+De normale horizontale rasterlijnen zijn 0,5 logische pixel breed. Een aanwezige
+nullijn is 1,25 pixel en krijgt de contrastrijkere marker-kleur. De payoff-as
+is bij deze aanpassing niet veranderd.
+
+Node-regressietests (`node devtools/test_dashboard_axes.cjs`) controleren zeven
+ticks, dekking, nul en formatting, inclusief 1.500 deterministische bereiktests.
+De 41 bestaande Python-tests slagen. QtWebEngine bevestigt daadwerkelijk getekende
+labels 0/100/.../600 bij aantallen, -30.000/.../30.000 bij resultaat en
+125/250/.../875 bij de gebruikte koersreeks. Er zijn uitsluitend fictieve
+gegevens gebruikt.
+
+### Thema Donker / Zand
+
+Rechtsboven staat een themaselector voor alleen Asset Dashboard. Zand gebruikt
+een warme beige achtergrond (#f1e7d5), crèmekleurige panelen (#fff9ee), donkere
+tekst en warme randen. De kleuren zijn centraal als CSS-variabelen gedefinieerd.
+Canvasgrafieken lezen dezelfde palettevariabelen voor assen, raster, lijnen en
+candles. De legenda en tooltips wisselen mee; zoom en inhoud blijven behouden.
+Dividenden/earnings, ITM-cellen en gebruikerscommentaar houden hun eigen betekenis
+en opgeslagen kleuren.
+
+De keuze wordt via SettingsManager opgeslagen in de profielvoorkeur
+`ui.asset_dashboard_theme` (dark/sand). De HTML krijgt de bewaarde keuze vóór
+laden mee, zodat de pagina niet eerst kort met een ander thema verschijnt.
+Een wissel verandert alleen CSS en grafiekpresentatie, zonder herberekening of
+opnieuw opbouwen van de pagina.
+
+41 gerichte tests slagen. QtWebEngine-test met fictieve data en instellingen in
+geheugen bevestigt herstel van Zand, heen en terug schakelen, opslaan van de keuze
+en ongewijzigde ITM-kleuren. Het zandpalet is visueel gecontroleerd via
+`C:/python_coding/diagnostics/asset_dashboard_zand_thema.png`.
+
+### Optiecommentaar bewerken en kleuren
+
+De commentcellen zijn bewerkbaar. Enter of verlaten van de cel bewaart de tekst;
+Escape annuleert de nog niet bewaarde tekst. Rechtsklikken opent hetzelfde Qt-menu
+met de bestaande `get_comment_colors()`-instellingen, inclusief Geen en Kies kleur.
+Opgeslagen achtergrond- en tekstkleuren worden ook bij de eerste weergave getoond.
+
+Er zijn geen extra zichtbare kolommen toegevoegd. De exacte serie-ID en de
+commentkleuren reizen als aparte metadata naast de bestaande optievelden mee.
+`DashboardComments` gebruikt de bestaande `_on_comment_commit` van de oude tab
+en `update_open_optie_comment_color`. Daardoor blijven historie, caches,
+modelpatches, de bestaande 60-seconden flush-timer en databaseopslag gelijk.
+Deze tijdelijke afhankelijkheid moet worden losgemaakt voordat de oude tab ooit
+verwijderd wordt; de oude Single Asset Analyse-code is niet aangepast.
+
+Binnenkomende koersupdates overschrijven een actieve editor niet. Bewaren geeft
+een bevestiging of zichtbare fout aan de cel. De nieuwe tekst en kleur verschijnen
+ook in de bestaande modellen. Bij afsluiten wordt een actieve webeditor eerst
+afgehandeld; pas na bevestiging loopt de normale closeEvent en de bestaande flush.
+Bij een fout of een ontbrekende bevestiging blijft de app open.
+
+38 gerichte tests slagen. De QtWebEngine-controle met fictieve data en commentcache
+in geheugen bevestigt typen tijdens een refresh, bewaren via de echte webbridge,
+de ingestelde rode kleur en het bewaren van een actieve editor vóór afsluiten.
+De kleurmenukeuze was geautomatiseerd; er is niet naar de echte database geschreven.
+
+### Vaste indicator en rustige assetwissels
+
+De indicator heeft een vaste hoogte van 132 logische pixels en twee gestapelde
+delen: labels/scores boven en de twee toelichtingsregels onder, gescheiden door
+een subtiele horizontale lijn. Lange labels en scores blijven op hun eigen regel
+met horizontale scroll; lange toelichting krijgt een ellipsis en volledige tooltip.
+
+De pagina werd niet opnieuw geladen, maar veel DOM-inhoud werd met replaceChildren
+weggehaald en opgebouwd. Bovendien wiste clearAnalytics de payofftabel en grafieken
+voordat de nieuwe berekening klaar was. Dit is vervangen door blijvende componenten
+in `asset_dashboard_view.js`: cijferkaarten, indicatorpills/scores, badges, tabelkoppen
+en containers blijven staan. Alleen gewijzigde tekst, celstijl en benodigde
+positierijen veranderen. De payofftabel behoudt zijn cellen. Canvasafmetingen worden
+alleen aangepast bij een echte formaatwijziging, en ongewijzigde reeksen worden
+niet opnieuw getekend.
+
+Bij assetwisselen blijft de oude weergave staan met status Laden totdat de nieuwe
+analyse gereed is. Daarna verschijnen nieuwe basisgegevens, posities en grafieken
+in één browsertaak. De selectie zelf reageert onmiddellijk. Verouderde resultaten
+worden genegeerd. Bij fouten worden oude grafiekgegevens niet als nieuwe gepresenteerd.
+De afgesproken zichtbaarheid van lege positiesecties blijft gelden; daardoor kan de
+pagina-inhoud nog van hoogte veranderen, maar de scrollpositie blijft waar mogelijk
+behouden. Handmatig zoomen blijft intact bij updates van dezelfde asset.
+
+33 bestaande tests slagen. De echte QtWebEngine-test met fictieve AAPL/UVXY-data
+bevestigt dezelfde kaart-, pill-, tabel- en celobjecten vóór en na een assetwissel,
+geen lege tussenfase, indicatorhoogte 132 bij beide assets en behoud van scrollY=100.
+
 ### Earningslabels naast dividend
 
 Naast de drie dividendbadges staan nu Earnings en de komende earningsdatum.
@@ -205,3 +328,9 @@ profielen en een langdurige sessie is nog niet uitgevoerd.
 
 Graphify-update uitgevoerd. De extractie slaagt, maar de HTML-export van 1.8
 loopt tegen de bestaande grens van 5.000 nodes aan. De verplichte 1.4-update slaagt.
+
+## Payoffgrafiek: oude schaal en prijsdistributie
+- Oude 25%-formule voor de verticale marge en 2% horizontale marge overgenomen; ronde aslabels binnen het bereik.
+- Volumegewogen prijsverdeling: balken 24/12 maanden, stippellijnen 6/3 maanden, afzonderlijke procentas met dezelfde dubbele headroom.
+- Berekeningsmethoden ongewijzigd gekopieerd uit de oude UI naar een dashboardservice; uitgevoerd op de bestaande achtergrondworker, zonder databasewrites.
+- Ontbrekende historie geeft geen fictieve verdeling. De oude Single Asset Analyse blijft ongewijzigd.

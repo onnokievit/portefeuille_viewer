@@ -61,7 +61,7 @@ def _option_rows(store, asset):
     rows = frame.sort("optie_exp_date").to_dicts()
     for row in rows:
         comment = latest.get(row.get("uniek_id"), {})
-        for field in ("optie_comment", "optie_comment_updated_at"):
+        for field in ("optie_comment", "optie_comment_updated_at", "optie_comment_color", "optie_comment_textcolor"):
             if field in comment:
                 row[field] = comment[field]
     return rows
@@ -140,6 +140,9 @@ def build_dashboard_payload(store, asset="", status="all"):
         quantity = json_safe(row.get("aantal_bezit"))
         row["waarde_bezit"] = price * quantity if price is not None and quantity is not None else None
     positions["options"] = _option_rows(store, selected)
+    option_comments = [{"id": row["uniek_id"], "background": row.get("optie_comment_color") or "",
+                        "foreground": row.get("optie_comment_textcolor") or ""}
+                       for row in positions["options"]]
     for key in ("sprinters",):
         positions[key] = [r for r in positions[key]
                           if r.get("SomVantransactie_aantal") not in (None, 0)]
@@ -154,4 +157,5 @@ def build_dashboard_payload(store, asset="", status="all"):
         "dividend_display": dividend_display(dividend),
         "positions": positions,
         "position_columns": POSITION_COLUMNS,
+        "option_comments": option_comments,
     })

@@ -102,6 +102,19 @@ class AnalyticsTests(unittest.TestCase):
         self.assertEqual(result["payoff"]["price"],104.)
         self.assertEqual(result["payoff"]["price_source"],"laatste historische slotkoers")
 
+    def test_asset_price_precision_is_carried_to_the_chart_and_table(self):
+        store,payload,settings=fixture()
+        payload["summary"]["koers"]=1.0725
+        settings.update(step_pct=.5,decimals=4)
+        p=calculate_analytics(store,payload,settings)["payoff"]
+        self.assertEqual(p["decimals"],4)
+        self.assertEqual(p["steps"][8],1.0725)
+
+    def test_zero_step_matches_legacy_one_percent_fallback(self):
+        store,payload,settings=fixture();settings["step_pct"]=0.
+        p=calculate_analytics(store,payload,settings)["payoff"]
+        self.assertEqual(p["steps"],[float(v) for v in range(92,109)])
+
     def test_live_result_is_not_converted_twice_and_is_not_a_fake_candle(self):
         store,payload,settings=fixture()
         today=date.today()
