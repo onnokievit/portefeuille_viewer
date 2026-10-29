@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import polars as pl
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QWidget, QTableWidget, QCheckBox, QComboBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QWidget, QTableWidget, QTableWidgetItem, QCheckBox, QComboBox, QPushButton, QVBoxLayout
 from devtools.test_asset_dashboard_analytics import fixture
 from portefeuille_viewer.services.asset_dashboard_analytics import calculate_analytics
 from portefeuille_viewer.services.asset_dashboard_test_orders import DashboardTestOrders
@@ -36,7 +36,7 @@ class EditorTests(unittest.TestCase):
     def test_editor_restores_same_widgets_and_geometry(self):
         for use_layout in (False,True):
             parent=QWidget();dashboard=QWidget();dashboard._timer=SimpleNamespace(isActive=lambda:False,start=Mock())
-            target=SimpleNamespace()
+            target=SimpleNamespace(_refresh_test_orders_view_for_active_asset=Mock())
             layout=QVBoxLayout(parent) if use_layout else None
             for name,kind in [('checkBoxEnableTestOrders',QCheckBox),('checkBoxAssetOrdersOnly',QCheckBox),('comboboxScenarioSelector',QComboBox),('buttonEditScenarios',QPushButton),('buttonAddTestOrder',QPushButton),('buttonDeleteTestOrder',QPushButton),('testOrdersTable',QTableWidget)]:
                 widget=kind(parent);widget.setGeometry(5,7,150,40)
@@ -52,6 +52,29 @@ class EditorTests(unittest.TestCase):
             if not use_layout:self.assertEqual(original.geometry(),geometry)
             if layout:self.assertGreaterEqual(layout.indexOf(original),0)
             parent.deleteLater();dashboard.deleteLater()
+
+    def test_test_comment_uses_shared_series_identity_and_latest_cache(self):
+        from portefeuille_viewer.data.repository import build_uniek_id
+        values=dict(broker='lynx',asset_rollup='AAPL',asset_type='optie',optie_exp_date='20-11-2026',optie_call_put='call',optie_strike='110.00',scenario_order_uid='test-uid')
+        table=QTableWidget(1,2);table.setHorizontalHeaderLabels(['Broker','Comment'])
+        table.setItem(0,0,QTableWidgetItem('lynx'));table.setItem(0,1,QTableWidgetItem('verouderd'))
+        selector=QComboBox();selector.addItem('AAPL')
+        target=SimpleNamespace(testOrdersTable=table,test_order_columns=['broker','optie_comment'],
+            row_to_dict_db=lambda row:values,asset_selector=selector,checkBoxEnableTestOrders=QCheckBox(),
+            checkBoxAssetOrdersOnly=QCheckBox(),comboboxScenarioSelector=QComboBox())
+        dashboard=SimpleNamespace(_timer=SimpleNamespace(isActive=lambda:False,start=Mock()))
+        service=DashboardTestOrders(target,dashboard);service.asset='AAPL'
+        identity=build_uniek_id(values)
+        frame=pl.DataFrame([dict(uniek_id=identity,optie_comment='nieuw',optie_comment_color='#f8d7da',optie_comment_textcolor='#000000')])
+        with patch('portefeuille_viewer.services.asset_dashboard_test_orders.fetch_open_optie_comments',return_value=frame):
+            state=service.state('AAPL')
+        cell=state['rows'][0][1]
+        self.assertEqual(cell['text'],'nieuw');self.assertEqual(cell['comment']['id'],identity)
+        self.assertEqual(cell['comment']['background'],'#f8d7da');self.assertEqual(state['row_keys'],['test-uid'])
+        values['optie_strike']=''
+        with patch('portefeuille_viewer.services.asset_dashboard_test_orders.fetch_open_optie_comments') as fetch:
+            invalid=service.state('AAPL')
+        self.assertNotIn('comment',invalid['rows'][0][1]);fetch.assert_not_called()
 
     def test_actions_use_existing_controls(self):
         target=SimpleNamespace(checkBoxEnableTestOrders=QCheckBox(),checkBoxAssetOrdersOnly=QCheckBox(),comboboxScenarioSelector=QComboBox(),testOrdersTable=QTableWidget(),_refresh_test_orders_view_for_active_asset=Mock())

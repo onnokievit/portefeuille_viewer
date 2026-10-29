@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const fmt = v => v == null ? 'â€”' : Number(v).toLocaleString('nl-NL', {maximumFractionDigits: 2});
+  const fmt = v => v == null ? '—' : Number(v).toLocaleString('nl-NL', {maximumFractionDigits: 2});
   const finite = v => typeof v === 'number' && Number.isFinite(v);
   let analytics = null, range = null;
   const charts = [];
@@ -59,7 +59,7 @@
       const left=65,right=w-(this.kind==='payoff'?(distribution?55:8):16),top=this.kind==='payoff'?6:12,bottom=h-(this.kind==='payoff'?23:27);
       c.font='10px system-ui';c.fillStyle=palette.axis;
       const p=analytics?.payoff;
-      const priceText=v=>finite(v)?v.toLocaleString('nl-NL',{minimumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2,maximumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2}):'â€”';
+      const priceText=v=>finite(v)?v.toLocaleString('nl-NL',{minimumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2,maximumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2}):'—';
       let rows=this.kind==='payoff'?(p?.steps||[]).map((x,i)=>({x,i})):analytics?.history||[];
       if (this.kind!=='payoff') {const [a,b]=bounds(rows.length);rows=rows.slice(a,b);}
       if (!rows.length) {c.fillText('Geen gegevens beschikbaar',left,Math.max(30,h/2));return;}
@@ -149,8 +149,8 @@
         const i=Math.max(0,Math.min(rows.length-1,Math.round(((this.hover.x-left)/(right-left)*(this.kind==='payoff'?1.04:1)-(this.kind==='payoff'?.02:0))*(rows.length-1))));
         const r=rows[i];c.strokeStyle=palette.crosshair;c.beginPath();c.moveTo(x(i),top);c.lineTo(x(i),bottom);c.stroke();
         let text=this.kind==='payoff'?'Koers '+Number(r.x).toLocaleString('nl-NL',{minimumFractionDigits:p.decimals??2,maximumFractionDigits:p.decimals??2})+'\nTotaal '+fmt(get(r,9))+' EUR\nOpen opties '+fmt(get(r,2))+' EUR':r.date;
-        if(this.kind==='price')text+='\nO '+priceText(r.open)+' Â· H '+priceText(r.high)+'\nL '+priceText(r.low)+' Â· C '+priceText(r.close)+(r.live?'\nActuele snapshot':'');
-        if(this.kind==='result')text+='\nResultaat '+fmt(r.result)+' EUR'+(r.live?' Â· actuele snapshot':'');
+        if(this.kind==='price')text+='\nO '+priceText(r.open)+' · H '+priceText(r.high)+'\nL '+priceText(r.low)+' · C '+priceText(r.close)+(r.live?'\nActuele snapshot':'');
+        if(this.kind==='result')text+='\nResultaat '+fmt(r.result)+' EUR'+(r.live?' · actuele snapshot':'');
         if(this.kind==='quantity')text+='\nAantal '+fmt(r.quantity);
         this.tip.textContent=text;this.tip.style.display='block';this.tip.style.left=Math.max(0,Math.min(w-240,this.hover.x+10))+'px';this.tip.style.top='10px';
       }else this.tip.style.display='none';
@@ -171,8 +171,8 @@
     while(head.cells.length>count+1)head.lastChild.remove();
     if(head.cells[0].textContent!=='Eindkoers')head.cells[0].textContent='Eindkoers';
     for(let i=0;i<count;i++){
-      const cell=head.cells[i+1],value=p?.steps?Number(p.steps[i]).toLocaleString('nl-NL',{minimumFractionDigits:p.decimals??2,maximumFractionDigits:p.decimals??2}):'â€”',cls=i===p?.current_col?'current':'';
-      if(cell.textContent!==value)cell.textContent=value;if(cell.className!==cls)cell.className=cls;
+      const cell=head.cells[i+1],value=p?.steps?Number(p.steps[i]).toLocaleString('nl-NL',{minimumFractionDigits:p.decimals??2,maximumFractionDigits:p.decimals??2}):'—',cls=i===p?.current_col?'current':'';
+      if(cell.textContent!==value)cell.textContent=value;if(cell.title!==value)cell.title=value;if(cell.className!==cls)cell.className=cls;
     }
     while(body.rows.length<labels.length){const row=document.createElement('tr');row.append(document.createElement('th'));body.append(row);}
     labels.forEach((label,r)=>{
@@ -181,9 +181,9 @@
       while(row.cells.length<count+1)row.append(document.createElement('td'));
       while(row.cells.length>count+1)row.lastChild.remove();
       for(let i=0;i<count;i++){
-        const cell=row.cells[i+1],v=p?.values?.[r]?.[i],value=v==null?'â€”':Number(v).toLocaleString('nl-NL',{maximumFractionDigits:0});
+        const cell=row.cells[i+1],v=p?.values?.[r]?.[i],value=v==null?'—':Number(v).toLocaleString('nl-NL',{maximumFractionDigits:0});
         const cls=(v<0?'negative ':'')+(i===p?.current_col?'current':'');
-        if(cell.textContent!==value)cell.textContent=value;if(cell.className!==cls)cell.className=cls;
+        if(cell.textContent!==value)cell.textContent=value;if(cell.title!==value)cell.title=value;if(cell.className!==cls)cell.className=cls;
       }
     });
   }
@@ -204,8 +204,8 @@
     const historyChanged=switched||JSON.stringify(analytics?.history)!==JSON.stringify(next.history);
     if(switched)range=null;
     analytics=next;if(payoffChanged)payoffTable(next.payoff);
-    $('payoff-status').textContent=next.payoff.steps?'EUR Â· '+next.payoff.price_source:'Geen referentiekoers beschikbaar';
-    $('history-status').textContent=next.history.length?next.history.length+' punten Â· '+next.history[0].date+' t/m '+next.history[next.history.length-1].date:'Geen historie beschikbaar binnen deze periode';
+    $('payoff-status').textContent=next.payoff.steps?'EUR · '+next.payoff.price_source+(next.payoff.test_orders?' · inclusief testorders':''):'Geen referentiekoers beschikbaar';
+    $('history-status').textContent=next.history.length?next.history.length+' punten · '+next.history[0].date+' t/m '+next.history[next.history.length-1].date:'Geen historie beschikbaar binnen deze periode';
     for(const chart of charts)if(chart.kind==='payoff'?payoffChanged:historyChanged)chart.draw();
   };
   window.addEventListener('dashboard-theme-changed',drawAll);

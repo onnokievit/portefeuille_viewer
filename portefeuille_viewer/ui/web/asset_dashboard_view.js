@@ -125,15 +125,18 @@ function commentResult(raw){
 }
 async function flushDashboardComments(){
   try{
+    const layoutResult=window.flushDashboardLayout?await window.flushDashboardLayout():{};
+    const columnResult=window.flushDashboardColumns?await window.flushDashboardColumns():{};
     const settingsResult=await submitDashboardControls();
-    const results=[settingsResult,...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
+    const results=[layoutResult,columnResult,settingsResult,...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
     bridge.commentsFlushed(results.map(result=>result.error).filter(Boolean).join('\n'));
   }catch(error){bridge.commentsFlushed(String(error));}
 }
-function updateTable(id,rows,columns){
+function updateTable(id,rows,columns,kind){
   let state=tableStates.get(id);
   if(!state){
     const wrap=node('div',undefined,'scroll'),table=node('table'),head=node('tr'),thead=node('thead'),body=node('tbody');
+    table.dataset.positionColumns=kind;
     if(el(id).classList.contains('option-group')){
       table.classList.add('option-table');
       const widths=[4,8,5,4,9,6,6,6,6,7,7,7,5,8,13,6],total=widths.reduce((a,b)=>a+b,0);
@@ -171,6 +174,7 @@ function updateTable(id,rows,columns){
     if(state.body.children[index]!==tr)state.body.insertBefore(tr,state.body.children[index]||null);
   });
   for(const [key,row]of state.rows)if(!retained.has(key)){row.remove();state.rows.delete(key);}
+  window.updatePositionColumnWidths?.();
 }
 
 const positionGroups=[['options','put','put-positions'],['options','call','call-positions'],
@@ -184,7 +188,7 @@ function updatePositions(payload){
     const source=key==='options'?payload.positions[key].map((row,i)=>({...row,_comment:payload.option_comments[i]})):payload.positions[key];
     const rows=source.filter(row=>!side||String(row.optie_call_put).toLowerCase()===side||
       String(row.optie_call_put).toLowerCase()===(side==='call'?'c':'p'));
-    updateTable(group.id,rows,payload.position_columns[key]);group.hidden=!rows.length;
+    updateTable(group.id,rows,payload.position_columns[key],key);group.hidden=!rows.length;
   }
   for(const [section,container]of [['puts-section','put-positions'],['calls-section','call-positions'],['holdings-section','holding-positions']]){
     el(section).hidden=![...el(container).children].some(group=>!group.hidden);
@@ -302,17 +306,17 @@ for(const id of ['start','end'])el(id).addEventListener('change',()=>submitDashb
 el('asset-status').addEventListener('change',()=>{if(bridge)bridge.selectStatus(el('asset-status').value);});
 el('asset').addEventListener('change',()=>{if(bridge)bridge.selectAsset(el('asset').value);});
 if(window.qt&&window.QWebChannel){new QWebChannel(qt.webChannelTransport,channel=>{
-  bridge=channel.objects.dashboard;bridge.updated.connect(render);bridge.analyticsUpdated.connect(receiveAnalytics);bridge.ready();
+  bridge=channel.objects.dashboard;window.layoutBridgeReady?.(bridge);bridge.updated.connect(render);bridge.analyticsUpdated.connect(receiveAnalytics);bridge.ready();
   bridge.commentResult.connect(commentResult);
 });}else{text(el('status'),'Open deze pagina via de Asset Dashboard-tab in Portefeuille Viewer.');}
 
 function testOrderAction(action,value){
   if(!bridge)return;
   bridge.testOrderAction(JSON.stringify({asset:displayedAsset,action,value}),error=>{
-    if(error)text(el('tests-status'),error);
+    if(error){el('tests-status').className='warning';text(el('tests-status'),error);}
   });
 }
-let lastTestState='';
+let lastTestState='',testTableState=null;
 function updateTestOrders(state){
   if(!state)return;
   const signature=JSON.stringify(state);if(signature===lastTestState)return;lastTestState=signature;
@@ -320,11 +324,32 @@ function updateTestOrders(state){
   el('tests-enabled').checked=state.enabled;el('tests-asset-only').checked=state.asset_only;
   const selector=el('tests-scenario');selector.replaceChildren();
   state.scenarios.forEach(s=>{const option=node('option',s.name);option.value=s.id;selector.append(option);});selector.value=state.scenario;
-  const table=node('table'),head=node('tr'),thead=node('thead'),body=node('tbody');
-  state.columns.forEach(label=>head.append(node('th',label)));thead.append(head);
-  state.rows.forEach(cells=>{const row=node('tr');cells.forEach(cell=>{const td=node('td',cell.text);td.style.backgroundColor=cell.background||'';td.style.color=cell.foreground||'';row.append(td);});row.addEventListener('dblclick',()=>testOrderAction('editor'));body.append(row);});
-  table.append(thead,body);el('tests-table').replaceChildren(table);
-  text(el('tests-status'),state.enabled?'Testorders tellen mee in de payoff · dubbelklik om te bewerken':'Testorders staan uit · werkelijke posities');
+  if(!testTableState){
+    const table=node('table'),head=node('tr'),thead=node('thead'),body=node('tbody');
+    thead.append(head);table.append(thead,body);el('tests-table').replaceChildren(table);
+    testTableState={table,head,body,rows:new Map()};
+  }
+  const {head,body,rows}=testTableState,retained=new Set(),duplicates=new Map();
+  while(head.children.length<state.columns.length)head.append(node('th'));
+  state.columns.forEach((label,i)=>text(head.children[i],label));
+  state.rows.forEach((cells,index)=>{
+    const base=String(state.row_keys?.[index]??index),ordinal=duplicates.get(base)||0,key=base+':'+ordinal;
+    duplicates.set(base,ordinal+1);retained.add(key);
+    let row=rows.get(key);
+    if(!row){
+      row=node('tr');cells.forEach(()=>row.append(node('td')));
+      row.addEventListener('dblclick',event=>{if(!event.target.closest('[data-comment-id]'))testOrderAction('editor');});
+      rows.set(key,row);
+    }
+    cells.forEach((cell,i)=>{
+      const td=row.children[i];
+      if(cell.comment){updateCommentCell(td,{optie_comment:cell.text,_comment:cell.comment});}
+      else{text(td,cell.text);td.style.backgroundColor=cell.background||'';td.style.color=cell.foreground||'';}
+    });
+    if(body.children[index]!==row)body.insertBefore(row,body.children[index]||null);
+  });
+  for(const [key,row]of rows)if(!retained.has(key)){row.remove();rows.delete(key);}
+  el('tests-status').className='sr-only';text(el('tests-status'),'');
 }
 el('tests-enabled').addEventListener('change',()=>testOrderAction('enabled',el('tests-enabled').checked));
 el('tests-asset-only').addEventListener('change',()=>testOrderAction('asset_only',el('tests-asset-only').checked));

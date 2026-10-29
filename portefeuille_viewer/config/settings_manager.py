@@ -63,6 +63,10 @@ LOCAL_ONLY_KEYS = {
         "year_result_vs_indices_start_date",
         "cash_dashboard_start_date",
         "asset_dashboard_theme",
+        "asset_dashboard_layout_desktop",
+        "asset_dashboard_layout_laptop",
+        "asset_dashboard_position_columns_desktop",
+        "asset_dashboard_position_columns_laptop",
         "cash_dashboard_panel_state",
         "cash_dashboard_year_percent_mode",
         "cash_dashboard_chart_height_px",
@@ -78,6 +82,44 @@ LOCAL_ONLY_KEYS = {
 
 
 class SettingsManager:
+    def get_asset_dashboard_position_columns(self, mode):
+        from portefeuille_viewer.services.asset_dashboard_columns import validate_columns
+        if mode not in {'desktop','laptop'}:
+            raise ValueError('Onbekende schermindeling')
+        try:
+            return validate_columns(json.loads(self.config.get('ui','asset_dashboard_position_columns_'+mode,fallback='null')))
+        except (ValueError, TypeError):
+            return None
+
+    def set_asset_dashboard_position_columns(self, mode, value):
+        from portefeuille_viewer.services.asset_dashboard_columns import validate_columns
+        if mode not in {'desktop','laptop'}:
+            raise ValueError('Onbekende schermindeling')
+        value=validate_columns(value)
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui','asset_dashboard_position_columns_'+mode,json.dumps(value,separators=(',',':')))
+        self.save()
+
+    def get_asset_dashboard_layout(self, mode):
+        from portefeuille_viewer.services.asset_dashboard_layout import validate_layout
+        if mode not in {'desktop', 'laptop'}:
+            raise ValueError('Onbekende schermindeling')
+        try:
+            return validate_layout(json.loads(self.config.get('ui', 'asset_dashboard_layout_' + mode, fallback='null')))
+        except (ValueError, TypeError):
+            return None
+
+    def set_asset_dashboard_layout(self, mode, value):
+        from portefeuille_viewer.services.asset_dashboard_layout import validate_layout
+        if mode not in {'desktop', 'laptop'}:
+            raise ValueError('Onbekende schermindeling')
+        value = validate_layout(value)
+        if not self.config.has_section('ui'):
+            self.config.add_section('ui')
+        self.config.set('ui', 'asset_dashboard_layout_' + mode, json.dumps(value, separators=(',', ':')))
+        self.save()
+
     def get_asset_dashboard_theme(self):
         value = self.config.get("ui", "asset_dashboard_theme", fallback="dark")
         return value if value in {"dark", "sand"} else "dark"

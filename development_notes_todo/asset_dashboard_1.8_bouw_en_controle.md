@@ -342,3 +342,71 @@ loopt tegen de bestaande grens van 5.000 nodes aan. De verplichte 1.4-update sla
 - Payoff ontvangt effectieve scenario-orders op de UI-thread als Polars clone. De worker gebruikt de overgenomen legacy augmentatie, zonder globale caches of echte posities te wijzigen. Alleen aangevinkte orders tellen mee; historie blijft werkelijke historie.
 - Automatische regressiecontrole op identieke legacy berekeningscode, aan/uit en include, EUR-omrekening, behoud van snapshots en terugplaatsen van de oorspronkelijke widgets (zowel absolute geometrie als layouts).
 - Praktijktest: herstart, vergelijk dezelfde asset/scenario in beide pagina’s; test toevoegen, wijzigen, include, verwijderen, commentkleur, scenarioselectie en afsluiten/herstarten. Geen echte databasegegevens aangepast tijdens ontwikkelingstests.
+
+## 29 oktober 2026 — apart dashboard met instelbare indeling
+
+### Gebruik
+- Nieuw tabblad `Asset Dashboard – Indeling` naast het oorspronkelijke dashboard; bestaande pagina blijft bruikbaar.
+- Start met `python portefeuille_viewer_1.8.py --profile onno -desktop` (ook standaard zonder schermoptie), of `python portefeuille_viewer_1.8.py --profile onno -laptop`.
+- `Indeling bewerken`: versleep de kopbalk van een blok, wijzig de omvang met de hoekgreep rechtsonder. Pijltjestoetsen werken op beide handgrepen; Escape annuleert een lopende sleepactie.
+- Automatische opslag na verplaatsen/vergroten, met zichtbare bevestiging of fout. `Standaard herstellen` herstelt alleen de actieve schermindeling. Er zijn aparte beginindelingen voor laptop en desktop.
+
+### Techniek en isolatie
+- Dezelfde AssetDashboardTab, HTML, berekeningen, testordereditor en commentaaropslag; geen kopie van de dashboardfunctionaliteit.
+- Alleen de extra tab laadt de rastermodule. Bestaande DOM-blokken worden verplaatst, niet gekopieerd. Charts houden hun bestaande ResizeObservers en interactie; buiten de bewerkmodus zijn handgrepen uitgeschakeld.
+- 24 rasterkolommen, verticale eenheden van 20 px plus 7 px tussenruimte. Overlappende blokken worden bij verplaatsen naar beneden geschoven. Grenzen en onbekende/dubbele blokken worden gecontroleerd in JavaScript en Python.
+- Opgeslagen in de bestaande profielinstellingen onder `[ui] asset_dashboard_layout_desktop` en `asset_dashboard_layout_laptop`, als versie-1-JSON. Geen extra database of schema-aanpassing.
+- Lege positieblokken blijven in normale modus verborgen; in bewerkmodus kunnen ook die posities worden ingericht. Het opgeslagen raster behoudt hun ruimte zodat een assetwissel de indeling niet herschikt.
+- Beide dashboards worden pas bij eerste opening als webpagina geladen. Alleen het zichtbare dashboard publiceert updates. Eén gedeelde QThreadPool met maximaal één thread voor dashboardberekeningen; een lopende taak mag afronden, achterhaalde wachtende taken worden overgeslagen.
+- Afsluiten bevestigt invoer en layoutopslag van beide geladen dashboards voordat services en opslag worden afgesloten.
+
+### Controle
+- Node-controles met 2400 deterministische verplaatsingen/vergrotingen: grenzen, overlappingen en behoud van standaardindelingen.
+- Python-controles: afzonderlijke modusopslag, corruptie, profielrouting, startopties, één rekenworker, afbreken van wachtende taken, activeringsvolgorde en afsluiten van beide dashboards.
+- Echte QtWebEngine-testvensters met fictieve snapshots en uitsluitend instellingen in het geheugen: desktop/laptop renderen, slepen, vergroten, opslaan via QWebChannel en gescheiden indelingen. Screenshots onder `C:/python_coding/diagnostics/dashboard_layout_desktop.png` en `dashboard_layout_laptop.png`.
+- Geen productie-app gestart of productiedatabase/profielinstelling gewijzigd voor deze tests.
+
+### Compacte bediening en fijner horizontaal raster
+- Bewerkknop naar de bovenbalk; aparte indelingsregel, moduslabel en zichtbare statustekst verwijderd. Opslagmelding blijft toegankelijk via knop-tooltip en screenreaderstatus; opslaan mislukt geeft een gekleurde knoprand.
+- Herstellen is alleen zichtbaar tijdens de bewerkmodus.
+- Horizontaal raster van 24 naar 240 eenheden (10× fijnere breedte/positie). Verticale stappen en bestaande tussenruimte blijven gelijk.
+- Opslagversie 2. Versie-1-indelingen worden bij lezen omgerekend door x en breedte met 10 te vermenigvuldigen; y/hoogte blijven gelijk. Geen profielbestand tijdens ontwikkeling gemigreerd of gewijzigd.
+- Python- en Node-regressiecontrole voor migratie met behoud van verhoudingen; QtWebEngine-smoketest op beide schermindelingen geslaagd.
+
+### Fijne verticale maatvoering
+- Hoogte en verticale positie nu ook 10× fijner: 2,7 px per rasterstap in plaats van 27 px.
+- Versie 3 van de indeling: versie 1 en 2 worden bij lezen omgerekend met behoud van positie, hoogte en 7 px tussenruimte. Bestaande indelingen hoeven niet opnieuw ingericht te worden.
+
+### Positieblokken met automatische hoogte
+- Puts, calls en aandelen/sprinters vormen in de indelingspagina één verplaatsbare stapel met de breedte/startpositie van het eerste positieblok. Puts eerst, vervolgens calls, daarna aandelen/sprinters; lege onderdelen verdwijnen.
+- Elke tabel neemt precies de benodigde inhoudshoogte in, met 7 px tussenruimte. Geen verticale interne scrollbar; een horizontale scrollbar bij te veel kolommen kan blijven bestaan.
+- De grip van de stapel wijzigt alleen de breedte, hoogte volgt altijd de inhoud. Dezelfde globale indeling kan dus een klein blok voor één optie en een groter blok voor meerdere opties tonen.
+- Groei voorbij de gereserveerde ruimte schuift de onderliggende blokken mee. Weergavehoogte wordt niet naar profielinstellingen geschreven; bij assetwissels worden alleen DOM-inhoud en afgeleide positie aangepast.
+- ResizeObserver en gebundelde DOM-observatie volgen rijenaantallen, verborgen blokken en breedtewijzigingen; geen extra koersophaling of berekeningen.
+- Gecontroleerd met pure rastertests voor groei, verschuiven en behoud van opslag, en in QtWebEngine met één/vier opties en verdwijnen van een optieblok. De oorspronkelijke vaste Asset Dashboard-pagina blijft ongewijzigd.
+
+### Compact testorderblok
+- Kop/inklappen en routinematige statustekst verwijderd; bediening en tabel staan permanent open. Actiefouten blijven zichtbaar.
+- Scenarioselectie en actieknoppen dezelfde vaste hoogte (28 px).
+- Indelingspagina: alleen de tabel scrolt, buitenste paneel en container niet. Tabelkop blijft staan tijdens scrollen.
+- QtWebEngine-test met 60 fictieve regels bevestigt één interne verticale scrollbar en gelijke select-/knophoogte.
+
+### Compacte payoffkolommen
+- Naamkolom vast 112 px. Numerieke padding links/rechts van 6 naar 2 px; gelijke koerskolommen binnen beschikbare breedte. Rijhoogte/font behouden.
+- Bij een extreem smal blok verschijnt een ellipsis in een te smalle cel; de volledige waarde staat in de tooltip. Er worden geen cijfers weggeknipt zonder aanduiding.
+- QtWebEngine-controle bevestigt vaste naamkolombreedte, 2 px padding en geen horizontale scrollbar in de testindeling.
+
+### Versleepbare kolommen in positietabellen
+- De eerdere toevoeging aan de payofftabel is op verzoek verwijderd. Payoff behoudt de vaste naamkolom en compactere padding.
+- Kolomranden van calls, puts, aandelen en sprinters zijn versleepbaar. Calls en puts delen dezelfde kolomverdeling voor identieke uitlijning; aandelen en sprinters hebben elk een eigen verdeling.
+- Automatische opslag per profiel, apart voor desktop/laptop, onder `[ui] asset_dashboard_position_columns_desktop/laptop`. Oude payoff-kolomvoorkeuren worden niet meer gelezen.
+- Pijltjestoetsen verstellen 2 px; dubbelklik verdeelt de twee aangrenzende kolommen gelijk. Escape annuleert de sleepactie. Bij sluiten wordt een nog lopende opslag bevestigd.
+- Bestaande commentaarinvoer, kleuren en automatische hoogte blijven behouden. Geen databaseaanpassing.
+- Gecontroleerd: validatie van alle drie tabelindelingen en daadwerkelijke QtWebEngine-pointerevents op optie-kolommen met opgeslagen breedtes. Geen slepen op de payofftabel.
+
+### Testoptiecommentaar rechtstreeks bewerken
+- Het commentaarveld van geldige testopties en testaandelen is direct bewerkbaar, met dezelfde editor als bij opties in bezit. Enter/blur bewaart, Escape annuleert en rechtsklik gebruikt de bestaande kleurkeuze.
+- Metadata gebruikt exact `repository.build_uniek_id` op de bestaande `row_to_dict_db`-velden; opslag via DashboardComments en de bestaande commentaarcache/flush. Geen nieuw opslagpad.
+- Testregels worden op hun bestaande UID hergebruikt in de DOM, zodat verversen een actieve invoer/cursor niet vervangt. Dubbelklik op commentaar opent de native testordereditor niet; de overige cellen blijven dat doen.
+- De actuele gedeelde commentaarcache wordt batchgewijs gelezen voor de testtabel. De native editor ververst zijn testtabel bij openen, zodat beide weergaven dezelfde tekst en kleuren tonen.
+- Gecontroleerd: gedeelde ID, actuele tekst/kleur en onvolledige orders in unittests; rechtstreeks typen, bewaren via QWebChannel en behoud van editor tijdens verversen in de QtWebEngine-smoketest met fictieve gegevens.

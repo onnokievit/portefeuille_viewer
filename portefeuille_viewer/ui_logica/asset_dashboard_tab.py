@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, QRunnable, QThreadPool, Signal, Slot
@@ -23,6 +24,9 @@ from portefeuille_viewer.services.asset_dashboard_analytics import (
 )
 
 log = logging.getLogger(__name__)
+# Both dashboard tabs share one calculation lane, including during tab switches.
+DASHBOARD_ANALYTICS_POOL = QThreadPool()
+DASHBOARD_ANALYTICS_POOL.setMaxThreadCount(1)
 
 
 class _AnalyticsSignals(QObject):
@@ -33,11 +37,15 @@ class _AnalyticsJob(QRunnable):
     def __init__(self, generation, request, history_cache):
         super().__init__()
         self.generation = generation
+        self.cancelled = threading.Event()
         self.request = request
         self.history_cache = history_cache
         self.signals = _AnalyticsSignals()
 
     def run(self):
+        if self.cancelled.is_set():
+            self.signals.finished.emit(self.generation, None, 'cancelled')
+            return
         try:
             result = calculate_analytics(*self.request, history_cache=self.history_cache)
             self.signals.finished.emit(self.generation, result, "")
@@ -74,6 +82,26 @@ class DashboardBridge(QObject):
         self.tab._ready = True
         self.tab._publish(force=True)
         self.tab._request_earnings()
+
+    @Slot(str, result=str)
+    def savePositionColumns(self, raw):
+        try:
+            get_settings().set_asset_dashboard_position_columns(self.tab.layout_mode, json.loads(raw))
+            return ''
+        except Exception as exc:
+            log.warning('Kolombreedtes konden niet worden bewaard: %s', type(exc).__name__)
+            return str(exc)
+
+    @Slot(str, result=str)
+    def saveLayout(self, raw):
+        try:
+            if not self.tab.editable_layout:
+                raise ValueError('Dit dashboard heeft een vaste indeling')
+            get_settings().set_asset_dashboard_layout(self.tab.layout_mode, json.loads(raw))
+            return ''
+        except Exception as exc:
+            log.warning('Dashboardindeling kon niet worden bewaard: %s', type(exc).__name__)
+            return str(exc)
 
     @Slot(str, result=str)
     def testOrderAction(self, raw):
@@ -150,8 +178,10 @@ class DashboardBridge(QObject):
 class AssetDashboardTab(QWidget):
     assetChanged = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, editable_layout=False, layout_mode='desktop'):
         super().__init__(parent)
+        self.editable_layout = editable_layout
+        self.layout_mode = layout_mode if layout_mode in {'desktop', 'laptop'} else 'desktop'
         self.selected_asset = ""
         self._asset_status = "active"
         self._active = self._ready = False
@@ -284,6 +314,13 @@ class AssetDashboardTab(QWidget):
         self._controls.update(get_settings().get_asset_dashboard_period())
         page = template.read_text(encoding="utf-8").replace("{{START_DATE}}", self._controls["start"]).replace("{{END_DATE}}", self._controls["end"])
         page = page.replace("{{DASHBOARD_THEME}}", get_settings().get_asset_dashboard_theme())
+        column_config = json.dumps(get_settings().get_asset_dashboard_position_columns(self.layout_mode))
+        view_script += '\nwindow.dashboardPositionColumnConfig=' + column_config + ';\n' + template.with_name('asset_dashboard_columns.js').read_text(encoding='utf-8')
+        if self.editable_layout:
+            layout_script = template.with_name('asset_dashboard_layout.js').read_text(encoding='utf-8')
+            engine_script = template.with_name('asset_dashboard_layout_engine.js').read_text(encoding='utf-8')
+            config = json.dumps(dict(mode=self.layout_mode, layout=get_settings().get_asset_dashboard_layout(self.layout_mode)))
+            view_script += '\nwindow.dashboardLayoutConfig=' + config + ';\n' + engine_script + '\n' + layout_script
         self.web.setHtml(page.replace("<!-- DASHBOARD_CHARTS -->", "<script>" + chart_script + "</script>").replace(
             "<!-- DASHBOARD_VIEW -->", "<script>" + view_script + "</script>"))
 
@@ -301,6 +338,8 @@ class AssetDashboardTab(QWidget):
             self._earnings_timer.stop()
             self._pending_analytics = None
             self._generation += 1
+            if self._job is not None:
+                self._job.cancelled.set()
 
     def _snapshot_updated(self, key):
         # Leading edge batching: repeated ticks do not restart a pending render.
@@ -321,6 +360,9 @@ class AssetDashboardTab(QWidget):
                 self._comment_editor.remember(payload["option_comments"])
             if self._test_orders is not None:
                 payload['test_orders'] = self._test_orders.state(payload['asset'])
+                if self._comment_editor is not None:
+                    self._comment_editor.remember([cell['comment'] for cells in payload['test_orders']['rows']
+                        for cell in cells if cell.get('comment')])
             encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, default=str)
             if force or encoded != self._last_payload:
                 previous_asset = self.selected_asset
@@ -398,7 +440,7 @@ class AssetDashboardTab(QWidget):
         self._pending_analytics = None
         self._job = _AnalyticsJob(generation, request, self._history_cache)
         self._job.signals.finished.connect(self._analytics_finished)
-        QThreadPool.globalInstance().start(self._job)
+        DASHBOARD_ANALYTICS_POOL.start(self._job)
 
     @Slot(int, object, str)
     def _analytics_finished(self, generation, result, error):

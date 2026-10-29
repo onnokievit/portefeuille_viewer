@@ -108,6 +108,10 @@ def _parse_startup_args(argv: list[str]) -> argparse.Namespace:
         default="",
         help="Start direct met database alias/naam uit Settings > Databases.",
     )
+    display = parser.add_mutually_exclusive_group()
+    display.add_argument('-laptop', '--laptop', dest='dashboard_mode', action='store_const', const='laptop')
+    display.add_argument('-desktop', '--desktop', dest='dashboard_mode', action='store_const', const='desktop')
+    parser.set_defaults(dashboard_mode='desktop')
     args, _unknown = parser.parse_known_args(argv[1:])
     return args
 
@@ -1178,6 +1182,7 @@ def main():
     app = cast(QApplication | None, existing_app)
     if app is None:
         app = QApplication(sys.argv)
+    app.setProperty("dashboard_mode", startup_args.dashboard_mode)
     from portefeuille_viewer.services.ui_diagnostics import start_ui_diagnostics
     try:
         ui_diagnostics = start_ui_diagnostics(app, globals())
@@ -1540,7 +1545,7 @@ def main():
     w = MainWindow(portfolio_engine, price_feed)
     setattr(w, "option_timevalue_service", option_timevalue_service)
     setattr(w, "asset_volatility_history_update_runner", asset_volatility_history_update_runner)
-    w.show()
+    w.showMaximized()
     # Existing shared background path: independent of which tab is first opened.
     QTimer.singleShot(0, history_indicator_runner.request_startup)
     if getattr(app, 'ui_diagnostics', None) is not None:
