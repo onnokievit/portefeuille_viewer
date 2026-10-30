@@ -56,7 +56,20 @@
       const c=canvas.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,canvas.width,canvas.height);c.setTransform(dpr,0,0,dpr,0,0);
       // Keep only the space needed by the axes; the payoff panel has no outer header/footer.
       const distribution=this.kind==='payoff'?analytics?.payoff?.distribution:null;
-      const left=65,right=w-(this.kind==='payoff'?(distribution?55:8):16),top=this.kind==='payoff'?6:12,bottom=h-(this.kind==='payoff'?23:27);
+      let left=65,right=w-16;
+      if(this.kind==='payoff'){
+        left=94;right=w-38;
+        const table=$('payoff-table').querySelector('table'),head=table?.tHead?.rows[0];
+        if(head?.cells.length>1){
+          const panel=table.closest('section').getBoundingClientRect();
+          const firstCell=head.cells[1].getBoundingClientRect(),lastCell=head.cells[head.cells.length-1].getBoundingClientRect();
+          // Transfer the table's gutters; aligned equal-width panels then share pixel positions.
+          if(panel.width&&firstCell.width){left=firstCell.left-panel.left-1;right=w-(panel.right-lastCell.right)+1;}
+        }
+        this.canvas.dataset.plotLeft=String(left);this.canvas.dataset.plotRight=String(right);
+        this.canvas.parentElement.parentElement.querySelector('.payoff-legend').style.left=(left+8)+'px';
+      }
+      const top=this.kind==='payoff'?6:12,bottom=h-(this.kind==='payoff'?23:27);
       c.font='10px system-ui';c.fillStyle=palette.axis;
       const p=analytics?.payoff;
       const priceText=v=>finite(v)?v.toLocaleString('nl-NL',{minimumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2,maximumFractionDigits:p?.decimals??current?.payoff_controls?.decimals??2}):'—';
@@ -79,8 +92,8 @@
       }
       const y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top);
       const first=rows[0].x,last=rows[rows.length-1].x,span=(last-first)||1;
-      const priceX=value=>left+(value-first+span*.02)/(span*1.04)*(right-left);
-      const x=i=>this.kind==='payoff'?priceX(rows[i].x):left+(rows.length===1?.5:i/(rows.length-1))*(right-left);
+      const priceX=value=>DashboardAxes.payoffX(value,p?.steps||[],left,right);
+      const x=i=>this.kind==='payoff'?left+(i+.5)/rows.length*(right-left):left+(rows.length===1?.5:i/(rows.length-1))*(right-left);
       c.textAlign='right';
       for(const v of ticks){
         const yy=y(v),zero=v===0;
@@ -91,8 +104,9 @@
       c.lineWidth=1;
       c.textAlign='center';
       if(this.kind==='payoff'){
-        const axis=DashboardAxes.ticksWithin(first-span*.02,last+span*.02);
-        for(const value of axis.ticks)c.fillText(DashboardAxes.format(value,axis.step),priceX(value),h-7);
+        const columnWidth=(right-left)/rows.length;
+        const stride=Math.max(1,Math.ceil((Math.max(...rows.map(row=>c.measureText(priceText(row.x)).width))+6)/columnWidth));
+        rows.forEach((row,i)=>{if(i%stride===0)c.fillText(priceText(row.x),x(i),h-7);});
       }else for(let i=0;i<Math.min(5,rows.length);i++){
         const index=Math.round(i*(rows.length-1)/Math.max(1,Math.min(5,rows.length)-1));
         c.textAlign=i===0?'left':i===Math.min(5,rows.length)-1?'right':'center';
@@ -101,13 +115,13 @@
       if(distribution){
         const axis=DashboardAxes.ticksWithin(0,distribution.maximum);
         c.textAlign='left';
-        for(const value of axis.ticks)c.fillText(DashboardAxes.format(value,axis.step),right+5,bottom-value/distribution.maximum*(bottom-top)+3);
-        c.save();c.translate(w-6,(top+bottom)/2);c.rotate(-Math.PI/2);c.textAlign='center';c.fillText('Verdeling %',0,0);c.restore();
+        for(const value of axis.ticks)c.fillText(DashboardAxes.format(value,axis.step)+'%',right+5,bottom-value/distribution.maximum*(bottom-top)+3);
+
       }
       c.save();c.beginPath();c.rect(left,top,right-left,bottom-top);c.clip();
       if(distribution){
         const dy=value=>bottom-value/distribution.maximum*(bottom-top);
-        const width=distribution.width*.92/(span*1.04)*(right-left);
+        const width=distribution.width*.92/span*(right-left)*(rows.length-1)/rows.length;
         for(const [period,fill,stroke] of [['24','rgba(120,190,255,.5)','rgba(120,190,255,.5)'],['12','rgba(181,75,216,.33)','rgba(181,75,216,.51)']]){
           c.fillStyle=fill;c.strokeStyle=stroke;c.lineWidth=.6;
           distribution.centers.forEach((value,i)=>{const height=bottom-dy(distribution.series[period][i]);c.fillRect(priceX(value)-width/2,bottom-height,width,height);c.strokeRect(priceX(value)-width/2,bottom-height,width,height);});
@@ -141,12 +155,25 @@
         });
       }
       if(this.kind==='payoff'&&finite(p.price)){
-        const start=rows[0].x,end=rows[rows.length-1].x;
         const marker=priceX(p.price);
-        c.strokeStyle=palette.marker;c.setLineDash([4,4]);c.beginPath();c.moveTo(marker,top);c.lineTo(marker,bottom);c.stroke();c.setLineDash([]);
+        c.lineWidth=1;c.strokeStyle=palette.marker;c.setLineDash([4,4]);
+        if(finite(p.previous_price)){
+          const previous=priceX(p.previous_price);
+          c.save();c.globalAlpha=.45;c.beginPath();c.moveTo(previous,top);c.lineTo(previous,bottom);c.stroke();c.restore();
+        }
+        c.beginPath();c.moveTo(marker,top);c.lineTo(marker,bottom);c.stroke();c.setLineDash([]);
+        if(finite(p.previous_price)&&p.previous_price!==p.price){
+          const start=Math.max(left,Math.min(right,priceX(p.previous_price))),end=Math.max(left,Math.min(right,marker));
+          const middle=(top+bottom)/2,direction=Math.sign(end-start),head=Math.min(5,Math.abs(end-start)/2);
+          if(direction){
+            c.strokeStyle=p.price>p.previous_price?palette.green:palette.red;c.lineWidth=1;
+            c.beginPath();c.moveTo(start,middle);c.lineTo(end,middle);
+            c.moveTo(end-direction*head,middle-head*.65);c.lineTo(end,middle);c.lineTo(end-direction*head,middle+head*.65);c.stroke();
+          }
+        }
       }
       if(this.hover&&this.hover.x>=left&&this.hover.x<=right){
-        const i=Math.max(0,Math.min(rows.length-1,Math.round(((this.hover.x-left)/(right-left)*(this.kind==='payoff'?1.04:1)-(this.kind==='payoff'?.02:0))*(rows.length-1))));
+        const i=Math.max(0,Math.min(rows.length-1,this.kind==='payoff'?Math.floor((this.hover.x-left)/(right-left)*rows.length):Math.round((this.hover.x-left)/(right-left)*(rows.length-1))));
         const r=rows[i];c.strokeStyle=palette.crosshair;c.beginPath();c.moveTo(x(i),top);c.lineTo(x(i),bottom);c.stroke();
         let text=this.kind==='payoff'?'Koers '+Number(r.x).toLocaleString('nl-NL',{minimumFractionDigits:p.decimals??2,maximumFractionDigits:p.decimals??2})+'\nTotaal '+fmt(get(r,9))+' EUR\nOpen opties '+fmt(get(r,2))+' EUR':r.date;
         if(this.kind==='price')text+='\nO '+priceText(r.open)+' · H '+priceText(r.high)+'\nL '+priceText(r.low)+' · C '+priceText(r.close)+(r.live?'\nActuele snapshot':'');
@@ -175,9 +202,12 @@
       if(cell.textContent!==value)cell.textContent=value;if(cell.title!==value)cell.title=value;if(cell.className!==cls)cell.className=cls;
     }
     while(body.rows.length<labels.length){const row=document.createElement('tr');row.append(document.createElement('th'));body.append(row);}
+    const shortLabels={'Open aandelen':'Open aand.','Open sprinters':'Open sp.','Open opties':'Open opt.',
+      'Gesloten aandelen':'Gesl. aand.','Gesloten sprinters':'Gesl. sp.','Gesloten opties':'Gesl. opt.','Totaal zonder fees':'Tot. no fees'};
     labels.forEach((label,r)=>{
       const row=body.rows[r],cls=r===9?'total':'';if(row.className!==cls)row.className=cls;
-      if(row.cells[0].textContent!==label)row.cells[0].textContent=label;
+      const displayLabel=shortLabels[label]||label;
+      if(row.cells[0].textContent!==displayLabel)row.cells[0].textContent=displayLabel;row.cells[0].title=label;
       while(row.cells.length<count+1)row.append(document.createElement('td'));
       while(row.cells.length>count+1)row.lastChild.remove();
       for(let i=0;i<count;i++){
@@ -209,6 +239,7 @@
     for(const chart of charts)if(chart.kind==='payoff'?payoffChanged:historyChanged)chart.draw();
   };
   window.addEventListener('dashboard-theme-changed',drawAll);
+  new ResizeObserver(()=>charts.find(chart=>chart.kind==='payoff')?.draw()).observe($('payoff-table'));
   document.addEventListener('DOMContentLoaded',()=>{
     for(const [id,kind]of [['payoff-chart','payoff'],['price-chart','price'],['quantity-chart','quantity'],['result-chart','result']])charts.push(new Chart(id,kind));
   });

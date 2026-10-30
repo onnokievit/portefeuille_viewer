@@ -15,7 +15,7 @@ from portefeuille_viewer.services.asset_dashboard_layout import BLOCK_IDS, valid
 
 
 def fixture():
-    return dict(version=3, blocks=[dict(id=key,x=0,y=i*50,w=120,h=50) for i,key in enumerate(BLOCK_IDS)])
+    return dict(version=4, blocks=[dict(id=key,x=0,y=i*50,w=120,h=50) for i,key in enumerate(BLOCK_IDS)])
 
 class LayoutTests(unittest.TestCase):
     def settings(self):
@@ -47,6 +47,17 @@ class LayoutTests(unittest.TestCase):
             block['y'] //= 10;block['h'] //= 10
         self.assertEqual(validate_layout(old),fixture())
         self.assertEqual(old['blocks'][0]['h']*27-7,fixture()['blocks'][0]['h']*2.7-7)
+
+    def test_old_saved_layout_adds_movable_asset_info_between_table_and_chart(self):
+        value=fixture();value['version']=3
+        value['blocks']=[b for b in value['blocks'] if b['id']!='asset_info']
+        table=next(b for b in value['blocks'] if b['id']=='payoff_table')
+        result=validate_layout(value)
+        info=next(b for b in result['blocks'] if b['id']=='asset_info')
+        chart=next(b for b in result['blocks'] if b['id']=='payoff')
+        self.assertEqual((info['x'],info['w'],info['y']),(table['x'],table['w'],table['y']+table['h']))
+        self.assertGreaterEqual(chart['y'],info['y']+info['h'])
+        self.assertEqual(result['version'],4)
 
     def test_invalid_and_corrupt_layout(self):
         settings=self.settings()
@@ -88,6 +99,25 @@ class LayoutTests(unittest.TestCase):
         node=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name==name)
         namespace={};exec(compile(ast.Module(body=[node],type_ignores=[]),str(path),'exec'),namespace)
         return namespace[name]
+
+    def test_retired_dashboard_tab_is_removed_from_saved_order(self):
+        path=Path(__file__).resolve().parents[1]/'portefeuille_viewer/ui_logica/main_window_logica.py'
+        tree=ast.parse(path.read_text(encoding='utf-8'))
+        cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='MainWindow')
+        method=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='_apply_saved_tab_order')
+        orders,dashboard,single=object(),object(),object()
+        for saved,expected in [(['orders','asset_dashboard','single','asset_dashboard_layout'],[orders,single,dashboard]),
+                               (['orders','asset_dashboard','single'],[orders,dashboard,single])]:
+            items=[orders,dashboard,single]
+            def move(old,new):items.insert(new,items.pop(old))
+            tabs=SimpleNamespace(indexOf=lambda widget:items.index(widget),tabBar=lambda:SimpleNamespace(moveTab=move))
+            window=SimpleNamespace(_tab_specs=[('orders','Orders',orders),('asset_dashboard_layout','Asset Dashboard',dashboard),('single','Single',single)],
+                tabWidget=tabs,_persist_tab_order=Mock())
+            namespace={'get_settings':lambda:SimpleNamespace(get_tab_order=lambda:saved)}
+            exec(compile(ast.Module(body=[method],type_ignores=[]),str(path),'exec'),namespace)
+            namespace['_apply_saved_tab_order'](window)
+            self.assertEqual(items,expected)
+            window._persist_tab_order.assert_called_once()
 
     def test_switch_stops_previous_before_activating_next(self):
         order=[]

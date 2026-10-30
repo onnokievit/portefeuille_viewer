@@ -123,14 +123,16 @@ function commentResult(raw){
     cell.title='Enter: bewaren · Escape: annuleren · Rechtsklik: kleur kiezen';
   }
 }
+async function flushDashboardDrafts(){
+  const layoutResult=window.flushDashboardLayout?await window.flushDashboardLayout():{};
+  const columnResult=window.flushDashboardColumns?await window.flushDashboardColumns():{};
+  const settingsResult=await submitDashboardControls();
+  const results=[layoutResult,columnResult,settingsResult,...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
+  return results.map(result=>result.error).filter(Boolean).join('\n');
+}
 async function flushDashboardComments(){
-  try{
-    const layoutResult=window.flushDashboardLayout?await window.flushDashboardLayout():{};
-    const columnResult=window.flushDashboardColumns?await window.flushDashboardColumns():{};
-    const settingsResult=await submitDashboardControls();
-    const results=[layoutResult,columnResult,settingsResult,...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
-    bridge.commentsFlushed(results.map(result=>result.error).filter(Boolean).join('\n'));
-  }catch(error){bridge.commentsFlushed(String(error));}
+  try{bridge.commentsFlushed(await flushDashboardDrafts());}
+  catch(error){bridge.commentsFlushed(String(error));}
 }
 function updateTable(id,rows,columns,kind){
   let state=tableStates.get(id);
@@ -213,7 +215,8 @@ function applyDashboard(payload){
   const scrollX=window.scrollX,scrollY=window.scrollY;
   updatePayoffControls(payload.payoff_controls);
   metricDefinitions.forEach(([,key,pct],index)=>{
-    const value=payload.summary[key];text(metricValues[index],num(value,['koers','koers_prev'].includes(key)?payload.payoff_controls.decimals:2)+(pct&&value!=null?'%':''));
+    const value=payload.summary[key],displayValue=pct&&value!=null?Number(value)*100:value;
+    text(metricValues[index],num(displayValue,['koers','koers_prev'].includes(key)?payload.payoff_controls.decimals:2)+(pct&&value!=null?'%':''));
     className(metricValues[index],['pct_change','net_change'].includes(key)&&value!=null?(value>0?'positive':value<0?'negative':''):'');
   });
   updateIndicator(payload.indicator,payload.asset);

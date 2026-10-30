@@ -49,7 +49,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._register_tabs()
         self.single_asset_analyse_tab.asset_selector.currentTextChanged.connect(self._update_price_focus)
         self.asset_dashboard_tab.assetChanged.connect(self._update_price_focus)
-        self.asset_dashboard_layout_tab.assetChanged.connect(self._update_price_focus)
         if hasattr(self, "settings_tab") and hasattr(self.settings_tab, "set_price_feed"):
             self.settings_tab.set_price_feed(self.price_feed)
         self._apply_saved_tab_order()
@@ -95,9 +94,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.orders_tab = OrdersTabWidget()
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
         mode = QApplication.instance().property('dashboard_mode') or 'desktop'
-        self.asset_dashboard_tab = AssetDashboardTab(layout_mode=mode)
-        self.asset_dashboard_layout_tab = AssetDashboardTab(editable_layout=True, layout_mode=mode)
-        self._dashboard_tabs = (self.asset_dashboard_tab, self.asset_dashboard_layout_tab)
+        self.asset_dashboard_tab = AssetDashboardTab(editable_layout=True, layout_mode=mode)
+        self._dashboard_tabs = (self.asset_dashboard_tab,)
         for dashboard in self._dashboard_tabs:
             dashboard.set_comment_target(self.single_asset_analyse_tab)
             dashboard.set_payoff_target(self.single_asset_analyse_tab)
@@ -122,8 +120,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._tab_specs = [
             ("orders", "Orders", self.orders_tab),
             ("single_asset_analyse", "Single Asset Analyse", self.single_asset_analyse_tab),
-            ("asset_dashboard", "Asset Dashboard", self.asset_dashboard_tab),
-            ("asset_dashboard_layout", "Asset Dashboard – Indeling", self.asset_dashboard_layout_tab),
+            ("asset_dashboard_layout", "Asset Dashboard", self.asset_dashboard_tab),
             ("aandelen", "Aandelen", self.aandelen_tab),
             ("opties_open_live", "Open Opties (Live)", self.opties_open_tab),
             ("optie_tijdswaarde", "Optie Tijdswaarde", self.optie_tijdswaarde_tab),
@@ -150,15 +147,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not saved_order:
             self._persist_tab_order()
             return
+        # Preserve the surviving layout tab's position. Older orders with only
+        # the original dashboard ID migrate to the surviving tab ID.
+        if 'asset_dashboard_layout' not in saved_order:
+            saved_order = ['asset_dashboard_layout' if key == 'asset_dashboard' else key for key in saved_order]
         widget_by_id = {tab_id: widget for tab_id, _title, widget in self._tab_specs}
         ordered_ids = [tab_id for tab_id in saved_order if tab_id in widget_by_id]
         for tab_id, _title, _widget in self._tab_specs:
             if tab_id not in ordered_ids:
                 ordered_ids.append(tab_id)
-        # A newly introduced layout tab starts next to the existing dashboard.
-        if 'asset_dashboard_layout' not in saved_order:
-            ordered_ids.remove('asset_dashboard_layout')
-            ordered_ids.insert(ordered_ids.index('asset_dashboard') + 1, 'asset_dashboard_layout')
         desired_widgets = [widget_by_id[tab_id] for tab_id in ordered_ids]
         self._restoring_tab_order = True
         try:

@@ -64,6 +64,16 @@ class AnalyticsTests(unittest.TestCase):
         self.assertLess(p["values"][2][0],p["values"][2][8])
         self.assertLess(p["values"][2][-1],p["values"][2][8])
 
+    def test_previous_quote_is_passed_through_without_invention(self):
+        store,payload,settings=fixture()
+        payload['summary']['koers_prev']=110.
+        self.assertEqual(calculate_analytics(store,payload,settings)['payoff']['previous_price'],110.)
+        payload['summary'].pop('koers_prev')
+        self.assertIsNone(calculate_analytics(store,payload,settings)['payoff']['previous_price'])
+        payload['summary']['koers']=None
+        payload['summary']['koers_prev']=110.
+        self.assertIsNone(calculate_analytics(store,payload,settings)['payoff']['previous_price'])
+
     def test_history_matches_legacy_alignment_and_currency(self):
         store,payload,settings=fixture();result=calculate_analytics(store,payload,settings)
         history=result["history"]

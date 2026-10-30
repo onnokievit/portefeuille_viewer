@@ -410,3 +410,46 @@ loopt tegen de bestaande grens van 5.000 nodes aan. De verplichte 1.4-update sla
 - Testregels worden op hun bestaande UID hergebruikt in de DOM, zodat verversen een actieve invoer/cursor niet vervangt. Dubbelklik op commentaar opent de native testordereditor niet; de overige cellen blijven dat doen.
 - De actuele gedeelde commentaarcache wordt batchgewijs gelezen voor de testtabel. De native editor ververst zijn testtabel bij openen, zodat beide weergaven dezelfde tekst en kleuren tonen.
 - Gecontroleerd: gedeelde ID, actuele tekst/kleur en onvolledige orders in unittests; rechtstreeks typen, bewaren via QWebChannel en behoud van editor tijdens verversen in de QtWebEngine-smoketest met fictieve gegevens.
+
+### Vast dashboardtabblad verwijderd
+- Er is nog één tabblad `Asset Dashboard`: de versie met versleepbare indeling. De extra vaste dashboardinstantie en registratie zijn verwijderd.
+- Bestaande desktop/laptop-indelingen en kolomvoorkeuren blijven behouden. De interne tab-ID `asset_dashboard_layout` blijft gelijk, zodat de opgeslagen positie van de overblijvende tab intact blijft. Oude tabvolgordes met alleen `asset_dashboard` worden bij starten omgezet.
+- De gedeelde dashboardcode blijft nodig voor de overblijvende pagina. Single Asset Analyse blijft beschikbaar.
+
+### Payoffmarges en vorige koers
+- Payoff-as gebruikt nu 5% van de uiteindelijke plothoogte als vrije ruimte boven en onder de uiterste payoffwaarden, in plaats van de oude tekenafhankelijke 25%-formule. Ronde aslabels blijven behouden.
+- De bestaande vorige koers (`koers_prev`) gaat mee naar de workeruitvoer; wijzigingen van die koers tellen ook mee in de vernieuwingssleutel. Ontbrekende waarden worden niet ingevuld.
+- Vorige koers als lichtere stippellijn (45% dekking), huidige koers als bestaande stippellijn. Een dunne pijl (1 px) op halve grafiekhoogte loopt van vorige naar huidige koers, groen bij stijging en rood bij daling. Bij gelijke/ontbrekende koersen geen pijl.
+- Controles op exacte 5%-marges bij positieve/negatieve bereiken en doorgifte van vorige koers; QtWebEngine-smoketest met fictieve daling van 110 naar 100.
+
+### Payofftabel en grafiek horizontaal uitgelijnd
+- Naamkolom van 112 naar 84 px; labels ingekort tot Open aand./sp./opt., Gesl. aand./sp./opt. en Tot. no fees. Originele namen blijven beschikbaar als tooltip.
+- Koers- en bedragkolommen gecentreerd. Rechts een gedeelde ruimte voor procentwaarden; het woord Verdeling uit de grafiek verwijderd.
+- De grafiek neemt de gemeten linker/rechter tabelmarges over. Bij onder elkaar geplaatste blokken met dezelfde breedte vallen de linkerplotgrens, rechterplotgrens en alle 17 kolommiddelpunten binnen 1 px samen.
+- Payoffpunten volgen de koerskolommiddelpunten; vorige/huidige koers, pijl, histogram en hover gebruiken dezelfde prijs-naar-x-interpolatie. Ronde/ongelijk afgeronde prijsstappen zijn meegenomen.
+- Controle via Node op prijsinterpolatie en via echte QtWebEngine-geometrie op alle kolommen; geen opgeslagen gebruikersindeling aangepast voor de test.
+
+### Dashboardvoorkeuren exporteren en importeren
+- Onder `Indeling bewerken` staan Exporteren en Importeren. JSON-export bevat beide schermindelingen (desktop/laptop), positie-kolombreedtes, dashboardthema en datumselectie.
+- Bestand kan bij Onno geëxporteerd worden en bij Muriel/Quinten geïmporteerd. Verbindingen, client-ID's, profielkeuze, databasepaden, orders, transacties en overige instellingen worden niet geëxporteerd of overgenomen.
+- Hele bestand wordt gevalideerd vóór wijziging; één settings-save. Bij mislukte opslag wordt de configuratie in het geheugen teruggezet. Niet ingestelde schermindelingen worden als standaardinstellingen overgenomen.
+- Lopende invoer/layout/kolomopslag wordt eerst bevestigd. Na import herlaadt alleen de dashboardpagina, met behoud van de geselecteerde asset, zodat de nieuwe indeling direct geldt.
+- Tests: overdracht tussen twee fictieve profielen, uitsluiten van geheimen, ongeldige import zonder gedeeltelijke wijziging, rollback bij save-fout. QtWebEngine-smoketest exporteert naar een tijdelijk JSON-bestand, importeert en controleert het herladen; geen echte profielbestanden gewijzigd tijdens testen.
+
+### Assetselector en gebeurtenissen als verplaatsbaar blok
+- De bestaande assetselector, dividendlabels en earningslabels zijn uit de bovenbalk naar één nieuw blok `Asset · dividend · earnings` verplaatst. Dezelfde DOM-elementen en eventhandlers blijven in gebruik.
+- Assetstatus, periode, thema en indelingsknoppen blijven bovenaan.
+- Indelingsversie 4 voegt `asset_info` toe onder de payofftabel en vóór de payoffgrafiek; maakt daar ruimte met behoud van bestaande breedtes. Het blok kan vervolgens zelfstandig versleept en in omvang aangepast worden.
+- Oudere opgeslagen indelingen en geïmporteerde layoutbestanden worden aangevuld; desktop en laptop blijven onafhankelijk opgeslagen.
+- Controles: migratie van eerdere indelingen, Node-rastertests en QtWebEngine-smoketest met verplaatste selector en beide datumgroepen plus export/import.
+
+### Procentweergave van de kerncijfers
+- Dagverschil, Pct lineair en Pct delta ontvangen verhoudingsgetallen (zoals 0,13) uit de bestaande snapshots. De weergave vermenigvuldigt deze nu met 100 vóór het procentteken; bronberekeningen en bedragen blijven ongewijzigd.
+- QtWebEngine-regressiecontrole: -0,0076 → -0,76%, 0,13 → 13,00%, 0,15 → 15,00%.
+
+### Bewerken via onzichtbare randzones
+- Kopbalk en losse rechtsonder-knop verwijderd. Bewerkmodus voegt geen padding of andere gereserveerde ruimte meer toe; echte inhoudshoogte blijft gelijk.
+- Bovenrand (tussen de hoeken) verplaatst het blok. Zijranden/onderrand en hoeken wijzigen de omvang, inclusief de linker- en bovenhoeken met behoud van de tegenoverliggende rand. Cursors en randaccent geven de actie aan.
+- Positiestapel houdt automatische hoogte: randbediening wijzigt alleen de breedte, de bovenrand verplaatst de stapel.
+- Randzones zijn transparant en nemen geen layoutruimte in. Toetsenbordbediening blijft beschikbaar op bovenrand en rechteronderhoek.
+- Node-tests controleren alle resize-richtingen en begrenzing; QtWebEngine-smoketest bevestigt gelijke afmetingen en scrollruimte van payofftabel, assetblok en indicator vóór/na inschakelen van bewerkmodus, plus verplaatsen/vergroten en opslag.

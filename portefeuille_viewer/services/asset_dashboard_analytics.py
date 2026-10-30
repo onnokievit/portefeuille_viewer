@@ -150,7 +150,8 @@ def calculate_analytics(store, payload, settings, history_cache=None, history_to
         matrix.append([matrix[7][i] + matrix[8][i] for i in range(17)])
         payoff = {"steps": steps, "labels": LABELS,
                   "values": [[float(v) / factor for v in row] for row in matrix],
-                  "price": price, "price_source": price_source, "current_col": current_col,
+                  "price": price, "previous_price": number(summary.get("koers_prev")) if price_source == "snapshot" else None,
+                  "price_source": price_source, "current_col": current_col,
                   "currency": "EUR", "test_orders": bool(settings.get("test_orders_enabled")), "decimals": decimals,
                   "distribution": DashboardDistribution(filtered).calculate(asset, steps)}
     return json_safe({"asset": asset, "payoff": payoff, "history": history,

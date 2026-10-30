@@ -47,11 +47,23 @@
     return {min,max,step,ticks};
   }
   function payoff(min,max,height){
-    if(min===max)max=min+1;
-    // About 40 pixels per label, like the denser legacy payoff axis.
+    if(min===max){const span=Math.max(Math.abs(min)*.05,1);min-=span/2;max+=span/2;}
+    // Each side occupies 5% of the final plot height: remaining data span = 90%.
+    const margin=(max-min)/18;
     const intervals=Number.isFinite(height)?Math.max(3,Math.floor(height/40)):6;
-    return ticksWithin(min<0?min*1.25:min/1.25,max>0?max*1.25:max/1.25,intervals);
+    return ticksWithin(min-margin,max+margin,intervals);
   }
-  const api={scale,format,ticksWithin,payoff};root.DashboardAxes=api;
+  function payoffX(value,steps,left,right){
+    const n=steps.length;
+    if(n<2)return (left+right)/2;
+    let interval=-1;
+    for(let i=0;i<n-1;i++)if(steps[i+1]>steps[i]){
+      interval=i;if(value<=steps[i+1])break;
+    }
+    if(interval<0)return (left+right)/2;
+    const fraction=(value-steps[interval])/(steps[interval+1]-steps[interval]);
+    return left+(interval+.5+fraction)/n*(right-left);
+  }
+  const api={scale,format,ticksWithin,payoff,payoffX};root.DashboardAxes=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

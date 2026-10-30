@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, QRunnable, QThreadPool, Signal, Slot
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMenu, QColorDialog, QMessageBox
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QMenu, QColorDialog, QMessageBox, QFileDialog
 from PySide6.QtGui import QColor, QCursor
 
 from portefeuille_viewer.data.snapshot_store import SNAPSHOT_STORE
@@ -82,6 +82,37 @@ class DashboardBridge(QObject):
         self.tab._ready = True
         self.tab._publish(force=True)
         self.tab._request_earnings()
+
+    @Slot(result=str)
+    def exportDashboard(self):
+        from portefeuille_viewer.services.asset_dashboard_preferences import export_preferences
+        try:
+            path,_ = QFileDialog.getSaveFileName(self.tab,'Dashboardinstellingen exporteren',
+                'dashboard-instellingen.json','Dashboardinstellingen (*.json)')
+            if not path:return json.dumps(dict(cancelled=True))
+            target=Path(path)
+            if target.suffix.lower()!='.json':target=target.with_suffix('.json')
+            data=export_preferences(get_settings())
+            target.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+            return json.dumps(dict(path=str(target),error=''))
+        except Exception as exc:
+            log.exception('Dashboardexport mislukt')
+            return json.dumps(dict(error=str(exc)))
+
+    @Slot(result=str)
+    def importDashboard(self):
+        from portefeuille_viewer.services.asset_dashboard_preferences import import_preferences
+        try:
+            path,_ = QFileDialog.getOpenFileName(self.tab,'Dashboardinstellingen importeren','','Dashboardinstellingen (*.json)')
+            if not path:return json.dumps(dict(cancelled=True))
+            source=Path(path)
+            if source.stat().st_size>1_000_000:raise ValueError('Het instellingenbestand is te groot')
+            import_preferences(get_settings(),json.loads(source.read_text(encoding='utf-8-sig')))
+            QTimer.singleShot(100,self.tab._reload_preferences)
+            return json.dumps(dict(path=path,error=''))
+        except Exception as exc:
+            log.exception('Dashboardimport mislukt')
+            return json.dumps(dict(error=str(exc)))
 
     @Slot(str, result=str)
     def savePositionColumns(self, raw):
@@ -324,6 +355,21 @@ class AssetDashboardTab(QWidget):
         self.web.setHtml(page.replace("<!-- DASHBOARD_CHARTS -->", "<script>" + chart_script + "</script>").replace(
             "<!-- DASHBOARD_VIEW -->", "<script>" + view_script + "</script>"))
 
+    def _reload_preferences(self):
+        self._ready=False
+        self._last_payload=None
+        self._analytics_key=None
+        self._generation+=1
+        self._pending_analytics=None
+        if self._job is not None:self._job.cancelled.set()
+        old=self.web
+        old_bridge=self.bridge
+        self._layout.removeWidget(old)
+        old.hide()
+        old.deleteLater()
+        old_bridge.deleteLater()
+        self._initialize()
+
     def set_active(self, active):
         self._active = bool(active)
         if self._active:
@@ -425,7 +471,7 @@ class AssetDashboardTab(QWidget):
                 if frozen.dashboard_test_orders is not None else '')
         summary = payload.get("summary", {})
         key = (payload["asset"], token, json.dumps(settings, sort_keys=True),
-               summary.get("koers"), summary.get("totaal_inc_fee"))
+               summary.get("koers"), summary.get("koers_prev"), summary.get("totaal_inc_fee"))
         if key == self._analytics_key:
             return
         self._analytics_key = key
