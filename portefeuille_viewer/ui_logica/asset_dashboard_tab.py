@@ -15,6 +15,7 @@ from portefeuille_viewer.services.asset_dashboard_data import SOURCES, build_das
 from portefeuille_viewer.services.asset_dashboard_earnings import load_next_earnings
 from portefeuille_viewer.config.settings_manager import get_stockdata_db_path
 from portefeuille_viewer.services.asset_dashboard_comments import DashboardComments
+from portefeuille_viewer.services.asset_dashboard_summary import summary_colors
 from portefeuille_viewer.services.asset_dashboard_test_orders import DashboardTestOrders
 from portefeuille_viewer.services.asset_dashboard_controls import DashboardPayoffControls, DEFAULT_CONTROLS, validate_controls
 from portefeuille_viewer.signals import signals
@@ -389,7 +390,7 @@ class AssetDashboardTab(QWidget):
 
     def _snapshot_updated(self, key):
         # Leading edge batching: repeated ticks do not restart a pending render.
-        if self._active and key in (*SOURCES.values(), *ANALYTIC_SOURCES, "repository_snapshot_test_orders_cache", "snapshot_active_scenario_orders") and not self._timer.isActive():
+        if self._active and key in (*SOURCES.values(), *ANALYTIC_SOURCES, "repository_snapshot_test_orders_cache", "snapshot_active_scenario_orders", "repository_snapshot_portfolio_value_total_combined_put") and not self._timer.isActive():
             self._timer.start()
 
     def _publish(self, force=False, asset=None):
@@ -401,6 +402,7 @@ class AssetDashboardTab(QWidget):
             earnings = self._earnings.get(payload["asset"], {})
             payload["earnings_display"] = dict(event_date_display(earnings.get("date")),
                                                 source=earnings.get("source", ""))
+            payload["summary_colors"] = summary_colors(self._payoff_settings.tab if self._payoff_settings else None, payload["asset"], payload["summary"])
             payload["payoff_controls"] = self._payoff_settings.get(payload["asset"]) if self._payoff_settings else dict(DEFAULT_CONTROLS)
             if self._comment_editor is not None:
                 self._comment_editor.remember(payload["option_comments"])

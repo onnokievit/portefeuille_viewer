@@ -60,3 +60,7 @@ assert.deepEqual(engine.resizeEdges(rectangle,'ne',10,-20),{w:90,y:80,h:140});
 assert.deepEqual(engine.resizeEdges(rectangle,'w',-100,0),{x:0,w:120});
 assert.deepEqual(engine.resizeEdges({...rectangle,id:'puts'},'se',10,20),{w:90});
 console.log('Border resizing: four directions, corners, fixed opposite edges and automatic height OK');
+
+const flowed=engine.flowMinimumHeight(engine.defaults('laptop'),'asset_info',70);
+assert.equal(flowed.blocks.find(b=>b.id==='asset_info').h,70);
+assert.ok(engine.valid(flowed));

@@ -2,6 +2,7 @@
 import configparser
 import json
 from pathlib import Path
+from datetime import date
 from types import SimpleNamespace
 import polars as pl
 import sys
@@ -21,6 +22,7 @@ settings.config=configparser.ConfigParser();settings.save=Mock();settings.get_eu
 settings.config.read_dict({'ui':{'asset_dashboard_theme':'sand'}})
 store=DashboardTests().store()
 store.snapshot_aandelen_projection_v2=store.snapshot_aandelen_projection_v2.with_columns(pl.Series('koers_prev',[110.,19.]),pl.Series('pct_change',[-.0076,.01]),pl.Series('portfolio_total_waarde_lineair_pct',[.13,.1]),pl.Series('portfolio_total_waarde_delta_pct',[.15,.1]))
+store.snapshot_asset_dividend_calendar=pl.DataFrame({'asset_rollup':['AAPL'],'next_dividend_date':[date(2027,4,8)],'next_dividend_amount':[.73],'ib_currency':['EUR']})
 analytics_store,payload,cfg=fixture()
 temp_preferences=TemporaryDirectory()
 preferences_file=Path(temp_preferences.name)/'dashboard.json'
@@ -32,6 +34,7 @@ def commit_comment(value):comment_cache[value['uniek_id']]={**comment_cache.get(
 def create(mode):
     tab=module.AssetDashboardTab(editable_layout=True,layout_mode=mode)
     tab._request_earnings=Mock()
+    tab._earnings={'AAPL':dict(date='2026-11-04',source='test')}
     legacy=SimpleNamespace(_on_comment_commit=Mock(side_effect=commit_comment),_patch_comment_in_models=Mock(),
         commentFlushTimer=SimpleNamespace(isActive=lambda:False,start=Mock()))
     tab.set_comment_target(legacy);tab._comment_editor.remember([dict(id='known-test')])
@@ -47,14 +50,21 @@ def fail(message):
     errors.append(message);app.quit()
 
 def check_desktop():
-    desktop.web.page().runJavaScript("""JSON.stringify({blocks:document.querySelectorAll('.layout-item').length,asset:document.getElementById('asset').value,grid:getComputedStyle(document.querySelector('.layout-canvas')).gridTemplateColumns,canvases:[...document.querySelectorAll('canvas')].map(c=>({id:c.id,w:c.width,h:c.height})),mode:document.querySelector('.layout-toolbar').dataset.mode,metrics:[...document.querySelectorAll('#metrics b')].map(n=>n.textContent),busy:document.querySelector('.dashboard-workspace').getAttribute('aria-busy'),assetInfo:!!document.querySelector('[data-block=asset_info] #asset'),headerAsset:!!document.querySelector('header #asset'),events:!!document.querySelector('[data-block=asset_info] #dividend')&&!!document.querySelector('[data-block=asset_info] #earnings')})""",desktop_ready)
+    desktop.web.page().runJavaScript("""JSON.stringify({blocks:document.querySelectorAll('.layout-item').length,asset:document.getElementById('asset').value,grid:getComputedStyle(document.querySelector('.layout-canvas')).gridTemplateColumns,canvases:[...document.querySelectorAll('canvas')].map(c=>({id:c.id,w:c.width,h:c.height})),mode:document.querySelector('.layout-toolbar').dataset.mode,metrics:Object.fromEntries([...document.querySelectorAll('#asset-info-panel [data-metric]')].map(n=>[n.dataset.metric,n.querySelector('b').textContent])),busy:document.querySelector('.dashboard-workspace').getAttribute('aria-busy'),assetInfo:!!document.querySelector('[data-block=asset_info] #asset'),headerAsset:!!document.querySelector('header #asset'),events:!!document.querySelector('[data-block=asset_info] #dividend')&&!!document.querySelector('[data-block=asset_info] #earnings'),metricsInBlock:!!document.querySelector('#asset-info-panel #metrics'),topMetrics:!!document.querySelector('main>#metrics'),badges:[...document.querySelectorAll('#asset-info-panel .dividend-badge,#asset-info-panel .metric b')].map(n=>({w:n.getBoundingClientRect().width,h:n.getBoundingClientRect().height,font:getComputedStyle(n).fontSize,overflow:n.scrollWidth>n.clientWidth+1})),metricColors:Object.fromEntries([...document.querySelectorAll('#asset-info-panel [data-metric]')].map(n=>[n.dataset.metric,n.querySelector('b').style.backgroundColor])),exposureRight:Math.abs(document.querySelector('.asset-info-exposure').getBoundingClientRect().right-document.querySelector('.asset-info-first').getBoundingClientRect().right),gapWidth:document.querySelector('.asset-metric-gap').getBoundingClientRect().width,separator:!!document.querySelector('.asset-info-separator'),infoOverflow:document.querySelector('#asset-info-panel').scrollHeight>document.querySelector('#asset-info-panel').clientHeight+1})""",desktop_ready)
 
 def desktop_ready(raw):
     try:
         value=json.loads(raw);assert value['blocks']==11,value;assert value['asset']=='AAPL',value
         assert value['mode']=='desktop';assert value['busy']=='false',value
         assert value['assetInfo'] and value['events'] and not value['headerAsset'],value
-        assert [value['metrics'][i] for i in (2,4,5)]==['-0,76%','13,00%','15,00%'],value
+        assert value['metricsInBlock'] and not value['topMetrics'],value
+        assert value['exposureRight']<1 and abs(value['gapWidth']-72)<1 and value['separator'],value
+        assert not value['infoOverflow'],value
+        assert len(value['badges'])==11,value
+        assert all(abs(b['w']-72)<1 and abs(b['h']-28)<1 and b['font']=='12px' and not b['overflow'] for b in value['badges']),value
+        assert value['metricColors']['pct_change']=='rgb(255, 199, 206)',value
+        assert value['metricColors']['koers_prev']=='rgb(221, 235, 247)',value
+        assert [value['metrics'][i] for i in ('pct_change','portfolio_total_waarde_lineair_pct','portfolio_total_waarde_delta_pct')]==['-0,76%','13,00%','15,00%'],value
         assert all(c['w']>0 and c['h']>0 for c in value['canvases']),value
         assert len(value['grid'].split())==240,value
         desktop.web.page().runJavaScript("JSON.stringify({overflow:document.getElementById('payoff-table').scrollWidth>document.getElementById('payoff-table').clientWidth+1,width:document.querySelector('#payoff-table th').getBoundingClientRect().width,padding:getComputedStyle(document.querySelector('#payoff-table td')).paddingRight})",payoff_fit_ready)
@@ -246,7 +256,7 @@ def preferences_ready(raw):
     except Exception as exc:errors.append(str(exc))
     app.quit()
 
-with patch.object(module.QFileDialog,'getSaveFileName',return_value=(str(preferences_file),'')),patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(preferences_file),'')),patch.object(module,'get_settings',return_value=settings),patch.object(module,'SNAPSHOT_STORE',store),patch('portefeuille_viewer.services.asset_dashboard_comments.repository.fetch_open_optie_comments',side_effect=fetch_comments):
+with patch.object(module.QFileDialog,'getSaveFileName',return_value=(str(preferences_file),'')),patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(preferences_file),'')),patch.object(module,'get_settings',return_value=settings),patch.object(module,'SNAPSHOT_STORE',store),patch.object(module,'summary_colors',return_value={'koers':'#ffc7ce','koers_prev':'#ddebf7','pct_change':'#ffc7ce','net_change':'','portfolio_total_waarde_lineair_pct':'#00b45a','portfolio_total_waarde_delta_pct':'#00b45a'}),patch('portefeuille_viewer.services.asset_dashboard_comments.repository.fetch_open_optie_comments',side_effect=fetch_comments):
     desktop=create('desktop')
     QTimer.singleShot(2200,check_desktop)
     QTimer.singleShot(18000,lambda:fail('GUI timeout'))

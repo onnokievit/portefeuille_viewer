@@ -453,3 +453,18 @@ loopt tegen de bestaande grens van 5.000 nodes aan. De verplichte 1.4-update sla
 - Positiestapel houdt automatische hoogte: randbediening wijzigt alleen de breedte, de bovenrand verplaatst de stapel.
 - Randzones zijn transparant en nemen geen layoutruimte in. Toetsenbordbediening blijft beschikbaar op bovenrand en rechteronderhoek.
 - Node-tests controleren alle resize-richtingen en begrenzing; QtWebEngine-smoketest bevestigt gelijke afmetingen en scrollruimte van payofftabel, assetblok en indicator vóór/na inschakelen van bewerkmodus, plus verplaatsen/vergroten en opslag.
+
+### Compact assetblok met twee regels en oorspronkelijke kleuren
+- De zes kerncijfers zijn uit de bovenkant van de pagina naar de tweede regel van het verplaatsbare assetblok verhuisd. Eerste regel blijft assetselector plus dividend/earnings.
+- Volgorde tweede regel zoals Single Asset Analyse: Pct. Change, Koers, Koers Prev., Net. Change, Pct Lineair, Pct Delta.
+- Alle vijf gebeurtenisvakjes en zes waardevelden 72×28 px, font 12 px; datum/bedrag met 2 px horizontale padding. De assetselector blijft breder voor leesbare assetnamen.
+- Achtergrondkleuren via een adapter naar de bestaande `_color_green_red` en `_get_portfolio_value_pct_color`; vorige koers dezelfde lichtblauwe QColor. Geen nieuwe financiële kleurregels of berekeningen.
+- Indelingsversie 5 vergroot te lage bestaande assetblokken tot minimaal 40 rastereenheden voor beide regels, met verschuiving van onderliggende blokken. Desktop/laptop-export en import blijven compatibel met oudere indelingen.
+- 75 Python-tests slagen; QtWebEngine controleert tweede regel, gelijke afmetingen/font, volledige datum/bedrag zonder afkappen en kleuren.
+
+### Vaste indeling binnen het assetblok
+- Eerste regel: asset/dividend/earnings links, Pct Lineair en Pct Delta rechts uitgelijnd. Alle bestaande waardevelden en kleuren blijven dezelfde DOM-componenten.
+- Vaste dunne separator in dezelfde kleur als de assetindicator. Tweede regel: Pct. Change, Koers, Koers Prev., één leeg vak (72 px), Net. Change.
+- Geen interne sleepfunctionaliteit voor de losse vakjes: vaste CSS-indeling. Het volledige blok blijft verplaatsbaar.
+- Indelingsversie 6 maakt het basisblok minimaal 48 rastereenheden hoog; bij smallere schermen groeit alleen de weergavehoogte als de linker gebeurtenissenrij moet afbreken. ResizeObserver voert uitsluitend presentatiewerk uit.
+- Gecontroleerd op rechtsuitlijning, separator, lege vakbreedte, behoud van kleuren/groottes en geen interne verticale scrollbar in QtWebEngine. Oudere exportbestanden blijven importeerbaar.

@@ -15,7 +15,7 @@ from portefeuille_viewer.services.asset_dashboard_layout import BLOCK_IDS, valid
 
 
 def fixture():
-    return dict(version=4, blocks=[dict(id=key,x=0,y=i*50,w=120,h=50) for i,key in enumerate(BLOCK_IDS)])
+    return dict(version=6, blocks=[dict(id=key,x=0,y=i*50,w=120,h=50) for i,key in enumerate(BLOCK_IDS)])
 
 class LayoutTests(unittest.TestCase):
     def settings(self):
@@ -57,7 +57,15 @@ class LayoutTests(unittest.TestCase):
         chart=next(b for b in result['blocks'] if b['id']=='payoff')
         self.assertEqual((info['x'],info['w'],info['y']),(table['x'],table['w'],table['y']+table['h']))
         self.assertGreaterEqual(chart['y'],info['y']+info['h'])
-        self.assertEqual(result['version'],4)
+        self.assertEqual(result['version'],6)
+
+    def test_existing_small_asset_block_grows_for_two_rows(self):
+        value=fixture();value['version']=4
+        info=next(b for b in value['blocks'] if b['id']=='asset_info');info['h']=24
+        result=validate_layout(value)
+        self.assertEqual(next(b for b in result['blocks'] if b['id']=='asset_info')['h'],48)
+        self.assertEqual(result['version'],6)
+        self.assertEqual(info['h'],24)
 
     def test_invalid_and_corrupt_layout(self):
         settings=self.settings()

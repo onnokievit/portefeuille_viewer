@@ -10,7 +10,15 @@
   const market=[...oldGrid.children].filter(n=>n.tagName==='SECTION');
   const assetInfo=document.createElement('section');assetInfo.className='panel asset-info-panel';assetInfo.id='asset-info-panel';
   assetInfo.setAttribute('aria-label','Asset, dividend en earnings');
-  for(const id of ['asset','dividend','earnings'])assetInfo.append(document.getElementById(id));
+  const assetFirst=document.createElement('div');assetFirst.className='asset-info-first';
+  const selectors=document.createElement('div');selectors.className='asset-info-selectors';
+  for(const id of ['asset','dividend','earnings'])selectors.append(document.getElementById(id));
+  const metrics=document.getElementById('metrics'),exposure=document.createElement('div');exposure.className='asset-info-exposure';
+  [...metrics.children].slice(-2).forEach(card=>exposure.append(card));
+  const spacer=document.createElement('span');spacer.className='asset-metric-gap';spacer.setAttribute('aria-hidden','true');
+  metrics.insertBefore(spacer,metrics.children[3]);
+  const separator=document.createElement('div');separator.className='asset-info-separator';separator.setAttribute('aria-hidden','true');
+  assetFirst.append(selectors,exposure);assetInfo.append(assetFirst,separator,metrics);
   const elements={payoff:panelFor('payoff-chart'),indicator:document.getElementById('indicator'),
     payoff_table:panelFor('payoff-table'),price:panelFor('price-chart'),result:panelFor('result-chart'),quantity:panelFor('quantity-chart'),
     puts:document.getElementById('puts-section'),calls:document.getElementById('calls-section'),holdings:document.getElementById('holdings-section'),
@@ -42,7 +50,19 @@
     .layout-auto-stack .positions-grid{height:auto;min-height:0}
     .layout-auto-stack .scroll{height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
     .layout-editing .layout-auto-stack.layout-empty .layout-body{min-height:80px}
-    .asset-info-panel{display:flex;gap:7px;align-items:center;align-content:center;flex-wrap:wrap}
+    .asset-info-panel{display:flex;flex-direction:column;gap:5px;align-items:stretch;justify-content:flex-start}
+    .asset-info-first{display:flex;gap:5px;align-items:flex-end;flex-wrap:nowrap;flex:none}
+    .asset-info-selectors{display:flex;gap:5px;align-items:center;flex-wrap:wrap;min-width:0;flex:1 1 auto}
+    .asset-info-exposure{display:flex;gap:5px;flex:none;margin-left:auto}
+    .asset-info-separator{border-top:1px solid var(--indicator-line);height:1px;flex:none;width:100%}
+    .asset-metric-gap{display:block;width:72px;flex:0 0 72px;height:44px}
+    .asset-info-panel #dividend{grid-template-columns:repeat(3,72px);width:226px;min-width:226px;max-width:226px;flex:0 0 226px;gap:5px}
+    .asset-info-panel #earnings{display:grid;grid-template-columns:repeat(2,72px);gap:5px}
+    .asset-info-panel #dividend .dividend-badge,.asset-info-panel #earnings .dividend-badge{width:72px;height:28px;min-width:72px;padding:4px 2px;font-size:12px;line-height:20px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .asset-info-panel #metrics{display:flex;flex-wrap:wrap;gap:5px;margin:0;flex:none}
+    .asset-info-panel .metric{width:72px;flex:0 0 72px;min-width:72px;height:44px;padding:0;border:0;border-radius:0;background:none;text-align:right}
+    .asset-info-panel .metric small{display:block;height:16px;font-size:12px;line-height:16px;white-space:nowrap}
+    .asset-info-panel .metric b{display:block;width:72px;height:28px;padding:4px 2px;margin:0;font-size:12px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--default-badge)}
     .asset-info-panel #asset{width:145px;min-width:130px;height:28px;padding:3px 7px}
     .asset-info-panel .dividend-labels{flex-wrap:nowrap;margin:0}
     .layout-edge{display:none;position:absolute;z-index:6;touch-action:none;background:transparent}
@@ -119,7 +139,11 @@
     const empty=positionIds.every(id=>elements[id].hidden);
     stack.hidden=empty&&!editing;stack.classList.toggle('layout-empty',empty);
     const height=stack.hidden?0:Math.ceil((stack.querySelector('.layout-body').getBoundingClientRect().height+7)/2.7);
-    const display=engine.flowPositions(layout,height);
+    let display=engine.flowPositions(layout,height);
+    const infoStyle=getComputedStyle(assetInfo);
+    const naturalHeight=assetFirst.getBoundingClientRect().height+metrics.getBoundingClientRect().height+1+
+      2*parseFloat(infoStyle.gap)+parseFloat(infoStyle.paddingTop)+parseFloat(infoStyle.paddingBottom)+2;
+    display=engine.flowMinimumHeight(display,'asset_info',Math.ceil((naturalHeight+7)/2.7));
     for(const block of display.blocks){
       const wrapper=wrappers[block.id],element=elements[block.id];
       wrapper.style.gridColumn=(block.x+1)+' / span '+block.w;
@@ -134,6 +158,7 @@
   for(const element of Object.values(elements))observer.observe(element,{attributes:true,attributeFilter:['hidden']});
   for(const id of positionIds)observer.observe(elements[id],{childList:true,subtree:true,characterData:true});
   new ResizeObserver(requestFlow).observe(wrappers.puts.querySelector('.layout-body'));
+  const infoObserver=new ResizeObserver(requestFlow);infoObserver.observe(assetFirst);infoObserver.observe(metrics);
   function start(event,id,kind,edge){
     if(!editing||event.button!==0)return;event.preventDefault();
     const rect=grid.getBoundingClientRect();

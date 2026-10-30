@@ -9,11 +9,11 @@ function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefi
 function text(n,value){value=String(value);if(n.textContent!==value)n.textContent=value;}
 function className(n,value){if(n.className!==value)n.className=value;}
 
-const metricDefinitions=[['Koers','koers'],['Vorige koers','koers_prev'],['Dagverschil','pct_change',true],
-  ['Net change','net_change'],['Pct lineair','portfolio_total_waarde_lineair_pct',true],['Pct delta','portfolio_total_waarde_delta_pct',true]];
-const metricValues=metricDefinitions.map(([label])=>{
+const metricDefinitions=[['Pct. Change','pct_change',true],['Koers','koers'],['Koers Prev.','koers_prev'],
+  ['Net. Change','net_change'],['Pct Lineair','portfolio_total_waarde_lineair_pct',true],['Pct Delta','portfolio_total_waarde_delta_pct',true]];
+const metricValues=metricDefinitions.map(([label,key])=>{
   const card=node('div',undefined,'metric'),value=node('b','—');
-  card.append(node('small',label),value);el('metrics').append(card);return value;
+  card.dataset.metric=key;card.append(node('small',label),value);el('metrics').append(card);return value;
 });
 
 function updateBadges(id,items,background,title=''){
@@ -217,7 +217,9 @@ function applyDashboard(payload){
   metricDefinitions.forEach(([,key,pct],index)=>{
     const value=payload.summary[key],displayValue=pct&&value!=null?Number(value)*100:value;
     text(metricValues[index],num(displayValue,['koers','koers_prev'].includes(key)?payload.payoff_controls.decimals:2)+(pct&&value!=null?'%':''));
-    className(metricValues[index],['pct_change','net_change'].includes(key)&&value!=null?(value>0?'positive':value<0?'negative':''):'');
+    const background=payload.summary_colors?.[key]||'';
+    className(metricValues[index],'');metricValues[index].style.backgroundColor=background;
+    metricValues[index].style.color=background?'#000000':'';
   });
   updateIndicator(payload.indicator,payload.asset);
   const dividend=payload.dividend_display,earnings=payload.earnings_display;
