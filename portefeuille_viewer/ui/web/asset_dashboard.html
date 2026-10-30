@@ -17,7 +17,7 @@ main{padding:9px 14px}header{gap:9px;margin-bottom:7px}h1{font-size:20px;margin:
 .history-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;min-width:0}.history-layout .chart-box{height:260px;margin:0}.history-layout>.panel{min-width:0}@media(max-width:850px){.history-layout{grid-template-columns:1fr}}
 .dashboard-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;min-width:0;align-items:start}.dashboard-analysis{display:flex;flex-direction:column;gap:7px;min-width:0}.dashboard-workspace>.history-layout{grid-column:auto}
 @media(min-width:1800px){.dashboard-workspace{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}.dashboard-workspace>.history-layout{grid-template-columns:minmax(0,1fr)}.dashboard-workspace>.history-layout .chart-box{height:240px}}
-#indicator{height:132px;min-height:132px;max-height:132px;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:51px minmax(0,1fr);gap:5px;padding:10px 12px;overflow:hidden;align-items:stretch}
+#indicator{height:132px;min-height:132px;max-height:132px;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:44px minmax(0,1fr);gap:5px;padding:10px 12px;overflow:hidden;align-items:stretch}
 .indicator-left{display:grid;grid-template-rows:24px 22px;gap:3px;min-width:0;min-height:0;width:100%}
 .indicator-labels{flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;overflow-y:hidden;min-height:0;scrollbar-width:thin}
 .indicator-pill{flex-shrink:0}.indicator-scores{margin-top:0;flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;overflow-y:hidden;min-height:0;scrollbar-width:thin}
@@ -52,6 +52,11 @@ select,input,button{background:var(--control-bg);border-color:var(--control-bord
 #test-orders-section input[type=checkbox]{width:auto}
 #test-orders-section .toolbar{align-items:center;flex-shrink:0}
 #test-orders-section .toolbar select,#test-orders-section .toolbar button{height:28px;box-sizing:border-box;padding:4px 7px;font:12px system-ui,sans-serif;line-height:18px}
+#tests-table input:not([type=checkbox]){width:100%;min-width:40px;height:25px;padding:2px 4px;border:1px solid transparent;border-radius:0;background:transparent;font:inherit;box-sizing:border-box;color:inherit}
+#tests-table input:focus{border-color:var(--focus);outline:none;background:var(--panel)}
+#tests-table input[type=checkbox]{width:15px;height:15px;cursor:pointer}
+#tests-table tr.test-selected{outline:1px solid var(--focus);outline-offset:-1px}
+#tests-table td.test-input-error{outline:1px solid var(--red);outline-offset:-1px}
 #tests-table thead th{position:sticky;top:0;z-index:1;background:var(--panel)}#tests-table{max-height:300px}#tests-table tbody tr{cursor:pointer}
 </style></head>
 <body><main>
@@ -71,7 +76,7 @@ select,input,button{background:var(--control-bg);border-color:var(--control-bord
 <div class="dashboard-positions"><section class="panel full position-section" id="puts-section" aria-label="Open puts" hidden><div id="put-positions" class="positions-grid"></div></section>
 <section class="panel full position-section" id="calls-section" aria-label="Open calls" hidden><div id="call-positions" class="positions-grid"></div></section>
 <section class="panel full position-section" id="holdings-section" aria-label="Open aandelen en sprinters" hidden><div id="holding-positions" class="positions-grid"></div></section>
-<section class="panel full" id="test-orders-section" aria-label="Testorders en scenario’s"><div class="toolbar"><label><input id="tests-enabled" type="checkbox"> Testorders toepassen</label><label><input id="tests-asset-only" type="checkbox"> Alleen deze asset</label><select id="tests-scenario" aria-label="Testorderscenario"></select><button id="tests-editor">Testorders bewerken / toevoegen / verwijderen</button><button id="tests-builder">Edit scenarios</button><button id="tests-manager">Scenario’s beheren</button></div><div id="tests-status" class="sr-only" role="status"></div><div id="tests-table" class="scroll"></div></section>
+<section class="panel full" id="test-orders-section" aria-label="Testorders en scenario’s"><div class="toolbar"><label><input id="tests-enabled" type="checkbox"> Testorders toepassen</label><label><input id="tests-asset-only" type="checkbox"> Alleen deze asset</label><select id="tests-scenario" aria-label="Testorderscenario"></select><button id="tests-add">Toevoegen</button><button id="tests-delete" disabled>Verwijderen</button><button id="tests-builder">Edit scenarios</button><button id="tests-manager">Scenario’s beheren</button></div><div id="tests-status" class="sr-only" role="status"></div><div id="tests-table" class="scroll"></div></section>
 </div>
 </div>
 

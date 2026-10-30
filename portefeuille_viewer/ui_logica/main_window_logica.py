@@ -93,6 +93,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _register_tabs(self):
         self.orders_tab = OrdersTabWidget()
         self.single_asset_analyse_tab = SingleAssetAnalyseTab()
+        self.single_asset_analyse_tab.add_state_engine_button(self.orders_tab.buttonRunStateEngineNow)
         mode = QApplication.instance().property('dashboard_mode') or 'desktop'
         self.asset_dashboard_tab = AssetDashboardTab(editable_layout=True, layout_mode=mode)
         self._dashboard_tabs = (self.asset_dashboard_tab,)

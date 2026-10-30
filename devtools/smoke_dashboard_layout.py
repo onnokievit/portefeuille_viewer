@@ -189,7 +189,7 @@ def check_test_order_block():
 def verify_test_order_block():
     laptop.web.page().runJavaScript("""(()=>{
       const section=document.getElementById('test-orders-section'),body=section.closest('.layout-body'),table=document.getElementById('tests-table');
-      return JSON.stringify({details:!!section.querySelector('details'),bodyOverflow:body.scrollHeight>body.clientHeight+1,sectionOverflow:section.scrollHeight>section.clientHeight+1,tableScroll:table.scrollHeight>table.clientHeight,select:document.getElementById('tests-scenario').getBoundingClientRect().height,button:document.getElementById('tests-editor').getBoundingClientRect().height});
+      return JSON.stringify({details:!!section.querySelector('details'),bodyOverflow:body.scrollHeight>body.clientHeight+1,sectionOverflow:section.scrollHeight>section.clientHeight+1,tableScroll:table.scrollHeight>table.clientHeight,select:document.getElementById('tests-scenario').getBoundingClientRect().height,button:document.getElementById('tests-add').getBoundingClientRect().height});
     })()""",test_order_block_ready)
 
 def test_order_block_ready(raw):

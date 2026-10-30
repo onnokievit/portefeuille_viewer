@@ -1,12 +1,12 @@
 # Graph Report - C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.8  (2026-10-30)
 
 ## Corpus Check
-- 354 files · ~939,682 words
+- 354 files · ~940,476 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5984 nodes · 18061 edges · 268 communities detected
-- Extraction: 55% EXTRACTED · 45% INFERRED · 0% AMBIGUOUS · INFERRED: 8099 edges (avg confidence: 0.75)
+- 6021 nodes · 18231 edges · 270 communities detected
+- Extraction: 55% EXTRACTED · 45% INFERRED · 0% AMBIGUOUS · INFERRED: 8243 edges (avg confidence: 0.75)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -278,120 +278,122 @@
 - [[_COMMUNITY_Community 265|Community 265]]
 - [[_COMMUNITY_Community 266|Community 266]]
 - [[_COMMUNITY_Community 267|Community 267]]
+- [[_COMMUNITY_Community 268|Community 268]]
+- [[_COMMUNITY_Community 269|Community 269]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `SingleAssetAnalyseTab` - 158 edges
+1. `SingleAssetAnalyseTab` - 159 edges
 2. `emit()` - 148 edges
 3. `start()` - 129 edges
 4. `SettingsManager` - 122 edges
 5. `get_settings()` - 117 edges
-6. `ProfileStorage` - 104 edges
-7. `SectorAnalysisTab` - 91 edges
-8. `text()` - 88 edges
-9. `HeaderFilterMenuMixin` - 81 edges
-10. `SubscriptionManager` - 71 edges
+6. `HeaderFilterMenuMixin` - 105 edges
+7. `ProfileStorage` - 104 edges
+8. `text()` - 91 edges
+9. `SectorAnalysisTab` - 91 edges
+10. `ColumnFilterPopup` - 80 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `run_loop()` --calls--> `run()`  [INFERRED]
+  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\api_versie.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\vol_surf_poc\archive\test_chain.py
 - `Explicit offline STOCKDATA audit/migration. Default is read-only; never run by t` --uses--> `ProcessLock`  [INFERRED]
   C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\devtools\harden_stockdata_constraints.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\process_lock.py
 - `Render the real Qt dashboard with synthetic data; never writes to a database.` --uses--> `BrokerSelectionTests`  [INFERRED]
   C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\preview_cash_brokers.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\test_cash_broker_selection.py
-- `Run from project root: python -m unittest discover -s devtools -p test_cash_brok` --uses--> `CashManagementEntriesDialog`  [INFERRED]
-  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\devtools\test_cash_broker_selection.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.4\portefeuille_viewer\ui_logica\cash_management_entries_dialog.py
-- `FileLease` --uses--> `Unique local IB client IDs and shared line reservations for auxiliary clients.`  [INFERRED]
-  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\local_runtime.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\services\ib_connection_guard.py
-- `FileLease` --uses--> `Attach leases to the connection, releasing after disconnect or process crash.`  [INFERRED]
-  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\local_runtime.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\services\ib_connection_guard.py
+- `Reference snapshot events must not enter Access/COM on the GUI thread.` --uses--> `OrdersTabWidget`  [INFERRED]
+  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.6\devtools\test_order_reference_snapshots.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.8\portefeuille_viewer\ui_logica\orders_tab_widget.py
+- `Profile isolation and real Windows process-lock tests; no Access connections.` --uses--> `ProfileStorage`  [INFERRED]
+  C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\devtools\test_profile_sessions.py → C:\python_coding\portefeuille_viewer\portefeuille_viewer_1.5\portefeuille_viewer\config\profile_storage.py
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (241): error(), historicalDataEnd(), _infer_sec_type(), _is_index_symbol(), kick_off_more(), main(), nextValidId(), Submit one historical-data request for all_data row idx. (+233 more)
+Nodes (267): AandelenProjectionV2, _all_brokers(), _apply_timevalue_overlay(), _expected_no_price_assets(), _has_technical_keys(), _normalize_changed_assets(), _price_diag(), Versioned projection for Aandelen view.      - Produces full snapshot DataFram (+259 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.01
-Nodes (396): Creates temp_stock_prices_temp in Access if it doesn't exist,     then inserts, save_df_to_access_temp(), ensure_indexes(), main(), merge_delete_append(), merge_update_insert(), null_safe_diff(), Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <> (+388 more)
+Nodes (174): Summary badge colours delegated to the existing Single Asset Analyse policy., summary_colors(), DashboardTestOrders, Reuse the original test-order editor and scenario handlers without a second writ, text(), _append_log(), _append_result(), main() (+166 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.01
-Nodes (188): AandelenProjectionV2, _all_brokers(), _apply_timevalue_overlay(), _expected_no_price_assets(), _has_technical_keys(), _normalize_changed_assets(), _price_diag(), Versioned projection for Aandelen view.      - Produces full snapshot DataFram (+180 more)
+Nodes (359): Creates temp_stock_prices_temp in Access if it doesn't exist,     then inserts, save_df_to_access_temp(), ensure_indexes(), main(), merge_delete_append(), merge_update_insert(), null_safe_diff(), Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <> (+351 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.01
-Nodes (139): adjust(), apply(), finish(), save(), configure(), applyDashboard(), assetOptions(), commentResult() (+131 more)
+Nodes (167): main(), fetch_target(), fetch_target(), main(), _AccountBalancesDeleteWorker, _AccountBalancesLoadWorker, _AccountBalancesSaveWorker, AccountDailyBalancesDialog (+159 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.01
-Nodes (244): ScheduledTask, apply(), finish(), markDirty(), save(), status(), backup(), Consistent explicit backup before first Wyse import; requires exclusive file acc (+236 more)
+Nodes (154): adjust(), apply(), finish(), save(), configure(), applyDashboard(), assetOptions(), commentResult() (+146 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.01
-Nodes (221): AppTaskScheduler, AssetVolatilityHistoryUpdateRunner, from_environment(), _parse_last_json_line(), Run the daily HV/IV DB update script in a separate process., request_startup_update(), hydrate_snapshots(), compact_float64() (+213 more)
+Nodes (156): empty_asset_indicator_live_frame(), empty_asset_indicator_meta_frame(), empty_asset_indicator_summary_frame(), Contract definitions for the asset indicator/advisor pipeline.  This module inte, ActionDecision, ActionInput, calculate_direction_score(), calculate_long_term_direction_score() (+148 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.01
-Nodes (81): text(), chain_path(), load_chain(), normalize_chain(), _append_log(), _append_result(), main(), OptionChainRetrieverWindow (+73 more)
+Cohesion: 0.02
+Nodes (171): ScheduledTask, apply(), finish(), markDirty(), save(), status(), backup(), Consistent explicit backup before first Wyse import; requires exclusive file acc (+163 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.01
-Nodes (120): CheckableFilterComboController, Small reusable controller for an include-list combobox.      All options are che, ColoredPolarsTableModel, ColumnFilterPopup, HeaderFilterMenuMixin, Vereist in de host-widget:     - self.tableView: QTableView     - self._table_, HeaderFilterMenuMixin, HighlightingPandasTableModel (+112 more)
+Cohesion: 0.02
+Nodes (112): TestApp, FutureHistApp, IndexHistApp, connectionClosed(), error(), historicalDataEnd(), _infer_sec_type(), _is_index_symbol() (+104 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.01
-Nodes (161): empty_asset_indicator_live_frame(), empty_asset_indicator_meta_frame(), empty_asset_indicator_summary_frame(), Contract definitions for the asset indicator/advisor pipeline.  This module inte, ActionDecision, ActionInput, calculate_direction_score(), calculate_long_term_direction_score() (+153 more)
+Cohesion: 0.02
+Nodes (55): AssetResultViewer, main(), _range_with_aligned_zero(), resolve_db_path(), to_timestamp(), CheckableFilterComboController, _normalize_text(), Small reusable controller for an include-list combobox.      All options are che (+47 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.02
-Nodes (100): calculate_analytics(), capture_analytics(), number(), parse_date(), Dashboard payoff and history, operating on immutable captured snapshots., Called on the UI thread. Polars clones share immutable/COW buffers., Called on the UI thread. Polars clones share immutable/COW buffers., _as_finite_float() (+92 more)
+Nodes (68): _AandelenWebBridge, AandelenWebPilotTab, _BetaScenarioWebBridge, BetaScenarioWebDialog, clearBrokers(), clearIndexShifts(), createBetaShiftScenario(), deleteActiveBetaShiftScenario() (+60 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.02
-Nodes (69): _AandelenWebBridge, AandelenWebPilotTab, _BetaScenarioWebBridge, BetaScenarioWebDialog, clearBrokers(), clearIndexShifts(), createBetaShiftScenario(), deleteActiveBetaShiftScenario() (+61 more)
+Nodes (105): AppTaskScheduler, AssetVolatilityHistoryUpdateRunner, from_environment(), _parse_last_json_line(), Run the daily HV/IV DB update script in a separate process., request_startup_update(), EngineCoreRuntime, Minimal orchestration layer for Event + StateStore + ProjectionBus.      This (+97 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.02
-Nodes (41): BetaMatrixViewer, main(), _clean(), DoorrolOrderIssue, find_orders_with_call_put_mix(), IssueApplier, load_doorrol_rows(), main() (+33 more)
+Nodes (74): calculate_analytics(), capture_analytics(), number(), parse_date(), Dashboard payoff and history, operating on immutable captured snapshots., Called on the UI thread. Polars clones share immutable/COW buffers., Called on the UI thread. Polars clones share immutable/COW buffers., DashboardComments (+66 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.02
-Nodes (39): _AccountBalancesDeleteWorker, _AccountBalancesLoadWorker, _AccountBalancesSaveWorker, AccountDailyBalancesDialog, _clear_account_daily_balances_dialog_instance(), open_account_daily_balances_dialog(), build_cash_management_result_chart_payload(), DividendWindow (+31 more)
+Nodes (37): build_cash_management_result_chart_payload(), _emit_aandelenProjectionFilterChanged(), _emit_assetSubscriptionsRefreshRequested(), _emit_databaseChanged(), _emit_priceUpdateFailed(), _emit_priceUpdateFinished(), _emit_priceUpdateOutput(), _emit_priceUpdateRequested() (+29 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.03
-Nodes (60): DashboardComments, Adapter to the existing Single Asset Analyse comment cache and flush lifecycle., DashboardPayoffControls, Bridge to the existing per-asset STOCKDATA settings cache and close-time flush., validate_controls(), build_dashboard_payload(), dividend_display(), event_date_display() (+52 more)
+Nodes (139): AssetIndicatorChangesPayload, build_asset_indicator_changes(), build_changes(), build_timeline(), _change_reasons(), classify_change(), _comparison_window(), _dt_sort_value() (+131 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.03
-Nodes (76): _chain_summary(), _FetchWorker, PySide6 main window for the Vol Surface POC.  Layout:   ┌─ top bar ─────────────, Captures sys.stdout writes and emits them as a Qt signal (thread-safe)., _StdoutRedirect, VolSurfWindow, copy(), defaults() (+68 more)
+Nodes (69): chain_path(), load_chain(), normalize_chain(), run(), ScanWorker, SortableTableWidgetItem, ChainRunRepository, _ensure_table() (+61 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.04
-Nodes (32): _AssetRollupDeleteWorker, AssetRollupEditorTab, _AssetRollupLoadWorker, _AssetRollupSaveWorker, _LongHistoryOutputDialog, _SortableTableItem, _to_float(), AssetRollupColumn (+24 more)
+Cohesion: 0.03
+Nodes (50): Standalone state engine tools for manual historical rebuilds., _date_label(), MonthEndCompareDialog, MonthEndCompareModel, MonthEndCompareSortProxy, _to_float(), _coerce_to_date(), _date_label() (+42 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.04
-Nodes (38): _date_label(), MonthEndCompareDialog, MonthEndCompareModel, MonthEndCompareSortProxy, _to_float(), _coerce_to_date(), _iter_daily_dates(), _iter_friday_dates() (+30 more)
+Cohesion: 0.03
+Nodes (57): _chain_summary(), PySide6 main window for the Vol Surface POC.  Layout:   ┌─ top bar ─────────────, Captures sys.stdout writes and emits them as a Qt signal (thread-safe)., _StdoutRedirect, VolSurfWindow, copy(), defaults(), flowMinimumHeight() (+49 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.05
-Nodes (69): clean(), decimals(), format(), payoff(), scale(), ticksWithin(), $(), bounds() (+61 more)
+Cohesion: 0.04
+Nodes (42): HeaderFilterMenuMixin, HighlightingPandasTableModel, _fmt(), LaatstTransactiesDialog, QTableWidget — Space togglet vinkje op huidige rij, sortering via header., _TransactiesTable, HighlightingPandasTableModel, Geef de geselecteerde rij als dict terug, of {} als out-of-range. (+34 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.04
-Nodes (35): AssetResultViewer, main(), _range_with_aligned_zero(), resolve_db_path(), to_timestamp(), AssetRecord, build_yfinance_candidates(), DividendIbWorker (+27 more)
+Cohesion: 0.03
+Nodes (72): build_universe(), _clean(), compare_with_access_q3(), connect_access(), _friday_number(), load_asset_rollup_data(), load_latest_open_options_v2(), load_optie_referentie_data() (+64 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.06
-Nodes (37): build_payload(), _dt_sort_value(), _dt_value(), find_changes(), _fmt_dt(), _fmt_num(), load_history_rows(), normalize_value() (+29 more)
+Cohesion: 0.05
+Nodes (46): clean(), decimals(), format(), payoff(), scale(), ticksWithin(), $(), bounds() (+38 more)
 
 ### Community 20 - "Community 20"
 Cohesion: 0.06
-Nodes (20): Standalone state engine tools for manual historical rebuilds., OptionChainTableModel, Option Chain Table Model Polars-based table model voor option chain display, Get all data for a specific row, Table model voor option chain data (Polars DataFrame), Update table met nieuwe DataFrame, OptionChainService, Option Chain Service Handles IBKR reqContractDetails for option chain retrieval (+12 more)
+Nodes (33): _to_float(), _OptionReferenceDeleteWorker, OptionReferenceEditorTab, _OptionReferenceLoadWorker, _OptionReferenceSaveWorker, _SortableTableItem, _to_float(), _bracket() (+25 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.08
-Nodes (26): AssetRow, clean(), connect_access(), duration_to_days(), filter_duration(), load_assets(), load_volatility_history(), FigureCanvas (+18 more)
+Nodes (26): _append_today_if_needed(), _coerce_to_date(), _iter_daily_dates(), _iter_friday_dates(), _iter_month_end_dates(), _iter_quarter_end_dates(), _iter_third_friday_dates(), _iter_year_end_dates() (+18 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.15
@@ -402,8 +404,8 @@ Cohesion: 0.16
 Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.16
-Nodes (13): _asset_rollup_price_insensitive(), build_uniek_id_like_repository(), CandidatePair, _clean(), _date_for_id(), DoorrolApplier, DoorrolFinder, main() (+5 more)
+Cohesion: 0.18
+Nodes (28): _as_date(), _asset_last_price_candidates(), build_margin_efficiency_report(), _clean(), _connect_access_readonly(), _default_portfolio_db_path(), _format_nl(), _format_rows_for_export() (+20 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.16
@@ -426,28 +428,28 @@ Cohesion: 0.16
 Nodes (8): _clean(), ExpireApplier, ExpireCandidate, ExpireFinder, main(), ReviewWindow, _to_date(), to_float()
 
 ### Community 30 - "Community 30"
-Cohesion: 0.25
-Nodes (19): AssetIndicatorChangesPayload, build_asset_indicator_changes(), build_changes(), build_timeline(), _change_reasons(), classify_change(), _comparison_window(), _dt_sort_value() (+11 more)
+Cohesion: 0.18
+Nodes (2): _normalize_date(), StateEngineTasksDialog
 
 ### Community 31 - "Community 31"
-Cohesion: 0.23
-Nodes (5): DbMigrationService, MigrationResult, Minimal multi-user DB migration bootstrap.      Rules:     - Additive only., main(), Voer de bestaande migratie handmatig uit voor één expliciet gekozen database.  G
+Cohesion: 0.15
+Nodes (17): build_close_order(), build_contract_lookup(), build_parser(), _clean_ib_field(), estimate_relief(), IbSettings, load_ib_settings(), main() (+9 more)
 
 ### Community 32 - "Community 32"
+Cohesion: 0.18
+Nodes (9): _days_in_month(), main(), _nice_step(), PriceDistributionViewer, PriceRow, resolve_db_path(), _safe_date(), _safe_float() (+1 more)
+
+### Community 33 - "Community 33"
+Cohesion: 0.21
+Nodes (12): error(), historicalDataEnd(), _infer_sec_type(), _is_index_symbol(), kick_off_more(), nextValidId(), Submit one historical-data request for all_data row idx., Maintain up to MAX_IN_FLIGHT concurrent historical requests. (+4 more)
+
+### Community 34 - "Community 34"
 Cohesion: 0.5
 Nodes (3): CellPatchPayload, SnapshotInitPayload, ViewPatchPayload
 
-### Community 33 - "Community 33"
-Cohesion: 1.0
-Nodes (1): Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant
-
-### Community 34 - "Community 34"
-Cohesion: 1.0
-Nodes (0): 
-
 ### Community 35 - "Community 35"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant
 
 ### Community 36 - "Community 36"
 Cohesion: 1.0
@@ -463,7 +465,7 @@ Nodes (0):
 
 ### Community 39 - "Community 39"
 Cohesion: 1.0
-Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
+Nodes (0): 
 
 ### Community 40 - "Community 40"
 Cohesion: 1.0
@@ -471,7 +473,7 @@ Nodes (0):
 
 ### Community 41 - "Community 41"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
 
 ### Community 42 - "Community 42"
 Cohesion: 1.0
@@ -527,527 +529,527 @@ Nodes (0):
 
 ### Community 55 - "Community 55"
 Cohesion: 1.0
-Nodes (1): Build live option time-value snapshot from open options + option_series_master.
+Nodes (0): 
 
 ### Community 56 - "Community 56"
 Cohesion: 1.0
-Nodes (1): Merge nonmissing fields; changed facts and fetch checkpoint commit together.
+Nodes (0): 
 
 ### Community 57 - "Community 57"
 Cohesion: 1.0
-Nodes (1): Latest known schedule, retaining historical dates without presenting them as fut
+Nodes (1): Build live option time-value snapshot from open options + option_series_master.
 
 ### Community 58 - "Community 58"
 Cohesion: 1.0
-Nodes (1): Laad database configuratie uit settings.ini.
+Nodes (1): Merge nonmissing fields; changed facts and fetch checkpoint commit together.
 
 ### Community 59 - "Community 59"
 Cohesion: 1.0
-Nodes (1): Herlaad database configuratie na wijzigingen in settings.
+Nodes (1): Latest known schedule, retaining historical dates without presenting them as fut
 
 ### Community 60 - "Community 60"
 Cohesion: 1.0
-Nodes (1): Schakel naar een andere database.
+Nodes (1): Laad database configuratie uit settings.ini.
 
 ### Community 61 - "Community 61"
 Cohesion: 1.0
-Nodes (1): Laadt de asset_rollup_data-tabel uit de database.
+Nodes (1): Herlaad database configuratie na wijzigingen in settings.
 
 ### Community 62 - "Community 62"
 Cohesion: 1.0
-Nodes (1): Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
+Nodes (1): Schakel naar een andere database.
 
 ### Community 63 - "Community 63"
 Cohesion: 1.0
-Nodes (1): Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.
+Nodes (1): Laadt de asset_rollup_data-tabel uit de database.
 
 ### Community 64 - "Community 64"
 Cohesion: 1.0
-Nodes (1): Laadt de sprinter referentie tabel  uit de database.
+Nodes (1): Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
 
 ### Community 65 - "Community 65"
 Cohesion: 1.0
-Nodes (1): Laadt de optie referentie tabel uit de stock database.
+Nodes (1): Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.
 
 ### Community 66 - "Community 66"
 Cohesion: 1.0
-Nodes (1): Laadt de dividend tabel  uit de database.
+Nodes (1): Laadt de sprinter referentie tabel  uit de database.
 
 ### Community 67 - "Community 67"
 Cohesion: 1.0
-Nodes (1): Laadt alle transacties uit de database.
+Nodes (1): Laadt de optie referentie tabel uit de stock database.
 
 ### Community 68 - "Community 68"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM
+Nodes (1): Laadt de dividend tabel  uit de database.
 
 ### Community 69 - "Community 69"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro
+Nodes (1): Laadt alle transacties uit de database.
 
 ### Community 70 - "Community 70"
 Cohesion: 1.0
-Nodes (1): Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse
+Nodes (1): Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM
 
 ### Community 71 - "Community 71"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR
+Nodes (1): Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro
 
 ### Community 72 - "Community 72"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.
+Nodes (1): Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse
 
 ### Community 73 - "Community 73"
 Cohesion: 1.0
-Nodes (1): Voeg 1..n transacties atomisch in en geef de committed rows terug.
+Nodes (1): Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR
 
 ### Community 74 - "Community 74"
 Cohesion: 1.0
-Nodes (1): Nieuwe transactie invoegen en Id teruggeven.
+Nodes (1): Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.
 
 ### Community 75 - "Community 75"
 Cohesion: 1.0
-Nodes (1): Verwijder alle transacties met een specifieke order_id.     Retourneert het aan
+Nodes (1): Voeg 1..n transacties atomisch in en geef de committed rows terug.
 
 ### Community 76 - "Community 76"
 Cohesion: 1.0
-Nodes (1): Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder
+Nodes (1): Nieuwe transactie invoegen en Id teruggeven.
 
 ### Community 77 - "Community 77"
 Cohesion: 1.0
-Nodes (1): Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte
+Nodes (1): Verwijder alle transacties met een specifieke order_id.     Retourneert het aan
 
 ### Community 78 - "Community 78"
 Cohesion: 1.0
-Nodes (1): Shared broker source for Orders and Cash Management.
+Nodes (1): Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder
 
 ### Community 79 - "Community 79"
 Cohesion: 1.0
-Nodes (1): Haal lijsten voor comboboxen op.
+Nodes (1): Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte
 
 ### Community 80 - "Community 80"
 Cohesion: 1.0
-Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
+Nodes (1): Shared broker source for Orders and Cash Management.
 
 ### Community 81 - "Community 81"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
+Nodes (1): Haal lijsten voor comboboxen op.
 
 ### Community 82 - "Community 82"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
+Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
 
 ### Community 83 - "Community 83"
 Cohesion: 1.0
-Nodes (1): Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty
+Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
 
 ### Community 84 - "Community 84"
 Cohesion: 1.0
-Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
+Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
 
 ### Community 85 - "Community 85"
 Cohesion: 1.0
-Nodes (1): Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna
+Nodes (1): Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty
 
 ### Community 86 - "Community 86"
 Cohesion: 1.0
-Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
+Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
 
 ### Community 87 - "Community 87"
 Cohesion: 1.0
-Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
+Nodes (1): Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna
 
 ### Community 88 - "Community 88"
 Cohesion: 1.0
-Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
+Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
 
 ### Community 89 - "Community 89"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
+Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
 
 ### Community 90 - "Community 90"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
+Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
 
 ### Community 91 - "Community 91"
 Cohesion: 1.0
-Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m
+Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
 
 ### Community 92 - "Community 92"
 Cohesion: 1.0
-Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
+Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
 
 ### Community 93 - "Community 93"
 Cohesion: 1.0
-Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
+Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m
 
 ### Community 94 - "Community 94"
 Cohesion: 1.0
-Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti
+Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
 
 ### Community 95 - "Community 95"
 Cohesion: 1.0
-Nodes (1): Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebruikt
+Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
 
 ### Community 96 - "Community 96"
 Cohesion: 1.0
-Nodes (1): All catalog records, including unheld/INCL_EXCL=0 records and missing mappings.
+Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti
 
 ### Community 97 - "Community 97"
 Cohesion: 1.0
-Nodes (1): Merge nonmissing fields; changed facts and fetch checkpoint commit together.
+Nodes (1): Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebruikt
 
 ### Community 98 - "Community 98"
 Cohesion: 1.0
-Nodes (1): Latest known schedule, retaining historical dates without presenting them as fut
+Nodes (1): All catalog records, including unheld/INCL_EXCL=0 records and missing mappings.
 
 ### Community 99 - "Community 99"
 Cohesion: 1.0
-Nodes (1): Reset alle snapshots naar leeg.
+Nodes (1): Merge nonmissing fields; changed facts and fetch checkpoint commit together.
 
 ### Community 100 - "Community 100"
 Cohesion: 1.0
-Nodes (1): Controleer of er al data is geladen.
+Nodes (1): Latest known schedule, retaining historical dates without presenting them as fut
 
 ### Community 101 - "Community 101"
 Cohesion: 1.0
-Nodes (1): Korte tekstuele samenvatting voor debug/log.
+Nodes (1): Reset alle snapshots naar leeg.
 
 ### Community 102 - "Community 102"
 Cohesion: 1.0
-Nodes (1): Capture on the GUI thread, where mutable scenario/cache writers run.
+Nodes (1): Controleer of er al data is geladen.
 
 ### Community 103 - "Community 103"
 Cohesion: 1.0
-Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
+Nodes (1): Korte tekstuele samenvatting voor debug/log.
 
 ### Community 104 - "Community 104"
 Cohesion: 1.0
-Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
+Nodes (1): Capture on the GUI thread, where mutable scenario/cache writers run.
 
 ### Community 105 - "Community 105"
 Cohesion: 1.0
-Nodes (1): Enabled for the current measurement phase; PV_UI_DIAGNOSTICS=0 opts out.
+Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
 
 ### Community 106 - "Community 106"
 Cohesion: 1.0
-Nodes (1): First event sets the deadline; following events cannot postpone it.
+Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
 
 ### Community 107 - "Community 107"
 Cohesion: 1.0
-Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
+Nodes (1): Enabled for the current measurement phase; PV_UI_DIAGNOSTICS=0 opts out.
 
 ### Community 108 - "Community 108"
 Cohesion: 1.0
-Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
+Nodes (1): First event sets the deadline; following events cannot postpone it.
 
 ### Community 109 - "Community 109"
 Cohesion: 1.0
-Nodes (1): First event sets the deadline; following events cannot postpone it.
+Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
 
 ### Community 110 - "Community 110"
 Cohesion: 1.0
-Nodes (1): Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback.
+Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
 
 ### Community 111 - "Community 111"
 Cohesion: 1.0
-Nodes (1): historical close is split-adjusted in many feeds. For state valuation against ra
+Nodes (1): First event sets the deadline; following events cannot postpone it.
 
 ### Community 112 - "Community 112"
 Cohesion: 1.0
-Nodes (1): Houdt de actuele datasets in geheugen.     Wordt gevuld door repository-functies
+Nodes (1): Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback.
 
 ### Community 113 - "Community 113"
 Cohesion: 1.0
-Nodes (1): Reset alle snapshots naar leeg.
+Nodes (1): historical close is split-adjusted in many feeds. For state valuation against ra
 
 ### Community 114 - "Community 114"
 Cohesion: 1.0
-Nodes (1): Controleer of er al data is geladen.
+Nodes (1): Houdt de actuele datasets in geheugen.     Wordt gevuld door repository-functies
 
 ### Community 115 - "Community 115"
 Cohesion: 1.0
-Nodes (1): Korte tekstuele samenvatting voor debug/log.
+Nodes (1): Reset alle snapshots naar leeg.
 
 ### Community 116 - "Community 116"
 Cohesion: 1.0
-Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
+Nodes (1): Controleer of er al data is geladen.
 
 ### Community 117 - "Community 117"
 Cohesion: 1.0
-Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
+Nodes (1): Korte tekstuele samenvatting voor debug/log.
 
 ### Community 118 - "Community 118"
 Cohesion: 1.0
-Nodes (1): Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>
+Nodes (1): Stage repository loads in a worker without exposing partial snapshots.
 
 ### Community 119 - "Community 119"
 Cohesion: 1.0
-Nodes (1): Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>
+Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
 
 ### Community 120 - "Community 120"
 Cohesion: 1.0
-Nodes (1): Reset alle snapshots naar leeg.
+Nodes (1): Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>
 
 ### Community 121 - "Community 121"
 Cohesion: 1.0
-Nodes (1): Controleer of er al data is geladen.
+Nodes (1): Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>
 
 ### Community 122 - "Community 122"
 Cohesion: 1.0
-Nodes (1): Korte tekstuele samenvatting voor debug/log.
+Nodes (1): Reset alle snapshots naar leeg.
 
 ### Community 123 - "Community 123"
 Cohesion: 1.0
-Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
+Nodes (1): Controleer of er al data is geladen.
 
 ### Community 124 - "Community 124"
 Cohesion: 1.0
-Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
+Nodes (1): Korte tekstuele samenvatting voor debug/log.
 
 ### Community 125 - "Community 125"
 Cohesion: 1.0
-Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
+Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
 
 ### Community 126 - "Community 126"
 Cohesion: 1.0
-Nodes (1): Sla huidige config gesplitst op naar shared en local.
+Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
 
 ### Community 127 - "Community 127"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
 
 ### Community 128 - "Community 128"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Sla huidige config gesplitst op naar shared en local.
 
 ### Community 129 - "Community 129"
 Cohesion: 1.0
-Nodes (1): Stel database in als default.
+Nodes (1): Update database configuratie.
 
 ### Community 130 - "Community 130"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Update database configuratie.
 
 ### Community 131 - "Community 131"
 Cohesion: 1.0
-Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
+Nodes (1): Stel database in als default.
 
 ### Community 132 - "Community 132"
 Cohesion: 1.0
-Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 133 - "Community 133"
 Cohesion: 1.0
-Nodes (1): Map hex -> priority (int).
+Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
 
 ### Community 134 - "Community 134"
 Cohesion: 1.0
-Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
+Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
 
 ### Community 135 - "Community 135"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:
+Nodes (1): Map hex -> priority (int).
 
 ### Community 136 - "Community 136"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
 
 ### Community 137 - "Community 137"
 Cohesion: 1.0
-Nodes (1): Laadt de asset_rollup_data-tabel uit de database.
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:
 
 ### Community 138 - "Community 138"
 Cohesion: 1.0
-Nodes (1): Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
+Nodes (1): Haal singleton settings manager op.
 
 ### Community 139 - "Community 139"
 Cohesion: 1.0
-Nodes (1): Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.
+Nodes (1): Laadt de asset_rollup_data-tabel uit de database.
 
 ### Community 140 - "Community 140"
 Cohesion: 1.0
-Nodes (1): Laadt de sprinter referentie tabel  uit de database.
+Nodes (1): Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.
 
 ### Community 141 - "Community 141"
 Cohesion: 1.0
-Nodes (1): Laadt de sprinter referentie tabel  uit de database.
+Nodes (1): Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.
 
 ### Community 142 - "Community 142"
 Cohesion: 1.0
-Nodes (1): Laadt de dividend tabel  uit de database.
+Nodes (1): Laadt de sprinter referentie tabel  uit de database.
 
 ### Community 143 - "Community 143"
 Cohesion: 1.0
-Nodes (1): Laadt alle transacties uit de database.
+Nodes (1): Laadt de sprinter referentie tabel  uit de database.
 
 ### Community 144 - "Community 144"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM
+Nodes (1): Laadt de dividend tabel  uit de database.
 
 ### Community 145 - "Community 145"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro
+Nodes (1): Laadt alle transacties uit de database.
 
 ### Community 146 - "Community 146"
 Cohesion: 1.0
-Nodes (1): Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse
+Nodes (1): Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM
 
 ### Community 147 - "Community 147"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR
+Nodes (1): Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro
 
 ### Community 148 - "Community 148"
 Cohesion: 1.0
-Nodes (1): Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.
+Nodes (1): Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse
 
 ### Community 149 - "Community 149"
 Cohesion: 1.0
-Nodes (1): Voeg 1..n transacties atomisch in en geef de committed rows terug.
+Nodes (1): Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR
 
 ### Community 150 - "Community 150"
 Cohesion: 1.0
-Nodes (1): Nieuwe transactie invoegen en Id teruggeven.
+Nodes (1): Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.
 
 ### Community 151 - "Community 151"
 Cohesion: 1.0
-Nodes (1): Verwijder alle transacties met een specifieke order_id.     Retourneert het aan
+Nodes (1): Voeg 1..n transacties atomisch in en geef de committed rows terug.
 
 ### Community 152 - "Community 152"
 Cohesion: 1.0
-Nodes (1): Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder
+Nodes (1): Nieuwe transactie invoegen en Id teruggeven.
 
 ### Community 153 - "Community 153"
 Cohesion: 1.0
-Nodes (1): Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte
+Nodes (1): Verwijder alle transacties met een specifieke order_id.     Retourneert het aan
 
 ### Community 154 - "Community 154"
 Cohesion: 1.0
-Nodes (1): Haal lijsten voor comboboxen op.
+Nodes (1): Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder
 
 ### Community 155 - "Community 155"
 Cohesion: 1.0
-Nodes (1): Haal lijsten voor comboboxen op.
+Nodes (1): Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte
 
 ### Community 156 - "Community 156"
 Cohesion: 1.0
-Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
+Nodes (1): Haal lijsten voor comboboxen op.
 
 ### Community 157 - "Community 157"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
+Nodes (1): Haal lijsten voor comboboxen op.
 
 ### Community 158 - "Community 158"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
+Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
 
 ### Community 159 - "Community 159"
 Cohesion: 1.0
-Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
+Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
 
 ### Community 160 - "Community 160"
 Cohesion: 1.0
-Nodes (1): Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna
+Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
 
 ### Community 161 - "Community 161"
 Cohesion: 1.0
-Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
+Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
 
 ### Community 162 - "Community 162"
 Cohesion: 1.0
-Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
+Nodes (1): Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna
 
 ### Community 163 - "Community 163"
 Cohesion: 1.0
-Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
+Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
 
 ### Community 164 - "Community 164"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
+Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
 
 ### Community 165 - "Community 165"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
+Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
 
 ### Community 166 - "Community 166"
 Cohesion: 1.0
-Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m
+Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
 
 ### Community 167 - "Community 167"
 Cohesion: 1.0
-Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
+Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
 
 ### Community 168 - "Community 168"
 Cohesion: 1.0
-Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
+Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m
 
 ### Community 169 - "Community 169"
 Cohesion: 1.0
-Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti
+Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
 
 ### Community 170 - "Community 170"
 Cohesion: 1.0
-Nodes (1): historical close is split-adjusted in many feeds. For state valuation against ra
+Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
 
 ### Community 171 - "Community 171"
 Cohesion: 1.0
-Nodes (1): Cheap connection summary; never copy the full registry per tick.
+Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti
 
 ### Community 172 - "Community 172"
 Cohesion: 1.0
-Nodes (1): Cheap connection summary; never copy the full registry per tick.
+Nodes (1): historical close is split-adjusted in many feeds. For state valuation against ra
 
 ### Community 173 - "Community 173"
 Cohesion: 1.0
-Nodes (1): Build live option time-value snapshot from open options + option_series_master.
+Nodes (1): Cheap connection summary; never copy the full registry per tick.
 
 ### Community 174 - "Community 174"
 Cohesion: 1.0
-Nodes (1): Use the app's asset/date/strike/direction fields, not an IB symbol.
+Nodes (1): Cheap connection summary; never copy the full registry per tick.
 
 ### Community 175 - "Community 175"
 Cohesion: 1.0
-Nodes (1): Cheap connection summary; never copy the full registry per tick.
+Nodes (1): Build live option time-value snapshot from open options + option_series_master.
 
 ### Community 176 - "Community 176"
 Cohesion: 1.0
-Nodes (1): Cheap connection summary; never copy the full registry per tick.
+Nodes (1): Use the app's asset/date/strike/direction fields, not an IB symbol.
 
 ### Community 177 - "Community 177"
 Cohesion: 1.0
-Nodes (1): Sla huidige config gesplitst op naar shared en local.
+Nodes (1): Cheap connection summary; never copy the full registry per tick.
 
 ### Community 178 - "Community 178"
 Cohesion: 1.0
-Nodes (1): Haal alle databases op als dictionary.
+Nodes (1): Cheap connection summary; never copy the full registry per tick.
 
 ### Community 179 - "Community 179"
 Cohesion: 1.0
-Nodes (1): Haal naam van default database op.
+Nodes (1): Sla huidige config gesplitst op naar shared en local.
 
 ### Community 180 - "Community 180"
 Cohesion: 1.0
-Nodes (1): Voeg nieuwe database toe.
+Nodes (1): Haal alle databases op als dictionary.
 
 ### Community 181 - "Community 181"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Haal naam van default database op.
 
 ### Community 182 - "Community 182"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Voeg nieuwe database toe.
 
 ### Community 183 - "Community 183"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Update database configuratie.
 
 ### Community 184 - "Community 184"
 Cohesion: 1.0
-Nodes (1): Map hex -> priority (int).
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 185 - "Community 185"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 186 - "Community 186"
 Cohesion: 1.0
@@ -1055,811 +1057,819 @@ Nodes (1): Map hex -> priority (int).
 
 ### Community 187 - "Community 187"
 Cohesion: 1.0
-Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
 
 ### Community 188 - "Community 188"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:
+Nodes (1): Map hex -> priority (int).
 
 ### Community 189 - "Community 189"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
 
 ### Community 190 - "Community 190"
 Cohesion: 1.0
-Nodes (1): Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:
 
 ### Community 191 - "Community 191"
 Cohesion: 1.0
-Nodes (1): Voeg of update prijs in de cache.
+Nodes (1): Haal singleton settings manager op.
 
 ### Community 192 - "Community 192"
 Cohesion: 1.0
-Nodes (1): Haal prijs op, of None.
+Nodes (1): Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.
 
 ### Community 193 - "Community 193"
 Cohesion: 1.0
-Nodes (1): Geeft dict (sym,cur)->prijs terug.
+Nodes (1): Voeg of update prijs in de cache.
 
 ### Community 194 - "Community 194"
 Cohesion: 1.0
-Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
+Nodes (1): Haal prijs op, of None.
 
 ### Community 195 - "Community 195"
 Cohesion: 1.0
-Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
+Nodes (1): Geeft dict (sym,cur)->prijs terug.
 
 ### Community 196 - "Community 196"
 Cohesion: 1.0
-Nodes (1): Sla huidige config gesplitst op naar shared en local.
+Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
 
 ### Community 197 - "Community 197"
 Cohesion: 1.0
-Nodes (1): Haal alle databases op als dictionary.
+Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
 
 ### Community 198 - "Community 198"
 Cohesion: 1.0
-Nodes (1): Haal naam van default database op.
+Nodes (1): Sla huidige config gesplitst op naar shared en local.
 
 ### Community 199 - "Community 199"
 Cohesion: 1.0
-Nodes (1): Voeg nieuwe database toe.
+Nodes (1): Haal alle databases op als dictionary.
 
 ### Community 200 - "Community 200"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Haal naam van default database op.
 
 ### Community 201 - "Community 201"
 Cohesion: 1.0
-Nodes (1): Stel database in als default.
+Nodes (1): Voeg nieuwe database toe.
 
 ### Community 202 - "Community 202"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Update database configuratie.
 
 ### Community 203 - "Community 203"
 Cohesion: 1.0
-Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
+Nodes (1): Stel database in als default.
 
 ### Community 204 - "Community 204"
 Cohesion: 1.0
-Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 205 - "Community 205"
 Cohesion: 1.0
-Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
+Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
 
 ### Community 206 - "Community 206"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
+Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
 
 ### Community 207 - "Community 207"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
 
 ### Community 208 - "Community 208"
 Cohesion: 1.0
-Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
 
 ### Community 209 - "Community 209"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
+Nodes (1): Haal singleton settings manager op.
 
 ### Community 210 - "Community 210"
 Cohesion: 1.0
-Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
+Nodes (1): Voer een update uit op één of twee records (binnen dezelfde transactie).     Al
 
 ### Community 211 - "Community 211"
 Cohesion: 1.0
-Nodes (1): Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty
+Nodes (1): Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.
 
 ### Community 212 - "Community 212"
 Cohesion: 1.0
-Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
+Nodes (1): Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.
 
 ### Community 213 - "Community 213"
 Cohesion: 1.0
-Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
+Nodes (1): Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty
 
 ### Community 214 - "Community 214"
 Cohesion: 1.0
-Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
+Nodes (1): Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re
 
 ### Community 215 - "Community 215"
 Cohesion: 1.0
-Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
+Nodes (1): Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D
 
 ### Community 216 - "Community 216"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
+Nodes (1): Werk alleen de kleur bij voor de laatste comment van een uniek_id.
 
 ### Community 217 - "Community 217"
 Cohesion: 1.0
-Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
+Nodes (1): Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort
 
 ### Community 218 - "Community 218"
 Cohesion: 1.0
-Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen me
+Nodes (1): Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.
 
 ### Community 219 - "Community 219"
 Cohesion: 1.0
-Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
+Nodes (1): Bepaalt het volgende order_id_number (volgnummer binnen een order_id).
 
 ### Community 220 - "Community 220"
 Cohesion: 1.0
-Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
+Nodes (1): Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen me
 
 ### Community 221 - "Community 221"
 Cohesion: 1.0
-Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time
+Nodes (1): bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa
 
 ### Community 222 - "Community 222"
 Cohesion: 1.0
-Nodes (1): Reset alle snapshots naar leeg.
+Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
 
 ### Community 223 - "Community 223"
 Cohesion: 1.0
-Nodes (1): Controleer of er al data is geladen.
+Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time
 
 ### Community 224 - "Community 224"
 Cohesion: 1.0
-Nodes (1): Korte tekstuele samenvatting voor debug/log.
+Nodes (1): Reset alle snapshots naar leeg.
 
 ### Community 225 - "Community 225"
 Cohesion: 1.0
-Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
+Nodes (1): Controleer of er al data is geladen.
 
 ### Community 226 - "Community 226"
 Cohesion: 1.0
-Nodes (1): Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.
+Nodes (1): Korte tekstuele samenvatting voor debug/log.
 
 ### Community 227 - "Community 227"
 Cohesion: 1.0
-Nodes (1): Voeg of update prijs in de cache.
+Nodes (1): Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta
 
 ### Community 228 - "Community 228"
 Cohesion: 1.0
-Nodes (1): Haal prijs op, of None.
+Nodes (1): Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.
 
 ### Community 229 - "Community 229"
 Cohesion: 1.0
-Nodes (1): Geeft dict (sym,cur)->prijs terug.
+Nodes (1): Voeg of update prijs in de cache.
 
 ### Community 230 - "Community 230"
 Cohesion: 1.0
-Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
+Nodes (1): Haal prijs op, of None.
 
 ### Community 231 - "Community 231"
 Cohesion: 1.0
-Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
+Nodes (1): Geeft dict (sym,cur)->prijs terug.
 
 ### Community 232 - "Community 232"
 Cohesion: 1.0
-Nodes (1): Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:
+Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
 
 ### Community 233 - "Community 233"
 Cohesion: 1.0
-Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
+Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
 
 ### Community 234 - "Community 234"
 Cohesion: 1.0
-Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
+Nodes (1): Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:
 
 ### Community 235 - "Community 235"
 Cohesion: 1.0
-Nodes (1): Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:
+Nodes (1): Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:
 
 ### Community 236 - "Community 236"
 Cohesion: 1.0
-Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
+Nodes (1): Start option market-data subscriptions.          rows format: (series_id, conid,
 
 ### Community 237 - "Community 237"
 Cohesion: 1.0
-Nodes (1): Sla huidige config gesplitst op naar shared en local.
+Nodes (1): Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:
 
 ### Community 238 - "Community 238"
 Cohesion: 1.0
-Nodes (1): Haal alle databases op als dictionary.
+Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
 
 ### Community 239 - "Community 239"
 Cohesion: 1.0
-Nodes (1): Haal naam van default database op.
+Nodes (1): Sla huidige config gesplitst op naar shared en local.
 
 ### Community 240 - "Community 240"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Haal alle databases op als dictionary.
 
 ### Community 241 - "Community 241"
 Cohesion: 1.0
-Nodes (1): Stel database in als default.
+Nodes (1): Haal naam van default database op.
 
 ### Community 242 - "Community 242"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Update database configuratie.
 
 ### Community 243 - "Community 243"
 Cohesion: 1.0
-Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
+Nodes (1): Stel database in als default.
 
 ### Community 244 - "Community 244"
 Cohesion: 1.0
-Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 245 - "Community 245"
 Cohesion: 1.0
-Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
+Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
 
 ### Community 246 - "Community 246"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
+Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
 
 ### Community 247 - "Community 247"
 Cohesion: 1.0
-Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
+Nodes (1): Map achtergrondkleur hex -> tekstkleur hex.
 
 ### Community 248 - "Community 248"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
 
 ### Community 249 - "Community 249"
 Cohesion: 1.0
-Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
+Nodes (1): Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -
 
 ### Community 250 - "Community 250"
 Cohesion: 1.0
-Nodes (1): Sla huidige config gesplitst op naar shared en local.
+Nodes (1): Haal singleton settings manager op.
 
 ### Community 251 - "Community 251"
 Cohesion: 1.0
-Nodes (1): Haal alle databases op als dictionary.
+Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
 
 ### Community 252 - "Community 252"
 Cohesion: 1.0
-Nodes (1): Haal naam van default database op.
+Nodes (1): Sla huidige config gesplitst op naar shared en local.
 
 ### Community 253 - "Community 253"
 Cohesion: 1.0
-Nodes (1): Voeg nieuwe database toe.
+Nodes (1): Haal alle databases op als dictionary.
 
 ### Community 254 - "Community 254"
 Cohesion: 1.0
-Nodes (1): Stel database in als default.
+Nodes (1): Haal naam van default database op.
 
 ### Community 255 - "Community 255"
 Cohesion: 1.0
-Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
+Nodes (1): Voeg nieuwe database toe.
 
 ### Community 256 - "Community 256"
 Cohesion: 1.0
-Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
+Nodes (1): Stel database in als default.
 
 ### Community 257 - "Community 257"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
 
 ### Community 258 - "Community 258"
 Cohesion: 1.0
-Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
+Nodes (1): Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.
 
 ### Community 259 - "Community 259"
 Cohesion: 1.0
-Nodes (1): Haal naam van default database op.
+Nodes (1): Haal singleton settings manager op.
 
 ### Community 260 - "Community 260"
 Cohesion: 1.0
-Nodes (1): Voeg nieuwe database toe.
+Nodes (1): Laad config uit settings_shared.ini en settings_local.ini.
 
 ### Community 261 - "Community 261"
 Cohesion: 1.0
-Nodes (1): Update database configuratie.
+Nodes (1): Haal naam van default database op.
 
 ### Community 262 - "Community 262"
 Cohesion: 1.0
-Nodes (1): Zet alle is_default flags naar false.
+Nodes (1): Voeg nieuwe database toe.
 
 ### Community 263 - "Community 263"
 Cohesion: 1.0
-Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
+Nodes (1): Update database configuratie.
 
 ### Community 264 - "Community 264"
 Cohesion: 1.0
-Nodes (1): Map hex -> priority (int).
+Nodes (1): Zet alle is_default flags naar false.
 
 ### Community 265 - "Community 265"
 Cohesion: 1.0
-Nodes (1): Haal singleton settings manager op.
+Nodes (1): Haal brokerlijst op uit settings.ini (comma-separated).
 
 ### Community 266 - "Community 266"
 Cohesion: 1.0
-Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
+Nodes (1): Map hex -> priority (int).
 
 ### Community 267 - "Community 267"
+Cohesion: 1.0
+Nodes (1): Haal singleton settings manager op.
+
+### Community 268 - "Community 268"
+Cohesion: 1.0
+Nodes (1): Schat delta op basis van moneyness.      - Ondersteunt option_type in variante
+
+### Community 269 - "Community 269"
 Cohesion: 1.0
 Nodes (1): Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time
 
 ## Knowledge Gaps
 - **491 isolated node(s):** `Standalone web report for asset indicator history changes.  Run:     python devt`, `Static call-site inventory; no imports of app modules and no database access.`, `Compare resource growth on a NEW synthetic Access DB, never a user database.  py`, `Standalone E2E helper to fetch executions from the last N days.     Returns a li`, `Isolate Qt/WebEngine/Access first-chance exceptions, without production data.  R` (+486 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 33`** (2 nodes): `Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant`, `ai_option_advisor.py`
+- **Thin community `Community 35`** (2 nodes): `Deprecated placeholder.  De OpenAI-adviesfunctie is verwijderd uit deze variant`, `ai_option_advisor.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 34`** (1 nodes): `optie_scanner.py`
+- **Thin community `Community 36`** (1 nodes): `optie_scanner.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 35`** (1 nodes): `option_workbench.py`
+- **Thin community `Community 37`** (1 nodes): `option_workbench.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 36`** (1 nodes): `test_functions_to_be_copied_to_other_files.py`
+- **Thin community `Community 38`** (1 nodes): `test_functions_to_be_copied_to_other_files.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 37`** (1 nodes): `__init__.py`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 38`** (1 nodes): `__init__.py`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 39`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
+- **Thin community `Community 39`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 40`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 41`** (1 nodes): `asset_source.py`
+- **Thin community `Community 41`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 42`** (1 nodes): `chain_retriever_window.py`
+- **Thin community `Community 42`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 43`** (1 nodes): `chain_run_repository.py`
+- **Thin community `Community 43`** (1 nodes): `asset_source.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 44`** (1 nodes): `chain_scanner.py`
+- **Thin community `Community 44`** (1 nodes): `chain_retriever_window.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 45`** (1 nodes): `chain_store.py`
+- **Thin community `Community 45`** (1 nodes): `chain_run_repository.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 46`** (1 nodes): `date_utils.py`
+- **Thin community `Community 46`** (1 nodes): `chain_scanner.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 47`** (1 nodes): `main.py`
+- **Thin community `Community 47`** (1 nodes): `chain_store.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 48`** (1 nodes): `models.py`
+- **Thin community `Community 48`** (1 nodes): `date_utils.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 49`** (1 nodes): `orchestrator.py`
+- **Thin community `Community 49`** (1 nodes): `main.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 50`** (1 nodes): `parquet_viewer.py`
+- **Thin community `Community 50`** (1 nodes): `models.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 51`** (1 nodes): `__init__.py`
+- **Thin community `Community 51`** (1 nodes): `orchestrator.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 52`** (1 nodes): `__init__.py`
+- **Thin community `Community 52`** (1 nodes): `parquet_viewer.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 53`** (1 nodes): `fetch_hv_iv_ibkr_single_stock.py`
+- **Thin community `Community 53`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 54`** (1 nodes): `iv_surface_app.py`
+- **Thin community `Community 54`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 55`** (1 nodes): `Build live option time-value snapshot from open options + option_series_master.`
+- **Thin community `Community 55`** (1 nodes): `fetch_hv_iv_ibkr_single_stock.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 56`** (1 nodes): `Merge nonmissing fields; changed facts and fetch checkpoint commit together.`
+- **Thin community `Community 56`** (1 nodes): `iv_surface_app.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 57`** (1 nodes): `Latest known schedule, retaining historical dates without presenting them as fut`
+- **Thin community `Community 57`** (1 nodes): `Build live option time-value snapshot from open options + option_series_master.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 58`** (1 nodes): `Laad database configuratie uit settings.ini.`
+- **Thin community `Community 58`** (1 nodes): `Merge nonmissing fields; changed facts and fetch checkpoint commit together.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 59`** (1 nodes): `Herlaad database configuratie na wijzigingen in settings.`
+- **Thin community `Community 59`** (1 nodes): `Latest known schedule, retaining historical dates without presenting them as fut`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 60`** (1 nodes): `Schakel naar een andere database.`
+- **Thin community `Community 60`** (1 nodes): `Laad database configuratie uit settings.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 61`** (1 nodes): `Laadt de asset_rollup_data-tabel uit de database.`
+- **Thin community `Community 61`** (1 nodes): `Herlaad database configuratie na wijzigingen in settings.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 62`** (1 nodes): `Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.`
+- **Thin community `Community 62`** (1 nodes): `Schakel naar een andere database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 63`** (1 nodes): `Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.`
+- **Thin community `Community 63`** (1 nodes): `Laadt de asset_rollup_data-tabel uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 64`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
+- **Thin community `Community 64`** (1 nodes): `Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 65`** (1 nodes): `Laadt de optie referentie tabel uit de stock database.`
+- **Thin community `Community 65`** (1 nodes): `Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 66`** (1 nodes): `Laadt de dividend tabel  uit de database.`
+- **Thin community `Community 66`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 67`** (1 nodes): `Laadt alle transacties uit de database.`
+- **Thin community `Community 67`** (1 nodes): `Laadt de optie referentie tabel uit de stock database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 68`** (1 nodes): `Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM`
+- **Thin community `Community 68`** (1 nodes): `Laadt de dividend tabel  uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 69`** (1 nodes): `Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro`
+- **Thin community `Community 69`** (1 nodes): `Laadt alle transacties uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 70`** (1 nodes): `Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse`
+- **Thin community `Community 70`** (1 nodes): `Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 71`** (1 nodes): `Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR`
+- **Thin community `Community 71`** (1 nodes): `Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 72`** (1 nodes): `Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.`
+- **Thin community `Community 72`** (1 nodes): `Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 73`** (1 nodes): `Voeg 1..n transacties atomisch in en geef de committed rows terug.`
+- **Thin community `Community 73`** (1 nodes): `Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 74`** (1 nodes): `Nieuwe transactie invoegen en Id teruggeven.`
+- **Thin community `Community 74`** (1 nodes): `Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 75`** (1 nodes): `Verwijder alle transacties met een specifieke order_id.     Retourneert het aan`
+- **Thin community `Community 75`** (1 nodes): `Voeg 1..n transacties atomisch in en geef de committed rows terug.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 76`** (1 nodes): `Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder`
+- **Thin community `Community 76`** (1 nodes): `Nieuwe transactie invoegen en Id teruggeven.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 77`** (1 nodes): `Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte`
+- **Thin community `Community 77`** (1 nodes): `Verwijder alle transacties met een specifieke order_id.     Retourneert het aan`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 78`** (1 nodes): `Shared broker source for Orders and Cash Management.`
+- **Thin community `Community 78`** (1 nodes): `Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 79`** (1 nodes): `Haal lijsten voor comboboxen op.`
+- **Thin community `Community 79`** (1 nodes): `Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 80`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
+- **Thin community `Community 80`** (1 nodes): `Shared broker source for Orders and Cash Management.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 81`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
+- **Thin community `Community 81`** (1 nodes): `Haal lijsten voor comboboxen op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 82`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
+- **Thin community `Community 82`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 83`** (1 nodes): `Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty`
+- **Thin community `Community 83`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 84`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
+- **Thin community `Community 84`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 85`** (1 nodes): `Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna`
+- **Thin community `Community 85`** (1 nodes): `Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 86`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
+- **Thin community `Community 86`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 87`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
+- **Thin community `Community 87`** (1 nodes): `Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 88`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
+- **Thin community `Community 88`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 89`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
+- **Thin community `Community 89`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 90`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
+- **Thin community `Community 90`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 91`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m`
+- **Thin community `Community 91`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 92`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
+- **Thin community `Community 92`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 93`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
+- **Thin community `Community 93`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 94`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti`
+- **Thin community `Community 94`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 95`** (1 nodes): `Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebruikt`
+- **Thin community `Community 95`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 96`** (1 nodes): `All catalog records, including unheld/INCL_EXCL=0 records and missing mappings.`
+- **Thin community `Community 96`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 97`** (1 nodes): `Merge nonmissing fields; changed facts and fetch checkpoint commit together.`
+- **Thin community `Community 97`** (1 nodes): `Centrale coordinator voor asset_last_prices.      De Access tabel wordt gebruikt`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 98`** (1 nodes): `Latest known schedule, retaining historical dates without presenting them as fut`
+- **Thin community `Community 98`** (1 nodes): `All catalog records, including unheld/INCL_EXCL=0 records and missing mappings.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 99`** (1 nodes): `Reset alle snapshots naar leeg.`
+- **Thin community `Community 99`** (1 nodes): `Merge nonmissing fields; changed facts and fetch checkpoint commit together.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 100`** (1 nodes): `Controleer of er al data is geladen.`
+- **Thin community `Community 100`** (1 nodes): `Latest known schedule, retaining historical dates without presenting them as fut`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 101`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
+- **Thin community `Community 101`** (1 nodes): `Reset alle snapshots naar leeg.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 102`** (1 nodes): `Capture on the GUI thread, where mutable scenario/cache writers run.`
+- **Thin community `Community 102`** (1 nodes): `Controleer of er al data is geladen.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 103`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
+- **Thin community `Community 103`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 104`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
+- **Thin community `Community 104`** (1 nodes): `Capture on the GUI thread, where mutable scenario/cache writers run.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 105`** (1 nodes): `Enabled for the current measurement phase; PV_UI_DIAGNOSTICS=0 opts out.`
+- **Thin community `Community 105`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 106`** (1 nodes): `First event sets the deadline; following events cannot postpone it.`
+- **Thin community `Community 106`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 107`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
+- **Thin community `Community 107`** (1 nodes): `Enabled for the current measurement phase; PV_UI_DIAGNOSTICS=0 opts out.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 108`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
+- **Thin community `Community 108`** (1 nodes): `First event sets the deadline; following events cannot postpone it.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 109`** (1 nodes): `First event sets the deadline; following events cannot postpone it.`
+- **Thin community `Community 109`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 110`** (1 nodes): `Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback.`
+- **Thin community `Community 110`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 111`** (1 nodes): `historical close is split-adjusted in many feeds. For state valuation against ra`
+- **Thin community `Community 111`** (1 nodes): `First event sets the deadline; following events cannot postpone it.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 112`** (1 nodes): `Houdt de actuele datasets in geheugen.     Wordt gevuld door repository-functies`
+- **Thin community `Community 112`** (1 nodes): `Open de expliciet opgegeven STOCKDATA-database; geen user-db fallback.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 113`** (1 nodes): `Reset alle snapshots naar leeg.`
+- **Thin community `Community 113`** (1 nodes): `historical close is split-adjusted in many feeds. For state valuation against ra`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 114`** (1 nodes): `Controleer of er al data is geladen.`
+- **Thin community `Community 114`** (1 nodes): `Houdt de actuele datasets in geheugen.     Wordt gevuld door repository-functies`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 115`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
+- **Thin community `Community 115`** (1 nodes): `Reset alle snapshots naar leeg.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 116`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
+- **Thin community `Community 116`** (1 nodes): `Controleer of er al data is geladen.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 117`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
+- **Thin community `Community 117`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 118`** (1 nodes): `Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>`
+- **Thin community `Community 118`** (1 nodes): `Stage repository loads in a worker without exposing partial snapshots.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 119`** (1 nodes): `Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>`
+- **Thin community `Community 119`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 120`** (1 nodes): `Reset alle snapshots naar leeg.`
+- **Thin community `Community 120`** (1 nodes): `Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 121`** (1 nodes): `Controleer of er al data is geladen.`
+- **Thin community `Community 121`** (1 nodes): `Bouwt een NULL-veilige verschil-expressie voor Access/ODBC:       (main.col <>`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 122`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
+- **Thin community `Community 122`** (1 nodes): `Reset alle snapshots naar leeg.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 123`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
+- **Thin community `Community 123`** (1 nodes): `Controleer of er al data is geladen.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 124`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
+- **Thin community `Community 124`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 125`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
+- **Thin community `Community 125`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 126`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
+- **Thin community `Community 126`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 127`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 127`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 128`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 128`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 129`** (1 nodes): `Stel database in als default.`
+- **Thin community `Community 129`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 130`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 130`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 131`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
+- **Thin community `Community 131`** (1 nodes): `Stel database in als default.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 132`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
+- **Thin community `Community 132`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 133`** (1 nodes): `Map hex -> priority (int).`
+- **Thin community `Community 133`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 134`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
+- **Thin community `Community 134`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 135`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:`
+- **Thin community `Community 135`** (1 nodes): `Map hex -> priority (int).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 136`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 136`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 137`** (1 nodes): `Laadt de asset_rollup_data-tabel uit de database.`
+- **Thin community `Community 137`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 138`** (1 nodes): `Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.`
+- **Thin community `Community 138`** (1 nodes): `Haal singleton settings manager op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 139`** (1 nodes): `Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.`
+- **Thin community `Community 139`** (1 nodes): `Laadt de asset_rollup_data-tabel uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 140`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
+- **Thin community `Community 140`** (1 nodes): `Laad historical OHLCV-data in memory en publiceer de latest-close afleiding.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 141`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
+- **Thin community `Community 141`** (1 nodes): `Laad minimale v2 dagresultaten in memory voor snelle chart-opbouw.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 142`** (1 nodes): `Laadt de dividend tabel  uit de database.`
+- **Thin community `Community 142`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 143`** (1 nodes): `Laadt alle transacties uit de database.`
+- **Thin community `Community 143`** (1 nodes): `Laadt de sprinter referentie tabel  uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 144`** (1 nodes): `Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM`
+- **Thin community `Community 144`** (1 nodes): `Laadt de dividend tabel  uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 145`** (1 nodes): `Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro`
+- **Thin community `Community 145`** (1 nodes): `Laadt alle transacties uit de database.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 146`** (1 nodes): `Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse`
+- **Thin community `Community 146`** (1 nodes): `Bouwt de dataset 'open opties' na volgens de Access-query:     SELECT ... FROM`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 147`** (1 nodes): `Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR`
+- **Thin community `Community 147`** (1 nodes): `Bouwt de dataset 'gesloten opties' na volgens de Access-querylogica:     1. Gro`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 148`** (1 nodes): `Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.`
+- **Thin community `Community 148`** (1 nodes): `Voer een verdere aggregatie uit op snapshot_gesloten_opties, gegroepeerd op asse`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 149`** (1 nodes): `Voeg 1..n transacties atomisch in en geef de committed rows terug.`
+- **Thin community `Community 149`** (1 nodes): `Bouwt de dataset 'open sprinters' na volgens de Access-query:     SELECT ... FR`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 150`** (1 nodes): `Nieuwe transactie invoegen en Id teruggeven.`
+- **Thin community `Community 150`** (1 nodes): `Bouwt de dataset 'gesloten sprinters' na volgens de Access-querylogica:     1.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 151`** (1 nodes): `Verwijder alle transacties met een specifieke order_id.     Retourneert het aan`
+- **Thin community `Community 151`** (1 nodes): `Voeg 1..n transacties atomisch in en geef de committed rows terug.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 152`** (1 nodes): `Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder`
+- **Thin community `Community 152`** (1 nodes): `Nieuwe transactie invoegen en Id teruggeven.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 153`** (1 nodes): `Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte`
+- **Thin community `Community 153`** (1 nodes): `Verwijder alle transacties met een specifieke order_id.     Retourneert het aan`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 154`** (1 nodes): `Haal lijsten voor comboboxen op.`
+- **Thin community `Community 154`** (1 nodes): `Verwijder transacties met specifieke Id's.     Retourneert het aantal verwijder`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 155`** (1 nodes): `Haal lijsten voor comboboxen op.`
+- **Thin community `Community 155`** (1 nodes): `Haal unieke waarden voor één kolom op.     - base_filters: andere actieve filte`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 156`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
+- **Thin community `Community 156`** (1 nodes): `Haal lijsten voor comboboxen op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 157`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
+- **Thin community `Community 157`** (1 nodes): `Haal lijsten voor comboboxen op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 158`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
+- **Thin community `Community 158`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 159`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
+- **Thin community `Community 159`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 160`** (1 nodes): `Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna`
+- **Thin community `Community 160`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 161`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
+- **Thin community `Community 161`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 162`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
+- **Thin community `Community 162`** (1 nodes): `Laad volledige open_optie_comments tabel in cache (SNAPSHOT_STORE.repository_sna`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 163`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
+- **Thin community `Community 163`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 164`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
+- **Thin community `Community 164`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 165`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
+- **Thin community `Community 165`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 166`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m`
+- **Thin community `Community 166`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 167`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
+- **Thin community `Community 167`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 168`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
+- **Thin community `Community 168`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen m`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 169`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti`
+- **Thin community `Community 169`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 170`** (1 nodes): `historical close is split-adjusted in many feeds. For state valuation against ra`
+- **Thin community `Community 170`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 171`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
+- **Thin community `Community 171`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_ti`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 172`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
+- **Thin community `Community 172`** (1 nodes): `historical close is split-adjusted in many feeds. For state valuation against ra`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 173`** (1 nodes): `Build live option time-value snapshot from open options + option_series_master.`
+- **Thin community `Community 173`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 174`** (1 nodes): `Use the app's asset/date/strike/direction fields, not an IB symbol.`
+- **Thin community `Community 174`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 175`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
+- **Thin community `Community 175`** (1 nodes): `Build live option time-value snapshot from open options + option_series_master.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 176`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
+- **Thin community `Community 176`** (1 nodes): `Use the app's asset/date/strike/direction fields, not an IB symbol.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 177`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
+- **Thin community `Community 177`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 178`** (1 nodes): `Haal alle databases op als dictionary.`
+- **Thin community `Community 178`** (1 nodes): `Cheap connection summary; never copy the full registry per tick.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 179`** (1 nodes): `Haal naam van default database op.`
+- **Thin community `Community 179`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 180`** (1 nodes): `Voeg nieuwe database toe.`
+- **Thin community `Community 180`** (1 nodes): `Haal alle databases op als dictionary.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 181`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 181`** (1 nodes): `Haal naam van default database op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 182`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 182`** (1 nodes): `Voeg nieuwe database toe.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 183`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 183`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 184`** (1 nodes): `Map hex -> priority (int).`
+- **Thin community `Community 184`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 185`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
+- **Thin community `Community 185`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 186`** (1 nodes): `Map hex -> priority (int).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 187`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
+- **Thin community `Community 187`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 188`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:`
+- **Thin community `Community 188`** (1 nodes): `Map hex -> priority (int).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 189`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 189`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 190`** (1 nodes): `Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.`
+- **Thin community `Community 190`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 191`** (1 nodes): `Voeg of update prijs in de cache.`
+- **Thin community `Community 191`** (1 nodes): `Haal singleton settings manager op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 192`** (1 nodes): `Haal prijs op, of None.`
+- **Thin community `Community 192`** (1 nodes): `Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 193`** (1 nodes): `Geeft dict (sym,cur)->prijs terug.`
+- **Thin community `Community 193`** (1 nodes): `Voeg of update prijs in de cache.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 194`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
+- **Thin community `Community 194`** (1 nodes): `Haal prijs op, of None.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 195`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
+- **Thin community `Community 195`** (1 nodes): `Geeft dict (sym,cur)->prijs terug.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 196`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
+- **Thin community `Community 196`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 197`** (1 nodes): `Haal alle databases op als dictionary.`
+- **Thin community `Community 197`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 198`** (1 nodes): `Haal naam van default database op.`
+- **Thin community `Community 198`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 199`** (1 nodes): `Voeg nieuwe database toe.`
+- **Thin community `Community 199`** (1 nodes): `Haal alle databases op als dictionary.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 200`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 200`** (1 nodes): `Haal naam van default database op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 201`** (1 nodes): `Stel database in als default.`
+- **Thin community `Community 201`** (1 nodes): `Voeg nieuwe database toe.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 202`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 202`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 203`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
+- **Thin community `Community 203`** (1 nodes): `Stel database in als default.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 204`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
+- **Thin community `Community 204`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 205`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
+- **Thin community `Community 205`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 206`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
+- **Thin community `Community 206`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 207`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 207`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 208`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
+- **Thin community `Community 208`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 209`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
+- **Thin community `Community 209`** (1 nodes): `Haal singleton settings manager op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 210`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
+- **Thin community `Community 210`** (1 nodes): `Voer een update uit op één of twee records (binnen dezelfde transactie).     Al`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 211`** (1 nodes): `Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty`
+- **Thin community `Community 211`** (1 nodes): `Parseer een UI-veld naar int of None. Accepteert '10', '10.0', '10,0'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 212`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
+- **Thin community `Community 212`** (1 nodes): `Parseer een UI-veld naar float of None. Accepteert '0.1', '0,1'.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 213`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
+- **Thin community `Community 213`** (1 nodes): `Genereer uniek_id string op basis van transactievelden (zoals broker, rollup, ty`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 214`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
+- **Thin community `Community 214`** (1 nodes): `Haal commentaar per uniek_id uit cache; laadt cache uit DB indien nodig.     Re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 215`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
+- **Thin community `Community 215`** (1 nodes): `Voeg een comment toe (append) voor een uniek_id in cache en markeer dirty voor D`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 216`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
+- **Thin community `Community 216`** (1 nodes): `Werk alleen de kleur bij voor de laatste comment van een uniek_id.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 217`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
+- **Thin community `Community 217`** (1 nodes): `Bepaal of een order koppelbaar is (d.w.z. dat er een tweede transactie bij hoort`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 218`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen me`
+- **Thin community `Community 218`** (1 nodes): `Bepaalt het volgende beschikbare order_id in transacties_bron_data_org.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 219`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
+- **Thin community `Community 219`** (1 nodes): `Bepaalt het volgende order_id_number (volgnummer binnen een order_id).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 220`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
+- **Thin community `Community 220`** (1 nodes): `Laad de initiële live prijzen in SNAPSHOT_STORE.live_prices.     Eerst vullen me`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 221`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time`
+- **Thin community `Community 221`** (1 nodes): `bouwt de tabel op, die aangeeft of een asset actief is / niet actief is      wa`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 222`** (1 nodes): `Reset alle snapshots naar leeg.`
+- **Thin community `Community 222`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 223`** (1 nodes): `Controleer of er al data is geladen.`
+- **Thin community `Community 223`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 224`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
+- **Thin community `Community 224`** (1 nodes): `Reset alle snapshots naar leeg.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 225`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
+- **Thin community `Community 225`** (1 nodes): `Controleer of er al data is geladen.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 226`** (1 nodes): `Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.`
+- **Thin community `Community 226`** (1 nodes): `Korte tekstuele samenvatting voor debug/log.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 227`** (1 nodes): `Voeg of update prijs in de cache.`
+- **Thin community `Community 227`** (1 nodes): `Schrijf een snapshot-attribuut op een veilige manier.          - Voert de seta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 228`** (1 nodes): `Haal prijs op, of None.`
+- **Thin community `Community 228`** (1 nodes): `Houdt actuele koersen per (ib_symbol, currency) bij in een dict/DF-cache.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 229`** (1 nodes): `Geeft dict (sym,cur)->prijs terug.`
+- **Thin community `Community 229`** (1 nodes): `Voeg of update prijs in de cache.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 230`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
+- **Thin community `Community 230`** (1 nodes): `Haal prijs op, of None.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 231`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
+- **Thin community `Community 231`** (1 nodes): `Geeft dict (sym,cur)->prijs terug.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 232`** (1 nodes): `Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:`
+- **Thin community `Community 232`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 233`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
+- **Thin community `Community 233`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 234`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
+- **Thin community `Community 234`** (1 nodes): `Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 235`** (1 nodes): `Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:`
+- **Thin community `Community 235`** (1 nodes): `Vraag marktdata aan voor subscriptions.          Ondersteunt:         - legacy:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 236`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
+- **Thin community `Community 236`** (1 nodes): `Start option market-data subscriptions.          rows format: (series_id, conid,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 237`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
+- **Thin community `Community 237`** (1 nodes): `Geeft alle actuele prijzen terug als dict met tuple key.         Voor aandelen:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 238`** (1 nodes): `Haal alle databases op als dictionary.`
+- **Thin community `Community 238`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 239`** (1 nodes): `Haal naam van default database op.`
+- **Thin community `Community 239`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 240`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 240`** (1 nodes): `Haal alle databases op als dictionary.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 241`** (1 nodes): `Stel database in als default.`
+- **Thin community `Community 241`** (1 nodes): `Haal naam van default database op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 242`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 242`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 243`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
+- **Thin community `Community 243`** (1 nodes): `Stel database in als default.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 244`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
+- **Thin community `Community 244`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 245`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
+- **Thin community `Community 245`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 246`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
+- **Thin community `Community 246`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 247`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
+- **Thin community `Community 247`** (1 nodes): `Map achtergrondkleur hex -> tekstkleur hex.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 248`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 248`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 249`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
+- **Thin community `Community 249`** (1 nodes): `Sla comment-kleuren op naar user settings.          `colors` mag zijn:         -`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 250`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
+- **Thin community `Community 250`** (1 nodes): `Haal singleton settings manager op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 251`** (1 nodes): `Haal alle databases op als dictionary.`
+- **Thin community `Community 251`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 252`** (1 nodes): `Haal naam van default database op.`
+- **Thin community `Community 252`** (1 nodes): `Sla huidige config gesplitst op naar shared en local.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 253`** (1 nodes): `Voeg nieuwe database toe.`
+- **Thin community `Community 253`** (1 nodes): `Haal alle databases op als dictionary.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 254`** (1 nodes): `Stel database in als default.`
+- **Thin community `Community 254`** (1 nodes): `Haal naam van default database op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 255`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
+- **Thin community `Community 255`** (1 nodes): `Voeg nieuwe database toe.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 256`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
+- **Thin community `Community 256`** (1 nodes): `Stel database in als default.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 257`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 257`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 258`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
+- **Thin community `Community 258`** (1 nodes): `Retourneer lijst van (priority, label, bg_hex, fg_hex) voor comment-kleuren.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 259`** (1 nodes): `Haal naam van default database op.`
+- **Thin community `Community 259`** (1 nodes): `Haal singleton settings manager op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 260`** (1 nodes): `Voeg nieuwe database toe.`
+- **Thin community `Community 260`** (1 nodes): `Laad config uit settings_shared.ini en settings_local.ini.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 261`** (1 nodes): `Update database configuratie.`
+- **Thin community `Community 261`** (1 nodes): `Haal naam van default database op.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 262`** (1 nodes): `Zet alle is_default flags naar false.`
+- **Thin community `Community 262`** (1 nodes): `Voeg nieuwe database toe.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 263`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
+- **Thin community `Community 263`** (1 nodes): `Update database configuratie.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 264`** (1 nodes): `Map hex -> priority (int).`
+- **Thin community `Community 264`** (1 nodes): `Zet alle is_default flags naar false.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 265`** (1 nodes): `Haal singleton settings manager op.`
+- **Thin community `Community 265`** (1 nodes): `Haal brokerlijst op uit settings.ini (comma-separated).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 266`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
+- **Thin community `Community 266`** (1 nodes): `Map hex -> priority (int).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 267`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time`
+- **Thin community `Community 267`** (1 nodes): `Haal singleton settings manager op.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 268`** (1 nodes): `Schat delta op basis van moneyness.      - Ondersteunt option_type in variante`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 269`** (1 nodes): `Brokerloze delta-map uit snapshot_optie_timevalue_live.      snapshot_optie_time`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `emit()` connect `Community 12` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 13`, `Community 14`, `Community 15`, `Community 20`, `Community 21`?**
-  _High betweenness centrality (0.037) - this node is a cross-community bridge._
-- **Why does `start()` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 8`, `Community 9`, `Community 10`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 16`, `Community 17`, `Community 21`?**
-  _High betweenness centrality (0.023) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Community 2` to `Community 0`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 9`, `Community 10`, `Community 11`, `Community 13`, `Community 16`, `Community 18`, `Community 19`?**
-  _High betweenness centrality (0.019) - this node is a cross-community bridge._
+- **Why does `emit()` connect `Community 12` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 13`, `Community 14`, `Community 15`, `Community 17`, `Community 19`, `Community 20`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `get_settings()` connect `Community 0` to `Community 1`, `Community 3`, `Community 4`, `Community 5`, `Community 6`, `Community 7`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 14`, `Community 15`, `Community 17`, `Community 21`?**
+  _High betweenness centrality (0.025) - this node is a cross-community bridge._
+- **Why does `SingleAssetAnalyseTab` connect `Community 1` to `Community 0`, `Community 3`, `Community 6`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 12`, `Community 17`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `SingleAssetAnalyseTab` (e.g. with `ControlsTests` and `MainWindow`) actually correct?**
   _`SingleAssetAnalyseTab` has 8 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 145 inferred relationships involving `emit()` (e.g. with `.check_busy_rejection_and_retry()` and `.tick()`) actually correct?**

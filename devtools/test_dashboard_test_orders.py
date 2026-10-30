@@ -87,3 +87,53 @@ class EditorTests(unittest.TestCase):
         with self.assertRaises(ValueError):service.action('scenario',999)
 
 if __name__=='__main__':unittest.main()
+
+
+class InlineEditTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
+
+    def test_native_delegates_include_and_delete(self):
+        from PySide6.QtCore import Qt
+        from portefeuille_viewer.ui_logica.single_asset_analyse_tab_logica import NumberDelegate, ComboDelegate
+        fields=['scenario_order_uid','transactie_prijs','include','broker']
+        table=QTableWidget(1,len(fields))
+        for col,value in enumerate(['uid','1,00','','lynx']):table.setItem(0,col,QTableWidgetItem(value))
+        table.setItemDelegateForColumn(1,NumberDelegate(table));table.setItemDelegateForColumn(3,ComboDelegate(['lynx','degiro'],table))
+        table.item(0,2).setFlags(Qt.ItemIsEnabled|Qt.ItemIsUserCheckable)
+        target=SimpleNamespace(testOrdersTable=table,test_order_columns=fields,test_order_columns_db=fields,
+            row_to_dict_db=lambda row:{'scenario_order_uid':table.item(row,0).text()},
+            checkBoxEnableTestOrders=QCheckBox(),checkBoxAssetOrdersOnly=QCheckBox(),comboboxScenarioSelector=QComboBox(),
+            _handle_delete_test_order_clicked=Mock())
+        service=DashboardTestOrders(target,SimpleNamespace(_timer=SimpleNamespace(isActive=lambda:False,start=Mock())))
+        changed=Mock();table.cellChanged.connect(changed)
+        self.assertEqual(service.edit('uid','transactie_prijs','2.345')['value'],'2,35')
+        self.assertTrue(service.edit('uid','include',True)['value'])
+        self.assertEqual(service.edit('uid','broker','degiro')['value'],'degiro')
+        self.assertGreaterEqual(changed.call_count,3)
+        with self.assertRaises(ValueError):service.edit('uid','transactie_prijs','abc')
+        with self.assertRaises(ValueError):service.edit('uid','scenario_order_uid','other')
+        service.action('sort',{'field':'broker','descending':True})
+        self.assertEqual(table.horizontalHeader().sortIndicatorSection(),3)
+        service.action('delete','uid');target._handle_delete_test_order_clicked.assert_called_once()
+        table.deleteLater()
+
+
+class FilterRefreshTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
+
+    def test_filter_refreshes_once_without_native_toggle_side_effects(self):
+        checkbox=QCheckBox();native=Mock();checkbox.toggled.connect(native)
+        refresh=Mock()
+        target=SimpleNamespace(testOrdersTable=QTableWidget(),checkBoxEnableTestOrders=QCheckBox(),
+            checkBoxAssetOrdersOnly=checkbox,comboboxScenarioSelector=QComboBox(),
+            _refresh_test_orders_view_for_active_asset=refresh)
+        service=DashboardTestOrders(target,SimpleNamespace(_timer=SimpleNamespace(isActive=lambda:False,start=Mock())))
+        service.asset='AAPL'
+        for value in (True,False):
+            service.action('asset_only',value)
+            self.assertEqual(target.show_all_test_orders,not value)
+            self.assertEqual(checkbox.isChecked(),value)
+        self.assertEqual(refresh.call_count,2)
+        native.assert_not_called()

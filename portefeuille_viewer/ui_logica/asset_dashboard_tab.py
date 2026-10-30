@@ -136,6 +136,19 @@ class DashboardBridge(QObject):
             return str(exc)
 
     @Slot(str, result=str)
+    def editTestOrder(self, raw):
+        try:
+            request=json.loads(raw)
+            if request.get('asset')!=self.tab.selected_asset or self.tab._test_orders is None:
+                raise ValueError('De geselecteerde asset is gewijzigd')
+            result=self.tab._test_orders.edit(request['key'],request['field'],request.get('value'))
+            self.tab._publish(force=True)
+            return json.dumps(dict(error='',**result))
+        except Exception as exc:
+            log.warning('Testorder kon niet worden bewaard: %s',exc)
+            return json.dumps(dict(error=str(exc)))
+
+    @Slot(str, result=str)
     def testOrderAction(self, raw):
         try:
             request = json.loads(raw)
@@ -143,9 +156,9 @@ class DashboardBridge(QObject):
                 raise ValueError('De geselecteerde asset is gewijzigd')
             if self.tab._test_orders is None:
                 raise ValueError('Testorders zijn niet aangesloten')
-            self.tab._test_orders.action(request['action'], request.get('value'))
+            result=self.tab._test_orders.action(request['action'], request.get('value'))
             self.tab._publish(force=True)
-            return ''
+            return '' if result is None else json.dumps(dict(key=result))
         except Exception as exc:
             log.exception('Dashboard testorderactie mislukt')
             return str(exc)

@@ -1141,23 +1141,33 @@ class SingleAssetAnalyseTab(QWidget, Ui_SingleAssetAnalyseTab, HeaderFilterMenuM
             return
 
         if hasattr(self, "buttonRunStateEngineNow"):
-            try:
-                base = (self.buttonRunStateEngineNow.text() or "").strip()
-                if base:
-                    self._state_engine_button_base_text = base
-            except Exception:
-                pass
+            # The label may already contain a counter from the Orders mirror.
+            # Never promote rendered button text to the fixed base label.
             self.buttonRunStateEngineNow.clicked.connect(self._on_run_state_engine_now_clicked)
         if hasattr(self, "checkBoxAutoStateEngineOrders"):
             self.checkBoxAutoStateEngineOrders.setChecked(runner.is_auto_order_rebuild_enabled())
             self.checkBoxAutoStateEngineOrders.toggled.connect(runner.set_auto_order_rebuild)
         self._state_engine_controls_bound = True
+        self._refresh_state_engine_controls()
+
+    def add_state_engine_button(self, button):
+        """Expose the same manual action in another tab, without another runner."""
+        buttons = getattr(self, "_additional_state_engine_buttons", [])
+        if button in buttons:
+            return
+        buttons.append(button)
+        self._additional_state_engine_buttons = buttons
+        button.clicked.connect(self._on_run_state_engine_now_clicked)
+        self._refresh_state_engine_controls()
 
     def _refresh_state_engine_controls(self):
         runner = self._state_engine_runner or getattr(SNAPSHOT_STORE, "state_engine_runner", None)
         if runner is None:
             return
         summary = runner.get_pending_order_rebuild_summary()
+        for button in getattr(self, "_additional_state_engine_buttons", []):
+            button.setEnabled(True)
+            button.setText(f"{self._state_engine_button_base_text} ({summary['pending_assets']})")
         if hasattr(self, "buttonRunStateEngineNow"):
             self.buttonRunStateEngineNow.setText(
                 f"{self._state_engine_button_base_text} ({summary['pending_assets']})"

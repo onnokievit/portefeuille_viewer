@@ -6,7 +6,7 @@ import polars as pl
 import traceback
 from datetime import datetime
 
-from PySide6.QtWidgets import QWidget, QMessageBox, QAbstractItemView, QLineEdit, QHeaderView
+from PySide6.QtWidgets import QWidget, QMessageBox, QAbstractItemView, QLineEdit, QHeaderView, QPushButton
 from PySide6.QtCore import Qt, Signal, QDate, QTimer
 from PySide6.QtGui import QColor
 
@@ -216,6 +216,14 @@ class OrdersTabWidget(QWidget, Ui_OrdersTabUI, HeaderFilterMenuMixin):
         self.buttonReset.clicked.connect(self.on_reset_clicked)
         self.buttonDelete.clicked.connect(self.on_delete_clicked)
         self.buttonLaatsteTransacties.clicked.connect(self._on_laatste_transacties_clicked)
+        # Keep runtime additions outside the generated Qt Designer file.
+        self.buttonRunStateEngineNow = QPushButton("Run State Engine", self)
+        self.buttonRunStateEngineNow.setObjectName("buttonRunStateEngineNow")
+        self.buttonRunStateEngineNow.setEnabled(False)
+        self.horizontalLayoutButtons.insertWidget(
+            self.horizontalLayoutButtons.indexOf(self.buttonLaatsteTransacties) + 1,
+            self.buttonRunStateEngineNow,
+        )
         self.comboAssetType1.currentTextChanged.connect(self.on_asset_type1_changed)
         self.comboAssetType2.currentTextChanged.connect(self.on_asset_type2_changed)
         self.comboOorsprong1.currentTextChanged.connect(self.on_oorsprong1_changed)

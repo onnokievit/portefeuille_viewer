@@ -127,12 +127,18 @@ async function flushDashboardDrafts(){
   const layoutResult=window.flushDashboardLayout?await window.flushDashboardLayout():{};
   const columnResult=window.flushDashboardColumns?await window.flushDashboardColumns():{};
   const settingsResult=await submitDashboardControls();
-  const results=[layoutResult,columnResult,settingsResult,...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
+  const results=[layoutResult,columnResult,settingsResult,...await flushTestOrderEdits(),...await Promise.all([...document.querySelectorAll('[data-comment-id]')].map(saveCommentCell))];
   return results.map(result=>result.error).filter(Boolean).join('\n');
 }
 async function flushDashboardComments(){
   try{bridge.commentsFlushed(await flushDashboardDrafts());}
   catch(error){bridge.commentsFlushed(String(error));}
+}
+function compareDashboardValues(a,b,kind){
+  if(a==null||a==='')return b==null||b===''?0:1;
+  if(b==null||b==='')return -1;
+  if(kind==='number'||kind==='percent')return Number(a)-Number(b);
+  return String(a).localeCompare(String(b),'nl',{numeric:true,sensitivity:'base'});
 }
 function updateTable(id,rows,columns,kind){
   let state=tableStates.get(id);
@@ -150,7 +156,13 @@ function updateTable(id,rows,columns,kind){
     state={head,body,rows:new Map()};tableStates.set(id,state);
   }
   while(state.head.children.length<columns.length)state.head.append(node('th'));
-  columns.forEach(([label],i)=>text(state.head.children[i],label));
+  columns.forEach(([label,field,valueKind],i)=>{
+    const th=state.head.children[i];text(th,label+(state.sort?.field===field?(state.sort.descending?' \u25bc':' \u25b2'):''));
+    th.style.cursor='pointer';th.title='Klik om oplopend of aflopend te sorteren';
+    th.onclick=()=>{state.sort={field,kind:valueKind,descending:state.sort?.field===field?!state.sort.descending:false};updateTable(id,state.source,columns,kind);};
+  });
+  state.source=rows;
+  if(state.sort){const {field,kind:valueKind,descending}=state.sort;rows=[...rows].sort((a,b)=>(descending?-1:1)*compareDashboardValues(a[field],b[field],valueKind));}
   const retained=new Set(),duplicates=new Map();
   rows.forEach((row,index)=>{
     const base=JSON.stringify([row.broker,row.asset_rollup,row.asset_detail,row.optie_call_put,row.optie_exp_date,row.optie_strike]);
@@ -309,17 +321,34 @@ for(const input of payoffInputs){
 }
 for(const id of ['start','end'])el(id).addEventListener('change',()=>submitDashboardControls(id));
 el('asset-status').addEventListener('change',()=>{if(bridge)bridge.selectStatus(el('asset-status').value);});
-el('asset').addEventListener('change',()=>{if(bridge)bridge.selectAsset(el('asset').value);});
+el('asset').addEventListener('change',async()=>{if(bridge){const results=await flushTestOrderEdits();if(results.some(r=>r.error))return;bridge.selectAsset(el('asset').value);}});
 if(window.qt&&window.QWebChannel){new QWebChannel(qt.webChannelTransport,channel=>{
   bridge=channel.objects.dashboard;window.layoutBridgeReady?.(bridge);bridge.updated.connect(render);bridge.analyticsUpdated.connect(receiveAnalytics);bridge.ready();
   bridge.commentResult.connect(commentResult);
 });}else{text(el('status'),'Open deze pagina via de Asset Dashboard-tab in Portefeuille Viewer.');}
 
-function testOrderAction(action,value){
+let selectedTestKey=null;
+function testError(message){el('tests-status').className=message?'warning':'sr-only';text(el('tests-status'),message||'');}
+async function saveTestInput(input){
+  if(input._saving){await input._saving;return saveTestInput(input);}
+  const value=input.type==='checkbox'?input.checked:input.value;
+  if(value===input._saved)return {error:input._error||''};
+  input._saving=new Promise(resolve=>bridge.editTestOrder(JSON.stringify({asset:displayedAsset,key:input.dataset.testKey,field:input.dataset.testField,value}),raw=>{
+    let result;try{result=JSON.parse(raw);}catch(e){result={error:String(raw)};}
+    input._error=result.error||'';input.closest('td').classList.toggle('test-input-error',!!result.error);
+    if(!result.error){input._saved=result.value;if((input.type==='checkbox'?input.checked:input.value)===value){if(input.type==='checkbox')input.checked=result.value;else input.value=result.value;}}
+    testError(result.error);resolve(result);
+  }));
+  const result=await input._saving;input._saving=null;return result;
+}
+async function flushTestOrderEdits(){return Promise.all([...document.querySelectorAll('[data-test-field]')].map(saveTestInput));}
+async function testOrderAction(action,value){
   if(!bridge)return;
-  bridge.testOrderAction(JSON.stringify({asset:displayedAsset,action,value}),error=>{
-    if(error){el('tests-status').className='warning';text(el('tests-status'),error);}
-  });
+  const results=await flushTestOrderEdits();if(results.some(r=>r.error))return;
+  return new Promise(resolve=>bridge.testOrderAction(JSON.stringify({asset:displayedAsset,action,value}),raw=>{
+    let result={};if(raw){try{result=JSON.parse(raw);}catch(e){result={error:raw};}}
+    testError(result.error);if(result.key){selectedTestKey=result.key;el('tests-delete').disabled=false;setTimeout(()=>[...document.querySelectorAll('[data-test-field]')].find(i=>i.dataset.testKey===result.key)?.focus(),0);}resolve(result);
+  }));
 }
 let lastTestState='',testTableState=null;
 function updateTestOrders(state){
@@ -335,28 +364,55 @@ function updateTestOrders(state){
     testTableState={table,head,body,rows:new Map()};
   }
   const {head,body,rows}=testTableState,retained=new Set(),duplicates=new Map();
+  for(const [field,values] of Object.entries(state.choices||{})){
+    const id='test-choices-'+field;let list=document.getElementById(id);
+    if(!list){list=node('datalist');list.id=id;document.body.append(list);}
+    const signature=JSON.stringify(values);
+    if(list.dataset.signature!==signature){list.replaceChildren(...values.map(v=>{const o=node('option');o.value=v;return o;}));list.dataset.signature=signature;}
+  }
+
   while(head.children.length<state.columns.length)head.append(node('th'));
-  state.columns.forEach((label,i)=>text(head.children[i],label));
+  state.columns.forEach((label,i)=>{
+    const th=head.children[i],field=state.fields?.[i];
+    text(th,label+(field&&testTableState.sort?.field===field?(testTableState.sort.descending?' \u25bc':' \u25b2'):''));
+    if(field){th.style.cursor='pointer';th.title=field==='optie_comment'?'Klik: sorteren - Rechtsklik: filter op commentaarkleur':'Klik om te sorteren';
+      th.onclick=()=>{const descending=testTableState.sort?.field===field?!testTableState.sort.descending:false;testTableState.sort={field,descending};testOrderAction('sort',{field,descending});};
+      if(field==='optie_comment')th.oncontextmenu=event=>{event.preventDefault();testOrderAction('color_filter');};
+    }
+  });
   state.rows.forEach((cells,index)=>{
     const base=String(state.row_keys?.[index]??index),ordinal=duplicates.get(base)||0,key=base+':'+ordinal;
     duplicates.set(base,ordinal+1);retained.add(key);
     let row=rows.get(key);
     if(!row){
       row=node('tr');cells.forEach(()=>row.append(node('td')));
-      row.addEventListener('dblclick',event=>{if(!event.target.closest('[data-comment-id]'))testOrderAction('editor');});
+      row.addEventListener('click',()=>{selectedTestKey=base;el('tests-delete').disabled=false;for(const r of rows.values())r.classList.toggle('test-selected',r===row);});
       rows.set(key,row);
     }
     cells.forEach((cell,i)=>{
       const td=row.children[i];
       if(cell.comment){updateCommentCell(td,{optie_comment:cell.text,_comment:cell.comment});}
+      else if(state.fields?.[i] && (cell.editable||state.fields[i]==='include') && state.fields[i]!=='optie_comment'){
+        const field=state.fields[i];let input=td.querySelector('input');
+        if(!input){input=node('input');input.type=field==='include'?'checkbox':'text';td.replaceChildren(input);
+          input.addEventListener('change',()=>saveTestInput(input));input.addEventListener('blur',()=>saveTestInput(input));
+          input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();input.blur();}if(event.key==='Escape'){if(input.type==='checkbox')input.checked=input._saved;else input.value=input._saved;input._error='';input.blur();}});
+        }
+        input.dataset.testKey=base;input.dataset.testField=field;
+        if(document.activeElement!==input&&!input._saving&&!input._error){input._saved=field==='include'?!!cell.checked:cell.text;if(field==='include')input.checked=input._saved;else input.value=input._saved;}
+        if(state.choices?.[field])input.setAttribute('list','test-choices-'+field);
+        td.style.backgroundColor=cell.background||'';td.style.color=cell.foreground||'';
+      }
       else{text(td,cell.text);td.style.backgroundColor=cell.background||'';td.style.color=cell.foreground||'';}
     });
     if(body.children[index]!==row)body.insertBefore(row,body.children[index]||null);
   });
   for(const [key,row]of rows)if(!retained.has(key)){row.remove();rows.delete(key);}
-  el('tests-status').className='sr-only';text(el('tests-status'),'');
+  el('tests-delete').disabled=![...rows.values()].some(r=>r.isConnected&&r.querySelector('[data-test-key]')?.dataset.testKey===selectedTestKey);
 }
 el('tests-enabled').addEventListener('change',()=>testOrderAction('enabled',el('tests-enabled').checked));
 el('tests-asset-only').addEventListener('change',()=>testOrderAction('asset_only',el('tests-asset-only').checked));
 el('tests-scenario').addEventListener('change',()=>testOrderAction('scenario',Number(el('tests-scenario').value)));
-for(const action of ['editor','builder','manager'])el('tests-'+action).addEventListener('click',()=>testOrderAction(action));
+for(const action of ['add','builder','manager'])el('tests-'+action).addEventListener('click',()=>testOrderAction(action));
+
+el('tests-delete').addEventListener('click',()=>{if(selectedTestKey)testOrderAction('delete',selectedTestKey);});
